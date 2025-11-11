@@ -1,9 +1,9 @@
-import React, {
+import {
   createContext,
   useContext,
   useState,
   useMemo,
-  ReactNode,
+  type ReactNode,
 } from "react";
 import { logData } from "@/lib/logData";
 

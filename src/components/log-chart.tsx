@@ -1,4 +1,4 @@
-import React from "react";
+import { useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -14,10 +14,7 @@ import { useLogContext } from "@/context/LogContext";
 export default function LogChart() {
   const { filteredData } = useLogContext();
   // Limit chart to first 50 records for performance
-  const chartData = React.useMemo(
-    () => filteredData.slice(0, 50),
-    [filteredData]
-  );
+  const chartData = useMemo(() => filteredData.slice(0, 50), [filteredData]);
   return (
     <div style={{ width: "100%", height: 400 }}>
       <ResponsiveContainer>
