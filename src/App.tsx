@@ -1,8 +1,8 @@
 import "./App.css";
+import { Suspense } from "react";
+import { LogProvider } from "@/context/LogContext";
 import LogTable from "./components/log-table";
 import LogChart from "./components/log-chart";
-import { LogProvider } from "@/context/LogContext";
-import { Suspense } from "react";
 
 function App() {
   return (
