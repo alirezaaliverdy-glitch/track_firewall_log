@@ -31,44 +31,52 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { logData } from "@/lib/logData";
+// import { logData } from "@/lib/logData";
 import { Input } from "./ui/input";
 import { useLogContext } from "@/context/LogContext";
 
 // Define the type for a log row
-export type LogRow = (typeof logData)[0];
+export type LogRow = Record<string, string | number>;
 
-const columns: ColumnDef<LogRow>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value: boolean) =>
-          table.toggleAllPageRowsSelected(!!value)
-        }
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }: { row: any }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value: boolean) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  ...Object.keys(logData[0] || {}).map((key) => ({
-    accessorKey: key,
-    header: key,
-    cell: ({ row }: { row: any }) => <div>{row.getValue(key)}</div>,
-  })),
-  {
+function makeColumns(sample: LogRow | undefined): ColumnDef<LogRow>[] {
+  const cols: ColumnDef<LogRow>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value: boolean) =>
+            table.toggleAllPageRowsSelected(!!value)
+          }
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }: { row: any }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value: boolean) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+  ];
+
+  if (sample) {
+    Object.keys(sample).forEach((key) => {
+      cols.push({
+        accessorKey: key,
+        header: key,
+        cell: ({ row }: { row: any }) => <div>{row.getValue(key)}</div>,
+      });
+    });
+  }
+
+  cols.push({
     id: "actions",
     enableHiding: false,
     cell: ({ row }: { row: any }) => {
@@ -84,9 +92,7 @@ const columns: ColumnDef<LogRow>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(item))
-              }
+              onClick={() => navigator.clipboard.writeText(JSON.stringify(item))}
             >
               Copy row data
             </DropdownMenuItem>
@@ -96,11 +102,17 @@ const columns: ColumnDef<LogRow>[] = [
         </DropdownMenu>
       );
     },
-  },
-];
+  });
+
+  return cols;
+}
+
+let columns: ColumnDef<LogRow>[] = [];
 
 export default function LogTable() {
   const { search, setSearch, filteredData } = useLogContext();
+  // regenerate columns based on current data (use first row as sample)
+  columns = makeColumns(filteredData[0]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []

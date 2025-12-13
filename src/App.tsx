@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { LogProvider } from "@/context/LogContext";
 import LogTable from "./components/log-table";
 import LogChart from "./components/log-chart";
+import CsvUploader from "./components/csv-uploader";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
               Firewall Packet Tracer Logs (JSON)
             </h2>
           </div>
+          <CsvUploader />
           <LogChart />
           <LogTable />
         </div>
