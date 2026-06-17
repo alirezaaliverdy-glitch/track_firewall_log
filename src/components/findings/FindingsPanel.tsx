@@ -1,83 +1,116 @@
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useLogContext } from "@/context/LogContext";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { SeverityBadge, SeverityDot } from "@/components/ui/SeverityBadge";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { Finding, Severity } from "@/types/finding";
 
 // ---------------------------------------------------------------------------
-// Severity config
+// Single finding row
 // ---------------------------------------------------------------------------
 
-const SEVERITY_CONFIG: Record<Severity, { label: string; classes: string; dot: string }> = {
-  critical: { label: "Critical", classes: "border-red-700 bg-red-950/40",   dot: "bg-red-500"    },
-  high:     { label: "High",     classes: "border-orange-700 bg-orange-950/30", dot: "bg-orange-500" },
-  medium:   { label: "Medium",   classes: "border-yellow-700 bg-yellow-950/30", dot: "bg-yellow-500" },
-  low:      { label: "Low",      classes: "border-blue-700 bg-blue-950/30",  dot: "bg-blue-400"   },
-  info:     { label: "Info",     classes: "border-zinc-700 bg-zinc-800/40",  dot: "bg-zinc-400"   },
-};
-
-// ---------------------------------------------------------------------------
-// Single finding card
-// ---------------------------------------------------------------------------
-
-function FindingCard({ finding }: { finding: Finding }) {
-  const [expanded, setExpanded] = useState(false);
-  const cfg = SEVERITY_CONFIG[finding.severity];
+function FindingRow({ finding }: { finding: Finding }) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className={`rounded-lg border p-4 ${cfg.classes}`}>
-      {/* Header row */}
-      <div className="flex items-start gap-3">
-        <span
-          className={`mt-1 flex-shrink-0 w-2.5 h-2.5 rounded-full ${cfg.dot}`}
-          aria-hidden="true"
-        />
+    <div className="border border-zinc-700/50 rounded-lg overflow-hidden">
+      {/* Summary row — always visible */}
+      <button
+        type="button"
+        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-zinc-800/50 transition-colors"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <SeverityDot severity={finding.severity} />
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold uppercase tracking-wide text-zinc-300">
-              {cfg.label}
-            </span>
-            <span className="text-xs text-zinc-500">·</span>
-            <span className="text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <SeverityBadge severity={finding.severity} />
+            <span className="text-xs text-zinc-500">
               {finding.count} event{finding.count !== 1 ? "s" : ""}
             </span>
             {finding.mitreTactic && (
-              <>
-                <span className="text-xs text-zinc-500">·</span>
-                <span className="text-xs text-zinc-500" title={finding.mitreTechnique ?? ""}>
-                  MITRE: {finding.mitreTactic}
-                </span>
-              </>
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400"
+                title={finding.mitreTechnique}
+              >
+                MITRE · {finding.mitreTactic}
+              </span>
             )}
           </div>
-          <p className="text-sm font-medium text-zinc-100 mt-0.5 leading-snug">
+          <p className="text-sm font-medium text-zinc-100 leading-snug">
             {finding.title}
           </p>
         </div>
-        <button
-          className="flex-shrink-0 text-xs text-zinc-500 hover:text-zinc-300 transition-colors ml-2"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse details" : "Expand details"}
-        >
-          {expanded ? "▲" : "▼"}
-        </button>
-      </div>
 
-      {/* Expandable detail */}
-      {expanded && (
-        <div className="mt-3 ml-5 space-y-2 text-xs text-zinc-300">
-          <p>{finding.description}</p>
-          <p className="text-zinc-400">
-            <span className="font-semibold text-zinc-200">Recommendation: </span>
-            {finding.recommendation}
+        <span className="flex-shrink-0 mt-0.5 text-zinc-500">
+          {open
+            ? <ChevronDown className="w-4 h-4" aria-hidden="true" />
+            : <ChevronRight className="w-4 h-4" aria-hidden="true" />
+          }
+        </span>
+      </button>
+
+      {/* Expanded details */}
+      {open && (
+        <div className="px-4 pb-4 pt-1 border-t border-zinc-700/40 bg-zinc-800/30 space-y-3">
+          <p className="text-xs text-zinc-300 leading-relaxed">
+            {finding.description}
           </p>
+
+          <div className="rounded-md bg-zinc-900 border border-zinc-700/50 p-3">
+            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide mb-1">
+              Recommendation
+            </p>
+            <p className="text-xs text-zinc-200">{finding.recommendation}</p>
+          </div>
+
           {finding.mitreTechnique && (
-            <p className="text-zinc-500">
-              <span className="font-semibold text-zinc-400">Technique: </span>
+            <p className="text-[11px] text-zinc-500">
+              <span className="text-zinc-400 font-medium">Technique: </span>
               {finding.mitreTechnique}
             </p>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Severity group header
+// ---------------------------------------------------------------------------
+
+const SEVERITY_LABELS: Record<Severity, string> = {
+  critical: "Critical",
+  high:     "High",
+  medium:   "Medium",
+  low:      "Low",
+  info:     "Info",
+};
+
+function SeverityGroup({
+  severity,
+  findings,
+}: {
+  severity: Severity;
+  findings: Finding[];
+}) {
+  if (findings.length === 0) return null;
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <SeverityBadge severity={severity} />
+        <span className="text-xs text-zinc-500">
+          {findings.length} finding{findings.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {findings.map((f) => (
+          <FindingRow key={f.id} finding={f} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -93,32 +126,40 @@ export default function FindingsPanel() {
 
   if (summary.total === 0) return null;
 
-  return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-zinc-200 uppercase tracking-wide">
-          Security Findings
-        </h3>
-        {findings.length > 0 && (
-          <span className="text-xs text-zinc-400">
-            {findings.length} finding{findings.length !== 1 ? "s" : ""}
-          </span>
-        )}
-      </div>
+  const grouped = Object.fromEntries(
+    SEVERITY_ORDER.map((sev) => [
+      sev,
+      findings.filter((f) => f.severity === sev),
+    ])
+  ) as Record<Severity, Finding[]>;
 
+  const headerRight = findings.length > 0
+    ? (
+      <span className="text-xs text-zinc-400">
+        {findings.length} finding{findings.length !== 1 ? "s" : ""}
+      </span>
+    )
+    : null;
+
+  return (
+    <SectionCard title="Security Findings" headerRight={headerRight}>
       {findings.length === 0 ? (
-        <p className="text-sm text-zinc-400">
-          No major security findings detected based on available fields.
-        </p>
+        <EmptyState
+          compact
+          title="No major security findings detected"
+          description="Based on the available fields in the uploaded log."
+        />
       ) : (
-        <div className="space-y-2">
-          {SEVERITY_ORDER.flatMap((sev) =>
-            findings
-              .filter((f) => f.severity === sev)
-              .map((f) => <FindingCard key={f.id} finding={f} />)
-          )}
+        <div className="space-y-5">
+          {SEVERITY_ORDER.map((sev) => (
+            <SeverityGroup
+              key={sev}
+              severity={sev}
+              findings={grouped[sev]}
+            />
+          ))}
         </div>
       )}
-    </div>
+    </SectionCard>
   );
 }
