@@ -1,15 +1,15 @@
 import type { Finding } from "@/types/finding";
+import type { NormalizedLog } from "@/types/log";
 
 const MAX_DISPLAY = 10;
 
 // ---------------------------------------------------------------------------
-// Evidence extraction helpers
+// Evidence extraction
 // ---------------------------------------------------------------------------
 
 /**
- * Return up to MAX_DISPLAY unique source IPs from a finding's related logs.
- * Preserves insertion order so the most-frequent IPs (which detections tend
- * to place first) appear at the top.
+ * Return up to MAX_DISPLAY unique source IPs from a finding's related logs,
+ * in insertion order (detections generally put the most-relevant log first).
  */
 export function getAffectedSrcIps(finding: Finding): string[] {
   const seen = new Set<string>();
@@ -33,8 +33,7 @@ export function getAffectedDstIps(finding: Finding): string[] {
 }
 
 /**
- * Return up to MAX_DISPLAY unique destination ports from a finding's related
- * logs, sorted numerically ascending.
+ * Return up to MAX_DISPLAY unique destination ports, sorted numerically.
  */
 export function getAffectedDstPorts(finding: Finding): number[] {
   const seen = new Set<number>();
@@ -44,67 +43,89 @@ export function getAffectedDstPorts(finding: Finding): number[] {
   return Array.from(seen).sort((a, b) => a - b).slice(0, MAX_DISPLAY);
 }
 
+/**
+ * Return up to `limit` sample logs from a finding's related logs.
+ * Defaults to 5 samples — enough to show representative evidence without
+ * overwhelming the details panel.
+ */
+export function getSampleEvidenceLogs(
+  finding: Finding,
+  limit = 5
+): NormalizedLog[] {
+  return finding.relatedLogs.slice(0, limit);
+}
+
 // ---------------------------------------------------------------------------
-// Plain-text summary for clipboard copy
+// Plain-text summary for clipboard
 // ---------------------------------------------------------------------------
 
 /**
  * Produce a plain-text summary of a finding suitable for pasting into a
- * ticket, chat, or email.
+ * ticket, chat, or report.
  *
- * Security: uses only string values already present in the Finding object.
+ * Security: only string values already present in the Finding object are used.
  * No eval, no dangerouslySetInnerHTML.
  */
 export function getFindingSummaryText(finding: Finding): string {
   const lines: string[] = [
-    `SECURITY FINDING`,
-    `================`,
-    `Title:          ${finding.title}`,
-    `Severity:       ${finding.severity.toUpperCase()}`,
-    `Type:           ${finding.type}`,
-    `Event count:    ${finding.count}`,
-    ``,
-    `DESCRIPTION`,
-    `-----------`,
+    "SECURITY FINDING",
+    "================",
+    `Title:       ${finding.title}`,
+    `Severity:    ${finding.severity.toUpperCase()}`,
+    `Type:        ${finding.type}`,
+    `Event count: ${finding.count}`,
+    "",
+    "DESCRIPTION",
+    "-----------",
     finding.description,
-    ``,
-    `RECOMMENDATION`,
-    `--------------`,
+    "",
+    "RECOMMENDATION",
+    "--------------",
     finding.recommendation,
   ];
 
   if (finding.mitreTactic || finding.mitreTechnique) {
-    lines.push(``);
-    lines.push(`MITRE ATT&CK`);
-    lines.push(`------------`);
+    lines.push("", "MITRE ATT&CK", "------------");
     if (finding.mitreTactic)    lines.push(`Tactic:    ${finding.mitreTactic}`);
     if (finding.mitreTechnique) lines.push(`Technique: ${finding.mitreTechnique}`);
   }
 
-  const srcIps  = getAffectedSrcIps(finding);
-  const dstIps  = getAffectedDstIps(finding);
+  const srcIps   = getAffectedSrcIps(finding);
+  const dstIps   = getAffectedDstIps(finding);
   const dstPorts = getAffectedDstPorts(finding);
 
   if (srcIps.length > 0) {
-    lines.push(``);
-    lines.push(`AFFECTED SOURCE IPs (up to ${MAX_DISPLAY})`);
-    lines.push(`----------------------------------`);
+    lines.push("", `AFFECTED SOURCE IPs (up to ${MAX_DISPLAY})`, "----------------------------------");
     srcIps.forEach((ip) => lines.push(`  ${ip}`));
   }
-
   if (dstIps.length > 0) {
-    lines.push(``);
-    lines.push(`AFFECTED DESTINATION IPs (up to ${MAX_DISPLAY})`);
-    lines.push(`---------------------------------------`);
+    lines.push("", `AFFECTED DESTINATION IPs (up to ${MAX_DISPLAY})`, "---------------------------------------");
     dstIps.forEach((ip) => lines.push(`  ${ip}`));
   }
-
   if (dstPorts.length > 0) {
-    lines.push(``);
-    lines.push(`AFFECTED DESTINATION PORTS`);
-    lines.push(`--------------------------`);
-    lines.push(`  ${dstPorts.join(", ")}`);
+    lines.push("", "AFFECTED DESTINATION PORTS", "--------------------------", `  ${dstPorts.join(", ")}`);
   }
 
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Clipboard helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Copy text to clipboard using the Async Clipboard API.
+ * Falls back gracefully — never throws to the caller.
+ * Returns true if the copy succeeded.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Clipboard API rejected (e.g. no permission) — fail silently
+  }
+  return false;
 }

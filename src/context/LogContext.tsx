@@ -72,6 +72,12 @@ export type LogContextType = {
   selectedFinding: Finding | null;
   /** Related logs for the selected finding; empty array when none selected. */
   evidenceLogs: NormalizedLog[];
+  /**
+   * The log set the table should display.
+   * When no finding is selected → filteredLogs (search applied to all logs).
+   * When a finding is selected  → evidence logs further filtered by search.
+   */
+  activeTableLogs: NormalizedLog[];
 
   // --- Legacy alias ---
   setData: (rows: RawLogRow[]) => void;
@@ -215,6 +221,9 @@ export function LogProvider({ children }: { children: ReactNode }) {
     [filteredLogs]
   );
 
+  // activeTableLogs = same as filteredLogs — named alias for table consumers
+  const activeTableLogs = filteredLogs;
+
   return (
     <LogContext.Provider
       value={{
@@ -230,6 +239,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
         selectedFindingId, setSelectedFindingId,
         clearSelectedFinding,
         selectedFinding, evidenceLogs,
+        activeTableLogs,
         setData,
       }}
     >

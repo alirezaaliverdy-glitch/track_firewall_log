@@ -11,7 +11,7 @@ import {
   type ColumnFiltersState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { ChevronDown, MoreHorizontal } from "lucide-react";
+import { ChevronDown, MoreHorizontal, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -56,16 +56,12 @@ function ActionBadge({ action }: { action?: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Safe string renderer
-// ---------------------------------------------------------------------------
-
 function s(val: unknown): string {
   return val === null || val === undefined ? "" : String(val);
 }
 
 // ---------------------------------------------------------------------------
-// Column definitions (fixed normalized columns)
+// Column definitions
 // ---------------------------------------------------------------------------
 
 const COLUMNS: ColumnDef<NormalizedLog>[] = [
@@ -77,9 +73,7 @@ const COLUMNS: ColumnDef<NormalizedLog>[] = [
           table.getIsAllPageRowsSelected() ||
           (table.getIsSomePageRowsSelected() && "indeterminate")
         }
-        onCheckedChange={(value: boolean) =>
-          table.toggleAllPageRowsSelected(!!value)
-        }
+        onCheckedChange={(value: boolean) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
       />
     ),
@@ -201,17 +195,13 @@ const COLUMNS: ColumnDef<NormalizedLog>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(item.raw))
-              }
+              onClick={() => navigator.clipboard.writeText(JSON.stringify(item.raw))}
             >
               Copy raw row
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(item, null, 2))
-              }
+              onClick={() => navigator.clipboard.writeText(JSON.stringify(item, null, 2))}
             >
               Copy normalized
             </DropdownMenuItem>
@@ -227,7 +217,13 @@ const COLUMNS: ColumnDef<NormalizedLog>[] = [
 // ---------------------------------------------------------------------------
 
 export default function LogTable() {
-  const { search, setSearch, filteredLogs } = useLogContext();
+  const {
+    search,
+    setSearch,
+    activeTableLogs,
+    selectedFinding,
+    clearSelectedFinding,
+  } = useLogContext();
 
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -235,7 +231,7 @@ export default function LogTable() {
   const [rowSelection, setRowSelection] = React.useState({});
 
   const table = useReactTable<NormalizedLog>({
-    data: filteredLogs,
+    data: activeTableLogs,
     columns: COLUMNS,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -250,10 +246,32 @@ export default function LogTable() {
 
   return (
     <div className="w-full">
+      {/* Evidence filter banner */}
+      {selectedFinding && (
+        <div className="flex items-center justify-between gap-3 mb-3 px-4 py-2.5 rounded-lg border border-blue-700/50 bg-blue-950/30">
+          <p className="text-xs text-blue-300 truncate min-w-0">
+            <span className="font-semibold">Showing evidence logs for:</span>{" "}
+            {selectedFinding.title}
+            <span className="text-blue-500 ml-2">
+              ({activeTableLogs.length} row{activeTableLogs.length !== 1 ? "s" : ""})
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={clearSelectedFinding}
+            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium border border-blue-700/60 bg-blue-900/40 text-blue-300 hover:bg-blue-900/60 transition-colors"
+          >
+            <XCircle className="w-3 h-3" aria-hidden="true" />
+            Clear Evidence Filter
+          </button>
+        </div>
+      )}
+
+      {/* Search + column toggle */}
       <div className="flex items-center py-4 gap-4">
         <Input
           type="text"
-          placeholder="Search logs..."
+          placeholder={selectedFinding ? "Search within evidence…" : "Search logs…"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm border rounded px-2 py-1"
@@ -282,6 +300,7 @@ export default function LogTable() {
         </DropdownMenu>
       </div>
 
+      {/* Table */}
       <div className="overflow-hidden rounded-md border border-zinc-700">
         <Table>
           <TableHeader>
@@ -321,7 +340,7 @@ export default function LogTable() {
             ) : (
               <TableRow>
                 <TableCell colSpan={COLUMNS.length} className="h-24 text-center text-zinc-500">
-                  No results.
+                  {selectedFinding ? "No evidence logs match the current search." : "No results."}
                 </TableCell>
               </TableRow>
             )}
@@ -329,6 +348,7 @@ export default function LogTable() {
         </Table>
       </div>
 
+      {/* Pagination */}
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-muted-foreground flex-1 text-sm">
           {table.getFilteredSelectedRowModel().rows.length} of{" "}

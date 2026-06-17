@@ -6,6 +6,7 @@ import ColumnMappingWizard from "./components/upload/ColumnMappingWizard";
 import SummaryCards from "./components/dashboard/SummaryCards";
 import DataQualityPanel from "./components/dashboard/DataQualityPanel";
 import FindingsPanel from "./components/findings/FindingsPanel";
+import FindingDetails from "./components/findings/FindingDetails";
 import ActionDistributionChart from "./components/charts/ActionDistributionChart";
 import TopPortsChart from "./components/charts/TopPortsChart";
 import LogChart from "./components/log-chart";
@@ -25,16 +26,16 @@ function App() {
             </h2>
           </div>
 
-          {/* 1. Upload + privacy notice */}
+          {/* 1. Upload */}
           <CsvUploader />
 
-          {/* 2. Column mapping wizard — auto-hidden when no data */}
+          {/* 2. Column mapping wizard */}
           <ColumnMappingWizard />
 
           {/* 3. Summary cards */}
           <SummaryCards />
 
-          {/* 4. Export buttons — only visible when data is loaded */}
+          {/* 4. Export buttons */}
           <ExportButtons />
 
           {/* 5. Data quality */}
@@ -43,16 +44,19 @@ function App() {
           {/* 6. Security findings */}
           <FindingsPanel />
 
-          {/* 7. Charts side-by-side */}
+          {/* 7. Finding details — only visible when a finding is selected */}
+          <FindingDetails />
+
+          {/* 8. Charts */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <ActionDistributionChart />
             <TopPortsChart />
           </div>
 
-          {/* 8. Bytes-over-time chart */}
+          {/* 9. Bytes-over-time chart */}
           <LogChart />
 
-          {/* 9. Log table */}
+          {/* 10. Log table */}
           <LogTable />
 
         </div>
