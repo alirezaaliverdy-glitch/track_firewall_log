@@ -37,9 +37,11 @@ export type LogContextType = {
 
   // --- Normalized layer ---
   logs: NormalizedLog[];
+  /** Filtered by search; if a finding is selected this equals evidenceLogs
+   *  further filtered by search. */
   filteredLogs: NormalizedLog[];
 
-  // --- Legacy compatibility (LogTable / LogChart still reference this) ---
+  // --- Legacy compatibility ---
   filteredData: RawLogRow[];
 
   // --- Search ---
@@ -49,7 +51,6 @@ export type LogContextType = {
   // --- Column mapping ---
   columnMapping: ColumnMapping;
   setColumnMapping: (m: ColumnMapping) => void;
-  /** Raw CSV headers extracted from the current rawData */
   csvHeaders: string[];
   vendorPreset: FirewallVendor;
   setVendorPreset: (v: FirewallVendor) => void;
@@ -60,9 +61,17 @@ export type LogContextType = {
   summary: LogSummary;
   dataQuality: DataQualityResult;
 
-  // --- Security ---
+  // --- Security findings ---
   findings: Finding[];
   hygieneScore: number;
+
+  // --- Finding drilldown (Task 9) ---
+  selectedFindingId: string | null;
+  setSelectedFindingId: (id: string | null) => void;
+  clearSelectedFinding: () => void;
+  selectedFinding: Finding | null;
+  /** Related logs for the selected finding; empty array when none selected. */
+  evidenceLogs: NormalizedLog[];
 
   // --- Legacy alias ---
   setData: (rows: RawLogRow[]) => void;
@@ -89,6 +98,31 @@ function headersFromRows(rows: RawLogRow[]): string[] {
   return Object.keys(rows[0]);
 }
 
+function applySearch(logs: NormalizedLog[], term: string): NormalizedLog[] {
+  if (!term) return logs;
+  const lower = term.toLowerCase();
+  return logs.filter((log) => {
+    const fields: unknown[] = [
+      log.timestamp, log.date, log.time,
+      log.action, log.protocol,
+      log.srcIp, log.dstIp,
+      log.srcPort, log.dstPort,
+      log.natSrcPort, log.natDstPort,
+      log.bytes, log.bytesSent, log.bytesReceived,
+      log.packets, log.packetsSent, log.packetsReceived,
+      log.service, log.application,
+      log.ruleName, log.user, log.message,
+      log.vendor,
+    ];
+    if (fields.some((v) => v !== undefined && String(v).toLowerCase().includes(lower))) {
+      return true;
+    }
+    return Object.values(log.raw).some((v) =>
+      String(v ?? "").toLowerCase().includes(lower)
+    );
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -96,8 +130,8 @@ function headersFromRows(rows: RawLogRow[]): string[] {
 export function LogProvider({ children }: { children: ReactNode }) {
   const [rawData, setRawDataState] = useState<RawLogRow[]>(logData);
   const [search, setSearch] = useState("");
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
 
-  // Derive initial mapping from seed data
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>(() =>
     detectColumnMapping(headersFromRows(logData))
   );
@@ -110,31 +144,35 @@ export function LogProvider({ children }: { children: ReactNode }) {
   const setRawData = useCallback((rows: RawLogRow[]) => {
     setRawDataState(rows);
     setSearch("");
-    // Auto-detect mapping and vendor from the new data
+    setSelectedFindingId(null);
     const headers = headersFromRows(rows);
     setColumnMapping(detectColumnMapping(headers));
     if (rows.length > 0) setVendorPreset(detectVendor(rows[0]));
   }, []);
 
-  const setData = setRawData; // legacy alias
+  const setData = setRawData;
 
   const resetData = useCallback(() => {
     setRawDataState(logData);
     setSearch("");
+    setSelectedFindingId(null);
     setColumnMapping(detectColumnMapping(headersFromRows(logData)));
     setVendorPreset(logData.length > 0 ? detectVendor(logData[0]) : "generic");
   }, []);
 
-  // ---- Derived: CSV headers (memoized) ----
+  const clearSelectedFinding = useCallback(() => {
+    setSelectedFindingId(null);
+  }, []);
+
+  // ---- Derived ----
+
   const csvHeaders = useMemo(() => headersFromRows(rawData), [rawData]);
 
-  // ---- Normalized logs (mapping-aware) ----
   const logs = useMemo(
     () => normalizeLogsWithMapping(rawData, columnMapping, vendorPreset),
     [rawData, columnMapping, vendorPreset]
   );
 
-  // ---- Mapping confidence / missing fields ----
   const mappingConfidence = useMemo(
     () => getMappingConfidence(columnMapping),
     [columnMapping]
@@ -145,42 +183,36 @@ export function LogProvider({ children }: { children: ReactNode }) {
     [columnMapping]
   );
 
-  // ---- Filtered logs (search) ----
-  const filteredLogs = useMemo(() => {
-    if (!search) return logs;
-    const term = search.toLowerCase();
-    return logs.filter((log) => {
-      const normalizedFields: unknown[] = [
-        log.timestamp, log.date, log.time,
-        log.action, log.protocol,
-        log.srcIp, log.dstIp,
-        log.srcPort, log.dstPort,
-        log.natSrcPort, log.natDstPort,
-        log.bytes, log.bytesSent, log.bytesReceived,
-        log.packets, log.packetsSent, log.packetsReceived,
-        log.service, log.application,
-        log.ruleName, log.user, log.message,
-        log.vendor,
-      ];
-      if (normalizedFields.some((v) => v !== undefined && String(v).toLowerCase().includes(term))) {
-        return true;
-      }
-      return Object.values(log.raw).some((v) =>
-        String(v ?? "").toLowerCase().includes(term)
-      );
-    });
-  }, [logs, search]);
-
-  // ---- Legacy compat ----
-  const filteredData = useMemo(() => filteredLogs.map((l) => l.raw), [filteredLogs]);
-
-  // ---- Analytics ----
   const summary      = useMemo(() => buildSummary(logs), [logs]);
   const dataQuality  = useMemo(() => getDataQuality(logs), [logs]);
   const findings     = useMemo(() => runDetections(logs), [logs]);
   const hygieneScore = useMemo(
     () => calculateHygieneScore(findings, dataQuality),
     [findings, dataQuality]
+  );
+
+  // ---- Finding selection ----
+
+  const selectedFinding = useMemo(
+    () => findings.find((f) => f.id === selectedFindingId) ?? null,
+    [findings, selectedFindingId]
+  );
+
+  const evidenceLogs = useMemo(
+    () => selectedFinding?.relatedLogs ?? [],
+    [selectedFinding]
+  );
+
+  // ---- Filtered logs ----
+  // When a finding is selected the base pool is evidenceLogs; otherwise all logs.
+  const filteredLogs = useMemo(() => {
+    const base = selectedFinding ? evidenceLogs : logs;
+    return applySearch(base, search);
+  }, [logs, evidenceLogs, selectedFinding, search]);
+
+  const filteredData = useMemo(
+    () => filteredLogs.map((l) => l.raw),
+    [filteredLogs]
   );
 
   return (
@@ -195,6 +227,9 @@ export function LogProvider({ children }: { children: ReactNode }) {
         mappingConfidence, missingMappings,
         summary, dataQuality,
         findings, hygieneScore,
+        selectedFindingId, setSelectedFindingId,
+        clearSelectedFinding,
+        selectedFinding, evidenceLogs,
         setData,
       }}
     >
