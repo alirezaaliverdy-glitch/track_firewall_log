@@ -4,6 +4,7 @@ import { LogProvider } from "@/context/LogContext";
 import LogTable from "./components/log-table";
 import LogChart from "./components/log-chart";
 import CsvUploader from "./components/csv-uploader";
+import SummaryCards from "./components/dashboard/SummaryCards";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
             </h2>
           </div>
           <CsvUploader />
+          <SummaryCards />
           <LogChart />
           <LogTable />
         </div>

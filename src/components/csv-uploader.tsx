@@ -13,7 +13,7 @@ function isCsvFile(file: File): boolean {
 }
 
 export default function CsvUploader() {
-  const { setData } = useLogContext();
+  const { setRawData } = useLogContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +55,7 @@ export default function CsvUploader() {
         console.warn(`CSV parsed with ${errors.length} non-fatal error(s):`, errors);
       }
 
-      setData(rows);
+      setRawData(rows);
     };
 
     reader.onerror = () => {
