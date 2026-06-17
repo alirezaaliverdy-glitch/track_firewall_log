@@ -10,7 +10,10 @@ import { logData } from "@/lib/logData";
 import { normalizeLogs } from "@/lib/normalizer";
 import { buildSummary, type LogSummary } from "@/lib/analytics";
 import { getDataQuality, type DataQualityResult } from "@/lib/dataQuality";
+import { runDetections } from "@/lib/detections";
+import { calculateHygieneScore } from "@/lib/scoring";
 import type { RawLogRow, NormalizedLog } from "@/types/log";
+import type { Finding } from "@/types/finding";
 
 // ---------------------------------------------------------------------------
 // Context shape
@@ -41,12 +44,16 @@ export type LogContextType = {
   summary: LogSummary;
   dataQuality: DataQualityResult;
 
-  // --- Legacy: kept so CsvUploader compiles without a change ---
+  // --- Security ---
+  findings: Finding[];
+  hygieneScore: number;
+
+  // --- Legacy alias so any call to setData still compiles ---
   setData: (rows: RawLogRow[]) => void;
 };
 
 // ---------------------------------------------------------------------------
-// Context
+// Context instance
 // ---------------------------------------------------------------------------
 
 const LogContext = createContext<LogContextType | undefined>(undefined);
@@ -71,7 +78,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
     setSearch("");
   }, []);
 
-  // Alias kept for CsvUploader (which still calls setData)
+  // Legacy alias
   const setData = setRawData;
 
   const resetData = useCallback(() => {
@@ -79,16 +86,16 @@ export function LogProvider({ children }: { children: ReactNode }) {
     setSearch("");
   }, []);
 
-  // --- Normalized logs (derived from rawData) ---
+  // --- Normalized logs (memoized from rawData) ---
   const logs = useMemo(() => normalizeLogs(rawData), [rawData]);
 
-  // --- Search filter applied to normalized logs ---
+  // --- Filtered logs (memoized from logs + search) ---
   const filteredLogs = useMemo(() => {
     if (!search) return logs;
     const term = search.toLowerCase();
 
     return logs.filter((log) => {
-      // 1. Check every normalized field (string / number / undefined)
+      // 1. Check all normalized fields
       const normalizedFields: unknown[] = [
         log.timestamp, log.date, log.time,
         log.action, log.protocol,
@@ -110,24 +117,33 @@ export function LogProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
-      // 2. Fall back to scanning the original raw row
+      // 2. Fall back to the original raw row
       return Object.values(log.raw).some((v) =>
         String(v ?? "").toLowerCase().includes(term)
       );
     });
   }, [logs, search]);
 
-  // --- Legacy: raw rows of the filtered set (for LogTable and LogChart) ---
+  // --- Legacy compat: raw rows of the filtered set (LogTable / LogChart) ---
   const filteredData = useMemo(
     () => filteredLogs.map((l) => l.raw),
     [filteredLogs]
   );
 
-  // --- Summary analytics (runs on ALL normalized logs, not just filtered) ---
+  // --- Summary analytics (all logs, not just filtered) ---
   const summary = useMemo(() => buildSummary(logs), [logs]);
 
-  // --- Data quality (runs on ALL normalized logs) ---
+  // --- Data quality (all logs) ---
   const dataQuality = useMemo(() => getDataQuality(logs), [logs]);
+
+  // --- Security findings (all logs) ---
+  const findings = useMemo(() => runDetections(logs), [logs]);
+
+  // --- Hygiene score (derived from findings + dataQuality) ---
+  const hygieneScore = useMemo(
+    () => calculateHygieneScore(findings, dataQuality),
+    [findings, dataQuality]
+  );
 
   return (
     <LogContext.Provider
@@ -142,6 +158,8 @@ export function LogProvider({ children }: { children: ReactNode }) {
         setSearch,
         summary,
         dataQuality,
+        findings,
+        hygieneScore,
         setData,
       }}
     >
