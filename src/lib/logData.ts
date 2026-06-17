@@ -1,4 +1,6 @@
-export const logData: Array<Record<string, string | number>> = [
+import type { RawLogRow } from "@/types/log";
+
+export const logData: RawLogRow[] = [
     { "Date": "2025-11-08", "Time": "08:00:00", "Source Port": 12004, "Destination Port": 80, "NAT Source Port": 13004, "NAT Destination Port": 80, "Action": "deny", "Bytes": 266, "Bytes Sent": 135, "Bytes Received": 131, "Packets": 1, "Elapsed Time (sec)": 66, "pkts_sent": 1, "pkts_received": 0 },
     { "Date": "2025-11-08", "Time": "08:00:01", "Source Port": 12011, "Destination Port": 25, "NAT Source Port": 13011, "NAT Destination Port": 25, "Action": "deny", "Bytes": 974, "Bytes Sent": 471, "Bytes Received": 503, "Packets": 5, "Elapsed Time (sec)": 1444, "pkts_sent": 2, "pkts_received": 3 },
     { "Date": "2025-11-08", "Time": "08:00:02", "Source Port": 12008, "Destination Port": 1449, "NAT Source Port": 13008, "NAT Destination Port": 1449, "Action": "deny", "Bytes": 511, "Bytes Sent": 238, "Bytes Received": 273, "Packets": 6, "Elapsed Time (sec)": 971, "pkts_sent": 2, "pkts_received": 4 },

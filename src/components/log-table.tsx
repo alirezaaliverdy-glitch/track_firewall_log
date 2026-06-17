@@ -31,12 +31,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-// import { logData } from "@/lib/logData";
 import { Input } from "./ui/input";
 import { useLogContext } from "@/context/LogContext";
+import type { RawLogRow } from "@/types/log";
 
-// Define the type for a log row
-export type LogRow = Record<string, string | number>;
+// LogRow is an alias for RawLogRow — a flexible record from PapaParse
+export type LogRow = RawLogRow;
 
 function makeColumns(sample: LogRow | undefined): ColumnDef<LogRow>[] {
   const cols: ColumnDef<LogRow>[] = [
@@ -71,7 +71,9 @@ function makeColumns(sample: LogRow | undefined): ColumnDef<LogRow>[] {
       cols.push({
         accessorKey: key,
         header: key,
-        cell: ({ row }: { row: any }) => <div>{row.getValue(key)}</div>,
+        cell: ({ row }: { row: any }) => (
+          <div>{String(row.getValue(key) ?? "")}</div>
+        ),
       });
     });
   }

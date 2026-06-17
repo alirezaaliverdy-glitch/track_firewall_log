@@ -6,12 +6,13 @@ import {
   type ReactNode,
 } from "react";
 import { logData } from "@/lib/logData";
+import type { RawLogRow } from "@/types/log";
 
 export type LogContextType = {
   search: string;
   setSearch: (s: string) => void;
-  filteredData: Array<Record<string, string | number>>;
-  setData: (d: Array<Record<string, string | number>>) => void;
+  filteredData: RawLogRow[];
+  setData: (d: RawLogRow[]) => void;
 };
 
 const LogContext = createContext<LogContextType | undefined>(undefined);
@@ -24,16 +25,14 @@ export function useLogContext() {
 
 export function LogProvider({ children }: { children: ReactNode }) {
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<Array<Record<string, string | number>>>(
-    logData
-  );
+  const [data, setData] = useState<RawLogRow[]>(logData);
 
   const filteredData = useMemo(() => {
     if (!search) return data;
     const lowerSearch = search.toLowerCase();
     return data.filter((row) =>
       Object.values(row).some((val) =>
-        String(val).toLowerCase().includes(lowerSearch)
+        String(val ?? "").toLowerCase().includes(lowerSearch)
       )
     );
   }, [search, data]);
