@@ -9,6 +9,7 @@ import ActionDistributionChart from "./components/charts/ActionDistributionChart
 import TopPortsChart from "./components/charts/TopPortsChart";
 import LogChart from "./components/log-chart";
 import LogTable from "./components/log-table";
+import ExportButtons from "./components/export/ExportButtons";
 
 function App() {
   return (
@@ -23,28 +24,31 @@ function App() {
             </h2>
           </div>
 
-          {/* 1. Upload */}
+          {/* 1. Upload + privacy notice */}
           <CsvUploader />
 
           {/* 2. Summary cards */}
           <SummaryCards />
 
-          {/* 3. Data quality */}
+          {/* 3. Export buttons — only visible when data is loaded */}
+          <ExportButtons />
+
+          {/* 4. Data quality */}
           <DataQualityPanel />
 
-          {/* 4. Security findings */}
+          {/* 5. Security findings */}
           <FindingsPanel />
 
-          {/* 5. Charts */}
+          {/* 6. Charts side-by-side */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <ActionDistributionChart />
             <TopPortsChart />
           </div>
 
-          {/* 6. Bytes-over-time chart */}
+          {/* 7. Bytes-over-time chart */}
           <LogChart />
 
-          {/* 7. Log table */}
+          {/* 8. Log table */}
           <LogTable />
 
         </div>
