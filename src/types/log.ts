@@ -4,3 +4,77 @@
  * Treat every value as untrusted input.
  */
 export type RawLogRow = Record<string, string | number | boolean | null | undefined>;
+
+// ---------------------------------------------------------------------------
+// Vendor detection
+// ---------------------------------------------------------------------------
+
+export type FirewallVendor =
+  | "generic"
+  | "mikrotik"
+  | "fortigate"
+  | "pfsense"
+  | "paloalto"
+  | "sophos"
+  | "ciscoasa"
+  | "unknown";
+
+// ---------------------------------------------------------------------------
+// Normalized log model
+// ---------------------------------------------------------------------------
+
+/**
+ * A firewall log row mapped to a vendor-agnostic common model.
+ * All fields are optional except `vendor` and `raw`.
+ * Numeric fields are always actual numbers (never strings).
+ */
+export type NormalizedLog = {
+  /** Combined ISO-like timestamp when available, e.g. "2025-11-08 08:00:00" */
+  timestamp?: string;
+  /** Date portion, e.g. "2025-11-08" */
+  date?: string;
+  /** Time portion, e.g. "08:00:00" */
+  time?: string;
+  /** Normalized action: "allow" | "deny" | "drop" | "reset" | raw value */
+  action?: string;
+  /** Network protocol, e.g. "tcp", "udp", "icmp" */
+  protocol?: string;
+  /** Source IP address */
+  srcIp?: string;
+  /** Destination IP address */
+  dstIp?: string;
+  /** Source port number */
+  srcPort?: number;
+  /** Destination port number */
+  dstPort?: number;
+  /** NAT source port */
+  natSrcPort?: number;
+  /** NAT destination port */
+  natDstPort?: number;
+  /** Total bytes transferred */
+  bytes?: number;
+  /** Bytes sent (outbound) */
+  bytesSent?: number;
+  /** Bytes received (inbound) */
+  bytesReceived?: number;
+  /** Total packet count */
+  packets?: number;
+  /** Packets sent */
+  packetsSent?: number;
+  /** Packets received */
+  packetsReceived?: number;
+  /** Service name, e.g. "http", "dns" */
+  service?: string;
+  /** Application name (NGFW layer-7) */
+  application?: string;
+  /** Firewall rule or policy name */
+  ruleName?: string;
+  /** Authenticated user */
+  user?: string;
+  /** Free-form log message */
+  message?: string;
+  /** Detected firewall vendor */
+  vendor: FirewallVendor;
+  /** Original unmodified CSV row — kept for search and raw display */
+  raw: RawLogRow;
+};
