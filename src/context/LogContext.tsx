@@ -7,13 +7,23 @@ import {
   type ReactNode,
 } from "react";
 import { logData } from "@/lib/logData";
-import { normalizeLogs } from "@/lib/normalizer";
+import { normalizeLogsWithMapping, detectVendor } from "@/lib/normalizer";
 import { buildSummary, type LogSummary } from "@/lib/analytics";
 import { getDataQuality, type DataQualityResult } from "@/lib/dataQuality";
 import { runDetections } from "@/lib/detections";
 import { calculateHygieneScore } from "@/lib/scoring";
-import type { RawLogRow, NormalizedLog } from "@/types/log";
+import {
+  detectColumnMapping,
+  getMappingConfidence,
+  getMissingImportantMappings,
+} from "@/lib/columnMapping";
+import type { RawLogRow, NormalizedLog, FirewallVendor } from "@/types/log";
 import type { Finding } from "@/types/finding";
+import type {
+  ColumnMapping,
+  MappingConfidence,
+  MappableField,
+} from "@/types/mapping";
 
 // ---------------------------------------------------------------------------
 // Context shape
@@ -22,23 +32,29 @@ import type { Finding } from "@/types/finding";
 export type LogContextType = {
   // --- Raw layer ---
   rawData: RawLogRow[];
-  /** Replace the entire dataset with freshly parsed CSV rows. */
   setRawData: (rows: RawLogRow[]) => void;
-  /** Reset back to the built-in seed data. */
   resetData: () => void;
 
   // --- Normalized layer ---
-  /** All rows after normalization — one NormalizedLog per raw row. */
   logs: NormalizedLog[];
-  /** Normalized rows that pass the current search filter. */
   filteredLogs: NormalizedLog[];
 
-  // --- Legacy compatibility: raw rows of filteredLogs, for LogTable / LogChart ---
+  // --- Legacy compatibility (LogTable / LogChart still reference this) ---
   filteredData: RawLogRow[];
 
   // --- Search ---
   search: string;
   setSearch: (s: string) => void;
+
+  // --- Column mapping ---
+  columnMapping: ColumnMapping;
+  setColumnMapping: (m: ColumnMapping) => void;
+  /** Raw CSV headers extracted from the current rawData */
+  csvHeaders: string[];
+  vendorPreset: FirewallVendor;
+  setVendorPreset: (v: FirewallVendor) => void;
+  mappingConfidence: MappingConfidence;
+  missingMappings: MappableField[];
 
   // --- Analytics ---
   summary: LogSummary;
@@ -48,7 +64,7 @@ export type LogContextType = {
   findings: Finding[];
   hygieneScore: number;
 
-  // --- Legacy alias so any call to setData still compiles ---
+  // --- Legacy alias ---
   setData: (rows: RawLogRow[]) => void;
 };
 
@@ -65,6 +81,15 @@ export function useLogContext(): LogContextType {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function headersFromRows(rows: RawLogRow[]): string[] {
+  if (rows.length === 0) return [];
+  return Object.keys(rows[0]);
+}
+
+// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
@@ -72,30 +97,59 @@ export function LogProvider({ children }: { children: ReactNode }) {
   const [rawData, setRawDataState] = useState<RawLogRow[]>(logData);
   const [search, setSearch] = useState("");
 
-  // Stable setter — replaces dataset and clears search
+  // Derive initial mapping from seed data
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping>(() =>
+    detectColumnMapping(headersFromRows(logData))
+  );
+  const [vendorPreset, setVendorPreset] = useState<FirewallVendor>(() =>
+    logData.length > 0 ? detectVendor(logData[0]) : "generic"
+  );
+
+  // ---- Setters ----
+
   const setRawData = useCallback((rows: RawLogRow[]) => {
     setRawDataState(rows);
     setSearch("");
+    // Auto-detect mapping and vendor from the new data
+    const headers = headersFromRows(rows);
+    setColumnMapping(detectColumnMapping(headers));
+    if (rows.length > 0) setVendorPreset(detectVendor(rows[0]));
   }, []);
 
-  // Legacy alias
-  const setData = setRawData;
+  const setData = setRawData; // legacy alias
 
   const resetData = useCallback(() => {
     setRawDataState(logData);
     setSearch("");
+    setColumnMapping(detectColumnMapping(headersFromRows(logData)));
+    setVendorPreset(logData.length > 0 ? detectVendor(logData[0]) : "generic");
   }, []);
 
-  // --- Normalized logs (memoized from rawData) ---
-  const logs = useMemo(() => normalizeLogs(rawData), [rawData]);
+  // ---- Derived: CSV headers (memoized) ----
+  const csvHeaders = useMemo(() => headersFromRows(rawData), [rawData]);
 
-  // --- Filtered logs (memoized from logs + search) ---
+  // ---- Normalized logs (mapping-aware) ----
+  const logs = useMemo(
+    () => normalizeLogsWithMapping(rawData, columnMapping, vendorPreset),
+    [rawData, columnMapping, vendorPreset]
+  );
+
+  // ---- Mapping confidence / missing fields ----
+  const mappingConfidence = useMemo(
+    () => getMappingConfidence(columnMapping),
+    [columnMapping]
+  );
+
+  const missingMappings = useMemo(
+    () => getMissingImportantMappings(columnMapping),
+    [columnMapping]
+  );
+
+  // ---- Filtered logs (search) ----
   const filteredLogs = useMemo(() => {
     if (!search) return logs;
     const term = search.toLowerCase();
-
     return logs.filter((log) => {
-      // 1. Check all normalized fields
       const normalizedFields: unknown[] = [
         log.timestamp, log.date, log.time,
         log.action, log.protocol,
@@ -108,38 +162,22 @@ export function LogProvider({ children }: { children: ReactNode }) {
         log.ruleName, log.user, log.message,
         log.vendor,
       ];
-
-      if (
-        normalizedFields.some(
-          (v) => v !== undefined && String(v).toLowerCase().includes(term)
-        )
-      ) {
+      if (normalizedFields.some((v) => v !== undefined && String(v).toLowerCase().includes(term))) {
         return true;
       }
-
-      // 2. Fall back to the original raw row
       return Object.values(log.raw).some((v) =>
         String(v ?? "").toLowerCase().includes(term)
       );
     });
   }, [logs, search]);
 
-  // --- Legacy compat: raw rows of the filtered set (LogTable / LogChart) ---
-  const filteredData = useMemo(
-    () => filteredLogs.map((l) => l.raw),
-    [filteredLogs]
-  );
+  // ---- Legacy compat ----
+  const filteredData = useMemo(() => filteredLogs.map((l) => l.raw), [filteredLogs]);
 
-  // --- Summary analytics (all logs, not just filtered) ---
-  const summary = useMemo(() => buildSummary(logs), [logs]);
-
-  // --- Data quality (all logs) ---
-  const dataQuality = useMemo(() => getDataQuality(logs), [logs]);
-
-  // --- Security findings (all logs) ---
-  const findings = useMemo(() => runDetections(logs), [logs]);
-
-  // --- Hygiene score (derived from findings + dataQuality) ---
+  // ---- Analytics ----
+  const summary      = useMemo(() => buildSummary(logs), [logs]);
+  const dataQuality  = useMemo(() => getDataQuality(logs), [logs]);
+  const findings     = useMemo(() => runDetections(logs), [logs]);
   const hygieneScore = useMemo(
     () => calculateHygieneScore(findings, dataQuality),
     [findings, dataQuality]
@@ -148,18 +186,15 @@ export function LogProvider({ children }: { children: ReactNode }) {
   return (
     <LogContext.Provider
       value={{
-        rawData,
-        setRawData,
-        resetData,
-        logs,
-        filteredLogs,
-        filteredData,
-        search,
-        setSearch,
-        summary,
-        dataQuality,
-        findings,
-        hygieneScore,
+        rawData, setRawData, resetData,
+        logs, filteredLogs, filteredData,
+        search, setSearch,
+        columnMapping, setColumnMapping,
+        csvHeaders,
+        vendorPreset, setVendorPreset,
+        mappingConfidence, missingMappings,
+        summary, dataQuality,
+        findings, hygieneScore,
         setData,
       }}
     >

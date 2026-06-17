@@ -1,4 +1,5 @@
 import type { RawLogRow, NormalizedLog, FirewallVendor } from "@/types/log";
+import type { ColumnMapping } from "@/types/mapping";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -282,4 +283,126 @@ export function normalizeRow(row: RawLogRow): NormalizedLog {
  */
 export function normalizeLogs(rows: RawLogRow[]): NormalizedLog[] {
   return rows.map(normalizeRow);
+}
+
+// ---------------------------------------------------------------------------
+// Mapping-aware normalizer
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a single field from a row using an explicit column mapping first,
+ * then alias detection as fallback.
+ *
+ * The mapping stores the *original-cased* column name chosen by the user.
+ * We look it up case-insensitively so casing mismatches never cause a miss.
+ */
+function pickWithMapping(
+  map: Map<string, RawLogRow[string]>,
+  mappedColumn: string | undefined,
+  aliases: string[]
+): RawLogRow[string] {
+  // 1. Explicit mapping — look up the user-chosen column name
+  if (mappedColumn !== undefined) {
+    const key = mappedColumn.toLowerCase();
+    if (map.has(key)) return map.get(key);
+  }
+  // 2. Alias fallback — same as the default normalizer
+  return pick(map, aliases);
+}
+
+/**
+ * Convert a single raw CSV row using an explicit ColumnMapping.
+ *
+ * Rules:
+ * - Mapped columns take priority over alias detection.
+ * - Fields not in the mapping fall back to alias detection.
+ * - Never throws; every field is optional.
+ * - Raw row is always preserved unchanged.
+ */
+export function normalizeRowWithMapping(
+  row: RawLogRow,
+  mapping: ColumnMapping,
+  vendorOverride?: FirewallVendor
+): NormalizedLog {
+  const map = lowerKeyMap(row);
+  const vendor = vendorOverride ?? detectVendor(row);
+
+  // ---- Temporal fields ----
+  const timestampRaw = toStr(pickWithMapping(map, mapping.timestamp, ALIASES_TIMESTAMP));
+  const dateRaw      = toStr(pickWithMapping(map, mapping.date,      ALIASES_DATE));
+  const timeRaw      = toStr(pickWithMapping(map, mapping.time,      ALIASES_TIME));
+
+  let timestamp = timestampRaw;
+  if (!timestamp && dateRaw && timeRaw) {
+    timestamp = `${dateRaw} ${timeRaw}`;
+  } else if (!timestamp && dateRaw) {
+    timestamp = dateRaw;
+  }
+
+  // ---- Network fields ----
+  const srcIp    = toStr(pickWithMapping(map, mapping.srcIp,    ALIASES_SRC_IP));
+  const dstIp    = toStr(pickWithMapping(map, mapping.dstIp,    ALIASES_DST_IP));
+  const srcPort  = toNum(pickWithMapping(map, mapping.srcPort,  ALIASES_SRC_PORT));
+  const dstPort  = toNum(pickWithMapping(map, mapping.dstPort,  ALIASES_DST_PORT));
+  const natSrcPort = toNum(pickWithMapping(map, mapping.natSrcPort, ALIASES_NAT_SRC_PORT));
+  const natDstPort = toNum(pickWithMapping(map, mapping.natDstPort, ALIASES_NAT_DST_PORT));
+  const protocol = toStr(pickWithMapping(map, mapping.protocol, ALIASES_PROTOCOL))?.toLowerCase();
+
+  // ---- Action ----
+  const actionRaw = toStr(pickWithMapping(map, mapping.action, ALIASES_ACTION));
+  const action = normalizeAction(actionRaw);
+
+  // ---- Traffic volume ----
+  const bytes          = toNum(pickWithMapping(map, mapping.bytes,          ALIASES_BYTES));
+  const bytesSent      = toNum(pickWithMapping(map, mapping.bytesSent,      ALIASES_BYTES_SENT));
+  const bytesReceived  = toNum(pickWithMapping(map, mapping.bytesReceived,  ALIASES_BYTES_RECEIVED));
+  const packets        = toNum(pickWithMapping(map, mapping.packets,        ALIASES_PACKETS));
+  const packetsSent    = toNum(pickWithMapping(map, mapping.packetsSent,    ALIASES_PKTS_SENT));
+  const packetsReceived = toNum(pickWithMapping(map, mapping.packetsReceived, ALIASES_PKTS_RECEIVED));
+
+  // ---- Application / policy ----
+  const service     = toStr(pickWithMapping(map, mapping.service,     ALIASES_SERVICE));
+  const application = toStr(pickWithMapping(map, mapping.application, ALIASES_APPLICATION));
+  const ruleName    = toStr(pickWithMapping(map, mapping.ruleName,    ALIASES_RULE));
+  const user        = toStr(pickWithMapping(map, mapping.user,        ALIASES_USER));
+  const message     = toStr(pickWithMapping(map, mapping.message,     ALIASES_MESSAGE));
+
+  const result: NormalizedLog = { vendor, raw: row };
+
+  if (timestamp   !== undefined) result.timestamp   = timestamp;
+  if (dateRaw     !== undefined) result.date         = dateRaw;
+  if (timeRaw     !== undefined) result.time         = timeRaw;
+  if (action      !== undefined) result.action       = action;
+  if (protocol    !== undefined) result.protocol     = protocol;
+  if (srcIp       !== undefined) result.srcIp        = srcIp;
+  if (dstIp       !== undefined) result.dstIp        = dstIp;
+  if (srcPort     !== undefined) result.srcPort      = srcPort;
+  if (dstPort     !== undefined) result.dstPort      = dstPort;
+  if (natSrcPort  !== undefined) result.natSrcPort   = natSrcPort;
+  if (natDstPort  !== undefined) result.natDstPort   = natDstPort;
+  if (bytes       !== undefined) result.bytes        = bytes;
+  if (bytesSent   !== undefined) result.bytesSent    = bytesSent;
+  if (bytesReceived !== undefined) result.bytesReceived = bytesReceived;
+  if (packets     !== undefined) result.packets      = packets;
+  if (packetsSent !== undefined) result.packetsSent  = packetsSent;
+  if (packetsReceived !== undefined) result.packetsReceived = packetsReceived;
+  if (service     !== undefined) result.service      = service;
+  if (application !== undefined) result.application  = application;
+  if (ruleName    !== undefined) result.ruleName     = ruleName;
+  if (user        !== undefined) result.user         = user;
+  if (message     !== undefined) result.message      = message;
+
+  return result;
+}
+
+/**
+ * Normalize an array of rows using an explicit ColumnMapping.
+ * Falls back to alias detection for any field not in the mapping.
+ */
+export function normalizeLogsWithMapping(
+  rows: RawLogRow[],
+  mapping: ColumnMapping,
+  vendorOverride?: FirewallVendor
+): NormalizedLog[] {
+  return rows.map((row) => normalizeRowWithMapping(row, mapping, vendorOverride));
 }

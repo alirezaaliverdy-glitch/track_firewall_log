@@ -62,12 +62,16 @@ export default function CsvUploader() {
         console.warn(`CSV parsed with ${errors.length} non-fatal error(s):`, errors);
       }
 
+      // setRawData also auto-detects column mapping and vendor
       setRawData(rows);
       setUploadState({ status: "done", fileName: file.name, rowCount: rows.length });
     };
 
     reader.onerror = () => {
-      setUploadState({ status: "error", message: "An error occurred while reading the file." });
+      setUploadState({
+        status: "error",
+        message: "An error occurred while reading the file.",
+      });
     };
 
     // Fully client-side — no server upload
@@ -120,6 +124,8 @@ export default function CsvUploader() {
           <p className="text-xs text-green-400" role="status" aria-live="polite">
             ✓ Loaded {uploadState.rowCount.toLocaleString()} rows from{" "}
             <span className="font-medium">{uploadState.fileName}</span>
+            {" — "}
+            <span className="text-zinc-400">review column mapping below</span>
           </p>
         )}
 

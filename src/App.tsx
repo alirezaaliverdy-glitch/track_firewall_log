@@ -2,6 +2,7 @@ import "./App.css";
 import { Suspense } from "react";
 import { LogProvider } from "@/context/LogContext";
 import CsvUploader from "./components/csv-uploader";
+import ColumnMappingWizard from "./components/upload/ColumnMappingWizard";
 import SummaryCards from "./components/dashboard/SummaryCards";
 import DataQualityPanel from "./components/dashboard/DataQualityPanel";
 import FindingsPanel from "./components/findings/FindingsPanel";
@@ -27,28 +28,31 @@ function App() {
           {/* 1. Upload + privacy notice */}
           <CsvUploader />
 
-          {/* 2. Summary cards */}
+          {/* 2. Column mapping wizard — auto-hidden when no data */}
+          <ColumnMappingWizard />
+
+          {/* 3. Summary cards */}
           <SummaryCards />
 
-          {/* 3. Export buttons — only visible when data is loaded */}
+          {/* 4. Export buttons — only visible when data is loaded */}
           <ExportButtons />
 
-          {/* 4. Data quality */}
+          {/* 5. Data quality */}
           <DataQualityPanel />
 
-          {/* 5. Security findings */}
+          {/* 6. Security findings */}
           <FindingsPanel />
 
-          {/* 6. Charts side-by-side */}
+          {/* 7. Charts side-by-side */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <ActionDistributionChart />
             <TopPortsChart />
           </div>
 
-          {/* 7. Bytes-over-time chart */}
+          {/* 8. Bytes-over-time chart */}
           <LogChart />
 
-          {/* 8. Log table */}
+          {/* 9. Log table */}
           <LogTable />
 
         </div>
