@@ -82,14 +82,6 @@ function FindingRow({ finding }: { finding: Finding }) {
 // Severity group header
 // ---------------------------------------------------------------------------
 
-const SEVERITY_LABELS: Record<Severity, string> = {
-  critical: "Critical",
-  high:     "High",
-  medium:   "Medium",
-  low:      "Low",
-  info:     "Info",
-};
-
 function SeverityGroup({
   severity,
   findings,
