@@ -12,6 +12,7 @@ import TopPortsChart from "./components/charts/TopPortsChart";
 import LogChart from "./components/log-chart";
 import LogTable from "./components/log-table";
 import ExportButtons from "./components/export/ExportButtons";
+import WorkflowGuide from "./components/layout/WorkflowGuide";
 
 function App() {
   return (
@@ -25,6 +26,9 @@ function App() {
               Firewall Log Analyzer
             </h2>
           </div>
+
+          {/* Workflow Guide */}
+          <WorkflowGuide />
 
           {/* 1. Upload */}
           <CsvUploader />

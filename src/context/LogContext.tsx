@@ -54,6 +54,7 @@ export type LogContextType = {
   csvHeaders: string[];
   vendorPreset: FirewallVendor;
   setVendorPreset: (v: FirewallVendor) => void;
+  detectedVendor: FirewallVendor; // Added for convenience
   mappingConfidence: MappingConfidence;
   missingMappings: MappableField[];
 
@@ -232,7 +233,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
         search, setSearch,
         columnMapping, setColumnMapping,
         csvHeaders,
-        vendorPreset, setVendorPreset,
+        vendorPreset, setVendorPreset, detectedVendor: vendorPreset,
         mappingConfidence, missingMappings,
         summary, dataQuality,
         findings, hygieneScore,

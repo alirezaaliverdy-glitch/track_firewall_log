@@ -53,12 +53,6 @@ function confidenceColor(score: number): string {
   return "text-red-400";
 }
 
-function confidenceBg(score: number): string {
-  if (score >= 75) return "bg-green-500";
-  if (score >= 40) return "bg-yellow-500";
-  return "bg-red-500";
-}
-
 // ---------------------------------------------------------------------------
 // Single field row
 // ---------------------------------------------------------------------------
@@ -218,10 +212,12 @@ export default function ColumnMappingWizard() {
     mappingConfidence,
     missingMappings,
     summary,
+    detectedVendor,
   } = useLogContext();
 
   const [localMapping, setLocalMapping] = useState<ColumnMapping>(() => ({ ...columnMapping }));
   const [isDirty, setIsDirty] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const presets = useMemo(() => getAllPresets(), []);
 
@@ -282,141 +278,146 @@ export default function ColumnMappingWizard() {
   })();
 
   const displayScore = isDirty ? previewConfidence.score : mappingConfidence.score;
+  const currentPreset = presets.find((p) => p.vendor === vendorPreset);
 
   return (
     <div className="rounded-xl border border-zinc-700/60 bg-zinc-900 mb-4 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-700/60">
-        <div>
+      {/* Summary Header */}
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-5 py-3.5 border-b border-zinc-700/60 hover:bg-zinc-800/50 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="flex items-center gap-3">
           <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-widest">
             Column Mapping
           </h3>
-          <p className="text-[11px] text-zinc-500 mt-0.5">
-            Map CSV columns to normalized fields used for analysis and detections.
-          </p>
-        </div>
-        {/* Confidence badge */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-1.5 rounded-full bg-zinc-700 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${confidenceBg(displayScore)}`}
-                style={{ width: `${displayScore}%` }}
-                role="meter"
-                aria-valuenow={displayScore}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`Mapping confidence: ${displayScore}%`}
-              />
-            </div>
-            <span className={`text-sm font-bold ${confidenceColor(displayScore)}`}>
-              {displayScore}%
+          {missingMappings.length > 0 && (
+            <span className="flex items-center gap-1.5 text-yellow-400 text-xs font-medium">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {missingMappings.length} Important Fields Missing
             </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-5 space-y-4">
-        {/* Vendor preset selector */}
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex-1 min-w-[180px]">
-            <label className="block text-[11px] text-zinc-400 mb-1.5">
-              Vendor Preset
-            </label>
-            <div className="relative">
-              <select
-                value={vendorPreset}
-                onChange={(e) => handleVendorChange(e.target.value as FirewallVendor)}
-                className="w-full appearance-none rounded-md bg-zinc-800 border border-zinc-600 text-xs text-zinc-200 px-2.5 py-2 pr-7 focus:outline-none focus:ring-1 focus:ring-zinc-500 transition-colors"
-                aria-label="Select vendor preset"
-              >
-                {presets.map((p) => (
-                  <option key={p.vendor} value={p.vendor}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none"
-                aria-hidden="true"
-              />
-            </div>
-            <p className="text-[10px] text-zinc-600 mt-1">
-              {presets.find((p) => p.vendor === vendorPreset)?.description ?? ""}
-            </p>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 pb-0.5">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
-              title="Reset to auto-detected mapping"
-            >
-              <RotateCcw className="w-3 h-3" aria-hidden="true" />
-              Auto-detect
-            </button>
-            <button
-              type="button"
-              onClick={handleApply}
-              disabled={!isDirty}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed border-blue-600 bg-blue-700 text-white hover:bg-blue-600"
-              title="Apply mapping and re-run analysis"
-            >
-              <CheckCircle className="w-3 h-3" aria-hidden="true" />
-              Apply Mapping
-            </button>
-          </div>
-        </div>
-
-        {/* Missing important fields warning */}
-        {missingMappings.length > 0 && !isDirty && (
-          <div className="flex items-start gap-2 rounded-md border border-yellow-700/50 bg-yellow-950/30 px-3 py-2.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
-            <p className="text-xs text-yellow-300">
-              Some detections may be limited because important fields are not mapped:{" "}
-              <span className="font-medium">
-                {missingMappings.map((f) => FIELD_LABELS[f]).join(", ")}
-              </span>
-            </p>
-          </div>
-        )}
-
-        {isDirty && (
-          <div className="flex items-center gap-2 rounded-md border border-blue-700/50 bg-blue-950/30 px-3 py-2">
-            <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" aria-hidden="true" />
-            <p className="text-xs text-blue-300">
-              Unsaved changes. Click{" "}
-              <span className="font-semibold">Apply Mapping</span> to re-run analysis.
-            </p>
-          </div>
-        )}
-
-        {/* Available headers info */}
-        <p className="text-[10px] text-zinc-600">
-          {csvHeaders.length} column{csvHeaders.length !== 1 ? "s" : ""} detected in CSV:{" "}
-          <span className="text-zinc-500">{csvHeaders.slice(0, 8).join(", ")}</span>
-          {csvHeaders.length > 8 && (
-            <span className="text-zinc-600"> +{csvHeaders.length - 8} more</span>
           )}
-        </p>
-
-        {/* Field mapping sections */}
-        <div className="space-y-2">
-          {WIZARD_SECTIONS.map((section, i) => (
-            <Section
-              key={section.label}
-              label={section.label}
-              fields={section.fields}
-              headers={csvHeaders}
-              mapping={localMapping}
-              onChange={handleFieldChange}
-              defaultOpen={i < 2} // first two sections open by default
-            />
-          ))}
         </div>
-      </div>
+
+        {/* Right side summary */}
+        <div className="flex items-center gap-3">
+          {detectedVendor && (
+            <span className="text-xs text-zinc-400">
+              Vendor: <span className="font-medium">{currentPreset?.name ?? detectedVendor}</span>
+            </span>
+          )}
+          <span className="text-xs text-zinc-400">
+            Confidence: <span className={`font-medium ${confidenceColor(displayScore)}`}>{displayScore}%</span>
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-zinc-500 transition-transform ${expanded ? "rotate-180" : ""}`}
+            aria-hidden="true"
+          />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="p-5 space-y-4">
+          {/* Vendor preset selector */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[180px]">
+              <label className="block text-[11px] text-zinc-400 mb-1.5">
+                Vendor Preset
+              </label>
+              <div className="relative">
+                <select
+                  value={vendorPreset}
+                  onChange={(e) => handleVendorChange(e.target.value as FirewallVendor)}
+                  className="w-full appearance-none rounded-md bg-zinc-800 border border-zinc-600 text-xs text-zinc-200 px-2.5 py-2 pr-7 focus:outline-none focus:ring-1 focus:ring-zinc-500 transition-colors"
+                  aria-label="Select vendor preset"
+                >
+                  {presets.map((p) => (
+                    <option key={p.vendor} value={p.vendor}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none"
+                  aria-hidden="true"
+                />
+              </div>
+              <p className="text-[10px] text-zinc-600 mt-1">
+                {currentPreset?.description ?? ""}
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 pb-0.5">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+                title="Reset to auto-detected mapping"
+              >
+                <RotateCcw className="w-3 h-3" aria-hidden="true" />
+                Auto-detect
+              </button>
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={!isDirty}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed border-blue-600 bg-blue-700 text-white hover:bg-blue-600"
+                title="Apply mapping and re-run analysis"
+              >
+                <CheckCircle className="w-3 h-3" aria-hidden="true" />
+                Apply Mapping
+              </button>
+            </div>
+          </div>
+
+          {/* Missing important fields warning */}
+          {missingMappings.length > 0 && !isDirty && (
+            <div className="flex items-start gap-2 rounded-md border border-yellow-700/50 bg-yellow-950/30 px-3 py-2.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <p className="text-xs text-yellow-300">
+                Map Source IP and Destination IP to improve scan and attacker detection.
+              </p>
+            </div>
+          )}
+
+          {isDirty && (
+            <div className="flex items-center gap-2 rounded-md border border-blue-700/50 bg-blue-950/30 px-3 py-2">
+              <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" aria-hidden="true" />
+              <p className="text-xs text-blue-300">
+                Unsaved changes. Click{" "}
+                <span className="font-semibold">Apply Mapping</span> to re-run analysis.
+              </p>
+            </div>
+          )}
+
+          {/* Available headers info */}
+          <p className="text-[10px] text-zinc-600">
+            {csvHeaders.length} column{csvHeaders.length !== 1 ? "s" : ""} detected in CSV:{" "}
+            <span className="text-zinc-500">{csvHeaders.slice(0, 8).join(", ")}</span>
+            {csvHeaders.length > 8 && (
+              <span className="text-zinc-600"> +{csvHeaders.length - 8} more</span>
+            )}
+          </p>
+
+          {/* Field mapping sections */}
+          <div className="space-y-2">
+            {WIZARD_SECTIONS.map((section, i) => (
+              <Section
+                key={section.label}
+                label={section.label}
+                fields={section.fields}
+                headers={csvHeaders}
+                mapping={localMapping}
+                onChange={handleFieldChange}
+                defaultOpen={i < 2} // first two sections open by default
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
