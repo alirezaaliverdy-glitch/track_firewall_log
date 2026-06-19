@@ -8,6 +8,8 @@ import {
 } from "react";
 import { logData } from "@/lib/logData";
 import { normalizeLogsWithMapping, detectVendor } from "@/lib/normalizer";
+import { enrichLogsWithTrafficDirection } from "@/lib/trafficDirection";
+import { enrichLogsWithAssetIntelligence } from "@/lib/assetIntelligence";
 import { buildSummary, type LogSummary } from "@/lib/analytics";
 import { getDataQuality, type DataQualityResult } from "@/lib/dataQuality";
 import { runDetections } from "@/lib/detections";
@@ -128,6 +130,8 @@ function applySearch(logs: NormalizedLog[], term: string): NormalizedLog[] {
       log.service, log.application,
       log.ruleName, log.user, log.message,
       log.vendor,
+      log.srcIpCategory, log.dstIpCategory,
+      log.trafficDirection, log.serviceCategory,
     ];
     if (fields.some((v) => v !== undefined && String(v).toLowerCase().includes(lower))) {
       return true;
@@ -204,10 +208,10 @@ export function LogProvider({ children }: { children: ReactNode }) {
 
   const csvHeaders = useMemo(() => headersFromRows(rawData), [rawData]);
 
-  const logs = useMemo(
-    () => normalizeLogsWithMapping(rawData, columnMapping, vendorPreset),
-    [rawData, columnMapping, vendorPreset]
-  );
+  const logs = useMemo(() => {
+    const normalized = normalizeLogsWithMapping(rawData, columnMapping, vendorPreset);
+    return enrichLogsWithAssetIntelligence(enrichLogsWithTrafficDirection(normalized));
+  }, [rawData, columnMapping, vendorPreset]);
 
   const mappingConfidence = useMemo(
     () => getMappingConfidence(columnMapping),

@@ -22,6 +22,17 @@ export type FirewallVendor =
 
 export type FirewallTypeSelection = "auto" | FirewallVendor;
 
+export type IpCategory = "private" | "public" | "loopback" | "link-local" | "invalid" | "missing";
+export type TrafficDirection = "inbound" | "outbound" | "internal" | "external" | "loopback" | "unknown";
+export type ServiceCategory =
+  | "management"
+  | "database"
+  | "dns"
+  | "mail"
+  | "file-sharing"
+  | "web"
+  | "unknown";
+
 // ---------------------------------------------------------------------------
 // Normalized log model
 // ---------------------------------------------------------------------------
@@ -76,6 +87,20 @@ export type NormalizedLog = {
   user?: string;
   /** Free-form log message */
   message?: string;
+  /** Source IP category derived from RFC1918 and reserved ranges. */
+  srcIpCategory?: IpCategory;
+  /** Destination IP category derived from RFC1918 and reserved ranges. */
+  dstIpCategory?: IpCategory;
+  /** Direction derived from source/destination IP categories. */
+  trafficDirection?: TrafficDirection;
+  /** Service family derived from destination port. */
+  serviceCategory?: ServiceCategory;
+  /** True when destination port is a management or remote-access service. */
+  isManagementTraffic?: boolean;
+  /** True when destination port is a database service. */
+  isDatabaseTraffic?: boolean;
+  /** True when destination port is in the risky service registry. */
+  isRiskyServiceTraffic?: boolean;
   /** Detected firewall vendor */
   vendor: FirewallVendor;
   /** Original unmodified CSV row — kept for search and raw display */

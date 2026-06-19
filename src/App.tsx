@@ -7,6 +7,7 @@ import FirewallTypeSelector from "./components/upload/FirewallTypeSelector";
 import ColumnMappingWizard from "./components/upload/ColumnMappingWizard";
 import SummaryCards from "./components/dashboard/SummaryCards";
 import DataQualityPanel from "./components/dashboard/DataQualityPanel";
+import TrafficDirectionPanel from "./components/dashboard/TrafficDirectionPanel";
 import SensitivePortsExplorer from "./components/dashboard/SensitivePortsExplorer";
 import FindingsPanel from "./components/findings/FindingsPanel";
 import EvidenceOverviewBanner from "./components/findings/EvidenceOverviewBanner";
@@ -57,6 +58,7 @@ function App() {
           <LogChart />
 
           <DataQualityPanel />
+          <TrafficDirectionPanel />
           <FindingsPanel />
           <FindingDetails />
           <LogTable />

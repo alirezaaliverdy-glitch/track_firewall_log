@@ -135,6 +135,22 @@ const COLUMNS: ColumnDef<NormalizedLog>[] = [
     ),
   },
   {
+    accessorKey: "trafficDirection",
+    header: "Direction",
+    cell: ({ row }: { row: any }) => (
+      <span className="rounded border border-blue-900/60 bg-blue-950/30 px-1.5 py-0.5 text-[11px] text-blue-200">
+        {s(row.getValue("trafficDirection")) || "unknown"}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "serviceCategory",
+    header: "Service Type",
+    cell: ({ row }: { row: any }) => (
+      <span className="text-xs text-slate-400">{s(row.getValue("serviceCategory"))}</span>
+    ),
+  },
+  {
     accessorKey: "bytes",
     header: "Bytes",
     cell: ({ row }: { row: any }) => {
