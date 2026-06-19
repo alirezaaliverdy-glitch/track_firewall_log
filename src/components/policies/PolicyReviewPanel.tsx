@@ -23,11 +23,13 @@ function PolicyGroup({ title, policies }: { title: string; policies: PolicySumma
 }
 
 export default function PolicyReviewPanel() {
-  const { logs, summary } = useLogContext();
+  const { logs, summary, logProfile } = useLogContext();
 
   const policies = useMemo(() => buildPolicyReview(logs), [logs]);
 
   if (summary.total === 0) return null;
+
+  if (!logProfile.capabilities.includes("policyReview")) return null;
 
   const topRisky = policies.filter((policy) => policy.riskScore > 0).slice(0, 5);
   const mostActive = [...policies].sort((a, b) => b.totalEvents - a.totalEvents).slice(0, 5);

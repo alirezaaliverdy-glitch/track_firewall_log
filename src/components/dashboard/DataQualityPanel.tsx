@@ -46,7 +46,7 @@ function CoverageRow({ coverage, field }: { coverage: number; field: string }) {
 }
 
 export default function DataQualityPanel() {
-  const { dataQuality, summary, missingMappings } = useLogContext();
+  const { dataQuality, summary, missingMappings, logProfile } = useLogContext();
   const [showDetails, setShowDetails] = useState(false);
 
   if (summary.total === 0) return null;
@@ -76,6 +76,12 @@ export default function DataQualityPanel() {
       : hasRiskyServiceGap
         ? "Map Action and Destination Port to improve risky service detection."
         : "Review the mapping and connect any available firewall fields.";
+  const disabledHighlights = [
+    logProfile.disabledCapabilities.policyReview,
+    logProfile.disabledCapabilities.trafficDirection,
+    logProfile.disabledCapabilities.sensitivePorts,
+    logProfile.disabledCapabilities.securityFindings,
+  ].filter((reason): reason is string => Boolean(reason)).slice(0, 3);
 
   return (
     <SectionCard title="Analysis Readiness" subtitle="How complete this import is for security analysis">
@@ -128,10 +134,24 @@ export default function DataQualityPanel() {
       </button>
 
       {showDetails && (
-        <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-3 border-t border-slate-800 pt-3 sm:grid-cols-2">
-          {dataQuality.fields.map((field) => (
-            <CoverageRow key={field.field} coverage={field.coverage} field={field.field} />
-          ))}
+        <div className="mt-3 space-y-3 border-t border-slate-800 pt-3">
+          {disabledHighlights.length > 0 && (
+            <div className="rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Capability notes
+              </p>
+              <ul className="space-y-1 text-xs text-slate-400">
+                {disabledHighlights.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+            {dataQuality.fields.map((field) => (
+              <CoverageRow key={field.field} coverage={field.coverage} field={field.field} />
+            ))}
+          </div>
         </div>
       )}
     </SectionCard>

@@ -302,6 +302,7 @@ export default function FindingsPanel() {
   const {
     findings,
     summary,
+    logProfile,
     selectedFindingId,
     setSelectedFindingId,
     clearSelectedFinding,
@@ -309,6 +310,7 @@ export default function FindingsPanel() {
   } = useLogContext();
 
   if (summary.total === 0) return null;
+  if (!logProfile.capabilities.includes("securityFindings")) return null;
 
   const grouped = Object.fromEntries(
     SEVERITY_ORDER.map((severity) => [

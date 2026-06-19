@@ -20,12 +20,14 @@ import {
   getMissingImportantMappings,
 } from "@/lib/columnMapping";
 import { getVendorPreset } from "@/lib/vendorPresets";
+import { buildLogProfile } from "@/lib/logProfile";
 import type {
   RawLogRow,
   NormalizedLog,
   FirewallVendor,
   FirewallTypeSelection,
 } from "@/types/log";
+import type { LogProfile } from "@/types/logProfile";
 import type { Finding } from "@/types/finding";
 import type {
   ColumnMapping,
@@ -71,6 +73,7 @@ export type LogContextType = {
   // --- Analytics ---
   summary: LogSummary;
   dataQuality: DataQualityResult;
+  logProfile: LogProfile;
 
   // --- Security findings ---
   findings: Finding[];
@@ -226,6 +229,10 @@ export function LogProvider({ children }: { children: ReactNode }) {
 
   const summary      = useMemo(() => buildSummary(logs), [logs]);
   const dataQuality  = useMemo(() => getDataQuality(logs), [logs]);
+  const logProfile   = useMemo(
+    () => buildLogProfile(rawData, logs, firewallType),
+    [rawData, logs, firewallType]
+  );
   const findings     = useMemo(() => runDetections(logs), [logs]);
   const hygieneScore = useMemo(
     () => calculateHygieneScore(findings, dataQuality),
@@ -270,7 +277,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
         firewallType, setFirewallType,
         vendorPreset, setVendorPreset, detectedVendor: vendorPreset,
         mappingConfidence, missingMappings,
-        summary, dataQuality,
+        summary, dataQuality, logProfile,
         findings, hygieneScore,
         selectedFindingId, setSelectedFindingId,
         clearSelectedFinding,

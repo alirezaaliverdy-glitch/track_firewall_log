@@ -36,7 +36,7 @@ function isBlocked(action?: string): boolean {
 }
 
 export default function SensitivePortsExplorer() {
-  const { logs, summary } = useLogContext();
+  const { logs, summary, logProfile } = useLogContext();
   const [query, setQuery] = useState("");
 
   const exposures = useMemo(() => {
@@ -75,6 +75,7 @@ export default function SensitivePortsExplorer() {
   }, [logs]);
 
   if (summary.total === 0) return null;
+  if (!logProfile.capabilities.includes("sensitivePorts")) return null;
 
   const lowerQuery = query.trim().toLowerCase();
   const filtered = lowerQuery

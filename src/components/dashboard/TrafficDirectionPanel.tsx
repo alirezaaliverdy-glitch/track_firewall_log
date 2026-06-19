@@ -16,9 +16,10 @@ function CountPill({ label, value }: { label: string; value: number }) {
 }
 
 export default function TrafficDirectionPanel() {
-  const { logs, summary } = useLogContext();
+  const { logs, summary, logProfile } = useLogContext();
 
   if (summary.total === 0) return null;
+  if (!logProfile.capabilities.includes("trafficDirection")) return null;
 
   const directionCounts = new Map<TrafficDirection, number>(
     DIRECTIONS.map((direction) => [direction, 0])
