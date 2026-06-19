@@ -18,11 +18,48 @@ import {
   copyToClipboard,
 } from "@/lib/findingUtils";
 import { exportFindingEvidence } from "@/lib/exportUtils";
+import { getRiskyPort } from "@/lib/riskyPorts";
 import type { Finding, Severity } from "@/types/finding";
 
-// ---------------------------------------------------------------------------
-// Single finding card
-// ---------------------------------------------------------------------------
+const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
+
+type PortFindingSummary = {
+  port?: number;
+  service?: string;
+  actionContext: "Allowed" | "Blocked" | "Mixed";
+};
+
+function titleCase(value: string): string {
+  return `${value[0].toUpperCase()}${value.slice(1)}`;
+}
+
+function getPortSummary(finding: Finding): PortFindingSummary {
+  const port = finding.relatedLogs.find((log) => log.dstPort !== undefined)?.dstPort;
+  const riskyPort = port !== undefined ? getRiskyPort(port) : undefined;
+  const service = riskyPort?.service ?? finding.relatedLogs.find((log) => log.service)?.service;
+
+  const actions = new Set(
+    finding.relatedLogs
+      .map((log) => log.action?.toLowerCase())
+      .filter((action): action is string => action !== undefined)
+  );
+  const allowed = ["allow", "accept", "pass", "permit"].some((action) => actions.has(action));
+  const blocked = ["deny", "drop", "block"].some((action) => actions.has(action));
+
+  return {
+    port,
+    service,
+    actionContext: allowed && blocked ? "Mixed" : allowed ? "Allowed" : blocked ? "Blocked" : "Mixed",
+  };
+}
+
+function isPortFinding(finding: Finding, port?: number): port is number {
+  return port !== undefined && (
+    finding.type.includes("risk") ||
+    finding.type.includes("port") ||
+    getRiskyPort(port) !== undefined
+  );
+}
 
 function FindingCard({
   finding,
@@ -37,6 +74,8 @@ function FindingCard({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const portSummary = getPortSummary(finding);
+  const showPortFirst = isPortFinding(finding, portSummary.port);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -62,7 +101,7 @@ function FindingCard({
     onSelect();
     setOpen(true);
     window.setTimeout(() => {
-      document.getElementById("evidence-log-area")?.scrollIntoView({
+      document.getElementById("analysis-overview")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
@@ -75,38 +114,69 @@ function FindingCard({
 
   return (
     <div className={`overflow-hidden rounded-lg border bg-slate-950/50 transition-all ${selectedRing}`}>
-      {/* Header row — clickable to expand */}
       <button
         type="button"
         className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
           isSelected ? "bg-blue-950/25 hover:bg-blue-950/35" : "hover:bg-slate-900/70"
         }`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <SeverityDot severity={finding.severity} />
+        {!showPortFirst && <SeverityDot severity={finding.severity} />}
 
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-0.5">
-            <SeverityBadge severity={finding.severity} />
-            <span className="text-xs text-zinc-500">
-              {finding.count} event{finding.count !== 1 ? "s" : ""}
-            </span>
-            {finding.mitreTactic && (
-              <span
-                className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400"
-                title={finding.mitreTechnique}
-              >
-                MITRE · {finding.mitreTactic}
-              </span>
-            )}
-          </div>
-          <p className="text-sm font-medium text-zinc-100 leading-snug">
-            {finding.title}
-          </p>
+        <div className="min-w-0 flex-1">
+          {showPortFirst ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-400">Port</p>
+                    <p className="font-mono text-3xl font-bold leading-none text-blue-100">
+                      {portSummary.port}
+                    </p>
+                  </div>
+                  <div className="pb-0.5">
+                    <p className="text-sm font-semibold text-slate-100">
+                      {portSummary.service ?? "Sensitive service"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {titleCase(finding.severity)} Risk · {finding.count} event{finding.count !== 1 ? "s" : ""} · {portSummary.actionContext}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-300">
+                  Recommendation: {finding.recommendation}
+                </p>
+              </div>
+              <SeverityBadge severity={finding.severity} />
+            </div>
+          ) : (
+            <>
+              <div className="mb-0.5 flex flex-wrap items-center gap-2">
+                <SeverityBadge severity={finding.severity} />
+                <span className="text-xs text-slate-500">
+                  {finding.count} event{finding.count !== 1 ? "s" : ""}
+                </span>
+                {finding.mitreTactic && (
+                  <span
+                    className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400"
+                    title={finding.mitreTechnique}
+                  >
+                    MITRE · {finding.mitreTactic}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm font-medium leading-snug text-slate-100">
+                {finding.title}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                Recommendation: {finding.recommendation}
+              </p>
+            </>
+          )}
         </div>
 
-        <span className="flex-shrink-0 mt-0.5 text-zinc-500">
+        <span className="mt-0.5 flex-shrink-0 text-slate-500">
           {open
             ? <ChevronDown className="w-4 h-4" aria-hidden="true" />
             : <ChevronRight className="w-4 h-4" aria-hidden="true" />
@@ -114,7 +184,6 @@ function FindingCard({
         </span>
       </button>
 
-      {/* Action bar */}
       <div className={`flex flex-wrap items-center gap-1.5 border-t border-slate-800 px-4 py-2 ${
         isSelected ? "bg-blue-950/10" : "bg-slate-900/40"
       }`}>
@@ -135,7 +204,7 @@ function FindingCard({
         <button
           type="button"
           onClick={handleFilterLogs}
-          className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+          className={`flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
             isSelected
               ? "text-blue-200 hover:bg-blue-900/40"
               : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
@@ -171,7 +240,6 @@ function FindingCard({
         )}
       </div>
 
-      {/* Expanded description / recommendation */}
       {open && (
         <div className="space-y-3 border-t border-slate-800 bg-slate-900/40 px-4 pb-4 pt-3">
           <p className="text-xs leading-relaxed text-slate-300">{finding.description}</p>
@@ -182,8 +250,8 @@ function FindingCard({
             <p className="text-xs text-slate-200">{finding.recommendation}</p>
           </div>
           {finding.mitreTechnique && (
-            <p className="text-[11px] text-zinc-500">
-              <span className="text-zinc-400 font-medium">Technique: </span>
+            <p className="text-[11px] text-slate-500">
+              <span className="font-medium text-slate-400">Technique: </span>
               {finding.mitreTechnique}
             </p>
           )}
@@ -192,10 +260,6 @@ function FindingCard({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Severity group
-// ---------------------------------------------------------------------------
 
 function SeverityGroup({
   severity,
@@ -215,30 +279,24 @@ function SeverityGroup({
     <div>
       <div className="mb-2 flex items-center gap-2">
         <SeverityBadge severity={severity} />
-        <span className="text-xs text-zinc-500">
+        <span className="text-xs text-slate-500">
           {findings.length} finding{findings.length !== 1 ? "s" : ""}
         </span>
       </div>
       <div className="space-y-2">
-        {findings.map((f) => (
+        {findings.map((finding) => (
           <FindingCard
-            key={f.id}
-            finding={f}
-            isSelected={selectedFindingId === f.id}
-            onSelect={() => onSelect(f.id)}
-            onFilterLogs={() => onFilterLogs(f.id)}
+            key={finding.id}
+            finding={finding}
+            isSelected={selectedFindingId === finding.id}
+            onSelect={() => onSelect(finding.id)}
+            onFilterLogs={() => onFilterLogs(finding.id)}
           />
         ))}
       </div>
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Panel
-// ---------------------------------------------------------------------------
-
-const SEVERITY_ORDER: Severity[] = ["critical", "high", "medium", "low", "info"];
 
 export default function FindingsPanel() {
   const {
@@ -253,7 +311,10 @@ export default function FindingsPanel() {
   if (summary.total === 0) return null;
 
   const grouped = Object.fromEntries(
-    SEVERITY_ORDER.map((sev) => [sev, findings.filter((f) => f.severity === sev)])
+    SEVERITY_ORDER.map((severity) => [
+      severity,
+      findings.filter((finding) => finding.severity === severity),
+    ])
   ) as Record<Severity, Finding[]>;
 
   const headerRight = (
@@ -270,7 +331,7 @@ export default function FindingsPanel() {
         </button>
       )}
       {findings.length > 0 && (
-        <span className="text-xs text-zinc-400">
+        <span className="text-xs text-slate-400">
           {findings.length} finding{findings.length !== 1 ? "s" : ""}
         </span>
       )}
@@ -279,27 +340,27 @@ export default function FindingsPanel() {
 
   return (
     <div id="security-findings" className="scroll-mt-4">
-      <SectionCard title="Security Findings" headerRight={headerRight}>
-      {findings.length === 0 ? (
-        <EmptyState
-          compact
-          title="No major security findings detected"
-          description="Based on the available fields in the uploaded log."
-        />
-      ) : (
-        <div className="space-y-5">
-          {SEVERITY_ORDER.map((sev) => (
-            <SeverityGroup
-              key={sev}
-              severity={sev}
-              findings={grouped[sev]}
-              selectedFindingId={selectedFindingId}
-              onSelect={setSelectedFindingId}
-              onFilterLogs={setSelectedFindingId}
-            />
-          ))}
-        </div>
-      )}
+      <SectionCard title="Security Findings" subtitle="Prioritized findings with port-first risky service context" headerRight={headerRight}>
+        {findings.length === 0 ? (
+          <EmptyState
+            compact
+            title="No major security findings detected"
+            description="Based on the available fields in the uploaded log."
+          />
+        ) : (
+          <div className="space-y-5">
+            {SEVERITY_ORDER.map((severity) => (
+              <SeverityGroup
+                key={severity}
+                severity={severity}
+                findings={grouped[severity]}
+                selectedFindingId={selectedFindingId}
+                onSelect={setSelectedFindingId}
+                onFilterLogs={setSelectedFindingId}
+              />
+            ))}
+          </div>
+        )}
       </SectionCard>
     </div>
   );
