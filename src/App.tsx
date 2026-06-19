@@ -2,6 +2,7 @@ import "./App.css";
 import { Suspense } from "react";
 import { LogProvider } from "@/context/LogContext";
 import CsvUploader from "./components/csv-uploader";
+import FirewallTypeSelector from "./components/upload/FirewallTypeSelector";
 import ColumnMappingWizard from "./components/upload/ColumnMappingWizard";
 import SummaryCards from "./components/dashboard/SummaryCards";
 import DataQualityPanel from "./components/dashboard/DataQualityPanel";
@@ -32,6 +33,7 @@ function App() {
           <WorkflowGuide />
 
           {/* 1. Upload */}
+          <FirewallTypeSelector />
           <CsvUploader />
 
           {/* 2. Column mapping wizard */}

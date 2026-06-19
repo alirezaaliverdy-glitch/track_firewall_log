@@ -61,10 +61,16 @@ function FindingCard({
     e.stopPropagation();
     onSelect();
     setOpen(true);
+    window.setTimeout(() => {
+      document.getElementById("evidence-log-area")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
   };
 
   const selectedRing = isSelected
-    ? "ring-2 ring-blue-500/60 border-blue-600/60"
+    ? "ring-2 ring-blue-500/80 border-blue-500 bg-blue-950/10 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
     : "border-zinc-700/50";
 
   return (
@@ -115,7 +121,11 @@ function FindingCard({
         <button
           type="button"
           onClick={handleViewEvidence}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors"
+          className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+            isSelected
+              ? "border border-blue-600/70 bg-blue-600 text-white hover:bg-blue-500"
+              : "border border-blue-800/70 bg-blue-950/40 text-blue-200 hover:bg-blue-900/50"
+          }`}
           title="Show details and evidence"
         >
           <Eye className="w-3 h-3" aria-hidden="true" />
@@ -127,13 +137,13 @@ function FindingCard({
           onClick={handleFilterLogs}
           className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
             isSelected
-              ? "text-blue-300 hover:text-blue-200 hover:bg-blue-900/40"
+              ? "text-blue-200 hover:bg-blue-900/40"
               : "text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/60"
           }`}
           title="Filter log table to this finding's evidence"
         >
           <Table2 className="w-3 h-3" aria-hidden="true" />
-          {isSelected ? "Filtering Logs" : "Filter Logs"}
+          {isSelected ? "Evidence Active" : "Filter Table"}
         </button>
 
         <button
@@ -252,7 +262,7 @@ export default function FindingsPanel() {
         <button
           type="button"
           onClick={clearSelectedFinding}
-          className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+          className="flex items-center gap-1.5 rounded border border-blue-800/70 bg-blue-950/40 px-2.5 py-1 text-[11px] font-medium text-blue-200 transition-colors hover:bg-blue-900/50"
           title="Clear finding filter and show all logs"
         >
           <XCircle className="w-3 h-3" aria-hidden="true" />
@@ -268,7 +278,8 @@ export default function FindingsPanel() {
   );
 
   return (
-    <SectionCard title="Security Findings" headerRight={headerRight}>
+    <div id="security-findings" className="scroll-mt-4">
+      <SectionCard title="Security Findings" headerRight={headerRight}>
       {findings.length === 0 ? (
         <EmptyState
           compact
@@ -289,6 +300,7 @@ export default function FindingsPanel() {
           ))}
         </div>
       )}
-    </SectionCard>
+      </SectionCard>
+    </div>
   );
 }

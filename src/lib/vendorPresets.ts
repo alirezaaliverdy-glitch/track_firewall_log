@@ -152,6 +152,23 @@ const VENDOR_PRESETS: VendorPreset[] = [
       ruleName:   "Rule",
     },
   },
+
+  {
+    vendor: "ubiquiti",
+    name: "Ubiquiti / UniFi",
+    description: "UniFi gateway firewall logs and common CSV exports.",
+    mapping: {
+      timestamp: "timestamp",
+      srcIp:     "src_ip",
+      dstIp:     "dst_ip",
+      srcPort:   "src_port",
+      dstPort:   "dst_port",
+      protocol:  "proto",
+      action:    "action",
+      bytes:     "bytes",
+      ruleName:  "rule",
+    },
+  },
 ];
 
 /** Map from vendor key to preset for O(1) lookup. */

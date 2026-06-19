@@ -17,7 +17,10 @@ export type FirewallVendor =
   | "paloalto"
   | "sophos"
   | "ciscoasa"
+  | "ubiquiti"
   | "unknown";
+
+export type FirewallTypeSelection = "auto" | FirewallVendor;
 
 // ---------------------------------------------------------------------------
 // Normalized log model

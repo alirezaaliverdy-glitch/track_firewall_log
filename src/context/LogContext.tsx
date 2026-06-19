@@ -17,7 +17,13 @@ import {
   getMappingConfidence,
   getMissingImportantMappings,
 } from "@/lib/columnMapping";
-import type { RawLogRow, NormalizedLog, FirewallVendor } from "@/types/log";
+import { getVendorPreset } from "@/lib/vendorPresets";
+import type {
+  RawLogRow,
+  NormalizedLog,
+  FirewallVendor,
+  FirewallTypeSelection,
+} from "@/types/log";
 import type { Finding } from "@/types/finding";
 import type {
   ColumnMapping,
@@ -52,6 +58,8 @@ export type LogContextType = {
   columnMapping: ColumnMapping;
   setColumnMapping: (m: ColumnMapping) => void;
   csvHeaders: string[];
+  firewallType: FirewallTypeSelection;
+  setFirewallType: (v: FirewallTypeSelection) => void;
   vendorPreset: FirewallVendor;
   setVendorPreset: (v: FirewallVendor) => void;
   detectedVendor: FirewallVendor; // Added for convenience
@@ -130,6 +138,20 @@ function applySearch(logs: NormalizedLog[], term: string): NormalizedLog[] {
   });
 }
 
+function mappingForRows(rows: RawLogRow[], firewallType: FirewallTypeSelection): ColumnMapping {
+  const headers = headersFromRows(rows);
+  const detectedMapping = detectColumnMapping(headers);
+  if (firewallType === "auto") return detectedMapping;
+
+  const preset = getVendorPreset(firewallType);
+  return preset ? { ...detectedMapping, ...preset.mapping } : detectedMapping;
+}
+
+function vendorForRows(rows: RawLogRow[], firewallType: FirewallTypeSelection): FirewallVendor {
+  if (firewallType !== "auto") return firewallType;
+  return rows.length > 0 ? detectVendor(rows[0]) : "generic";
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -138,6 +160,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
   const [rawData, setRawDataState] = useState<RawLogRow[]>(logData);
   const [search, setSearch] = useState("");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+  const [firewallType, setFirewallTypeState] = useState<FirewallTypeSelection>("auto");
 
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>(() =>
     detectColumnMapping(headersFromRows(logData))
@@ -152,10 +175,16 @@ export function LogProvider({ children }: { children: ReactNode }) {
     setRawDataState(rows);
     setSearch("");
     setSelectedFindingId(null);
-    const headers = headersFromRows(rows);
-    setColumnMapping(detectColumnMapping(headers));
-    if (rows.length > 0) setVendorPreset(detectVendor(rows[0]));
-  }, []);
+    setColumnMapping(mappingForRows(rows, firewallType));
+    setVendorPreset(vendorForRows(rows, firewallType));
+  }, [firewallType]);
+
+  const setFirewallType = useCallback((nextType: FirewallTypeSelection) => {
+    setFirewallTypeState(nextType);
+    setSelectedFindingId(null);
+    setColumnMapping(mappingForRows(rawData, nextType));
+    setVendorPreset(vendorForRows(rawData, nextType));
+  }, [rawData]);
 
   const setData = setRawData;
 
@@ -163,9 +192,9 @@ export function LogProvider({ children }: { children: ReactNode }) {
     setRawDataState(logData);
     setSearch("");
     setSelectedFindingId(null);
-    setColumnMapping(detectColumnMapping(headersFromRows(logData)));
-    setVendorPreset(logData.length > 0 ? detectVendor(logData[0]) : "generic");
-  }, []);
+    setColumnMapping(mappingForRows(logData, firewallType));
+    setVendorPreset(vendorForRows(logData, firewallType));
+  }, [firewallType]);
 
   const clearSelectedFinding = useCallback(() => {
     setSelectedFindingId(null);
@@ -233,6 +262,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
         search, setSearch,
         columnMapping, setColumnMapping,
         csvHeaders,
+        firewallType, setFirewallType,
         vendorPreset, setVendorPreset, detectedVendor: vendorPreset,
         mappingConfidence, missingMappings,
         summary, dataQuality,

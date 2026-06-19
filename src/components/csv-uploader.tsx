@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle, FileText, RefreshCw, Upload } from "lucide-react";
 import { importFirewallFile } from "@/lib/importer";
 import { useLogContext } from "@/context/LogContext";
 import { Input } from "./ui/input";
@@ -97,16 +97,35 @@ export default function CsvUploader() {
 
   if (summary.total === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center rounded-lg border border-zinc-700 bg-zinc-900 mb-4">
-        <h2 className="text-xl font-semibold text-zinc-200 mb-2">
-          Start by uploading a firewall log file
-        </h2>
-        <p className="text-sm text-zinc-400 mb-4">
-          Your logs stay in your browser. No file is uploaded to any server.
-        </p>
+      <div className="mb-4 rounded-lg border border-blue-900/50 bg-zinc-900 p-5 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border border-blue-700/60 bg-blue-950/50 text-blue-300">
+              <Upload className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-100">
+                Import firewall logs
+              </h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                Upload a log export to analyze traffic, findings, and evidence. Logs stay in your browser.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {SUPPORTED_FORMATS.map((format) => (
+                  <span key={format} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
+                    {format}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                Supported vendors: {SUPPORTED_VENDORS.join(", ")}
+              </p>
+            </div>
+          </div>
 
-        <label className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2 mb-4">
-          <span className="mr-2">Upload firewall log file</span>
+        <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus-within:ring-2 focus-within:ring-blue-500/50 md:flex-shrink-0">
+          <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
+          <span>Choose log file</span>
           <Input
             ref={inputRef}
             type="file"
@@ -116,56 +135,52 @@ export default function CsvUploader() {
             aria-label="Upload firewall log file"
           />
         </label>
-
-        <p className="text-xs text-zinc-500 mb-2">
-          Supported formats: {SUPPORTED_FORMATS.join(", ")}
-        </p>
-        <p className="text-xs text-zinc-500 mb-2">
-          Supported examples: {SUPPORTED_VENDORS.join(", ")}
-        </p>
-        <p className="text-xs text-zinc-500 max-w-sm">
-          Hint: exports with Action, Source IP, Destination IP, Port, Bytes, or Packets work best.
-        </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 mb-4">
+    <div className="mb-4 rounded-lg border border-blue-900/50 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
       <div className="flex flex-wrap items-center gap-3 justify-between">
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-sm text-zinc-300 whitespace-nowrap">Choose log file:</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-blue-800/70 bg-blue-950/40 px-3 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-900/50">
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            <span className="whitespace-nowrap">Choose log file</span>
             <Input
               ref={inputRef}
               type="file"
               accept={ACCEPT_ATTRIBUTE}
               onChange={onFileChange}
-              className="text-sm"
+              className="hidden"
               aria-label="Upload firewall log file"
             />
           </label>
           {uploadState.status === "done" && (
-            <span className="text-sm text-zinc-400">
-              File: <span className="font-medium">{uploadState.fileName}</span>
+            <span className="inline-flex min-w-0 items-center gap-2 text-sm text-zinc-300">
+              <CheckCircle className="h-4 w-4 flex-shrink-0 text-blue-400" aria-hidden="true" />
+              <span className="truncate">
+                Loaded <span className="font-medium text-zinc-100">{uploadState.fileName}</span>
+              </span>
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {uploadState.status === "done" && (
-            <span className="text-sm text-zinc-400">
-              Rows: <span className="font-medium">{summary.total.toLocaleString()}</span>
+            <span className="inline-flex items-center gap-1.5 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-400">
+              <FileText className="h-3.5 w-3.5 text-zinc-500" aria-hidden="true" />
+              <span>{summary.total.toLocaleString()} rows</span>
             </span>
           )}
           {detectedVendor && (
-            <span className="text-sm text-zinc-400">
-              Vendor: <span className="font-medium">{detectedVendor}</span>
+            <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-400">
+              Vendor <span className="font-medium text-zinc-200">{detectedVendor}</span>
             </span>
           )}
           {summary.total > 0 && (
-            <span className="text-sm text-zinc-400">
-              Mapping:{" "}
+            <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-400">
+              Mapping{" "}
               <span className={`font-medium ${confidenceColor(mappingConfidence.score)}`}>
                 {mappingConfidence.score}%
               </span>
@@ -175,9 +190,10 @@ export default function CsvUploader() {
           <button
             type="button"
             onClick={handleReset}
-            className="px-3 py-1.5 rounded text-xs font-medium border border-zinc-600 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-blue-800/70 hover:text-blue-200"
             aria-label="Clear uploaded data and reset to sample logs"
           >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             Reset
           </button>
         </div>

@@ -11,7 +11,7 @@ import {
   type ColumnFiltersState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { ChevronDown, MoreHorizontal, XCircle } from "lucide-react";
+import { ArrowUp, ChevronDown, Filter, List, MoreHorizontal, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -221,6 +221,7 @@ export default function LogTable() {
     search,
     setSearch,
     activeTableLogs,
+    logs,
     selectedFinding,
     clearSelectedFinding,
   } = useLogContext();
@@ -244,26 +245,82 @@ export default function LogTable() {
     state: { sorting, columnFilters, columnVisibility, rowSelection },
   });
 
+  const clearEvidenceMode = () => {
+    clearSelectedFinding();
+    setSearch("");
+  };
+
+  const scrollToFindings = () => {
+    document.getElementById("security-findings")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
   return (
-    <div className="w-full">
+    <div id="evidence-log-area" className="w-full scroll-mt-4">
       {/* Evidence filter banner */}
       {selectedFinding && (
-        <div className="flex items-center justify-between gap-3 mb-3 px-4 py-2.5 rounded-lg border border-blue-700/50 bg-blue-950/30">
-          <p className="text-xs text-blue-300 truncate min-w-0">
-            <span className="font-semibold">Showing evidence logs for:</span>{" "}
-            {selectedFinding.title}
-            <span className="text-blue-500 ml-2">
-              ({activeTableLogs.length} row{activeTableLogs.length !== 1 ? "s" : ""})
+        <div className="mb-3 rounded-lg border border-blue-700/60 bg-blue-950/30 px-4 py-3 shadow-[inset_0_1px_0_rgba(59,130,246,0.12)]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="mb-1 inline-flex items-center gap-1.5 rounded border border-blue-700/60 bg-blue-900/40 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-blue-200">
+                <Filter className="h-3 w-3" aria-hidden="true" />
+                Evidence mode
+              </div>
+              <p className="truncate text-sm text-blue-200">
+                <span className="font-semibold">Showing evidence for:</span>{" "}
+                {selectedFinding.title}
+              </p>
+              <p className="mt-1 text-xs text-blue-400/80">
+                Viewing {activeTableLogs.length.toLocaleString()} evidence row{activeTableLogs.length !== 1 ? "s" : ""} from {logs.length.toLocaleString()} total log row{logs.length !== 1 ? "s" : ""}.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={clearEvidenceMode}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-600/70 bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-500"
+              >
+                <List className="h-3.5 w-3.5" aria-hidden="true" />
+                Show All Logs
+              </button>
+              <button
+                type="button"
+                onClick={scrollToFindings}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-600 bg-zinc-900/80 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-blue-700/60 hover:text-blue-200"
+              >
+                <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                Back to Findings
+              </button>
+              <button
+                type="button"
+                onClick={clearEvidenceMode}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-600 bg-zinc-900/80 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-blue-700/60 hover:text-blue-200"
+              >
+                <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                Clear Evidence Filter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!selectedFinding && (
+        <div className="mb-3 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5">
+          <p className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+            <span className="inline-flex items-center gap-1.5 rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 font-medium text-zinc-300">
+              <List className="h-3 w-3 text-blue-400" aria-hidden="true" />
+              Viewing all logs
+            </span>
+            {search && (
+              <span className="text-zinc-500"> matching the current search</span>
+            )}
+            <span className="text-zinc-600">
+              ({activeTableLogs.length.toLocaleString()} row{activeTableLogs.length !== 1 ? "s" : ""})
             </span>
           </p>
-          <button
-            type="button"
-            onClick={clearSelectedFinding}
-            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium border border-blue-700/60 bg-blue-900/40 text-blue-300 hover:bg-blue-900/60 transition-colors"
-          >
-            <XCircle className="w-3 h-3" aria-hidden="true" />
-            Clear Evidence Filter
-          </button>
         </div>
       )}
 
@@ -271,10 +328,10 @@ export default function LogTable() {
       <div className="flex items-center py-4 gap-4">
         <Input
           type="text"
-          placeholder={selectedFinding ? "Search within evidence…" : "Search logs…"}
+          placeholder={selectedFinding ? "Search within evidence..." : "Search logs..."}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm border rounded px-2 py-1"
+          className="max-w-sm rounded border border-zinc-700 px-2 py-1 focus-visible:ring-blue-600/40"
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

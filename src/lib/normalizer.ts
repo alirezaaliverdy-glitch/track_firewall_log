@@ -182,6 +182,7 @@ export function detectVendor(row: RawLogRow): FirewallVendor {
   if (has("src-address") || has("dst-address")) return "mikrotik";
   if (has("srcip") || has("dstip") || has("sentbyte") || has("rcvdbyte")) return "fortigate";
   if (has("receive_time")) return "paloalto";
+  if (has("src_ip") || has("dst_ip") || has("src_mac") || has("dst_mac")) return "ubiquiti";
   return "generic";
 }
 
