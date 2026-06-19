@@ -156,7 +156,16 @@ const ALIASES_APPLICATION = [
 ];
 
 const ALIASES_RULE = [
-  "rule", "rule name", "rulename", "policy", "policyname",
+  "rule", "rule name", "rulename", "rulename", "firewall_rule",
+  "security_rule", "acl", "aclrule", "name",
+];
+
+const ALIASES_POLICY_ID = [
+  "policyid", "policy_id", "policy id",
+];
+
+const ALIASES_POLICY_NAME = [
+  "policyname", "policy name", "policy", "policyName".toLowerCase(),
 ];
 
 const ALIASES_USER = [
@@ -241,7 +250,10 @@ export function normalizeRow(row: RawLogRow): NormalizedLog {
   // ---- Application / policy ----
   const service = toStr(pick(map, ALIASES_SERVICE));
   const application = toStr(pick(map, ALIASES_APPLICATION));
-  const ruleName = toStr(pick(map, ALIASES_RULE));
+  const policyId = toStr(pick(map, ALIASES_POLICY_ID));
+  const policyName = toStr(pick(map, ALIASES_POLICY_NAME));
+  const ruleName = toStr(pick(map, ALIASES_RULE)) ?? policyName;
+  const ruleDisplayName = policyName ?? ruleName ?? policyId ?? "Unknown Policy";
   const user = toStr(pick(map, ALIASES_USER));
   const message = toStr(pick(map, ALIASES_MESSAGE));
 
@@ -270,7 +282,10 @@ export function normalizeRow(row: RawLogRow): NormalizedLog {
   if (packetsReceived !== undefined) result.packetsReceived = packetsReceived;
   if (service !== undefined) result.service = service;
   if (application !== undefined) result.application = application;
+  if (policyId !== undefined) result.policyId = policyId;
+  if (policyName !== undefined) result.policyName = policyName;
   if (ruleName !== undefined) result.ruleName = ruleName;
+  result.ruleDisplayName = ruleDisplayName;
   if (user !== undefined) result.user = user;
   if (message !== undefined) result.message = message;
 
@@ -364,7 +379,10 @@ export function normalizeRowWithMapping(
   // ---- Application / policy ----
   const service     = toStr(pickWithMapping(map, mapping.service,     ALIASES_SERVICE));
   const application = toStr(pickWithMapping(map, mapping.application, ALIASES_APPLICATION));
-  const ruleName    = toStr(pickWithMapping(map, mapping.ruleName,    ALIASES_RULE));
+  const policyId    = toStr(pick(map, ALIASES_POLICY_ID));
+  const policyName  = toStr(pick(map, ALIASES_POLICY_NAME));
+  const ruleName    = toStr(pickWithMapping(map, mapping.ruleName,    ALIASES_RULE)) ?? policyName;
+  const ruleDisplayName = policyName ?? ruleName ?? policyId ?? "Unknown Policy";
   const user        = toStr(pickWithMapping(map, mapping.user,        ALIASES_USER));
   const message     = toStr(pickWithMapping(map, mapping.message,     ALIASES_MESSAGE));
 
@@ -389,7 +407,10 @@ export function normalizeRowWithMapping(
   if (packetsReceived !== undefined) result.packetsReceived = packetsReceived;
   if (service     !== undefined) result.service      = service;
   if (application !== undefined) result.application  = application;
+  if (policyId    !== undefined) result.policyId     = policyId;
+  if (policyName  !== undefined) result.policyName   = policyName;
   if (ruleName    !== undefined) result.ruleName     = ruleName;
+  result.ruleDisplayName = ruleDisplayName;
   if (user        !== undefined) result.user         = user;
   if (message     !== undefined) result.message      = message;
 

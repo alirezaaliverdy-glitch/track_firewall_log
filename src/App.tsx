@@ -9,6 +9,7 @@ import SummaryCards from "./components/dashboard/SummaryCards";
 import DataQualityPanel from "./components/dashboard/DataQualityPanel";
 import TrafficDirectionPanel from "./components/dashboard/TrafficDirectionPanel";
 import SensitivePortsExplorer from "./components/dashboard/SensitivePortsExplorer";
+import PolicyReviewPanel from "./components/policies/PolicyReviewPanel";
 import FindingsPanel from "./components/findings/FindingsPanel";
 import EvidenceOverviewBanner from "./components/findings/EvidenceOverviewBanner";
 import FindingDetails from "./components/findings/FindingDetails";
@@ -59,6 +60,7 @@ function App() {
 
           <DataQualityPanel />
           <TrafficDirectionPanel />
+          <PolicyReviewPanel />
           <FindingsPanel />
           <FindingDetails />
           <LogTable />

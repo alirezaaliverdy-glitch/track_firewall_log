@@ -185,7 +185,7 @@ const COLUMNS: ColumnDef<NormalizedLog>[] = [
     accessorKey: "ruleName",
     header: "Rule",
     cell: ({ row }: { row: any }) => (
-      <span className="text-xs text-zinc-400">{s(row.getValue("ruleName"))}</span>
+      <span className="text-xs text-zinc-400">{s(row.original.ruleDisplayName ?? row.getValue("ruleName"))}</span>
     ),
   },
   {

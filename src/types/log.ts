@@ -83,6 +83,12 @@ export type NormalizedLog = {
   application?: string;
   /** Firewall rule or policy name */
   ruleName?: string;
+  /** Firewall policy identifier when available. */
+  policyId?: string;
+  /** Firewall policy name when available. */
+  policyName?: string;
+  /** Best display label for policy/rule review. */
+  ruleDisplayName?: string;
   /** Authenticated user */
   user?: string;
   /** Free-form log message */
