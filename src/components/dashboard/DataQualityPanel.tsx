@@ -21,24 +21,19 @@ function CoverageBar({ coverage, field }: { coverage: number; field: string }) {
   const pct = Math.round(coverage * 100);
   const isCritical = CRITICAL_FIELDS.has(field);
   const barColor =
-    pct >= 75 ? "bg-green-500" :
-    pct >= 40 ? "bg-yellow-500" :
+    pct >= 75 ? "bg-blue-500" :
+    pct >= 40 ? "bg-amber-500" :
                 "bg-red-500";
 
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <span className={`text-xs ${isCritical ? "text-zinc-200 font-medium" : "text-zinc-400"}`}>
+        <span className={`text-xs ${isCritical ? "font-medium text-slate-200" : "text-slate-400"}`}>
           {FIELD_LABELS[field] ?? field}
-          {isCritical && (
-            <span className="ml-1.5 text-[10px] text-zinc-500 font-normal uppercase tracking-wide">
-              critical
-            </span>
-          )}
         </span>
-        <span className="text-xs tabular-nums text-zinc-400">{pct}%</span>
+        <span className="text-xs tabular-nums text-slate-400">{pct}%</span>
       </div>
-      <div className="h-1.5 rounded-full bg-zinc-700/60 overflow-hidden">
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
         <div
           className={`h-full rounded-full transition-all ${barColor}`}
           style={{ width: `${pct}%` }}
@@ -61,9 +56,9 @@ export default function DataQualityPanel() {
   if (summary.total === 0) return null;
 
   const scoreColorClass =
-    dataQuality.score >= 75 ? "text-green-400" :
-    dataQuality.score >= 50 ? "text-yellow-400" :
-                               "text-red-400";
+    dataQuality.score >= 75 ? "text-blue-300" :
+    dataQuality.score >= 50 ? "text-amber-300" :
+                               "text-red-300";
   
   const scoreLabel = dataQuality.score >= 75 ? "Good" : dataQuality.score >= 50 ? "Needs Attention" : "Poor";
 
@@ -91,14 +86,20 @@ export default function DataQualityPanel() {
   const detectedFields = Object.entries(columnMapping).filter(([, mappedTo]) => mappedTo !== undefined).length;
 
   return (
-    <SectionCard title="Data Quality">
-      <div className="flex flex-col sm:flex-row items-baseline justify-between mb-4">
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-zinc-200">{dataQuality.score}%</span>
-          <span className={`text-sm font-medium ${scoreColorClass}`}>{scoreLabel}</span>
+    <SectionCard title="Data Quality" subtitle="Field coverage used for normalization and detections">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="rounded-lg border border-blue-900/50 bg-blue-950/20 px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <span className={`text-3xl font-bold ${scoreColorClass}`}>{dataQuality.score}%</span>
+            <span className="text-sm font-medium text-slate-300">{scoreLabel}</span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">Overall import quality</p>
         </div>
-        <div className="text-xs text-zinc-400">
-          Detected Fields: <span className="font-medium">{detectedFields}</span> / <span className="font-medium">{Object.keys(FIELD_LABELS).length}</span>
+        <div className="text-xs text-slate-400">
+          Detected fields: <span className="font-medium text-slate-200">{detectedFields}</span> / <span className="font-medium text-slate-200">{Object.keys(FIELD_LABELS).length}</span>
+          <span className="ml-2 rounded border border-slate-700 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
+            Required fields highlighted
+          </span>
         </div>
       </div>
 
@@ -109,9 +110,9 @@ export default function DataQualityPanel() {
       </div>
 
       {recommendations.length > 0 && (
-        <div className="space-y-2 pt-3 border-t border-zinc-700/60">
+        <div className="space-y-2 border-t border-slate-800 pt-3">
           {recommendations.map((rec) => (
-            <p key={rec.id} className="flex items-start gap-2 text-xs text-yellow-400" role="status">
+            <p key={rec.id} className="flex items-start gap-2 rounded-md border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-300" role="status">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>{rec.text}</span>
             </p>
@@ -125,6 +126,5 @@ export default function DataQualityPanel() {
 // Re-export FIELD_LABELS from mapping types or define here if truly local
 // For now, let's keep it local as it might have specific needs for DataQualityPanel
 // This avoids redeclaration error by removing the redundant declaration at the top
-
 
 

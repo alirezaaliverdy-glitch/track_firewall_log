@@ -107,14 +107,14 @@ export default function SensitivePortsExplorer() {
       subtitle="Observed risky destination ports and service context"
       headerRight={headerRight}
     >
-      <div className="mb-4 flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2">
-        <Search className="h-4 w-4 text-zinc-500" aria-hidden="true" />
+      <div className="mb-4 flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950 px-3 py-2 focus-within:border-blue-700/70 focus-within:ring-2 focus-within:ring-blue-600/20">
+        <Search className="h-4 w-4 text-blue-400" aria-hidden="true" />
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search port or service"
-          className="w-full bg-transparent text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+          className="w-full bg-transparent text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none"
           aria-label="Search sensitive ports"
         />
       </div>
@@ -131,7 +131,7 @@ export default function SensitivePortsExplorer() {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-700 text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-slate-800 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-3 py-2 font-medium">Port</th>
                 <th className="px-3 py-2 font-medium">Service</th>
@@ -142,26 +142,26 @@ export default function SensitivePortsExplorer() {
                 <th className="px-3 py-2 font-medium">Why it matters</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800">
+            <tbody className="divide-y divide-slate-800">
               {filtered.map((entry) => (
-                <tr key={entry.port} className="align-top">
-                  <td className="px-3 py-3 font-mono text-zinc-200">{entry.port}</td>
-                  <td className="px-3 py-3 text-zinc-200">{entry.service}</td>
+                <tr key={entry.port} className="align-top hover:bg-slate-900/50">
+                  <td className="px-3 py-3 font-mono text-blue-100">{entry.port}</td>
+                  <td className="px-3 py-3 text-slate-200">{entry.service}</td>
                   <td className="px-3 py-3">
                     <SeverityBadge severity={entry.severity} />
                   </td>
                   <td className={`px-3 py-3 text-right tabular-nums ${entry.allowed > 0 ? "text-yellow-400" : "text-zinc-500"}`}>
                     {entry.allowed.toLocaleString()}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-zinc-400">
+                  <td className="px-3 py-3 text-right tabular-nums text-slate-400">
                     {entry.blocked.toLocaleString()}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-zinc-300">
+                  <td className="px-3 py-3 text-right tabular-nums text-slate-300">
                     {entry.total.toLocaleString()}
                   </td>
-                  <td className="px-3 py-3 text-xs leading-relaxed text-zinc-400">
+                  <td className="px-3 py-3 text-xs leading-relaxed text-slate-400">
                     <p>{entry.reason}</p>
-                    <p className="mt-1 text-zinc-500">{entry.recommendation}</p>
+                    <p className="mt-1 text-slate-500">{entry.recommendation}</p>
                     {entry.other > 0 && (
                       <p className="mt-1 text-zinc-600">
                         {entry.other.toLocaleString()} event{entry.other === 1 ? "" : "s"} had another or unknown action.

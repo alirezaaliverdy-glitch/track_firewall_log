@@ -97,7 +97,7 @@ export default function CsvUploader() {
 
   if (summary.total === 0) {
     return (
-      <div className="mb-4 rounded-lg border border-blue-900/50 bg-zinc-900 p-5 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+      <div className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-5 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border border-blue-700/60 bg-blue-950/50 text-blue-300">
@@ -141,7 +141,7 @@ export default function CsvUploader() {
   }
 
   return (
-    <div className="mb-4 rounded-lg border border-blue-900/50 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+      <div className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-blue-800/70 bg-blue-950/40 px-3 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-900/50">

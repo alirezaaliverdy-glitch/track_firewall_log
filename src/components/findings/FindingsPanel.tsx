@@ -71,15 +71,15 @@ function FindingCard({
 
   const selectedRing = isSelected
     ? "ring-2 ring-blue-500/80 border-blue-500 bg-blue-950/10 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
-    : "border-zinc-700/50";
+    : "border-slate-800";
 
   return (
-    <div className={`rounded-lg border overflow-hidden transition-all ${selectedRing}`}>
+    <div className={`overflow-hidden rounded-lg border bg-slate-950/50 transition-all ${selectedRing}`}>
       {/* Header row — clickable to expand */}
       <button
         type="button"
         className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
-          isSelected ? "bg-blue-950/20 hover:bg-blue-950/30" : "hover:bg-zinc-800/50"
+          isSelected ? "bg-blue-950/25 hover:bg-blue-950/35" : "hover:bg-slate-900/70"
         }`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -94,7 +94,7 @@ function FindingCard({
             </span>
             {finding.mitreTactic && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400"
+                className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400"
                 title={finding.mitreTechnique}
               >
                 MITRE · {finding.mitreTactic}
@@ -115,8 +115,8 @@ function FindingCard({
       </button>
 
       {/* Action bar */}
-      <div className={`flex flex-wrap items-center gap-1.5 px-4 py-2 border-t border-zinc-700/30 ${
-        isSelected ? "bg-blue-950/10" : "bg-zinc-800/20"
+      <div className={`flex flex-wrap items-center gap-1.5 border-t border-slate-800 px-4 py-2 ${
+        isSelected ? "bg-blue-950/10" : "bg-slate-900/40"
       }`}>
         <button
           type="button"
@@ -138,7 +138,7 @@ function FindingCard({
           className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
             isSelected
               ? "text-blue-200 hover:bg-blue-900/40"
-              : "text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/60"
+              : "text-slate-300 hover:bg-slate-800 hover:text-slate-100"
           }`}
           title="Filter log table to this finding's evidence"
         >
@@ -149,7 +149,7 @@ function FindingCard({
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors"
+          className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100"
           title="Copy finding summary to clipboard"
         >
           {copied
@@ -162,7 +162,7 @@ function FindingCard({
           <button
             type="button"
             onClick={handleExport}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700/60 transition-colors"
+            className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-slate-100"
             title="Export evidence as CSV"
           >
             <Download className="w-3 h-3" aria-hidden="true" />
@@ -173,13 +173,13 @@ function FindingCard({
 
       {/* Expanded description / recommendation */}
       {open && (
-        <div className="px-4 pb-4 pt-1 border-t border-zinc-700/40 bg-zinc-800/30 space-y-3">
-          <p className="text-xs text-zinc-300 leading-relaxed">{finding.description}</p>
-          <div className="rounded-md bg-zinc-900 border border-zinc-700/50 p-3">
-            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wide mb-1">
+        <div className="space-y-3 border-t border-slate-800 bg-slate-900/40 px-4 pb-4 pt-3">
+          <p className="text-xs leading-relaxed text-slate-300">{finding.description}</p>
+          <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Recommendation
             </p>
-            <p className="text-xs text-zinc-200">{finding.recommendation}</p>
+            <p className="text-xs text-slate-200">{finding.recommendation}</p>
           </div>
           {finding.mitreTechnique && (
             <p className="text-[11px] text-zinc-500">
@@ -213,7 +213,7 @@ function SeverityGroup({
   if (findings.length === 0) return null;
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
+      <div className="mb-2 flex items-center gap-2">
         <SeverityBadge severity={severity} />
         <span className="text-xs text-zinc-500">
           {findings.length} finding{findings.length !== 1 ? "s" : ""}

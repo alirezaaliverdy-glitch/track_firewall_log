@@ -16,12 +16,12 @@ function Card({
   valueClass?: string;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 flex flex-col gap-1">
-      <span className="text-xs text-zinc-400 uppercase tracking-wide">{label}</span>
-      <span className={`text-2xl font-semibold ${valueClass ?? "text-zinc-100"}`}>
+    <div className="flex min-h-[104px] flex-col gap-1 rounded-lg border border-slate-800 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.06)]">
+      <span className="text-[11px] font-medium uppercase tracking-widest text-slate-400">{label}</span>
+      <span className={`text-2xl font-semibold ${valueClass ?? "text-blue-100"}`}>
         {value}
       </span>
-      {sub && <span className="text-xs text-zinc-500">{sub}</span>}
+      {sub && <span className="text-xs text-slate-500">{sub}</span>}
     </div>
   );
 }

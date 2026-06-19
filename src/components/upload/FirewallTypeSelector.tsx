@@ -19,7 +19,7 @@ export default function FirewallTypeSelector() {
     FIREWALL_OPTIONS.find((option) => option.value === firewallType)?.label ?? "Auto Detect";
 
   return (
-    <div className="mb-3 rounded-lg border border-blue-900/50 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+    <div className="mb-3 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-md border border-blue-700/60 bg-blue-950/50 text-blue-300">
@@ -44,7 +44,7 @@ export default function FirewallTypeSelector() {
           id="firewall-type"
           value={firewallType}
           onChange={(event) => setFirewallType(event.target.value as FirewallTypeSelection)}
-          className="h-10 min-w-[220px] rounded-md border border-zinc-600 bg-zinc-950 px-3 text-sm font-medium text-zinc-100 outline-none transition-colors hover:border-blue-700/70 focus:border-blue-500 focus:ring-2 focus:ring-blue-600/40"
+          className="h-10 min-w-[220px] rounded-md border border-blue-900/60 bg-slate-950 px-3 text-sm font-medium text-slate-100 outline-none transition-colors hover:border-blue-700/70 focus:border-blue-500 focus:ring-2 focus:ring-blue-600/40"
           aria-label="Firewall Type"
         >
           {FIREWALL_OPTIONS.map((option) => (

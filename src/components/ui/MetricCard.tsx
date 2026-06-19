@@ -33,14 +33,14 @@ export function MetricCard({
   const border = ACCENT_BORDER[accent] ?? "";
   return (
     <div
-      className={`rounded-lg bg-zinc-900 border border-zinc-700/60 p-4 flex flex-col gap-1.5 ${border}`}
+      className={`flex min-h-[112px] flex-col gap-1.5 rounded-lg border border-slate-800 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.06)] ${border}`}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest leading-none">
+        <span className="text-[11px] font-medium uppercase tracking-widest leading-none text-slate-400">
           {label}
         </span>
         {icon && (
-          <span className="text-zinc-600" aria-hidden="true">
+          <span className="text-slate-600" aria-hidden="true">
             {icon}
           </span>
         )}
@@ -49,7 +49,7 @@ export function MetricCard({
         {value}
       </span>
       {sub && (
-        <span className="text-[11px] text-zinc-500 leading-none">{sub}</span>
+        <span className="text-[11px] leading-none text-slate-500">{sub}</span>
       )}
     </div>
   );
