@@ -74,22 +74,22 @@ function normalizeAction(raw: string | undefined): string | undefined {
 // ---------------------------------------------------------------------------
 
 const ALIASES_SRC_IP = [
-  "srcip", "src_ip", "source ip", "sourceip", "src-address",
+  "srcip", "src_ip", "src ip", "source ip", "sourceip", "src-address",
   "source address", "source", "srcaddr",
 ];
 
 const ALIASES_DST_IP = [
-  "dstip", "dst_ip", "destination ip", "destinationip", "dst-address",
+  "dstip", "dst_ip", "dst ip", "destination ip", "destinationip", "dst-address",
   "destination address", "destination", "dstaddr",
 ];
 
 const ALIASES_SRC_PORT = [
-  "srcport", "src_port", "source port", "sourceport",
+  "srcport", "src_port", "src port", "source port", "sourceport",
   "src-port", "sport",
 ];
 
 const ALIASES_DST_PORT = [
-  "dstport", "dst_port", "destination port", "destinationport",
+  "dstport", "dst_port", "dst port", "destination port", "destinationport",
   "dst-port", "dport",
 ];
 

@@ -5,6 +5,7 @@ import CsvUploader from "./components/csv-uploader";
 import ColumnMappingWizard from "./components/upload/ColumnMappingWizard";
 import SummaryCards from "./components/dashboard/SummaryCards";
 import DataQualityPanel from "./components/dashboard/DataQualityPanel";
+import SensitivePortsExplorer from "./components/dashboard/SensitivePortsExplorer";
 import FindingsPanel from "./components/findings/FindingsPanel";
 import FindingDetails from "./components/findings/FindingDetails";
 import ActionDistributionChart from "./components/charts/ActionDistributionChart";
@@ -50,6 +51,8 @@ function App() {
 
           {/* 7. Finding details — only visible when a finding is selected */}
           <FindingDetails />
+
+          <SensitivePortsExplorer />
 
           {/* 8. Charts */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">

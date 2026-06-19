@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import type { RawLogRow } from "@/types/log";
+import { parseDelimitedLog } from "@/lib/parsers/csvParser";
 
 export interface ParseResult {
   rows: RawLogRow[];
@@ -22,7 +23,7 @@ export interface ParseResult {
  * Treat every value as untrusted input.
  */
 export function parseCSV(csvText: string): ParseResult {
-  const result = Papa.parse<RawLogRow>(csvText, {
+  const legacyResult = Papa.parse<RawLogRow>(csvText, {
     header: true,
     skipEmptyLines: true,
     // Trim whitespace from header names so column lookups are reliable
@@ -31,10 +32,11 @@ export function parseCSV(csvText: string): ParseResult {
     // Downstream consumers decide how to interpret each field.
     dynamicTyping: false,
   });
+  const result = parseDelimitedLog(csvText);
 
   return {
-    rows: result.data,
-    errors: result.errors,
-    meta: result.meta,
+    rows: result.rows,
+    errors: legacyResult.errors,
+    meta: legacyResult.meta,
   };
 }
