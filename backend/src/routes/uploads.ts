@@ -2,6 +2,7 @@ import fs from "node:fs";
 import type { FastifyPluginAsync } from "fastify";
 import { maxUploadBytes } from "../config/env.js";
 import { createUploadWithImportJob, getUploadById, toUploadMetadata } from "../services/upload.service.js";
+import { enqueueAnalysisJob } from "../services/worker.service.js";
 import { allowedExtensions, storeUploadFile, validateUploadExtension } from "../utils/fileValidation.js";
 
 export const uploadRoutes: FastifyPluginAsync = async (app) => {
@@ -54,6 +55,8 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
       },
       "Upload metadata stored"
     );
+
+    enqueueAnalysisJob({ uploadId: upload.id, jobId: job.id });
 
     return reply.code(202).send({
       uploadId: upload.id,

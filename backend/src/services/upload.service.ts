@@ -62,6 +62,7 @@ export function toUploadMetadata(upload: Upload & { jobs?: { id: string }[] }) {
     rowCount: upload.rowCount,
     parseWarningCount: upload.parseWarningCount,
     checksum: upload.checksum,
+    storagePath: undefined,
     createdAt: upload.createdAt,
     updatedAt: upload.updatedAt
   };

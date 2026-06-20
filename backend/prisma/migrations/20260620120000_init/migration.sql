@@ -62,6 +62,9 @@ CREATE TABLE "AnalysisRun" (
     "sensitivePortsJson" JSONB,
     "policyReviewJson" JSONB,
     "findingsJson" JSONB,
+    "normalizedLogsJson" JSONB,
+    "parseWarningsJson" JSONB,
+    "rowCount" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

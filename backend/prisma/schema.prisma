@@ -54,6 +54,9 @@ model AnalysisRun {
   sensitivePortsJson      Json?
   policyReviewJson        Json?
   findingsJson            Json?
+  normalizedLogsJson      Json?
+  parseWarningsJson       Json?
+  rowCount                Int?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 

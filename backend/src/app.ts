@@ -5,6 +5,7 @@ import Fastify, { type FastifyError } from "fastify";
 import { env, isProduction, maxUploadBytes } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
 import { loggerConfig } from "./lib/logger.js";
+import { analysisRoutes } from "./routes/analysis.js";
 import { healthRoutes } from "./routes/health.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
@@ -58,6 +59,7 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(uploadRoutes);
   await app.register(jobRoutes);
+  await app.register(analysisRoutes);
 
   app.addHook("onClose", async () => {
     await prisma.$disconnect();
