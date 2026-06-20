@@ -1,31 +1,8 @@
-import { Writable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import path from "node:path";
+import fs from "node:fs";
 import type { FastifyPluginAsync } from "fastify";
 import { maxUploadBytes } from "../config/env.js";
-import { createUpload, getUpload } from "../lib/memoryStore.js";
-
-const ALLOWED_EXTENSIONS = new Set(["csv", "tsv", "txt", "log", "json", "ndjson"]);
-
-function getExtension(fileName: string) {
-  return path.extname(fileName).replace(".", "").toLowerCase();
-}
-
-async function countBytes(stream: NodeJS.ReadableStream) {
-  let sizeBytes = 0;
-
-  await pipeline(
-    stream,
-    new Writable({
-      write(chunk: Buffer, _encoding, callback) {
-        sizeBytes += chunk.length;
-        callback();
-      }
-    })
-  );
-
-  return sizeBytes;
-}
+import { createUploadWithImportJob, getUploadById, toUploadMetadata } from "../services/upload.service.js";
+import { allowedExtensions, storeUploadFile, validateUploadExtension } from "../utils/fileValidation.js";
 
 export const uploadRoutes: FastifyPluginAsync = async (app) => {
   app.post("/api/uploads", async (request, reply) => {
@@ -40,32 +17,40 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ error: "A firewall log file is required" });
     }
 
-    const extension = getExtension(file.filename);
+    const extension = validateUploadExtension(file.filename);
 
-    if (!ALLOWED_EXTENSIONS.has(extension)) {
+    if (!extension.valid) {
       file.file.resume();
       return reply.code(415).send({
         error: "Unsupported file type",
-        allowedExtensions: Array.from(ALLOWED_EXTENSIONS).sort()
+        allowedExtensions
       });
     }
 
-    const sizeBytes = await countBytes(file.file);
+    const storedFile = await storeUploadFile(file.file, file.filename);
 
-    const { upload, job } = createUpload({
-      fileName: file.filename,
-      extension,
-      mimeType: file.mimetype,
-      sizeBytes
-    });
+    let created: Awaited<ReturnType<typeof createUploadWithImportJob>>;
+
+    try {
+      created = await createUploadWithImportJob({
+        ...storedFile,
+        mimeType: file.mimetype
+      });
+    } catch (error) {
+      await fs.promises.unlink(storedFile.storagePath).catch(() => undefined);
+      throw error;
+    }
+
+    const { upload, job } = created;
 
     request.log.info(
       {
         uploadId: upload.id,
         jobId: job.id,
         fileName: upload.fileName,
-        extension: upload.extension,
-        sizeBytes: upload.sizeBytes
+        originalFileName: upload.originalFileName,
+        extension: upload.fileExtension,
+        fileSize: upload.fileSize
       },
       "Upload metadata stored"
     );
@@ -73,26 +58,18 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(202).send({
       uploadId: upload.id,
       jobId: job.id,
-      fileName: upload.fileName,
+      fileName: upload.originalFileName,
       status: job.status
     });
   });
 
   app.get<{ Params: { id: string } }>("/api/uploads/:id", async (request, reply) => {
-    const upload = getUpload(request.params.id);
+    const upload = await getUploadById(request.params.id);
 
     if (!upload) {
       return reply.code(404).send({ error: "Upload not found" });
     }
 
-    return {
-      uploadId: upload.id,
-      jobId: upload.jobId,
-      fileName: upload.fileName,
-      extension: upload.extension,
-      mimeType: upload.mimeType,
-      sizeBytes: upload.sizeBytes,
-      createdAt: upload.createdAt
-    };
+    return toUploadMetadata(upload);
   });
 };

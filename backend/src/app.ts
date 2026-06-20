@@ -3,6 +3,7 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyError } from "fastify";
 import { env, isProduction, maxUploadBytes } from "./config/env.js";
+import { prisma } from "./db/prisma.js";
 import { loggerConfig } from "./lib/logger.js";
 import { healthRoutes } from "./routes/health.js";
 import { jobRoutes } from "./routes/jobs.js";
@@ -57,6 +58,10 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(uploadRoutes);
   await app.register(jobRoutes);
+
+  app.addHook("onClose", async () => {
+    await prisma.$disconnect();
+  });
 
   return app;
 }

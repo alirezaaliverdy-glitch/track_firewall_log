@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Upload {
+  id                      String        @id @default(cuid())
+  fileName                String
+  originalFileName        String
+  fileSize                Int
+  mimeType                String?
+  fileExtension           String
+  detectedFormat          String?
+  selectedVendor          String?
+  detectedVendor          String?
+  status                  UploadStatus
+  rowCount                Int?
+  parseWarningCount       Int?
+  checksum                String?
+  storagePath             String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  jobs                    Job[]
+  analysisRuns            AnalysisRun[]
+}
+
+model Job {
+  id            String    @id @default(cuid())
+  uploadId      String
+  upload        Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  type          JobType
+  status        JobStatus
+  progress      Int       @default(0)
+  errorMessage  String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([uploadId])
+}
+
+model AnalysisRun {
+  id                      String         @id @default(cuid())
+  uploadId                String
+  upload                  Upload         @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  status                  AnalysisStatus
+  summaryJson             Json?
+  logProfileJson          Json?
+  trafficIntelligenceJson Json?
+  sensitivePortsJson      Json?
+  policyReviewJson        Json?
+  findingsJson            Json?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([uploadId])
+}
+
+enum UploadStatus {
+  uploaded
+  queued
+  processing
+  analyzed
+  failed
+  deleted
+}
+
+enum JobStatus {
+  queued
+  processing
+  completed
+  failed
+}
+
+enum JobType {
+  import
+  analyze
+  ai_report
+}
+
+enum AnalysisStatus {
+  pending
+  completed
+  failed
+}
