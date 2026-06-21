@@ -63,6 +63,72 @@ export type EventFilters = {
   protocol?: string;
 };
 
+const EMPTY_SUMMARY: EventsSummary = {
+  totalEvents: 0,
+  countBySeverity: [],
+  countByAction: [],
+  topSourceIps: [],
+  topDestinationPorts: [],
+  topSources: [],
+  topDevices: [],
+};
+
+const safeNumber = (value: unknown): number => {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const normalizeArray = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object" && Array.isArray((value as { items?: unknown }).items)) {
+    return (value as { items: T[] }).items;
+  }
+  if (value && typeof value === "object" && Array.isArray((value as { data?: unknown }).data)) {
+    return (value as { data: T[] }).data;
+  }
+  return [];
+};
+
+const normalizeCountList = (value: unknown, labelKey: "value" | "severity" | "action") =>
+  normalizeArray<Record<string, unknown>>(value).map((item) => ({
+    [labelKey]: String(item[labelKey] ?? item.value ?? item.name ?? "unknown"),
+    count: safeNumber(item.count),
+  }));
+
+const normalizeSummary = (value: unknown): EventsSummary => {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const bySeverity = source.countBySeverity ?? source.bySeverity;
+  const byAction = source.countByAction ?? source.byAction;
+
+  return {
+    totalEvents: safeNumber(source.totalEvents ?? source.total),
+    countBySeverity: Array.isArray(bySeverity)
+      ? normalizeCountList(bySeverity, "severity") as EventsSummary["countBySeverity"]
+      : Object.entries((bySeverity && typeof bySeverity === "object" ? bySeverity : {}) as Record<string, unknown>).map(
+          ([severity, count]) => ({ severity, count: safeNumber(count) })
+        ),
+    countByAction: Array.isArray(byAction)
+      ? normalizeCountList(byAction, "action") as EventsSummary["countByAction"]
+      : Object.entries((byAction && typeof byAction === "object" ? byAction : {}) as Record<string, unknown>).map(
+          ([action, count]) => ({ action, count: safeNumber(count) })
+        ),
+    topSourceIps: normalizeCountList(source.topSourceIps, "value") as EventsSummary["topSourceIps"],
+    topDestinationPorts: normalizeCountList(source.topDestinationPorts, "value") as EventsSummary["topDestinationPorts"],
+    topSources: normalizeArray<Record<string, unknown>>(source.topSources).map((item) => ({
+      id: String(item.id ?? ""),
+      name: String(item.name ?? item.value ?? "Unknown source"),
+      type: String(item.type ?? "upload"),
+      count: safeNumber(item.count),
+    })),
+    topDevices: normalizeArray<Record<string, unknown>>(source.topDevices).map((item) => ({
+      id: String(item.id ?? ""),
+      name: String(item.name ?? item.value ?? "Unknown device"),
+      type: String(item.type ?? "generic_firewall"),
+      count: safeNumber(item.count),
+    })),
+  };
+};
+
 async function requestJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`);
   const payload = await response.json().catch(() => ({}));
@@ -89,19 +155,26 @@ function queryString(filters: EventFilters & { limit?: number }) {
 }
 
 export async function listSecurityEvents(filters: EventFilters = {}) {
-  const payload = await requestJson<{ events: SecurityEvent[] }>(`/events${queryString({ ...filters, limit: 100 })}`);
-  return payload.events;
+  const payload = await requestJson<unknown>(`/events${queryString({ ...filters, limit: 100 })}`);
+  const source = payload && typeof payload === "object" ? payload as Record<string, unknown> : payload;
+  return normalizeArray<SecurityEvent>(
+    Array.isArray(source) ? source : (source as Record<string, unknown>).events
+  );
 }
 
 export function getSecurityEvent(id: string) {
   return requestJson<SecurityEvent>(`/events/${id}`);
 }
 
-export function getSecurityEventsSummary(filters: EventFilters = {}) {
-  return requestJson<EventsSummary>(`/events/summary${queryString(filters)}`);
+export async function getSecurityEventsSummary(filters: EventFilters = {}) {
+  const payload = await requestJson<unknown>(`/events/summary${queryString(filters)}`);
+  return normalizeSummary(payload ?? EMPTY_SUMMARY);
 }
 
 export async function listEventBatches() {
-  const payload = await requestJson<{ batches: EventBatch[] }>("/event-batches?limit=10");
-  return payload.batches;
+  const payload = await requestJson<unknown>("/event-batches?limit=10");
+  const source = payload && typeof payload === "object" ? payload as Record<string, unknown> : payload;
+  return normalizeArray<EventBatch>(
+    Array.isArray(source) ? source : (source as Record<string, unknown>).batches
+  );
 }

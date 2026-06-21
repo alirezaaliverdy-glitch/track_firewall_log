@@ -85,10 +85,130 @@ model Device {
   eventSources      EventSource[]
   eventBatches      EventBatch[]
   securityEvents    SecurityEvent[]
+  incidents         Incident[]
+  aiActionIntents   AiActionIntent[]
+  actionPlans       ActionPlan[]
+  actionAuditLogs   ActionAuditLog[]
 
   @@index([type])
   @@index([host])
   @@index([status])
+}
+
+model AiChatSession {
+  id        String          @id @default(cuid())
+  title     String
+  userId    String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  messages  AiChatMessage[]
+  intents   AiActionIntent[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AiChatMessage {
+  id             String          @id @default(cuid())
+  sessionId      String
+  session        AiChatSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role           AiChatRole
+  content        String
+  structuredJson Json?
+  createdAt      DateTime        @default(now())
+  actionIntents  AiActionIntent[]
+
+  @@index([sessionId])
+  @@index([role])
+  @@index([createdAt])
+}
+
+model AiActionIntent {
+  id             String               @id @default(cuid())
+  sessionId      String
+  session        AiChatSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        AiChatMessage?       @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  deviceId       String?
+  device         Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  intentType     AiIntentType
+  status         AiActionIntentStatus @default(proposed)
+  riskLevel      AiRiskLevel
+  parametersJson Json
+  explanation    String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  actionPlans    ActionPlan[]
+
+  @@index([sessionId])
+  @@index([messageId])
+  @@index([deviceId])
+  @@index([intentType])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+model ActionPlan {
+  id             String             @id @default(cuid())
+  source         ActionPlanSource
+  requestedBy    String?
+  deviceId       String?
+  device         Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  aiIntentId     String?
+  aiIntent       AiActionIntent?    @relation(fields: [aiIntentId], references: [id], onDelete: SetNull)
+  actionType     ActionType
+  status         ActionPlanStatus   @default(proposed)
+  riskLevel      AiRiskLevel
+  parametersJson Json
+  validationJson Json?
+  dryRunJson     Json?
+  approvalJson   Json?
+  resultJson     Json?
+  rollbackJson   Json?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  auditLogs      ActionAuditLog[]
+  approvals      ActionApproval[]
+
+  @@index([source])
+  @@index([deviceId])
+  @@index([aiIntentId])
+  @@index([actionType])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+model ActionAuditLog {
+  id             String     @id @default(cuid())
+  actionPlanId   String
+  actionPlan     ActionPlan @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  deviceId       String?
+  device         Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  eventType      String
+  message        String
+  metadataJson   Json?
+  createdAt      DateTime   @default(now())
+
+  @@index([actionPlanId])
+  @@index([deviceId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model ActionApproval {
+  id             String           @id @default(cuid())
+  actionPlanId   String
+  actionPlan     ActionPlan       @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  approvedBy     String?
+  decision       ApprovalDecision
+  reason         String?
+  createdAt      DateTime         @default(now())
+
+  @@index([actionPlanId])
+  @@index([decision])
+  @@index([createdAt])
 }
 
 model EventSource {
@@ -103,6 +223,7 @@ model EventSource {
   updatedAt      DateTime           @updatedAt
   batches        EventBatch[]
   securityEvents SecurityEvent[]
+  incidents      Incident[]
 
   @@index([type])
   @@index([deviceId])
@@ -157,6 +278,7 @@ model SecurityEvent {
   normalizedJson Json
   tags           Json?
   createdAt      DateTime     @default(now())
+  incidentEvents IncidentEvent[]
 
   @@index([deviceId])
   @@index([sourceId])
@@ -170,6 +292,66 @@ model SecurityEvent {
   @@index([dstIp])
   @@index([dstPort])
   @@index([protocol])
+}
+
+model DetectionRule {
+  id            String            @id @default(cuid())
+  name          String
+  description   String
+  enabled       Boolean           @default(true)
+  severity      IncidentSeverity
+  ruleType      DetectionRuleType
+  queryJson     Json?
+  thresholdJson Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  incidents     Incident[]
+
+  @@index([enabled])
+  @@index([ruleType])
+  @@unique([ruleType, name])
+}
+
+model Incident {
+  id          String             @id @default(cuid())
+  title       String
+  description String
+  severity    IncidentSeverity
+  status      IncidentStatus     @default(open)
+  deviceId    String?
+  device      Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  sourceId    String?
+  source      EventSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  ruleId      String?
+  rule        DetectionRule?      @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  firstSeenAt DateTime
+  lastSeenAt  DateTime
+  eventCount  Int                @default(0)
+  summaryJson Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  events      IncidentEvent[]
+
+  @@index([status])
+  @@index([severity])
+  @@index([deviceId])
+  @@index([sourceId])
+  @@index([ruleId])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+model IncidentEvent {
+  id              String        @id @default(cuid())
+  incidentId      String
+  incident        Incident      @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  securityEventId String
+  securityEvent   SecurityEvent @relation(fields: [securityEventId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@index([incidentId])
+  @@index([securityEventId])
+  @@unique([incidentId, securityEventId])
 }
 
 model DeviceAuthProfile {
@@ -308,4 +490,107 @@ enum EventBatchStatus {
   completed
   failed
   partial
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum IncidentStatus {
+  open
+  investigating
+  resolved
+  false_positive
+}
+
+enum DetectionRuleType {
+  port_scan
+  ssh_bruteforce
+  sensitive_port_exposure
+  deny_drop_spike
+  suspicious_outbound
+}
+
+enum AiChatRole {
+  user
+  assistant
+  system
+  tool
+}
+
+enum AiActionIntentStatus {
+  proposed
+  discarded
+  converted_to_action_plan
+}
+
+enum AiRiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum AiIntentType {
+  create_egress_policy
+  update_policy_schedule
+  block_source_ip_temporary
+  unblock_source_ip
+  open_port
+  close_port
+  change_ssh_port
+  create_address_object
+  create_schedule_object
+  create_service_object
+  add_firewall_rule
+  remove_firewall_rule
+  enable_rule
+  disable_rule
+  explain_security_status
+  unknown
+}
+
+enum ActionPlanSource {
+  ai
+  user
+  system
+  detection
+}
+
+enum ActionPlanStatus {
+  proposed
+  validation_failed
+  dry_run_ready
+  awaiting_approval
+  approved
+  rejected
+  executing
+  succeeded
+  failed
+  rolled_back
+}
+
+enum ActionType {
+  create_egress_policy
+  update_policy_schedule
+  block_source_ip_temporary
+  unblock_source_ip
+  open_port
+  close_port
+  change_ssh_port
+  create_address_object
+  create_schedule_object
+  create_service_object
+  add_firewall_rule
+  remove_firewall_rule
+  enable_rule
+  disable_rule
+}
+
+enum ApprovalDecision {
+  approved
+  rejected
 }

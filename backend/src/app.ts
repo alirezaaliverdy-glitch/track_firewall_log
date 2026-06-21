@@ -4,11 +4,16 @@ import multipart from "@fastify/multipart";
 import Fastify, { type FastifyError } from "fastify";
 import { env, isProduction, maxUploadBytes } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
+import { actionRoutes } from "./routes/actions.js";
 import { loggerConfig } from "./lib/logger.js";
 import { analysisRoutes } from "./routes/analysis.js";
+import { aiRoutes } from "./routes/ai.js";
 import { deviceRoutes } from "./routes/devices.js";
+import { connectorPlanRoutes } from "./routes/connector-plans.js";
+import { detectionRoutes } from "./routes/detections.js";
 import { eventRoutes } from "./routes/events.js";
 import { healthRoutes } from "./routes/health.js";
+import { incidentRoutes } from "./routes/incidents.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
 
@@ -20,7 +25,7 @@ export async function buildApp() {
 
   await app.register(helmet);
   await app.register(cors, {
-    origin: env.corsOrigin,
+    origin: env.corsOrigins,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
   });
   await app.register(multipart, {
@@ -59,11 +64,16 @@ export async function buildApp() {
   });
 
   await app.register(healthRoutes);
+  await app.register(actionRoutes);
+  await app.register(connectorPlanRoutes);
   await app.register(uploadRoutes);
   await app.register(jobRoutes);
   await app.register(analysisRoutes);
+  await app.register(aiRoutes);
   await app.register(deviceRoutes);
   await app.register(eventRoutes);
+  await app.register(detectionRoutes);
+  await app.register(incidentRoutes);
 
   app.addHook("onClose", async () => {
     await prisma.$disconnect();

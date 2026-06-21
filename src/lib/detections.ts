@@ -2,14 +2,9 @@ import type { NormalizedLog } from "@/types/log";
 import type { Finding, Severity } from "@/types/finding";
 import { getRiskyPort, isRiskyPort } from "@/lib/riskyPorts";
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/** Actions that mean the connection was permitted. */
 const ALLOWED_ACTIONS = new Set(["allow", "accept", "pass", "permit"]);
-/** Actions that mean the connection was blocked. */
 const BLOCKED_ACTIONS = new Set(["deny", "drop", "block"]);
+const MAX_RELATED_LOGS = 50;
 
 function isAllowed(action?: string): boolean {
   return action ? ALLOWED_ACTIONS.has(action.toLowerCase()) : false;
@@ -19,17 +14,6 @@ function isBlocked(action?: string): boolean {
   return action ? BLOCKED_ACTIONS.has(action.toLowerCase()) : false;
 }
 
-/** Cap relatedLogs stored in a finding to avoid memory bloat. */
-const MAX_RELATED_LOGS = 50;
-
-// ---------------------------------------------------------------------------
-// 1. Allowed risky services
-// ---------------------------------------------------------------------------
-
-/**
- * Find log entries where traffic to a risky port was explicitly ALLOWED.
- * Groups by destination port — one finding per distinct risky port.
- */
 export function detectAllowedRiskyServices(logs: NormalizedLog[]): Finding[] {
   const groups = new Map<number, NormalizedLog[]>();
 
@@ -37,17 +21,12 @@ export function detectAllowedRiskyServices(logs: NormalizedLog[]): Finding[] {
     if (log.dstPort === undefined) continue;
     if (!isAllowed(log.action)) continue;
     if (!isRiskyPort(log.dstPort)) continue;
-
     const bucket = groups.get(log.dstPort);
-    if (bucket) {
-      bucket.push(log);
-    } else {
-      groups.set(log.dstPort, [log]);
-    }
+    if (bucket) bucket.push(log);
+    else groups.set(log.dstPort, [log]);
   }
 
   const findings: Finding[] = [];
-
   for (const [port, portLogs] of groups) {
     const meta = getRiskyPort(port)!;
     findings.push({
@@ -56,26 +35,15 @@ export function detectAllowedRiskyServices(logs: NormalizedLog[]): Finding[] {
       severity: meta.severity,
       title: `Allowed traffic to risky port ${port} (${meta.service})`,
       description:
-        `${portLogs.length} log entr${portLogs.length === 1 ? "y" : "ies"} ` +
-        `show traffic to port ${port} (${meta.service}) was permitted. ` +
-        meta.reason,
+        `${portLogs.length} log entr${portLogs.length === 1 ? "y" : "ies"} show traffic to port ${port} (${meta.service}) was permitted. ${meta.reason}`,
       recommendation: meta.recommendation,
       count: portLogs.length,
       relatedLogs: portLogs.slice(0, MAX_RELATED_LOGS),
     });
   }
-
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// 2. Denied risky services
-// ---------------------------------------------------------------------------
-
-/**
- * Find log entries where traffic to a risky port was BLOCKED.
- * Grouped by destination port. Severity: medium (blocked ≠ safe, could be probing).
- */
 export function detectDeniedRiskyServices(logs: NormalizedLog[]): Finding[] {
   const groups = new Map<number, NormalizedLog[]>();
 
@@ -83,17 +51,12 @@ export function detectDeniedRiskyServices(logs: NormalizedLog[]): Finding[] {
     if (log.dstPort === undefined) continue;
     if (!isBlocked(log.action)) continue;
     if (!isRiskyPort(log.dstPort)) continue;
-
     const bucket = groups.get(log.dstPort);
-    if (bucket) {
-      bucket.push(log);
-    } else {
-      groups.set(log.dstPort, [log]);
-    }
+    if (bucket) bucket.push(log);
+    else groups.set(log.dstPort, [log]);
   }
 
   const findings: Finding[] = [];
-
   for (const [port, portLogs] of groups) {
     const meta = getRiskyPort(port)!;
     findings.push({
@@ -102,31 +65,20 @@ export function detectDeniedRiskyServices(logs: NormalizedLog[]): Finding[] {
       severity: "medium",
       title: `Blocked attempts to risky port ${port} (${meta.service})`,
       description:
-        `${portLogs.length} blocked connection attempt${portLogs.length === 1 ? "" : "s"} ` +
-        `to port ${port} (${meta.service}) detected. ` +
-        `Repeated probing may indicate reconnaissance or an active attack attempt.`,
+        `${portLogs.length} blocked connection attempt${portLogs.length === 1 ? "" : "s"} to port ${port} (${meta.service}) detected. Repeated probing may indicate reconnaissance or an active attack attempt.`,
       recommendation: meta.recommendation,
       count: portLogs.length,
       relatedLogs: portLogs.slice(0, MAX_RELATED_LOGS),
     });
   }
-
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// 3. Traffic anomalies
-// ---------------------------------------------------------------------------
-
-const BYTE_THRESHOLD   = 1_000_000; // 1 MB per flow
+const BYTE_THRESHOLD = 1_000_000;
 const PACKET_THRESHOLD = 1_000;
 
-/**
- * Detect individual log entries with unusually high byte or packet counts.
- * Each qualifying log produces one medium finding.
- */
 export function detectTrafficAnomalies(logs: NormalizedLog[]): Finding[] {
-  const highBytes: NormalizedLog[]   = [];
+  const highBytes: NormalizedLog[] = [];
   const highPackets: NormalizedLog[] = [];
 
   for (const log of logs) {
@@ -140,7 +92,6 @@ export function detectTrafficAnomalies(logs: NormalizedLog[]): Finding[] {
   }
 
   const findings: Finding[] = [];
-
   if (highBytes.length > 0) {
     findings.push({
       id: "traffic-anomaly-high-bytes",
@@ -148,12 +99,8 @@ export function detectTrafficAnomalies(logs: NormalizedLog[]): Finding[] {
       severity: "medium",
       title: `High-volume traffic: ${highBytes.length} flow${highBytes.length === 1 ? "" : "s"} exceed ${(BYTE_THRESHOLD / 1_000_000).toFixed(0)} MB`,
       description:
-        `${highBytes.length} log entr${highBytes.length === 1 ? "y" : "ies"} record ` +
-        `more than ${(BYTE_THRESHOLD / 1_000_000).toFixed(0)} MB of data in a single flow. ` +
-        `Large flows may indicate data exfiltration, misconfigured backups, or media streaming.`,
-      recommendation:
-        "Investigate the source and destination of high-volume flows. " +
-        "Correlate with user activity and business justification.",
+        `${highBytes.length} log entr${highBytes.length === 1 ? "y" : "ies"} record more than ${(BYTE_THRESHOLD / 1_000_000).toFixed(0)} MB of data in a single flow. Large flows may indicate data exfiltration, misconfigured backups, or media streaming.`,
+      recommendation: "Investigate the source and destination of high-volume flows. Correlate with user activity and business justification.",
       count: highBytes.length,
       relatedLogs: highBytes.slice(0, MAX_RELATED_LOGS),
     });
@@ -166,11 +113,8 @@ export function detectTrafficAnomalies(logs: NormalizedLog[]): Finding[] {
       severity: "medium",
       title: `High packet count: ${highPackets.length} flow${highPackets.length === 1 ? "" : "s"} exceed ${PACKET_THRESHOLD} packets`,
       description:
-        `${highPackets.length} log entr${highPackets.length === 1 ? "y" : "ies"} record ` +
-        `more than ${PACKET_THRESHOLD} packets in a single flow. ` +
-        `Unusually high packet rates can indicate flooding, DDoS activity, or scanning.`,
-      recommendation:
-        "Review the source IPs involved. Check for rate-limiting rules and consider alerting thresholds.",
+        `${highPackets.length} log entr${highPackets.length === 1 ? "y" : "ies"} record more than ${PACKET_THRESHOLD} packets in a single flow. Unusually high packet rates can indicate flooding, DDoS activity, or scanning.`,
+      recommendation: "Review the source IPs involved. Check for rate-limiting rules and consider alerting thresholds.",
       count: highPackets.length,
       relatedLogs: highPackets.slice(0, MAX_RELATED_LOGS),
     });
@@ -179,18 +123,9 @@ export function detectTrafficAnomalies(logs: NormalizedLog[]): Finding[] {
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// 4. Vertical port scan (one source → one dest, many ports)
-// ---------------------------------------------------------------------------
+const VERTICAL_SCAN_THRESHOLD = 20;
 
-const VERTICAL_SCAN_THRESHOLD = 20; // unique dst ports from one src→dst pair
-
-/**
- * Detect a source IP probing many different ports on the same destination.
- * Requires: srcIp + dstIp + dstPort.
- */
 export function detectVerticalPortScan(logs: NormalizedLog[]): Finding[] {
-  // key: "srcIp|dstIp" → Set of unique destination ports
   const pairs = new Map<string, { ports: Set<number>; logs: NormalizedLog[] }>();
 
   for (const log of logs) {
@@ -206,7 +141,6 @@ export function detectVerticalPortScan(logs: NormalizedLog[]): Finding[] {
   }
 
   const findings: Finding[] = [];
-
   for (const [key, { ports, logs: pairLogs }] of pairs) {
     if (ports.size < VERTICAL_SCAN_THRESHOLD) continue;
     const [srcIp, dstIp] = key.split("|");
@@ -214,36 +148,22 @@ export function detectVerticalPortScan(logs: NormalizedLog[]): Finding[] {
       id: `vertical-scan-${srcIp}-${dstIp}`,
       type: "vertical-port-scan",
       severity: "high",
-      title: `Possible port scan: ${srcIp} → ${dstIp} (${ports.size} ports)`,
+      title: `Possible port scan: ${srcIp} -> ${dstIp} (${ports.size} ports)`,
       description:
-        `Source IP ${srcIp} was observed connecting to ${ports.size} unique destination ports ` +
-        `on ${dstIp}. This pattern is consistent with a vertical port scan used to map ` +
-        `open services on a target host.`,
-      recommendation:
-        "Investigate the source IP. Block or rate-limit if not a legitimate scanner. " +
-        "Ensure only required ports are exposed on the destination host.",
+        `Source IP ${srcIp} was observed connecting to ${ports.size} unique destination ports on ${dstIp}. This pattern is consistent with a vertical port scan used to map open services on a target host.`,
+      recommendation: "Investigate the source IP. Block or rate-limit if not a legitimate scanner. Ensure only required ports are exposed on the destination host.",
       count: pairLogs.length,
       relatedLogs: pairLogs.slice(0, MAX_RELATED_LOGS),
       mitreTactic: "Reconnaissance",
       mitreTechnique: "T1046 - Network Service Discovery",
     });
   }
-
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// 5. Horizontal port scan (one source, same port, many destinations)
-// ---------------------------------------------------------------------------
+const HORIZONTAL_SCAN_THRESHOLD = 20;
 
-const HORIZONTAL_SCAN_THRESHOLD = 20; // unique dst IPs on same port
-
-/**
- * Detect a source IP probing the same port across many different destinations.
- * Requires: srcIp + dstIp + dstPort.
- */
 export function detectHorizontalPortScan(logs: NormalizedLog[]): Finding[] {
-  // key: "srcIp|dstPort" → Set of unique destination IPs
   const pairs = new Map<string, { dstIps: Set<string>; logs: NormalizedLog[] }>();
 
   for (const log of logs) {
@@ -259,7 +179,6 @@ export function detectHorizontalPortScan(logs: NormalizedLog[]): Finding[] {
   }
 
   const findings: Finding[] = [];
-
   for (const [key, { dstIps, logs: scanLogs }] of pairs) {
     if (dstIps.size < HORIZONTAL_SCAN_THRESHOLD) continue;
     const [srcIp, dstPort] = key.split("|");
@@ -269,37 +188,21 @@ export function detectHorizontalPortScan(logs: NormalizedLog[]): Finding[] {
       severity: "high",
       title: `Possible host sweep: ${srcIp} probing port ${dstPort} on ${dstIps.size} hosts`,
       description:
-        `Source IP ${srcIp} was observed connecting to port ${dstPort} on ` +
-        `${dstIps.size} unique destination IPs. This pattern is consistent with a ` +
-        `horizontal scan used to discover hosts running a specific service.`,
-      recommendation:
-        "Block or rate-limit the source IP at the perimeter. " +
-        "Investigate whether any of the targeted hosts were compromised.",
+        `Source IP ${srcIp} was observed connecting to port ${dstPort} on ${dstIps.size} unique destination IPs. This pattern is consistent with a horizontal scan used to discover hosts running a specific service.`,
+      recommendation: "Block or rate-limit the source IP at the perimeter. Investigate whether any of the targeted hosts were compromised.",
       count: scanLogs.length,
       relatedLogs: scanLogs.slice(0, MAX_RELATED_LOGS),
       mitreTactic: "Reconnaissance",
       mitreTechnique: "T1046 - Network Service Discovery",
     });
   }
-
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// 6. Repeated denied attempts (brute-force indicator)
-// ---------------------------------------------------------------------------
-
-const REPEATED_DENY_THRESHOLD = 50; // denied attempts per src+dstPort pair
-
-/** Ports that indicate credential brute-forcing when repeatedly denied. */
+const REPEATED_DENY_THRESHOLD = 50;
 const BRUTE_FORCE_PORTS = new Set([22, 23, 3389, 5900, 8291]);
 
-/**
- * Detect a source IP making many blocked attempts to the same destination port.
- * Requires: srcIp + dstPort + blocked action.
- */
 export function detectRepeatedDeniedAttempts(logs: NormalizedLog[]): Finding[] {
-  // key: "srcIp|dstPort" → NormalizedLog[]
   const groups = new Map<string, NormalizedLog[]>();
 
   for (const log of logs) {
@@ -307,31 +210,20 @@ export function detectRepeatedDeniedAttempts(logs: NormalizedLog[]): Finding[] {
     if (!isBlocked(log.action)) continue;
     const key = `${log.srcIp}|${log.dstPort}`;
     const bucket = groups.get(key);
-    if (bucket) {
-      bucket.push(log);
-    } else {
-      groups.set(key, [log]);
-    }
+    if (bucket) bucket.push(log);
+    else groups.set(key, [log]);
   }
 
   const findings: Finding[] = [];
-
   for (const [key, groupLogs] of groups) {
     if (groupLogs.length < REPEATED_DENY_THRESHOLD) continue;
     const [srcIp, dstPortStr] = key.split("|");
     const dstPort = Number(dstPortStr);
     const isBrutePort = BRUTE_FORCE_PORTS.has(dstPort);
     const severity: Severity = isBrutePort ? "high" : "medium";
-
     const mitre = isBrutePort
-      ? {
-          mitreTactic: "Credential Access",
-          mitreTechnique: "T1110 - Brute Force",
-        }
-      : {
-          mitreTactic: "Reconnaissance",
-          mitreTechnique: "T1046 - Network Service Discovery",
-        };
+      ? { mitreTactic: "Credential Access", mitreTechnique: "T1110 - Brute Force" }
+      : { mitreTactic: "Reconnaissance", mitreTechnique: "T1046 - Network Service Discovery" };
 
     findings.push({
       id: `repeated-deny-${srcIp}-port-${dstPort}`,
@@ -339,11 +231,7 @@ export function detectRepeatedDeniedAttempts(logs: NormalizedLog[]): Finding[] {
       severity,
       title: `${groupLogs.length} blocked attempts from ${srcIp} to port ${dstPort}`,
       description:
-        `Source IP ${srcIp} made ${groupLogs.length} blocked connection attempts ` +
-        `to port ${dstPort}. ` +
-        (isBrutePort
-          ? `Port ${dstPort} is commonly targeted for credential brute-forcing.`
-          : `Repeated denies suggest automated scanning or probing activity.`),
+        `Source IP ${srcIp} made ${groupLogs.length} blocked connection attempts to port ${dstPort}. ${isBrutePort ? `Port ${dstPort} is commonly targeted for credential brute-forcing.` : "Repeated denies suggest automated scanning or probing activity."}`,
       recommendation: isBrutePort
         ? `Block ${srcIp} at the perimeter. Ensure strong authentication and account lockout policies are in place.`
         : `Investigate ${srcIp}. Consider adding a block rule if traffic is not expected.`,
@@ -352,19 +240,9 @@ export function detectRepeatedDeniedAttempts(logs: NormalizedLog[]): Finding[] {
       ...mitre,
     });
   }
-
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// Master runner
-// ---------------------------------------------------------------------------
-
-/**
- * Run all detections and return a combined, de-duplicated findings array.
- * Never throws — each detector is wrapped in a try/catch so a bug in one
- * detection does not prevent the others from running.
- */
 export function runDetections(logs: NormalizedLog[]): Finding[] {
   if (logs.length === 0) return [];
 
@@ -378,21 +256,15 @@ export function runDetections(logs: NormalizedLog[]): Finding[] {
   ];
 
   const all: Finding[] = [];
-
   for (const detector of detectors) {
     try {
-      const results = detector(logs);
-      all.push(...results);
+      all.push(...detector(logs));
     } catch (err) {
       console.error(`Detection failed in ${detector.name}:`, err);
     }
   }
 
-  // Sort: critical → high → medium → low → info
-  const ORDER: Record<string, number> = {
-    critical: 0, high: 1, medium: 2, low: 3, info: 4,
-  };
+  const ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
   all.sort((a, b) => (ORDER[a.severity] ?? 5) - (ORDER[b.severity] ?? 5));
-
   return all;
 }

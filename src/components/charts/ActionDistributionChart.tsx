@@ -36,8 +36,8 @@ export default function ActionDistributionChart() {
       {data.length === 0 ? (
         <EmptyState compact title="No action data available" />
       ) : (
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer>
+        <div className="h-72 min-h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 4, right: 12, left: -8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
               <XAxis

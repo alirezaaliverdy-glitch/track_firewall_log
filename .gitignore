@@ -23,3 +23,9 @@ backend/storage/
 *.njsproj
 *.sln
 *.sw?
+
+backend/.env
+
+.env
+
+.env.development

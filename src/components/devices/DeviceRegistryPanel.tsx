@@ -12,6 +12,7 @@ import {
   type DeviceProtocol,
   type DeviceStatus,
   type DeviceType,
+  normalizeArray,
 } from "@/lib/devices";
 import { Input } from "@/components/ui/input";
 
@@ -64,11 +65,11 @@ function protocolDefaultPort(protocol: DeviceProtocol, type: DeviceType) {
 }
 
 function formatType(type: DeviceType) {
-  return DEVICE_TYPES.find((entry) => entry.value === type)?.label ?? type;
+  return DEVICE_TYPES?.find((entry) => entry.value === type)?.label ?? type;
 }
 
 function parseTags(value: string) {
-  return value
+  return String(value ?? "")
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
@@ -84,14 +85,14 @@ export default function DeviceRegistryPanel() {
   const [testingId, setTestingId] = useState<string | null>(null);
 
   const editingDevice = useMemo(
-    () => devices.find((device) => device.id === editingId) ?? null,
+    () => normalizeArray<Device>(devices).find((device) => device.id === editingId) ?? null,
     [devices, editingId]
   );
 
   const refreshDevices = () => {
     setLoading(true);
     listDevices()
-      .then(setDevices)
+      .then((nextDevices) => setDevices(normalizeArray<Device>(nextDevices)))
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load devices."))
       .finally(() => setLoading(false));
   };
@@ -135,10 +136,10 @@ export default function DeviceRegistryPanel() {
       managementPort: device.managementPort,
       protocol: device.protocol,
       environment: device.environment,
-      tags: device.tags,
-      capabilities: device.capabilities,
+      tags: normalizeArray<string>(device.tags),
+      capabilities: device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {},
     });
-    setTagsText(device.tags.join(", "));
+    setTagsText(normalizeArray<string>(device.tags).join(", "));
   };
 
   const runConnectionTest = (device: Device) => {
@@ -162,6 +163,8 @@ export default function DeviceRegistryPanel() {
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to remove device."));
   };
+
+  const safeDevices = normalizeArray<Device>(devices);
 
   return (
     <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
@@ -217,7 +220,7 @@ export default function DeviceRegistryPanel() {
                   value={form.type}
                   onChange={(event) => {
                     const type = event.target.value as DeviceType;
-                    const vendor = DEVICE_TYPES.find((entry) => entry.value === type)?.vendor ?? form.vendor;
+                    const vendor = DEVICE_TYPES?.find((entry) => entry.value === type)?.vendor ?? form.vendor;
                     setForm((prev) => ({
                       ...prev,
                       type,
@@ -311,14 +314,23 @@ export default function DeviceRegistryPanel() {
         </form>
 
         <div className="min-h-[260px] rounded-lg border border-zinc-800 bg-zinc-950">
-          {devices.length === 0 ? (
+          {loading ? (
+            <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 p-6 text-center text-zinc-500">
+              <RefreshCw className="h-8 w-8 animate-spin" aria-hidden="true" />
+              <p className="text-sm">Loading devices...</p>
+            </div>
+          ) : safeDevices.length === 0 ? (
             <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 p-6 text-center text-zinc-500">
               <Server className="h-8 w-8" aria-hidden="true" />
               <p className="text-sm">No devices registered yet.</p>
             </div>
           ) : (
             <div className="divide-y divide-zinc-800">
-              {devices.map((device) => (
+              {safeDevices.map((device) => {
+                const tags = normalizeArray<string>(device.tags);
+                const capabilities = device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {};
+                const statusChecks = normalizeArray<NonNullable<Device["statusChecks"]>[number]>(device.statusChecks);
+                return (
                 <article key={device.id} className="p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
@@ -335,19 +347,19 @@ export default function DeviceRegistryPanel() {
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.host}:{device.managementPort}</span>
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.environment}</span>
                       </div>
-                      {device.tags.length > 0 && (
+                      {tags.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {device.tags.map((tag) => (
+                          {tags.map((tag) => (
                             <span key={tag} className="rounded bg-blue-950/50 px-2 py-0.5 text-[11px] text-blue-200">{tag}</span>
                           ))}
                         </div>
                       )}
                       <p className="mt-2 text-left text-xs text-zinc-500">
-                        Capabilities: {Object.entries(device.capabilities).map(([key, value]) => `${key}=${String(value)}`).join(", ") || "none"}
+                        Capabilities: {Object.entries(capabilities).map(([key, value]) => `${key}=${String(value)}`).join(", ") || "none"}
                       </p>
-                      {device.statusChecks?.[0] && (
+                      {statusChecks[0] && (
                         <p className="mt-1 text-left text-xs text-zinc-500">
-                          Last check: {device.statusChecks[0].message ?? device.statusChecks[0].status}
+                          Last check: {statusChecks[0].message ?? statusChecks[0].status}
                         </p>
                       )}
                     </div>
@@ -381,7 +393,7 @@ export default function DeviceRegistryPanel() {
                     </div>
                   </div>
                 </article>
-              ))}
+              )})}
             </div>
           )}
         </div>

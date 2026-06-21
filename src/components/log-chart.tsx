@@ -59,8 +59,8 @@ export default function LogChart() {
           description="Upload a log file that includes bytes or bytes sent / received columns."
         />
       ) : (
-        <div style={{ width: "100%", height: 280 }}>
-          <ResponsiveContainer>
+        <div className="h-72 min-h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 4, right: 24, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
               <XAxis

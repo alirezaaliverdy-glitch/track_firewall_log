@@ -9,9 +9,19 @@ import {
 } from "../services/device.service.js";
 
 export const deviceRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/api/devices", async () => ({
-    devices: await listDevices()
-  }));
+  app.get("/api/devices", async (_request, reply) => {
+    try {
+      return {
+        devices: await listDevices()
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to list devices";
+      return reply.code(500).send({
+        error: "Failed to list devices",
+        detail: message
+      });
+    }
+  });
 
   app.post<{ Body: Record<string, unknown> }>("/api/devices", async (request, reply) => {
     try {
@@ -19,7 +29,10 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(201).send(device);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid device input";
-      return reply.code(400).send({ error: message });
+      return reply.code(400).send({
+        error: "Failed to create device",
+        detail: message
+      });
     }
   });
 

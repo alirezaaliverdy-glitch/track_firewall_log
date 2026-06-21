@@ -22,6 +22,21 @@ const EMPTY_SUMMARY: EventsSummary = {
   topDevices: [],
 };
 
+const safeNumber = (value: unknown): number => {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatNumber = (value: unknown): string => safeNumber(value).toLocaleString();
+
+const formatDateTime = (value: unknown): string => {
+  if (!value) return "-";
+  const d = new Date(String(value));
+  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+};
+
+const safeArray = <T,>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
+
 const EMPTY_FILTERS: EventFilters = {
   vendor: "",
   action: "",
@@ -32,16 +47,6 @@ const EMPTY_FILTERS: EventFilters = {
   protocol: "",
 };
 
-function fmtDate(value: string | null | undefined) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
 function severityClass(severity: string | null) {
   if (severity === "high" || severity === "critical") return "border-red-800 bg-red-950/40 text-red-300";
   if (severity === "medium") return "border-yellow-800 bg-yellow-950/40 text-yellow-300";
@@ -50,8 +55,9 @@ function severityClass(severity: string | null) {
 }
 
 function topList(items: Array<{ value?: string; name?: string; count: number }>) {
-  if (items.length === 0) return "none";
-  return items.slice(0, 3).map((item) => `${item.value ?? item.name}: ${item.count}`).join(", ");
+  const safeItems = safeArray<{ value?: string; name?: string; count: number }>(items);
+  if (safeItems.length === 0) return "none";
+  return safeItems.slice(0, 3).map((item) => `${item.value ?? item.name ?? "unknown"}: ${formatNumber(item.count)}`).join(", ");
 }
 
 function eventEndpoint(event: SecurityEvent) {
@@ -78,9 +84,9 @@ export default function SecurityEventsPanel() {
       listEventBatches(),
     ])
       .then(([nextEvents, nextSummary, nextBatches]) => {
-        setEvents(nextEvents);
-        setSummary(nextSummary);
-        setBatches(nextBatches);
+        setEvents(safeArray<SecurityEvent>(nextEvents));
+        setSummary(nextSummary ?? EMPTY_SUMMARY);
+        setBatches(safeArray<EventBatch>(nextBatches));
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load security events."))
       .finally(() => setLoading(false));
@@ -99,6 +105,12 @@ export default function SecurityEventsPanel() {
       .then(setSelectedEvent)
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load event details."));
   };
+
+  const safeEvents = safeArray<SecurityEvent>(events);
+  const safeBatches = safeArray<EventBatch>(batches);
+  const safeSummary = summary ?? EMPTY_SUMMARY;
+  const countByAction = safeArray<{ action: string; count: number }>(safeSummary.countByAction);
+  const topSourceIps = safeArray<{ value: string; count: number }>(safeSummary.topSourceIps);
 
   return (
     <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
@@ -125,28 +137,28 @@ export default function SecurityEventsPanel() {
             <ShieldAlert className="h-4 w-4" aria-hidden="true" />
             Total events
           </div>
-          <p className="mt-1 text-2xl font-semibold text-blue-100">{summary.totalEvents.toLocaleString()}</p>
+          <p className="mt-1 text-2xl font-semibold text-blue-100">{formatNumber(safeSummary.totalEvents)}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
           <div className="flex items-center gap-2 text-xs text-zinc-500">
             <Network className="h-4 w-4" aria-hidden="true" />
             Top source IPs
           </div>
-          <p className="mt-2 text-xs text-zinc-300">{topList(summary.topSourceIps)}</p>
+          <p className="mt-2 text-xs text-zinc-300">{topList(topSourceIps)}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
           <div className="flex items-center gap-2 text-xs text-zinc-500">
             <Filter className="h-4 w-4" aria-hidden="true" />
             Actions
           </div>
-          <p className="mt-2 text-xs text-zinc-300">{topList(summary.countByAction.map((item) => ({ value: item.action, count: item.count })))}</p>
+          <p className="mt-2 text-xs text-zinc-300">{topList(countByAction.map((item) => ({ value: item.action, count: item.count })))}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
           <div className="flex items-center gap-2 text-xs text-zinc-500">
             <CalendarClock className="h-4 w-4" aria-hidden="true" />
             Recent batches
           </div>
-          <p className="mt-2 text-xs text-zinc-300">{batches.length} batches stored</p>
+          <p className="mt-2 text-xs text-zinc-300">{formatNumber(safeBatches.length)} batches stored</p>
         </div>
       </div>
 
@@ -187,16 +199,22 @@ export default function SecurityEventsPanel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
-              {events.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-zinc-500">
+                    Loading security events...
+                  </td>
+                </tr>
+              ) : safeEvents.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-sm text-zinc-500">
                     No security events stored yet.
                   </td>
                 </tr>
               ) : (
-                events.map((event) => (
+                safeEvents.map((event) => (
                   <tr key={event.id} className="text-zinc-300">
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">{fmtDate(event.timestamp ?? event.receivedAt)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">{formatDateTime(event.timestamp ?? event.receivedAt)}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded border px-2 py-0.5 text-xs ${severityClass(event.severity)}`}>
                         {event.severity ?? "unknown"}
@@ -224,11 +242,11 @@ export default function SecurityEventsPanel() {
         </div>
       </div>
 
-      {batches.length > 0 && (
+      {safeBatches.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {batches.slice(0, 5).map((batch) => (
+          {safeBatches.slice(0, 5).map((batch) => (
             <span key={batch.id} className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs text-zinc-400">
-              {batch.source?.name ?? "Source"}: {batch.parsedEvents}/{batch.totalEvents}
+              {batch.source?.name ?? "Source"}: {formatNumber(batch.parsedEvents)}/{formatNumber(batch.totalEvents)}
             </span>
           ))}
         </div>

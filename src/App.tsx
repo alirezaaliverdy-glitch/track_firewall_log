@@ -21,6 +21,10 @@ import ExportButtons from "./components/export/ExportButtons";
 import WorkflowGuide from "./components/layout/WorkflowGuide";
 import DeviceRegistryPanel from "./components/devices/DeviceRegistryPanel";
 import SecurityEventsPanel from "./components/events/SecurityEventsPanel";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import IncidentsPanel from "./components/incidents/IncidentsPanel";
+import AiSecurityAssistantPanel from "./components/ai/AiSecurityAssistantPanel";
+import ActionCenterPanel from "./components/actions/ActionCenterPanel";
 
 function App() {
   return (
@@ -45,10 +49,25 @@ function App() {
             </div>
           </div>
 
-          <FirewallTypeSelector />
-          <CsvUploader />
-          <DeviceRegistryPanel />
-          <SecurityEventsPanel />
+          <ErrorBoundary title="Upload panel unavailable">
+            <FirewallTypeSelector />
+            <CsvUploader />
+          </ErrorBoundary>
+          <ErrorBoundary title="Device Registry unavailable">
+            <DeviceRegistryPanel />
+          </ErrorBoundary>
+          <ErrorBoundary title="Security Events unavailable">
+            <SecurityEventsPanel />
+          </ErrorBoundary>
+          <ErrorBoundary title="Incidents unavailable">
+            <IncidentsPanel />
+          </ErrorBoundary>
+          <ErrorBoundary title="AI Security Assistant unavailable">
+            <AiSecurityAssistantPanel />
+          </ErrorBoundary>
+          <ErrorBoundary title="Action Center unavailable">
+            <ActionCenterPanel />
+          </ErrorBoundary>
           <WorkflowGuide />
           <ColumnMappingWizard />
           <SummaryCards />
