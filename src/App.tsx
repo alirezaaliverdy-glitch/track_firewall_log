@@ -19,6 +19,8 @@ import LogChart from "./components/log-chart";
 import LogTable from "./components/log-table";
 import ExportButtons from "./components/export/ExportButtons";
 import WorkflowGuide from "./components/layout/WorkflowGuide";
+import DeviceRegistryPanel from "./components/devices/DeviceRegistryPanel";
+import SecurityEventsPanel from "./components/events/SecurityEventsPanel";
 
 function App() {
   return (
@@ -33,18 +35,20 @@ function App() {
                   Firewall Log Analyzer
                 </h1>
                 <p className="mt-1 text-left text-sm text-slate-400">
-                  Client-side firewall import, findings, evidence, and export review.
+                  Backend-powered firewall import, findings, evidence, and export review.
                 </p>
               </div>
               <div className="inline-flex w-fit items-center gap-2 rounded-md border border-blue-800/70 bg-blue-950/40 px-3 py-1.5 text-xs font-medium text-blue-200">
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                Browser-only analysis
+                Backend analysis
               </div>
             </div>
           </div>
 
           <FirewallTypeSelector />
           <CsvUploader />
+          <DeviceRegistryPanel />
+          <SecurityEventsPanel />
           <WorkflowGuide />
           <ColumnMappingWizard />
           <SummaryCards />

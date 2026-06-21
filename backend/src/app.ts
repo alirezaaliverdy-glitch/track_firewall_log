@@ -6,6 +6,8 @@ import { env, isProduction, maxUploadBytes } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
 import { loggerConfig } from "./lib/logger.js";
 import { analysisRoutes } from "./routes/analysis.js";
+import { deviceRoutes } from "./routes/devices.js";
+import { eventRoutes } from "./routes/events.js";
 import { healthRoutes } from "./routes/health.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
@@ -19,7 +21,7 @@ export async function buildApp() {
   await app.register(helmet);
   await app.register(cors, {
     origin: env.corsOrigin,
-    methods: ["GET", "POST", "OPTIONS"]
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
   });
   await app.register(multipart, {
     limits: {
@@ -60,6 +62,8 @@ export async function buildApp() {
   await app.register(uploadRoutes);
   await app.register(jobRoutes);
   await app.register(analysisRoutes);
+  await app.register(deviceRoutes);
+  await app.register(eventRoutes);
 
   app.addHook("onClose", async () => {
     await prisma.$disconnect();

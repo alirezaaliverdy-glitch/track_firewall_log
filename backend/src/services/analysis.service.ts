@@ -1,6 +1,7 @@
 import { AnalysisStatus, JobStatus, UploadStatus, type Prisma } from "@prisma/client";
 import type { AnalysisResult } from "../analyzer/index.js";
 import { prisma } from "../db/prisma.js";
+import { storeUploadSecurityEvents } from "./event.service.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -12,6 +13,7 @@ export async function storeAnalysisResult(uploadId: string, result: AnalysisResu
       data: {
         uploadId,
         status: AnalysisStatus.completed,
+        resultJson: toJson(result),
         summaryJson: toJson(result.summary),
         logProfileJson: toJson(result.logProfile),
         trafficIntelligenceJson: toJson(result.trafficIntelligence),
@@ -35,6 +37,8 @@ export async function storeAnalysisResult(uploadId: string, result: AnalysisResu
       }
     });
 
+    await storeUploadSecurityEvents(tx, uploadId, result);
+
     return analysisRun;
   });
 }
@@ -49,6 +53,44 @@ export async function getLatestAnalysisForUpload(uploadId: string) {
 export async function getAnalysisRunById(analysisRunId: string) {
   return prisma.analysisRun.findUnique({
     where: { id: analysisRunId }
+  });
+}
+
+export async function getAnalysisJobById(jobId: string) {
+  return prisma.job.findUnique({
+    where: { id: jobId },
+    include: {
+      upload: {
+        include: {
+          analysisRuns: {
+            orderBy: { createdAt: "desc" },
+            take: 1
+          }
+        }
+      }
+    }
+  });
+}
+
+export async function getRecentAnalysisJobs(limit = 10) {
+  return prisma.job.findMany({
+    where: {
+      type: "import"
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: limit,
+    include: {
+      upload: {
+        include: {
+          analysisRuns: {
+            orderBy: { createdAt: "desc" },
+            take: 1
+          }
+        }
+      }
+    }
   });
 }
 
@@ -77,6 +119,10 @@ export async function markAnalysisFailed(uploadId: string, jobId: string, messag
 }
 
 export function toAnalysisResponse(run: NonNullable<Awaited<ReturnType<typeof getLatestAnalysisForUpload>>>) {
+  if (run.resultJson) {
+    return run.resultJson;
+  }
+
   return {
     analysisRunId: run.id,
     uploadId: run.uploadId,
@@ -92,5 +138,23 @@ export function toAnalysisResponse(run: NonNullable<Awaited<ReturnType<typeof ge
     rowCount: run.rowCount,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt
+  };
+}
+
+type AnalysisJobRecord = NonNullable<Awaited<ReturnType<typeof getAnalysisJobById>>>;
+
+export function toAnalysisJobStatus(job: AnalysisJobRecord) {
+  const analysisRun = job.upload.analysisRuns[0];
+  const logProfile = analysisRun?.logProfileJson as { detectedVendor?: string; confidence?: number } | null | undefined;
+
+  return {
+    id: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    fileName: job.upload.originalFileName,
+    vendor: job.upload.detectedVendor ?? logProfile?.detectedVendor ?? null,
+    confidence: logProfile?.confidence ?? null,
+    error: job.errorMessage ?? null
   };
 }

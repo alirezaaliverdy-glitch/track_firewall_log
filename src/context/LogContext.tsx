@@ -34,6 +34,7 @@ import type {
   MappingConfidence,
   MappableField,
 } from "@/types/mapping";
+import type { BackendAnalysisResult } from "@/lib/backendAnalysis";
 
 // ---------------------------------------------------------------------------
 // Context shape
@@ -43,6 +44,7 @@ export type LogContextType = {
   // --- Raw layer ---
   rawData: RawLogRow[];
   setRawData: (rows: RawLogRow[]) => void;
+  setBackendAnalysisResult: (result: BackendAnalysisResult) => void;
   resetData: () => void;
 
   // --- Normalized layer ---
@@ -166,6 +168,7 @@ function vendorForRows(rows: RawLogRow[], firewallType: FirewallTypeSelection): 
 
 export function LogProvider({ children }: { children: ReactNode }) {
   const [rawData, setRawDataState] = useState<RawLogRow[]>(logData);
+  const [backendResult, setBackendResult] = useState<BackendAnalysisResult | null>(null);
   const [search, setSearch] = useState("");
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
   const [firewallType, setFirewallTypeState] = useState<FirewallTypeSelection>("auto");
@@ -180,11 +183,22 @@ export function LogProvider({ children }: { children: ReactNode }) {
   // ---- Setters ----
 
   const setRawData = useCallback((rows: RawLogRow[]) => {
+    setBackendResult(null);
     setRawDataState(rows);
     setSearch("");
     setSelectedFindingId(null);
     setColumnMapping(mappingForRows(rows, firewallType));
     setVendorPreset(vendorForRows(rows, firewallType));
+  }, [firewallType]);
+
+  const setBackendAnalysisResult = useCallback((result: BackendAnalysisResult) => {
+    const rows = result.normalizedLogs.map((log) => log.raw);
+    setBackendResult(result);
+    setRawDataState(rows);
+    setSearch("");
+    setSelectedFindingId(null);
+    setColumnMapping(mappingForRows(rows, firewallType));
+    setVendorPreset(result.logProfile.effectiveVendor as FirewallVendor);
   }, [firewallType]);
 
   const setFirewallType = useCallback((nextType: FirewallTypeSelection) => {
@@ -197,6 +211,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
   const setData = setRawData;
 
   const resetData = useCallback(() => {
+    setBackendResult(null);
     setRawDataState(logData);
     setSearch("");
     setSelectedFindingId(null);
@@ -212,10 +227,12 @@ export function LogProvider({ children }: { children: ReactNode }) {
 
   const csvHeaders = useMemo(() => headersFromRows(rawData), [rawData]);
 
-  const logs = useMemo(() => {
+  const browserLogs = useMemo(() => {
     const normalized = normalizeLogsWithMapping(rawData, columnMapping, vendorPreset);
     return enrichLogsWithAssetIntelligence(enrichLogsWithTrafficDirection(normalized));
   }, [rawData, columnMapping, vendorPreset]);
+
+  const logs = backendResult?.normalizedLogs ?? browserLogs;
 
   const mappingConfidence = useMemo(
     () => getMappingConfidence(columnMapping),
@@ -227,13 +244,16 @@ export function LogProvider({ children }: { children: ReactNode }) {
     [columnMapping]
   );
 
-  const summary      = useMemo(() => buildSummary(logs), [logs]);
+  const browserSummary = useMemo(() => buildSummary(logs), [logs]);
   const dataQuality  = useMemo(() => getDataQuality(logs), [logs]);
-  const logProfile   = useMemo(
+  const browserLogProfile = useMemo(
     () => buildLogProfile(rawData, logs, firewallType),
     [rawData, logs, firewallType]
   );
-  const findings     = useMemo(() => runDetections(logs), [logs]);
+  const browserFindings = useMemo(() => runDetections(logs), [logs]);
+  const summary = backendResult?.summary ?? browserSummary;
+  const logProfile = backendResult?.logProfile ?? browserLogProfile;
+  const findings = backendResult?.findings ?? browserFindings;
   const hygieneScore = useMemo(
     () => calculateHygieneScore(findings, dataQuality),
     [findings, dataQuality]
@@ -269,7 +289,7 @@ export function LogProvider({ children }: { children: ReactNode }) {
   return (
     <LogContext.Provider
       value={{
-        rawData, setRawData, resetData,
+        rawData, setRawData, setBackendAnalysisResult, resetData,
         logs, filteredLogs, filteredData,
         search, setSearch,
         columnMapping, setColumnMapping,

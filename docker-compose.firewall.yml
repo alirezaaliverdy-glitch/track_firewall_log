@@ -1,0 +1,65 @@
+services:
+  main-nginx:
+    image: nginx:1.27-alpine
+    container_name: main-nginx
+    depends_on:
+      - firewall-web
+      - firewall-api
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.firewall-main.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+  firewall-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_BASE_PATH: /firewall/
+        VITE_API_BASE_URL: /firewall-api
+    container_name: firewall-web
+    expose:
+      - "50"
+    restart: unless-stopped
+
+  firewall-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: firewall-api
+    depends_on:
+      firewall-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://postgres:postgres@firewall-db:5432/firewall_log_analyzer
+      CORS_ORIGIN: http://192.168.7.13
+      MAX_UPLOAD_MB: 25
+      UPLOAD_DIR: /app/storage/uploads
+    expose:
+      - "4000"
+    volumes:
+      - firewall_uploads:/app/storage/uploads
+    restart: unless-stopped
+
+  firewall-db:
+    image: postgres:16-alpine
+    container_name: firewall-db
+    environment:
+      POSTGRES_DB: firewall_log_analyzer
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - firewall_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d firewall_log_analyzer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  firewall_db_data:
+  firewall_uploads:

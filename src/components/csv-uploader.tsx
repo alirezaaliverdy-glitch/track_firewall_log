@@ -1,7 +1,14 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle, FileText, RefreshCw, Upload } from "lucide-react";
 import { importFirewallFile } from "@/lib/importer";
 import { useLogContext } from "@/context/LogContext";
+import {
+  getBackendAnalysisJob,
+  getBackendAnalysisResult,
+  getRecentBackendAnalysisJobs,
+  uploadForBackendAnalysis,
+  type BackendAnalysisJobStatus,
+} from "@/lib/backendAnalysis";
 import { Input } from "./ui/input";
 import PrivacyNotice from "./upload/PrivacyNotice";
 
@@ -28,9 +35,11 @@ const SUPPORTED_VENDORS = [
 
 type UploadState =
   | { status: "idle" }
-  | { status: "loading"; fileName: string }
+  | { status: "loading"; fileName: string; message: string }
   | { status: "done"; fileName: string; rowCount: number }
   | { status: "error"; message: string };
+
+type AnalysisMode = "backend" | "browser";
 
 function isSupportedFile(file: File): boolean {
   const lowerName = file.name.toLowerCase();
@@ -47,6 +56,7 @@ export default function CsvUploader() {
   const {
     setRawData,
     resetData,
+    setBackendAnalysisResult,
     summary,
     csvHeaders,
     detectedVendor,
@@ -54,6 +64,59 @@ export default function CsvUploader() {
   } = useLogContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadState, setUploadState] = useState<UploadState>({ status: "idle" });
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("backend");
+  const [recentJobs, setRecentJobs] = useState<BackendAnalysisJobStatus[]>([]);
+
+  const loadRecentJobs = () => {
+    getRecentBackendAnalysisJobs()
+      .then((jobs) => setRecentJobs(jobs.filter((job) => job.status === "completed").slice(0, 5)))
+      .catch(() => setRecentJobs([]));
+  };
+
+  useEffect(() => {
+    loadRecentJobs();
+  }, []);
+
+  const applyBackendResult = async (jobId: string, fileName: string) => {
+    const result = await getBackendAnalysisResult(jobId);
+    setBackendAnalysisResult(result);
+    setUploadState({ status: "done", fileName, rowCount: result.rowCount });
+    loadRecentJobs();
+  };
+
+  const runBackendAnalysis = async (file: File) => {
+    setUploadState({ status: "loading", fileName: file.name, message: "Uploading to backend..." });
+    const created = await uploadForBackendAnalysis(file);
+    let job = await getBackendAnalysisJob(created.jobId);
+
+    while (job.status === "queued" || job.status === "processing") {
+      setUploadState({
+        status: "loading",
+        fileName: file.name,
+        message: job.status === "queued" ? "Queued for backend analysis..." : "Backend analysis running...",
+      });
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      job = await getBackendAnalysisJob(created.jobId);
+    }
+
+    if (job.status === "failed") {
+      throw new Error(job.error ?? "Backend analysis failed.");
+    }
+
+    await applyBackendResult(created.jobId, file.name);
+  };
+
+  const runBrowserAnalysis = async (file: File) => {
+    setUploadState({ status: "loading", fileName: file.name, message: "Parsing in browser..." });
+    const rows = await importFirewallFile(file);
+
+    if (rows.length === 0) {
+      throw new Error("The log file appears to be empty or has no valid rows.");
+    }
+
+    setRawData(rows);
+    setUploadState({ status: "done", fileName: file.name, rowCount: rows.length });
+  };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,21 +131,9 @@ export default function CsvUploader() {
       return;
     }
 
-    setUploadState({ status: "loading", fileName: file.name });
+    const analysis = analysisMode === "backend" ? runBackendAnalysis(file) : runBrowserAnalysis(file);
 
-    importFirewallFile(file)
-      .then((rows) => {
-        if (rows.length === 0) {
-          setUploadState({
-            status: "error",
-            message: "The log file appears to be empty or has no valid rows.",
-          });
-          return;
-        }
-
-        setRawData(rows);
-        setUploadState({ status: "done", fileName: file.name, rowCount: rows.length });
-      })
+    analysis
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : "Failed to import log file.";
         setUploadState({ status: "error", message });
@@ -108,8 +159,25 @@ export default function CsvUploader() {
                 Import firewall logs
               </h2>
               <p className="mt-1 text-sm text-zinc-400">
-                Upload a log export to analyze traffic, findings, and evidence. Logs stay in your browser.
+                Upload a log export to analyze traffic, findings, and evidence.
               </p>
+              <div className="mt-3 inline-flex rounded-md border border-zinc-700 bg-zinc-950 p-0.5">
+                {(["backend", "browser"] as AnalysisMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setAnalysisMode(mode)}
+                    className={`h-7 rounded px-3 text-xs font-medium capitalize transition-colors ${
+                      analysisMode === mode
+                        ? "bg-blue-600 text-white"
+                        : "text-zinc-400 hover:text-zinc-100"
+                    }`}
+                    aria-pressed={analysisMode === mode}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {SUPPORTED_FORMATS.map((format) => (
                   <span key={format} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
@@ -120,6 +188,31 @@ export default function CsvUploader() {
               <p className="mt-3 text-xs text-zinc-500">
                 Supported vendors: {SUPPORTED_VENDORS.join(", ")}
               </p>
+              {recentJobs.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-zinc-500">Recent backend jobs</span>
+                  {recentJobs.map((job) => (
+                    <button
+                      key={job.id}
+                      type="button"
+                      onClick={() => {
+                        setUploadState({
+                          status: "loading",
+                          fileName: job.fileName,
+                          message: "Loading backend result...",
+                        });
+                        applyBackendResult(job.id, job.fileName).catch((error: unknown) => {
+                          const message = error instanceof Error ? error.message : "Failed to load backend result.";
+                          setUploadState({ status: "error", message });
+                        });
+                      }}
+                      className="max-w-48 truncate rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
+                    >
+                      {job.fileName}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -156,6 +249,23 @@ export default function CsvUploader() {
               aria-label="Upload firewall log file"
             />
           </label>
+          <div className="inline-flex rounded-md border border-zinc-700 bg-zinc-950 p-0.5">
+            {(["backend", "browser"] as AnalysisMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setAnalysisMode(mode)}
+                className={`h-7 rounded px-3 text-xs font-medium capitalize transition-colors ${
+                  analysisMode === mode
+                    ? "bg-blue-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+                aria-pressed={analysisMode === mode}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
           {uploadState.status === "done" && (
             <span className="inline-flex min-w-0 items-center gap-2 text-sm text-zinc-300">
               <CheckCircle className="h-4 w-4 flex-shrink-0 text-blue-400" aria-hidden="true" />
@@ -203,7 +313,7 @@ export default function CsvUploader() {
         {uploadState.status === "loading" && (
           <p className="text-xs text-zinc-400" role="status" aria-live="polite">
             <span className="inline-block animate-pulse mr-1">...</span>
-            Parsing {uploadState.fileName}...
+            {uploadState.message} {uploadState.fileName}
           </p>
         )}
 

@@ -48,6 +48,7 @@ model AnalysisRun {
   uploadId                String
   upload                  Upload         @relation(fields: [uploadId], references: [id], onDelete: Cascade)
   status                  AnalysisStatus
+  resultJson              Json?
   summaryJson             Json?
   logProfileJson          Json?
   trafficIntelligenceJson Json?
@@ -61,6 +62,174 @@ model AnalysisRun {
   updatedAt               DateTime       @updatedAt
 
   @@index([uploadId])
+}
+
+model Device {
+  id                String              @id @default(cuid())
+  name              String
+  vendor            String
+  type              DeviceType
+  host              String
+  managementPort    Int
+  protocol          DeviceProtocol
+  environment       DeviceEnvironment
+  tags              String[]            @default([])
+  status            DeviceStatus        @default(unknown)
+  capabilities      Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  authProfiles      DeviceAuthProfile[]
+  deviceCapabilities DeviceCapability[]
+  statusChecks      DeviceStatusCheck[]
+  auditLogs         AuditLog[]
+  eventSources      EventSource[]
+  eventBatches      EventBatch[]
+  securityEvents    SecurityEvent[]
+
+  @@index([type])
+  @@index([host])
+  @@index([status])
+}
+
+model EventSource {
+  id             String             @id @default(cuid())
+  name           String
+  type           EventSourceType
+  deviceId       String?
+  device         Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  status         EventSourceStatus  @default(active)
+  lastSeenAt     DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  batches        EventBatch[]
+  securityEvents SecurityEvent[]
+
+  @@index([type])
+  @@index([deviceId])
+  @@index([status])
+  @@index([lastSeenAt])
+}
+
+model EventBatch {
+  id             String           @id @default(cuid())
+  sourceId       String?
+  source         EventSource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  deviceId       String?
+  device         Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  status         EventBatchStatus
+  totalEvents    Int              @default(0)
+  parsedEvents   Int              @default(0)
+  failedEvents   Int              @default(0)
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+  securityEvents SecurityEvent[]
+
+  @@index([sourceId])
+  @@index([deviceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SecurityEvent {
+  id             String       @id @default(cuid())
+  deviceId       String?
+  device         Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  sourceId       String?
+  source         EventSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  batchId        String?
+  batch          EventBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  timestamp      DateTime?
+  receivedAt     DateTime     @default(now())
+  vendor         String?
+  eventType      String
+  action         String?
+  severity       String?
+  srcIp          String?
+  srcPort        Int?
+  dstIp          String?
+  dstPort        Int?
+  protocol       String?
+  username       String?
+  ruleName       String?
+  interfaceIn    String?
+  interfaceOut   String?
+  rawMessage     String?
+  normalizedJson Json
+  tags           Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([deviceId])
+  @@index([sourceId])
+  @@index([batchId])
+  @@index([timestamp])
+  @@index([receivedAt])
+  @@index([vendor])
+  @@index([action])
+  @@index([severity])
+  @@index([srcIp])
+  @@index([dstIp])
+  @@index([dstPort])
+  @@index([protocol])
+}
+
+model DeviceAuthProfile {
+  id               String   @id @default(cuid())
+  deviceId         String
+  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  name             String
+  credentialRef    String
+  authType         String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([deviceId])
+}
+
+model DeviceCapability {
+  id                     String   @id @default(cuid())
+  deviceId               String
+  device                 Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  name                   String
+  category               String
+  enabled                Boolean  @default(false)
+  dryRunSupported        Boolean  @default(true)
+  manualApprovalRequired Boolean  @default(true)
+  metadata               Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([deviceId])
+}
+
+model DeviceStatusCheck {
+  id          String       @id @default(cuid())
+  deviceId    String
+  device      Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  status      DeviceStatus
+  message     String?
+  latencyMs   Int?
+  checkedAt   DateTime     @default(now())
+
+  @@index([deviceId])
+  @@index([checkedAt])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  deviceId       String?
+  device         Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  actor          String?
+  action         String
+  targetType     String
+  targetId       String?
+  dryRun         Boolean  @default(true)
+  approvalStatus String   @default("not_required")
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([deviceId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 enum UploadStatus {
@@ -89,4 +258,54 @@ enum AnalysisStatus {
   pending
   completed
   failed
+}
+
+enum DeviceType {
+  linux_edge
+  mikrotik
+  fortigate
+  pfsense
+  generic_syslog_source
+  generic_firewall
+}
+
+enum DeviceProtocol {
+  ssh
+  api
+  syslog
+  agent
+}
+
+enum DeviceEnvironment {
+  production
+  staging
+  lab
+}
+
+enum DeviceStatus {
+  unknown
+  online
+  offline
+  error
+}
+
+enum EventSourceType {
+  upload
+  syslog
+  agent
+  api
+  manual
+}
+
+enum EventSourceStatus {
+  active
+  inactive
+  error
+}
+
+enum EventBatchStatus {
+  processing
+  completed
+  failed
+  partial
 }
