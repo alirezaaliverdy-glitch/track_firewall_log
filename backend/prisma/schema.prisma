@@ -88,6 +88,7 @@ model Device {
   eventSources      EventSource[]
   eventBatches      EventBatch[]
   securityEvents    SecurityEvent[]
+  collectorStates   EventCollectorState[]
   incidents         Incident[]
   aiActionIntents   AiActionIntent[]
   actionPlans       ActionPlan[]
@@ -283,6 +284,7 @@ model SecurityEvent {
   batch          EventBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
   timestamp      DateTime?
   receivedAt     DateTime     @default(now())
+  sourceType     String?
   vendor         String?
   eventType      String
   action         String?
@@ -297,7 +299,13 @@ model SecurityEvent {
   interfaceIn    String?
   interfaceOut   String?
   rawMessage     String?
+  rawSnippet     String?
   normalizedJson Json
+  evidenceJson   Json?
+  dedupeKey      String?      @unique
+  firstSeen      DateTime?
+  lastSeen       DateTime?
+  count          Int          @default(1)
   tags           Json?
   createdAt      DateTime     @default(now())
   incidentEvents IncidentEvent[]
@@ -308,12 +316,35 @@ model SecurityEvent {
   @@index([timestamp])
   @@index([receivedAt])
   @@index([vendor])
+  @@index([sourceType])
   @@index([action])
   @@index([severity])
   @@index([srcIp])
   @@index([dstIp])
   @@index([dstPort])
   @@index([protocol])
+  @@index([dedupeKey])
+  @@index([lastSeen])
+}
+
+model EventCollectorState {
+  id               String   @id @default(cuid())
+  deviceId         String
+  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sourceType       String
+  lastCollectedAt  DateTime?
+  lastSuccessAt    DateTime?
+  lastErrorAt      DateTime?
+  lastError        String?
+  enabled          Boolean  @default(false)
+  intervalSeconds  Int      @default(60)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([deviceId, sourceType])
+  @@index([deviceId])
+  @@index([sourceType])
+  @@index([enabled])
 }
 
 model DetectionRule {

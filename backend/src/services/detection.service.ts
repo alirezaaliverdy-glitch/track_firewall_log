@@ -7,6 +7,7 @@ import {
   type SecurityEvent
 } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { buildIncidentsFromRecentEvents } from "./incident-builder.service.js";
 
 type DetectionRunInput = {
   batchId?: string;
@@ -428,10 +429,15 @@ export async function runDetections(input: DetectionRunInput) {
     else incidentsUpdated += 1;
   }
 
+  const linuxIncidents = await buildIncidentsFromRecentEvents({
+    deviceId: input.deviceId,
+    timeWindowMinutes: windowMinutes
+  });
+
   return {
     rulesEvaluated: rules.length,
-    incidentsCreated,
-    incidentsUpdated,
+    incidentsCreated: incidentsCreated + linuxIncidents.incidentsCreated,
+    incidentsUpdated: incidentsUpdated + linuxIncidents.incidentsUpdated,
     matchedEvents: new Set(matches.flatMap((match) => match.events.map((event) => event.id))).size
   };
 }

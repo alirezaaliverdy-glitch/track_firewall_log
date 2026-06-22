@@ -123,6 +123,7 @@ export default function AiSecurityAssistantPanel() {
   const [createdPlanId, setCreatedPlanId] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   const refreshSummary = () => {
     setSummaryLoading(true);
@@ -130,6 +131,7 @@ export default function AiSecurityAssistantPanel() {
       .then(([nextSummary, nextStatus]) => {
         setSummary(nextSummary);
         setProviderStatus(nextStatus);
+        setLastRefreshedAt(new Date().toISOString());
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load security summary."))
       .finally(() => setSummaryLoading(false));
@@ -202,6 +204,9 @@ export default function AiSecurityAssistantPanel() {
           </h2>
           <p className="mt-1 text-left text-sm text-zinc-400">
             Context-aware security chat. Proposed intents only, no execution.
+          </p>
+          <p className="mt-1 text-left text-xs text-zinc-500">
+            Last refreshed: {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleString() : "-"}
           </p>
         </div>
         <button

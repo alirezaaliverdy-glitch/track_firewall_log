@@ -60,6 +60,8 @@ export default function IncidentsPanel() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<DetectionRunResult | null>(null);
 
@@ -67,7 +69,10 @@ export default function IncidentsPanel() {
     setLoading(true);
     setMessage(null);
     getIncidents()
-      .then((nextIncidents) => setIncidents(normalizeArray<Incident>(nextIncidents)))
+      .then((nextIncidents) => {
+        setIncidents(normalizeArray<Incident>(nextIncidents));
+        setLastRefreshedAt(new Date().toISOString());
+      })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load incidents."))
       .finally(() => setLoading(false));
   }, []);
@@ -75,6 +80,12 @@ export default function IncidentsPanel() {
   useEffect(() => {
     refreshIncidents();
   }, [refreshIncidents]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = window.setInterval(refreshIncidents, 10000);
+    return () => window.clearInterval(id);
+  }, [autoRefresh, refreshIncidents]);
 
   const runDetectionNow = () => {
     setRunning(true);
@@ -125,6 +136,10 @@ export default function IncidentsPanel() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <label className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-xs text-zinc-300">
+            <input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} />
+            Auto 10s
+          </label>
           <button
             type="button"
             onClick={refreshIncidents}
@@ -144,6 +159,8 @@ export default function IncidentsPanel() {
           </button>
         </div>
       </div>
+
+      <p className="mb-4 text-left text-xs text-zinc-500">Last refreshed: {formatDateTime(lastRefreshedAt)}</p>
 
       {runResult && (
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

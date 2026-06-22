@@ -98,6 +98,7 @@ export default function DeviceRegistryPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [credentialLoading, setCredentialLoading] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [linuxStatuses, setLinuxStatuses] = useState<Record<string, LinuxStatus>>({});
   const [deviceCapabilities, setDeviceCapabilities] = useState<Record<string, DeviceCapabilities>>({});
@@ -110,7 +111,10 @@ export default function DeviceRegistryPanel() {
   const refreshDevices = () => {
     setLoading(true);
     listDevices()
-      .then((nextDevices) => setDevices(normalizeArray<Device>(nextDevices)))
+      .then((nextDevices) => {
+        setDevices(normalizeArray<Device>(nextDevices));
+        setLastRefreshedAt(new Date().toISOString());
+      })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load devices."))
       .finally(() => setLoading(false));
   };
@@ -123,9 +127,13 @@ export default function DeviceRegistryPanel() {
       .finally(() => setCredentialLoading(false));
   };
 
-  useEffect(() => {
+  const refreshAll = () => {
     refreshDevices();
     refreshCredentials();
+  };
+
+  useEffect(() => {
+    refreshAll();
   }, []);
 
   const resetForm = () => {
@@ -241,13 +249,16 @@ export default function DeviceRegistryPanel() {
         </div>
         <button
           type="button"
-          onClick={refreshDevices}
+          onClick={refreshAll}
           className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
           Refresh
         </button>
       </div>
+      <p className="mb-4 text-left text-xs text-zinc-500">
+        Last refreshed: {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleString() : "-"}
+      </p>
 
       <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
         <form onSubmit={submitCredential} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">

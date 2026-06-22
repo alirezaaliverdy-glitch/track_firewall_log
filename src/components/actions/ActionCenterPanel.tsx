@@ -167,12 +167,16 @@ export default function ActionCenterPanel() {
   const [approveText, setApproveText] = useState("");
   const [executeText, setExecuteText] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   const refreshActions = useCallback(() => {
     setLoading(true);
     setMessage(null);
     getActions()
-      .then((nextActions) => setActions(normalizeArray<ActionPlan>(nextActions)))
+      .then((nextActions) => {
+        setActions(normalizeArray<ActionPlan>(nextActions));
+        setLastRefreshedAt(new Date().toISOString());
+      })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load action plans."))
       .finally(() => setLoading(false));
   }, []);
@@ -217,6 +221,7 @@ export default function ActionCenterPanel() {
         return getActionAudit(plan.id);
       })
       .then((audit) => setAuditEntries(normalizeArray<ActionAuditEntry>(audit)))
+      .then(() => refreshActions())
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : `Failed to ${label}.`))
       .finally(() => setWorking(null));
   };
@@ -271,6 +276,10 @@ export default function ActionCenterPanel() {
           Refresh
         </button>
       </div>
+
+      <p className="mb-4 text-left text-xs text-zinc-500">
+        Last refreshed: {formatDateTime(lastRefreshedAt)}
+      </p>
 
       <div className="mb-4 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
         <div className="flex items-center gap-2 text-sm font-semibold text-yellow-100">

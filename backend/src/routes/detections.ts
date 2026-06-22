@@ -7,6 +7,20 @@ function parsePositiveInteger(value: unknown) {
 }
 
 export const detectionRoutes: FastifyPluginAsync = async (app) => {
+  const runHandler = async (request: {
+    body?: {
+      batchId?: string;
+      deviceId?: string;
+      sourceId?: string;
+      timeWindowMinutes?: number;
+    };
+  }) => runDetections({
+    batchId: typeof request.body?.batchId === "string" ? request.body.batchId : undefined,
+    deviceId: typeof request.body?.deviceId === "string" ? request.body.deviceId : undefined,
+    sourceId: typeof request.body?.sourceId === "string" ? request.body.sourceId : undefined,
+    timeWindowMinutes: parsePositiveInteger(request.body?.timeWindowMinutes)
+  });
+
   app.post<{
     Body: {
       batchId?: string;
@@ -14,14 +28,16 @@ export const detectionRoutes: FastifyPluginAsync = async (app) => {
       sourceId?: string;
       timeWindowMinutes?: number;
     };
-  }>("/api/detections/run", async (request) => {
-    return runDetections({
-      batchId: typeof request.body?.batchId === "string" ? request.body.batchId : undefined,
-      deviceId: typeof request.body?.deviceId === "string" ? request.body.deviceId : undefined,
-      sourceId: typeof request.body?.sourceId === "string" ? request.body.sourceId : undefined,
-      timeWindowMinutes: parsePositiveInteger(request.body?.timeWindowMinutes)
-    });
-  });
+  }>("/api/detections/run", runHandler);
+
+  app.post<{
+    Body: {
+      batchId?: string;
+      deviceId?: string;
+      sourceId?: string;
+      timeWindowMinutes?: number;
+    };
+  }>("/api/detection/run", runHandler);
 
   app.get("/api/detection-rules", async () => listDetectionRules());
 

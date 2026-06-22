@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, Eye, Filter, Network, RefreshCw, ShieldAlert } from "lucide-react";
 import {
+  getCollectorStatus,
+  getRetentionStatus,
   getSecurityEvent,
   getSecurityEventsSummary,
   listEventBatches,
   listSecurityEvents,
+  runCollectorOnce,
+  runRetention,
+  type CollectorStatus,
   type EventBatch,
   type EventFilters,
+  type RetentionStatus,
   type EventsSummary,
   type SecurityEvent,
 } from "@/lib/securityEvents";
+import { listDevices, type Device } from "@/lib/devices";
 import { Input } from "@/components/ui/input";
 
 const EMPTY_SUMMARY: EventsSummary = {
@@ -73,6 +80,12 @@ export default function SecurityEventsPanel() {
   const [filters, setFilters] = useState<EventFilters>(EMPTY_FILTERS);
   const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
   const [loading, setLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [collectorStatuses, setCollectorStatuses] = useState<Record<string, CollectorStatus>>({});
+  const [retentionStatus, setRetentionStatus] = useState<RetentionStatus | null>(null);
+  const [collectorRunningId, setCollectorRunningId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
@@ -82,11 +95,25 @@ export default function SecurityEventsPanel() {
       listSecurityEvents(filters),
       getSecurityEventsSummary(filters),
       listEventBatches(),
+      listDevices(),
+      getRetentionStatus(),
     ])
-      .then(([nextEvents, nextSummary, nextBatches]) => {
+      .then(([nextEvents, nextSummary, nextBatches, nextDevices, nextRetention]) => {
         setEvents(safeArray<SecurityEvent>(nextEvents));
         setSummary(nextSummary ?? EMPTY_SUMMARY);
         setBatches(safeArray<EventBatch>(nextBatches));
+        setDevices(safeArray<Device>(nextDevices));
+        setRetentionStatus(nextRetention);
+        setLastRefreshedAt(new Date().toISOString());
+        return Promise.all(
+          safeArray<Device>(nextDevices)
+            .filter((device) => device.type === "linux_edge" && device.protocol === "ssh")
+            .map((device) => getCollectorStatus(device.id).then((status) => [device.id, status] as const).catch(() => null))
+        );
+      })
+      .then((statuses) => {
+        if (!statuses) return;
+        setCollectorStatuses(Object.fromEntries(statuses.filter(Boolean) as Array<readonly [string, CollectorStatus]>));
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load security events."))
       .finally(() => setLoading(false));
@@ -95,6 +122,12 @@ export default function SecurityEventsPanel() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = window.setInterval(refresh, 10000);
+    return () => window.clearInterval(id);
+  }, [autoRefresh, refresh]);
 
   const updateFilter = (key: keyof EventFilters, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -106,11 +139,34 @@ export default function SecurityEventsPanel() {
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load event details."));
   };
 
+  const runCollection = (device: Device) => {
+    setCollectorRunningId(device.id);
+    setMessage(null);
+    runCollectorOnce(device.id)
+      .then((result) => {
+        setMessage(`${device.name}: collected ${result.collectedLines} lines, inserted ${result.ingestion.inserted}, updated ${result.ingestion.updated}.`);
+        refresh();
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Collector run failed."))
+      .finally(() => setCollectorRunningId(null));
+  };
+
+  const runRetentionNow = () => {
+    setLoading(true);
+    setMessage(null);
+    runRetention()
+      .then(() => refresh())
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Retention run failed."))
+      .finally(() => setLoading(false));
+  };
+
   const safeEvents = safeArray<SecurityEvent>(events);
   const safeBatches = safeArray<EventBatch>(batches);
   const safeSummary = summary ?? EMPTY_SUMMARY;
   const countByAction = safeArray<{ action: string; count: number }>(safeSummary.countByAction);
+  const countBySeverity = safeArray<{ severity: string; count: number }>(safeSummary.countBySeverity);
   const topSourceIps = safeArray<{ value: string; count: number }>(safeSummary.topSourceIps);
+  const linuxDevices = safeArray<Device>(devices).filter((device) => device.type === "linux_edge" && device.protocol === "ssh");
 
   return (
     <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
@@ -130,6 +186,45 @@ export default function SecurityEventsPanel() {
           Refresh
         </button>
       </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+        <label className="inline-flex items-center gap-2 rounded border border-zinc-800 bg-zinc-950 px-2 py-1">
+          <input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} />
+          Auto refresh 10s
+        </label>
+        <span>Last refreshed: {formatDateTime(lastRefreshedAt)}</span>
+        <button
+          type="button"
+          onClick={runRetentionNow}
+          className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-300 hover:text-blue-200"
+        >
+          Run Retention
+        </button>
+        {retentionStatus && <span>Rows: {formatNumber(retentionStatus.totalEvents)}/{formatNumber(retentionStatus.maxRows)}</span>}
+      </div>
+
+      {linuxDevices.length > 0 && (
+        <div className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <p className="mb-2 text-left text-xs font-semibold text-zinc-300">Collectors</p>
+          <div className="flex flex-wrap gap-2">
+            {linuxDevices.map((device) => {
+              const status = collectorStatuses[device.id];
+              return (
+                <button
+                  key={device.id}
+                  type="button"
+                  onClick={() => runCollection(device)}
+                  disabled={collectorRunningId === device.id}
+                  className="inline-flex h-8 items-center gap-2 rounded border border-blue-900/70 bg-blue-950/30 px-2.5 text-xs font-medium text-blue-200 hover:bg-blue-950/50 disabled:opacity-60"
+                >
+                  {collectorRunningId === device.id ? "Collecting" : "Run Collection Now"} · {device.name}
+                  {status?.state.lastSuccessAt ? ` · last ${formatDateTime(status.state.lastSuccessAt)}` : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
@@ -160,6 +255,14 @@ export default function SecurityEventsPanel() {
           </div>
           <p className="mt-2 text-xs text-zinc-300">{formatNumber(safeBatches.length)} batches stored</p>
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {countBySeverity.map((item) => (
+          <span key={item.severity} className={`rounded border px-2 py-1 text-xs ${severityClass(item.severity)}`}>
+            {item.severity}: {formatNumber(item.count)}
+          </span>
+        ))}
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
@@ -194,6 +297,7 @@ export default function SecurityEventsPanel() {
                 <th className="px-3 py-2 font-medium">Action</th>
                 <th className="px-3 py-2 font-medium">Endpoint</th>
                 <th className="px-3 py-2 font-medium">Vendor</th>
+                <th className="px-3 py-2 font-medium">Count</th>
                 <th className="px-3 py-2 font-medium">Source</th>
                 <th className="px-3 py-2 font-medium"></th>
               </tr>
@@ -201,13 +305,13 @@ export default function SecurityEventsPanel() {
             <tbody className="divide-y divide-zinc-800">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-zinc-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-zinc-500">
                     Loading security events...
                   </td>
                 </tr>
               ) : safeEvents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-zinc-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-zinc-500">
                     No security events stored yet.
                   </td>
                 </tr>
@@ -223,6 +327,7 @@ export default function SecurityEventsPanel() {
                     <td className="px-3 py-2">{event.action ?? "-"}</td>
                     <td className="px-3 py-2 font-mono text-xs">{eventEndpoint(event)}</td>
                     <td className="px-3 py-2">{event.vendor ?? "-"}</td>
+                    <td className="px-3 py-2">{formatNumber(event.count ?? 1)}</td>
                     <td className="px-3 py-2">{event.source?.name ?? "-"}</td>
                     <td className="px-3 py-2 text-right">
                       <button

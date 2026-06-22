@@ -7,6 +7,7 @@ export type SecurityEvent = {
   batchId: string | null;
   timestamp: string | null;
   receivedAt: string;
+  sourceType: string | null;
   vendor: string | null;
   eventType: string;
   action: string | null;
@@ -21,6 +22,12 @@ export type SecurityEvent = {
   interfaceIn: string | null;
   interfaceOut: string | null;
   rawMessage: string | null;
+  rawSnippet: string | null;
+  evidenceJson: Record<string, unknown> | null;
+  dedupeKey: string | null;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  count: number;
   normalizedJson: Record<string, unknown>;
   tags: Record<string, unknown> | null;
   createdAt: string;
@@ -51,6 +58,37 @@ export type EventsSummary = {
   topDestinationPorts: Array<{ value: string; count: number }>;
   topSources: Array<{ id: string; name: string; type: string; count: number }>;
   topDevices: Array<{ id: string; name: string; type: string; count: number }>;
+};
+
+export type CollectorStatus = {
+  device: { id: string; name: string; type: string; host: string; protocol: string };
+  supported: boolean;
+  collector: string | null;
+  sourceTypes: string[];
+  state: {
+    enabled: boolean;
+    lastCollectedAt: string | null;
+    lastSuccessAt: string | null;
+    lastErrorAt: string | null;
+    lastError: string | null;
+    intervalSeconds: number;
+  };
+};
+
+export type CollectorRunResult = {
+  deviceId: string;
+  collector: string;
+  collectedLines: number;
+  warnings: string[];
+  ingestion: { batchId: string; inserted: number; updated: number; warnings: string[] };
+  incidents: { incidentsCreated: number; incidentsUpdated: number; evaluatedEvents: number };
+};
+
+export type RetentionStatus = {
+  totalEvents: number;
+  maxRows: number;
+  policy: Record<string, number>;
+  countBySeverity: Array<{ severity: string; count: number }>;
 };
 
 export type EventFilters = {
@@ -177,4 +215,34 @@ export async function listEventBatches() {
   return normalizeArray<EventBatch>(
     Array.isArray(source) ? source : (source as Record<string, unknown>).batches
   );
+}
+
+export function getCollectorStatus(deviceId: string) {
+  return requestJson<CollectorStatus>(`/collectors/${deviceId}/status`);
+}
+
+export function runCollectorOnce(deviceId: string) {
+  return fetch(`${API_BASE_URL}/collectors/${deviceId}/run-once`, { method: "POST" })
+    .then(async (response) => {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string" ? payload.error : "Collector run failed.");
+      }
+      return payload as CollectorRunResult;
+    });
+}
+
+export function getRetentionStatus() {
+  return requestJson<RetentionStatus>("/events/retention/status");
+}
+
+export function runRetention() {
+  return fetch(`${API_BASE_URL}/events/retention/run`, { method: "POST" })
+    .then(async (response) => {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string" ? payload.error : "Retention run failed.");
+      }
+      return payload as { status: RetentionStatus };
+    });
 }

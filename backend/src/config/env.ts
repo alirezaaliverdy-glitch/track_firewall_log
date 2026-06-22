@@ -12,6 +12,14 @@ const DEFAULT_MAX_UPLOAD_MB = 25;
 const DEFAULT_AI_TIMEOUT_MS = 30000;
 const DEFAULT_AI_MAX_CONTEXT_EVENTS = 25;
 const DEFAULT_AI_MAX_CONTEXT_INCIDENTS = 10;
+const DEFAULT_EVENT_RETENTION_LOW_DAYS = 7;
+const DEFAULT_EVENT_RETENTION_MEDIUM_DAYS = 30;
+const DEFAULT_EVENT_RETENTION_HIGH_DAYS = 90;
+const DEFAULT_EVENT_RETENTION_CRITICAL_DAYS = 180;
+const DEFAULT_EVENT_MAX_ROWS = 200000;
+const DEFAULT_EVENT_MAX_RAW_SNIPPET_CHARS = 2000;
+const DEFAULT_EVENT_DEDUP_WINDOW_MINUTES = 60;
+const DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES = 60;
 const DEFAULT_OPENAI_MODEL = "openrouter/free";
 const DEFAULT_OPENAI_FALLBACK_MODELS = [
   "nvidia/nemotron-3-super:free",
@@ -59,7 +67,15 @@ export const env = {
   credentialEncryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY,
   aiTimeoutMs: parsePositiveInteger(process.env.AI_TIMEOUT_MS, DEFAULT_AI_TIMEOUT_MS),
   aiMaxContextEvents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_EVENTS, DEFAULT_AI_MAX_CONTEXT_EVENTS),
-  aiMaxContextIncidents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_INCIDENTS, DEFAULT_AI_MAX_CONTEXT_INCIDENTS)
+  aiMaxContextIncidents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_INCIDENTS, DEFAULT_AI_MAX_CONTEXT_INCIDENTS),
+  eventRetentionLowDays: parsePositiveInteger(process.env.EVENT_RETENTION_LOW_DAYS, DEFAULT_EVENT_RETENTION_LOW_DAYS),
+  eventRetentionMediumDays: parsePositiveInteger(process.env.EVENT_RETENTION_MEDIUM_DAYS, DEFAULT_EVENT_RETENTION_MEDIUM_DAYS),
+  eventRetentionHighDays: parsePositiveInteger(process.env.EVENT_RETENTION_HIGH_DAYS, DEFAULT_EVENT_RETENTION_HIGH_DAYS),
+  eventRetentionCriticalDays: parsePositiveInteger(process.env.EVENT_RETENTION_CRITICAL_DAYS, DEFAULT_EVENT_RETENTION_CRITICAL_DAYS),
+  eventMaxRows: parsePositiveInteger(process.env.EVENT_MAX_ROWS, DEFAULT_EVENT_MAX_ROWS),
+  eventMaxRawSnippetChars: parsePositiveInteger(process.env.EVENT_MAX_RAW_SNIPPET_CHARS, DEFAULT_EVENT_MAX_RAW_SNIPPET_CHARS),
+  eventDedupWindowMinutes: parsePositiveInteger(process.env.EVENT_DEDUP_WINDOW_MINUTES, DEFAULT_EVENT_DEDUP_WINDOW_MINUTES),
+  eventRetentionRunIntervalMinutes: parsePositiveInteger(process.env.EVENT_RETENTION_RUN_INTERVAL_MINUTES, DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES)
 };
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;

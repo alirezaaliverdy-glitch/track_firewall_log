@@ -7,6 +7,7 @@ import {
   listSecurityEvents,
   parseEventFilters
 } from "../services/event.service.js";
+import { getRetentionStatus, runRetention } from "../services/event-retention.service.js";
 
 export const eventRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: Record<string, unknown> }>("/api/events", async (request) => {
@@ -16,6 +17,10 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: Record<string, unknown> }>("/api/events/summary", async (request) => {
     return getSecurityEventsSummary(parseEventFilters(request.query ?? {}));
   });
+
+  app.get("/api/events/retention/status", async () => getRetentionStatus());
+
+  app.post("/api/events/retention/run", async () => runRetention());
 
   app.get<{ Params: { id: string } }>("/api/events/:id", async (request, reply) => {
     const event = await getSecurityEvent(request.params.id);
