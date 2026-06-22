@@ -6,6 +6,7 @@ import {
   DeviceType,
   type Prisma
 } from "@prisma/client";
+import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
 
 const DEVICE_TYPES = new Set<string>(Object.values(DeviceType));
@@ -31,6 +32,7 @@ type DeviceInput = {
   host?: unknown;
   managementPort?: unknown;
   protocol?: unknown;
+  credentialRef?: unknown;
   environment?: unknown;
   tags?: unknown;
   status?: unknown;
@@ -88,6 +90,11 @@ function asCapabilities(value: unknown) {
   return value;
 }
 
+function asOptionalCredentialRef(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  return asNonEmptyString(value, "credentialRef");
+}
+
 function normalizeCreateInput(input: DeviceInput) {
   const type = asEnum<DeviceType>(input.type, DEVICE_TYPES, "type");
   return {
@@ -97,6 +104,7 @@ function normalizeCreateInput(input: DeviceInput) {
     host: asNonEmptyString(input.host, "host"),
     managementPort: asPort(input.managementPort),
     protocol: asEnum<DeviceProtocol>(input.protocol, DEVICE_PROTOCOLS, "protocol"),
+    credentialRef: asOptionalCredentialRef(input.credentialRef),
     environment:
       input.environment === undefined
         ? DeviceEnvironment.lab
@@ -117,6 +125,7 @@ function normalizePatchInput(input: DeviceInput) {
   if (input.host !== undefined) data.host = asNonEmptyString(input.host, "host");
   if (input.managementPort !== undefined) data.managementPort = asPort(input.managementPort);
   if (input.protocol !== undefined) data.protocol = asEnum<DeviceProtocol>(input.protocol, DEVICE_PROTOCOLS, "protocol");
+  if (input.credentialRef !== undefined) data.credentialRef = asOptionalCredentialRef(input.credentialRef);
   if (input.environment !== undefined) {
     data.environment = asEnum<DeviceEnvironment>(input.environment, DEVICE_ENVIRONMENTS, "environment");
   }
@@ -136,6 +145,7 @@ function toDeviceResponse(device: NonNullable<Awaited<ReturnType<typeof getDevic
     host: device.host,
     managementPort: device.managementPort,
     protocol: device.protocol,
+    credentialRef: device.credentialRef,
     environment: device.environment,
     tags: device.tags,
     status: device.status,
@@ -305,6 +315,55 @@ export async function testDeviceConnection(id: string) {
   const device = await prisma.device.findUnique({ where: { id } });
   if (!device) return null;
 
+  const connector = selectDeviceConnector(device);
+  if (connector) {
+    const started = Date.now();
+    const result = await connector.testConnection(device);
+    const status = result.connected ? DeviceStatus.online : DeviceStatus.error;
+    const statusCheck = await prisma.deviceStatusCheck.create({
+      data: {
+        deviceId: device.id,
+        status,
+        message: result.message ?? (result.connected ? "SSH connection succeeded." : result.errorCode ?? "SSH connection failed."),
+        latencyMs: Date.now() - started
+      }
+    });
+
+    await prisma.device.update({
+      where: { id },
+      data: {
+        status,
+        capabilities: toJson({
+          ...(device.capabilities && typeof device.capabilities === "object" && !Array.isArray(device.capabilities) ? device.capabilities : {}),
+          linuxStatus: result
+        })
+      }
+    });
+
+    await writeAudit({
+      deviceId: device.id,
+      action: result.connected ? "device.connection_success" : "device.connection_failed",
+      dryRun: true,
+      metadata: {
+        protocol: device.protocol,
+        host: device.host,
+        port: device.managementPort,
+        connected: result.connected,
+        errorCode: result.errorCode,
+        warnings: result.warnings
+      }
+    });
+
+    return {
+      deviceId: device.id,
+      status,
+      message: result.message ?? (result.connected ? "SSH connection succeeded." : result.errorCode ?? "SSH connection failed."),
+      latencyMs: Date.now() - started,
+      checkedAt: statusCheck.checkedAt,
+      linuxStatus: result
+    };
+  }
+
   const result = await tcpCheck(device.host, device.managementPort);
 
   const statusCheck = await prisma.deviceStatusCheck.create({
@@ -341,6 +400,29 @@ export async function testDeviceConnection(id: string) {
     latencyMs: result.latencyMs,
     checkedAt: statusCheck.checkedAt
   };
+}
+
+export async function getDeviceCapabilities(id: string) {
+  const device = await prisma.device.findUnique({ where: { id } });
+  if (!device) return null;
+
+  const connector = selectDeviceConnector(device);
+  if (!connector) {
+    return {
+      canTestConnection: true,
+      canCollectStatus: false,
+      canUseUfw: false,
+      canOpenPort: false,
+      canClosePort: false,
+      canBlockSourceIp: false,
+      canUnblockSourceIp: false,
+      canChangeSshPortDryRunOnly: false,
+      canExecuteChangeSshPort: false,
+      supportedActions: []
+    };
+  }
+
+  return connector.getCapabilities(device);
 }
 
 // TODO: Add encrypted credential storage through a KMS/vault-backed secret provider.

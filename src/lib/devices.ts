@@ -20,6 +20,7 @@ export type Device = {
   host: string;
   managementPort: number;
   protocol: DeviceProtocol;
+  credentialRef: string | null;
   environment: DeviceEnvironment;
   tags: string[];
   status: DeviceStatus;
@@ -42,6 +43,7 @@ export type DeviceInput = {
   host: string;
   managementPort: number;
   protocol: DeviceProtocol;
+  credentialRef?: string | null;
   environment: DeviceEnvironment;
   tags: string[];
   capabilities: Record<string, unknown>;
@@ -53,6 +55,35 @@ export type ConnectionTestResult = {
   message: string;
   latencyMs: number;
   checkedAt: string;
+  linuxStatus?: LinuxStatus;
+};
+
+export type LinuxStatus = {
+  connected: boolean;
+  username?: string;
+  hostname?: string;
+  os?: string;
+  ufwAvailable?: boolean;
+  ufwStatus?: string;
+  listeningPorts?: string;
+  sshServiceStatus?: string;
+  currentSshPort?: number | null;
+  warnings: string[];
+  errorCode?: string;
+  message?: string;
+};
+
+export type DeviceCapabilities = {
+  canTestConnection: boolean;
+  canCollectStatus: boolean;
+  canUseUfw: boolean;
+  canOpenPort: boolean;
+  canClosePort: boolean;
+  canBlockSourceIp: boolean;
+  canUnblockSourceIp: boolean;
+  canChangeSshPortDryRunOnly: boolean;
+  canExecuteChangeSshPort: boolean;
+  supportedActions: string[];
 };
 
 export const normalizeArray = <T,>(value: unknown): T[] => {
@@ -79,6 +110,7 @@ export function normalizeDevice(value: unknown): Device {
     host: String(source.host ?? ""),
     managementPort: Number(source.managementPort ?? 0),
     protocol: String(source.protocol ?? "ssh") as DeviceProtocol,
+    credentialRef: typeof source.credentialRef === "string" ? source.credentialRef : null,
     environment: String(source.environment ?? "lab") as DeviceEnvironment,
     tags: normalizeArray<string>(source.tags),
     status: String(source.status ?? "unknown") as DeviceStatus,
@@ -176,4 +208,8 @@ export function testDeviceConnection(id: string) {
   return requestJson<ConnectionTestResult>(`/devices/${id}/test-connection`, {
     method: "POST",
   });
+}
+
+export function getDeviceCapabilities(id: string) {
+  return requestJson<DeviceCapabilities>(`/devices/${id}/capabilities`);
 }

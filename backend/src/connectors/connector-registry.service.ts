@@ -1,5 +1,6 @@
 import { ActionType, DeviceProtocol, DeviceType, type Device } from "@prisma/client";
-import type { ConnectorCapability, VendorPlanner } from "./types.js";
+import type { ConnectorCapability, DeviceConnector, VendorPlanner } from "./types.js";
+import { linuxSshConnector } from "./linux-ssh.connector.js";
 import { fortigatePlanner } from "./vendors/fortigate.planner.js";
 import { linuxEdgePlanner } from "./vendors/linux-edge.planner.js";
 import { mikrotikPlanner } from "./vendors/mikrotik.planner.js";
@@ -12,12 +13,24 @@ const planners: VendorPlanner[] = [
   pfsensePlanner
 ];
 
+const connectors: DeviceConnector[] = [
+  linuxSshConnector
+];
+
 export function getVendorPlanners() {
   return planners;
 }
 
 export function selectPlanner(device: Device | null) {
   return planners.find((planner) => planner.supports(device)) ?? null;
+}
+
+export function getDeviceConnectors() {
+  return connectors;
+}
+
+export function selectDeviceConnector(device: Device | null) {
+  return connectors.find((connector) => connector.supports(device)) ?? null;
 }
 
 export function getConnectorVendors() {
@@ -45,7 +58,7 @@ export function getConnectorCapabilities(): ConnectorCapability[] {
       deviceTypes: [DeviceType.linux_edge],
       protocols: [DeviceProtocol.ssh, DeviceProtocol.agent],
       supportedActions: linuxEdgePlanner.supportedActions,
-      executionEnabled: false
+      executionEnabled: true
     },
     {
       vendor: "pfsense",

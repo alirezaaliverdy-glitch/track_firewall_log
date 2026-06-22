@@ -1,4 +1,4 @@
-import type { ActionType, AiRiskLevel, Device, DeviceProtocol, DeviceType } from "@prisma/client";
+import type { ActionPlan, ActionType, AiRiskLevel, Device, DeviceProtocol, DeviceType } from "@prisma/client";
 
 export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "generic";
 export type CommandPlanStatus = "planned" | "needs_clarification" | "unsupported";
@@ -47,5 +47,71 @@ export type ConnectorCapability = {
   deviceTypes: DeviceType[];
   protocols: DeviceProtocol[];
   supportedActions: string[];
-  executionEnabled: false;
+  executionEnabled: boolean;
+};
+
+export type DeviceConnectionTestResult = {
+  connected: boolean;
+  username?: string;
+  hostname?: string;
+  os?: string;
+  ufwAvailable?: boolean;
+  ufwStatus?: string;
+  listeningPorts?: string;
+  sshServiceStatus?: string;
+  currentSshPort?: number | null;
+  warnings: string[];
+  errorCode?: string;
+  message?: string;
+};
+
+export type DeviceCapabilities = {
+  canTestConnection: boolean;
+  canCollectStatus: boolean;
+  canUseUfw: boolean;
+  canOpenPort: boolean;
+  canClosePort: boolean;
+  canBlockSourceIp: boolean;
+  canUnblockSourceIp: boolean;
+  canChangeSshPortDryRunOnly: boolean;
+  canExecuteChangeSshPort: false;
+  supportedActions: ActionType[];
+};
+
+export type ConnectorDryRun = {
+  plannedCommands: string[];
+  validationWarnings: string[];
+  affectedPorts: number[];
+  affectedServices: string[];
+  rollbackSteps: string[];
+  riskLevel: AiRiskLevel | string;
+  requiresApproval: true;
+};
+
+export type ConnectorExecutionResult = {
+  executed: boolean;
+  actionType: ActionType;
+  deviceId: string;
+  commands: Array<{
+    template: string;
+    stdout: string;
+    stderr: string;
+    exitCode: number | null;
+  }>;
+  warnings: string[];
+  rollbackJson?: Record<string, unknown>;
+};
+
+export type ConnectorAudit = (eventType: string, message: string, metadata?: unknown) => Promise<unknown>;
+
+export type DeviceConnector = {
+  name: VendorPlannerName;
+  supports(device: Device | null): boolean;
+  supportedActions: ActionType[];
+  testConnection(device: Device): Promise<DeviceConnectionTestResult>;
+  getCapabilities(device: Device): Promise<DeviceCapabilities>;
+  collectStatus(device: Device): Promise<DeviceConnectionTestResult>;
+  dryRun(actionPlan: ActionPlan, device: Device): Promise<ConnectorDryRun>;
+  execute(actionPlan: ActionPlan, device: Device, audit?: ConnectorAudit): Promise<ConnectorExecutionResult>;
+  rollback(actionPlan: ActionPlan, device: Device, audit?: ConnectorAudit): Promise<ConnectorExecutionResult>;
 };

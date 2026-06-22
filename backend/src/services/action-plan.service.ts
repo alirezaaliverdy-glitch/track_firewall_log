@@ -8,6 +8,8 @@ import {
   type Prisma
 } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { ConnectorError } from "../connectors/linux-ssh.connector.js";
+import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { buildDryRun } from "./dry-run.service.js";
 import { validateActionPlan } from "./policy-guard.service.js";
 
@@ -34,6 +36,18 @@ async function audit(plan: Pick<ActionPlan, "id" | "deviceId">, eventType: strin
       metadataJson: toJson(metadata)
     }
   });
+}
+
+export class ActionExecutionError extends Error {
+  code: string;
+  statusCode: number;
+
+  constructor(code: string, message: string, statusCode = 409) {
+    super(message);
+    this.name = "ActionExecutionError";
+    this.code = code;
+    this.statusCode = statusCode;
+  }
 }
 
 function includeRelations() {
@@ -239,23 +253,104 @@ export async function executeActionPlan(id: string) {
   const plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
 
-  const result = {
-    executed: false,
-    error: "connector_not_implemented",
-    message: "Real device execution is intentionally disabled. Future connectors must run after approval, audit, and rollback checks."
-  };
+  if (plan.status !== ActionPlanStatus.approved) {
+    await audit(plan, "execution_failed", "Execution refused because action is not approved.", { code: "ACTION_NOT_APPROVED", status: plan.status });
+    throw new ActionExecutionError("ACTION_NOT_APPROVED", "ActionPlan must be approved before execution.");
+  }
 
-  const updated = await prisma.actionPlan.update({
+  if (!plan.dryRunJson) {
+    await audit(plan, "execution_failed", "Execution refused because dry-run is missing.", { code: "DRY_RUN_REQUIRED" });
+    throw new ActionExecutionError("DRY_RUN_REQUIRED", "Dry-run is required before execution.");
+  }
+
+  const validationJson = asObject(plan.validationJson);
+  const validationErrors = Array.isArray(validationJson.errors) ? validationJson.errors : [];
+  if (validationErrors.length > 0 || validationJson.valid === false) {
+    await audit(plan, "execution_failed", "Execution refused because stored validation has blocking errors.", { code: "VALIDATION_BLOCKED", validationJson });
+    throw new ActionExecutionError("VALIDATION_BLOCKED", "ActionPlan validation has blocking errors.");
+  }
+
+  if (!plan.deviceId) {
+    await audit(plan, "execution_failed", "Execution refused because no device is selected.", { code: "DEVICE_REQUIRED" });
+    throw new ActionExecutionError("DEVICE_REQUIRED", "ActionPlan requires a target device.");
+  }
+
+  const device = await prisma.device.findUnique({ where: { id: plan.deviceId } });
+  if (!device) {
+    await audit(plan, "execution_failed", "Execution refused because target device was not found.", { code: "DEVICE_REQUIRED" });
+    throw new ActionExecutionError("DEVICE_REQUIRED", "Target device was not found.", 404);
+  }
+
+  const connector = selectDeviceConnector(device);
+  if (!connector) {
+    await audit(plan, "execution_failed", "Execution refused because no connector matched the target device.", { code: "CONNECTOR_NOT_FOUND", deviceType: device.type, protocol: device.protocol });
+    throw new ActionExecutionError("CONNECTOR_NOT_FOUND", "No connector found for this device.");
+  }
+
+  if (!connector.supportedActions.includes(plan.actionType)) {
+    await audit(plan, "execution_failed", "Execution refused because connector does not support this action.", { code: "CONNECTOR_ACTION_UNSUPPORTED", actionType: plan.actionType });
+    throw new ActionExecutionError("CONNECTOR_ACTION_UNSUPPORTED", "Connector does not support this action.");
+  }
+
+  const validation = await validateActionPlan(plan);
+  if (!validation.valid) {
+    await audit(plan, "execution_failed", "Execution refused by immediate PolicyGuard re-check.", { code: "VALIDATION_BLOCKED", validation });
+    throw new ActionExecutionError("VALIDATION_BLOCKED", "PolicyGuard blocked execution.");
+  }
+
+  const executing = await prisma.actionPlan.update({
     where: { id },
-    data: {
-      status: ActionPlanStatus.failed,
-      resultJson: toJson(result)
-    },
+    data: { status: ActionPlanStatus.executing },
     include: includeRelations()
   });
 
-  await audit(updated, "action.execution_refused", "Execution refused because device connector is not implemented.", result);
-  return updated;
+  await audit(executing, "connection_attempt", "Connector execution connection attempt started.", {
+    connector: connector.name,
+    host: device.host,
+    port: device.managementPort
+  });
+
+  try {
+    await audit(executing, "preflight_check", "Execution gating passed; connector preflight starting.", {
+      actionType: plan.actionType,
+      approved: true,
+      dryRunPresent: true
+    });
+    const result = await connector.execute(plan, device, (eventType, message, metadata) => audit(executing, eventType, message, metadata));
+    const updated = await prisma.actionPlan.update({
+      where: { id },
+      data: {
+        status: result.executed ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
+        resultJson: toJson(result),
+        rollbackJson: toJson(result.rollbackJson ?? plan.rollbackJson)
+      },
+      include: includeRelations()
+    });
+
+    await audit(updated, "connection_success", "Connector execution connection succeeded.", { connector: connector.name });
+    await audit(updated, result.executed ? "execution_succeeded" : "execution_failed", result.executed ? "Connector execution succeeded." : "Connector execution did not complete automatically.", result);
+    return updated;
+  } catch (error) {
+    const connectorError = error instanceof ConnectorError
+      ? error
+      : new ActionExecutionError("EXECUTION_FAILED", error instanceof Error ? error.message : "Execution failed.");
+    const updated = await prisma.actionPlan.update({
+      where: { id },
+      data: {
+        status: ActionPlanStatus.failed,
+        resultJson: toJson({
+          executed: false,
+          error: connectorError.code,
+          message: connectorError.message
+        })
+      },
+      include: includeRelations()
+    });
+    await audit(updated, "connection_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message });
+    await audit(updated, "command_failed", "Connector command failed or was refused.", { code: connectorError.code, message: connectorError.message });
+    await audit(updated, "execution_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message });
+    throw new ActionExecutionError(connectorError.code, connectorError.message, connectorError instanceof ConnectorError ? connectorError.statusCode : 409);
+  }
 }
 
 export async function getActionAudit(id: string) {

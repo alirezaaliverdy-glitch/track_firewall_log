@@ -1,8 +1,8 @@
 import { ActionType, AiRiskLevel, type ActionPlan, type Device } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 
-const PROTECTED_CLOSE_PORTS = new Set([80]);
-const WARNING_PORTS = new Set([22, 80, 443, 8080, 4000, 4050, 50]);
+const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
+const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
 const SHELL_KEYS = new Set(["command", "cmd", "shell", "script", "exec", "args"]);
 const DEVICE_REQUIRED_ACTIONS = new Set<ActionType>([
   ActionType.create_egress_policy,
@@ -40,6 +40,11 @@ function validPort(value: number | undefined) {
   return value !== undefined && value >= 1 && value <= 65535;
 }
 
+function validProtocol(value: unknown) {
+  const protocol = String(value ?? "tcp").toLowerCase();
+  return protocol === "tcp" || protocol === "udp";
+}
+
 function textParam(parameters: Record<string, unknown>, key: string) {
   const value = parameters[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -70,6 +75,19 @@ function containsShellShape(parameters: Record<string, unknown>) {
 
 function currentManagementIp() {
   return process.env.MANAGEMENT_IP ?? process.env.ADMIN_IP;
+}
+
+function isPrivateOrLocalIp(ip: string) {
+  const parts = ip.split(".").map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return ip === "::1" || ip.toLowerCase().startsWith("fc") || ip.toLowerCase().startsWith("fd") || ip.toLowerCase().startsWith("fe80:");
+  }
+  const [a, b] = parts;
+  return a === 10 ||
+    a === 127 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254);
 }
 
 export async function validateActionPlan(plan: ActionPlan): Promise<ValidationResult> {
@@ -133,15 +151,15 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   if (plan.actionType === ActionType.close_port) {
     const port = numberParam(parameters, "port");
     if (!validPort(port)) errors.push("close_port requires a valid port between 1 and 65535.");
-    if (port && PROTECTED_CLOSE_PORTS.has(port) && parameters.emergencyOverride !== true) {
-      errors.push("Closing port 80 requires emergencyOverride=true.");
-    }
+    if (!validProtocol(parameters.protocol)) errors.push("close_port protocol must be tcp or udp.");
+    if (port && PROTECTED_CLOSE_PORTS.has(port)) errors.push(`Closing protected port ${port} is blocked by policy.`);
     if (port && WARNING_PORTS.has(port)) warnings.push(`Port ${port} is operationally sensitive.`);
   }
 
   if (plan.actionType === ActionType.open_port) {
     const port = numberParam(parameters, "port");
     if (!validPort(port)) errors.push("open_port requires a valid port between 1 and 65535.");
+    if (!validProtocol(parameters.protocol)) errors.push("open_port protocol must be tcp or udp.");
     warnings.push("Opening ports can expose services and requires approval.");
   }
 
@@ -156,6 +174,9 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.unblock_source_ip) {
     const srcIp = typeof parameters.srcIp === "string" ? parameters.srcIp : undefined;
     if (!srcIp) errors.push(`${plan.actionType} requires srcIp.`);
+    if (plan.actionType === ActionType.block_source_ip_temporary && srcIp && isPrivateOrLocalIp(srcIp)) {
+      errors.push("Blocking private, local, or management IPs is blocked by policy.");
+    }
     if (srcIp && currentManagementIp() && srcIp === currentManagementIp() && parameters.managementOverride !== true) {
       errors.push("Blocking the current management IP requires managementOverride=true.");
     }
@@ -199,11 +220,26 @@ export function rollbackFor(actionType: ActionType, parameters: Record<string, u
     };
   }
 
+  if (actionType === ActionType.open_port) {
+    return {
+      type: "close_opened_port",
+      port: parameters.port,
+      protocol: parameters.protocol ?? "tcp"
+    };
+  }
+
   if (actionType === ActionType.block_source_ip_temporary) {
     return {
       type: "remove_temporary_block",
       srcIp: parameters.srcIp,
       expiresAfterMinutes: parameters.durationMinutes ?? 30
+    };
+  }
+
+  if (actionType === ActionType.unblock_source_ip) {
+    return {
+      type: "restore_source_block",
+      srcIp: parameters.srcIp
     };
   }
 

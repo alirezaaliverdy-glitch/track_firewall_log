@@ -210,7 +210,7 @@ export async function rejectAction(id: string, input: ApprovalInput = {}) {
 }
 
 export async function executeAction(id: string) {
-  return requestJson<unknown>(`/actions/${id}/execute`, { method: "POST" }, { allowConflict: true }).then(normalizeActionPlan);
+  return requestJson<unknown>(`/actions/${id}/execute`, { method: "POST" }).then(normalizeActionPlan);
 }
 
 export async function getActionAudit(id: string) {

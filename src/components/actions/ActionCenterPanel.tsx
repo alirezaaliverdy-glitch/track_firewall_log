@@ -12,6 +12,7 @@ import {
 import {
   approveAction,
   dryRunAction,
+  executeAction,
   getAction,
   getActionAudit,
   getActions,
@@ -162,6 +163,7 @@ export default function ActionCenterPanel() {
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [approveText, setApproveText] = useState("");
+  const [executeText, setExecuteText] = useState("");
   const [rejectReason, setRejectReason] = useState("");
 
   const refreshActions = useCallback(() => {
@@ -196,6 +198,7 @@ export default function ActionCenterPanel() {
     setDetailsLoading(true);
     setMessage(null);
     setApproveText("");
+    setExecuteText("");
     reloadSelected(action.id)
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load action details."))
       .finally(() => setDetailsLoading(false));
@@ -230,6 +233,19 @@ export default function ActionCenterPanel() {
     runPlanStep("reject", (id) => rejectAction(id, { reason: rejectReason.trim() || "Rejected from Action Center" }));
   };
 
+  const executeSelected = () => {
+    if (!selectedAction) return;
+    if (selectedAction.status !== "approved" || Object.keys(normalizeObject(selectedAction.dryRunJson)).length === 0) {
+      setMessage("Execution requires approved status and a completed dry-run.");
+      return;
+    }
+    if (executeText.trim() !== "EXECUTE") {
+      setMessage("Type EXECUTE before running a real connector command.");
+      return;
+    }
+    runPlanStep("execute", executeAction);
+  };
+
   const totalOpen = safeActions.filter((action) => !["rejected", "succeeded", "rolled_back"].includes(action.status)).length;
 
   return (
@@ -257,10 +273,10 @@ export default function ActionCenterPanel() {
       <div className="mb-4 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
         <div className="flex items-center gap-2 text-sm font-semibold text-yellow-100">
           <AlertTriangle className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-          No action is executed until approved. Real connectors are not enabled yet.
+          No action is executed until approved and confirmed.
         </div>
         <p className="mt-1 text-xs text-yellow-100/75">
-          This panel stores plans, dry-runs, approvals, and audit logs only. There is no SSH button and no direct command field.
+          Linux Edge execution uses fixed UFW templates only. There is no arbitrary command field and AI cannot execute directly.
         </p>
       </div>
 
@@ -279,7 +295,7 @@ export default function ActionCenterPanel() {
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
           <p className="text-xs text-zinc-500">Execution</p>
-          <p className="mt-2 text-xs text-red-200">connector_not_implemented</p>
+          <p className="mt-2 text-xs text-yellow-200">approval gated</p>
         </div>
       </div>
 
@@ -393,12 +409,12 @@ export default function ActionCenterPanel() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => undefined}
-                  disabled
+                  onClick={executeSelected}
+                  disabled={Boolean(working) || detailsLoading || selectedAction.status !== "approved" || Object.keys(normalizeObject(selectedAction.dryRunJson)).length === 0}
                   className="inline-flex h-8 items-center gap-1.5 rounded border border-yellow-900/80 px-2.5 text-xs font-medium text-yellow-300 hover:text-yellow-200 disabled:opacity-60"
                 >
                   <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                  Execute Disabled
+                  Execute
                 </button>
                 <button
                   type="button"
@@ -444,6 +460,19 @@ export default function ActionCenterPanel() {
                   />
                 </div>
               )}
+
+              <div className="mb-4 rounded border border-yellow-900/70 bg-yellow-950/20 p-3 text-left">
+                <label className="text-xs font-semibold text-yellow-100" htmlFor="action-execute-confirm">
+                  Real command will be executed on selected Linux device. Type EXECUTE to enable execution.
+                </label>
+                <input
+                  id="action-execute-confirm"
+                  value={executeText}
+                  onChange={(event) => setExecuteText(event.target.value)}
+                  className="mt-2 h-9 w-full rounded border border-yellow-900/60 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-yellow-600"
+                  placeholder="EXECUTE"
+                />
+              </div>
 
               <div className="mb-4 rounded border border-zinc-800 bg-black/20 p-3 text-left">
                 <label className="text-xs font-semibold text-zinc-300" htmlFor="action-reject-reason">Reject reason</label>

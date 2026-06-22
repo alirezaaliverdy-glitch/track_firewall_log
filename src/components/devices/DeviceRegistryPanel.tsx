@@ -3,15 +3,18 @@ import { Activity, CheckCircle, Pencil, PlugZap, Plus, RefreshCw, Server, Trash2
 import {
   createDevice,
   deleteDevice,
+  getDeviceCapabilities,
   listDevices,
   testDeviceConnection,
   updateDevice,
   type Device,
+  type DeviceCapabilities,
   type DeviceEnvironment,
   type DeviceInput,
   type DeviceProtocol,
   type DeviceStatus,
   type DeviceType,
+  type LinuxStatus,
   normalizeArray,
 } from "@/lib/devices";
 import { Input } from "@/components/ui/input";
@@ -35,6 +38,7 @@ const DEFAULT_FORM: DeviceInput = {
   host: "",
   managementPort: 8728,
   protocol: "api",
+  credentialRef: "",
   environment: "lab",
   tags: [],
   capabilities: {
@@ -83,6 +87,8 @@ export default function DeviceRegistryPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [linuxStatuses, setLinuxStatuses] = useState<Record<string, LinuxStatus>>({});
+  const [deviceCapabilities, setDeviceCapabilities] = useState<Record<string, DeviceCapabilities>>({});
 
   const editingDevice = useMemo(
     () => normalizeArray<Device>(devices).find((device) => device.id === editingId) ?? null,
@@ -135,6 +141,7 @@ export default function DeviceRegistryPanel() {
       host: device.host,
       managementPort: device.managementPort,
       protocol: device.protocol,
+      credentialRef: device.credentialRef ?? "",
       environment: device.environment,
       tags: normalizeArray<string>(device.tags),
       capabilities: device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {},
@@ -148,10 +155,22 @@ export default function DeviceRegistryPanel() {
     testDeviceConnection(device.id)
       .then((result) => {
         setMessage(`${device.name}: ${result.message}`);
+        if (result.linuxStatus) {
+          setLinuxStatuses((current) => ({ ...current, [device.id]: result.linuxStatus as LinuxStatus }));
+        }
         refreshDevices();
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Connection test failed."))
       .finally(() => setTestingId(null));
+  };
+
+  const loadCapabilities = (device: Device) => {
+    getDeviceCapabilities(device.id)
+      .then((capabilities) => {
+        setDeviceCapabilities((current) => ({ ...current, [device.id]: capabilities }));
+        setMessage(`${device.name}: capabilities loaded.`);
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load capabilities."));
   };
 
   const removeDevice = (device: Device) => {
@@ -280,6 +299,15 @@ export default function DeviceRegistryPanel() {
               </label>
             </div>
 
+            <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+              Credential Ref
+              <Input
+                value={form.credentialRef ?? ""}
+                onChange={(event) => setForm((prev) => ({ ...prev, credentialRef: event.target.value }))}
+                placeholder="ubuntu-lab-root"
+              />
+            </label>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
                 Environment
@@ -329,6 +357,8 @@ export default function DeviceRegistryPanel() {
               {safeDevices.map((device) => {
                 const tags = normalizeArray<string>(device.tags);
                 const capabilities = device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {};
+                const linuxStatus = linuxStatuses[device.id] ?? (capabilities.linuxStatus && typeof capabilities.linuxStatus === "object" ? capabilities.linuxStatus as LinuxStatus : undefined);
+                const connectorCapabilities = deviceCapabilities[device.id];
                 const statusChecks = normalizeArray<NonNullable<Device["statusChecks"]>[number]>(device.statusChecks);
                 return (
                 <article key={device.id} className="p-4">
@@ -346,6 +376,7 @@ export default function DeviceRegistryPanel() {
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.protocol}</span>
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.host}:{device.managementPort}</span>
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.environment}</span>
+                        {device.credentialRef && <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">credential: {device.credentialRef}</span>}
                       </div>
                       {tags.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -357,6 +388,21 @@ export default function DeviceRegistryPanel() {
                       <p className="mt-2 text-left text-xs text-zinc-500">
                         Capabilities: {Object.entries(capabilities).map(([key, value]) => `${key}=${String(value)}`).join(", ") || "none"}
                       </p>
+                      {connectorCapabilities && (
+                        <p className="mt-1 text-left text-xs text-green-300">
+                          Linux SSH: UFW={String(connectorCapabilities.canUseUfw)} open={String(connectorCapabilities.canOpenPort)} close={String(connectorCapabilities.canClosePort)} block={String(connectorCapabilities.canBlockSourceIp)}
+                        </p>
+                      )}
+                      {linuxStatus && (
+                        <div className="mt-2 rounded border border-zinc-800 bg-black/30 p-2 text-left text-xs text-zinc-400">
+                          <p className="text-zinc-300">SSH: {linuxStatus.connected ? "connected" : linuxStatus.errorCode ?? "failed"} · {linuxStatus.username ?? "unknown"}@{linuxStatus.hostname ?? device.host}</p>
+                          <p className="mt-1">UFW: {linuxStatus.ufwAvailable ? "available" : "not found"} · SSH port: {linuxStatus.currentSshPort ?? "unknown"}</p>
+                          {linuxStatus.sshServiceStatus && <p className="mt-1">Service: {linuxStatus.sshServiceStatus}</p>}
+                          {normalizeArray<string>(linuxStatus.warnings).length > 0 && (
+                            <p className="mt-1 text-yellow-300">{normalizeArray<string>(linuxStatus.warnings).join(", ")}</p>
+                          )}
+                        </div>
+                      )}
                       {statusChecks[0] && (
                         <p className="mt-1 text-left text-xs text-zinc-500">
                           Last check: {statusChecks[0].message ?? statusChecks[0].status}
@@ -373,6 +419,13 @@ export default function DeviceRegistryPanel() {
                       >
                         <PlugZap className="h-3.5 w-3.5" aria-hidden="true" />
                         {testingId === device.id ? "Testing" : "Test"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => loadCapabilities(device)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded border border-green-900/70 bg-green-950/30 px-2.5 text-xs font-medium text-green-300 transition-colors hover:bg-green-950/50"
+                      >
+                        Capabilities
                       </button>
                       <button
                         type="button"

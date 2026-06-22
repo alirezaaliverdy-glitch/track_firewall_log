@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   approveActionPlan,
+  ActionExecutionError,
   dryRunActionPlan,
   executeActionPlan,
   getActionAudit,
@@ -54,9 +55,20 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string } }>("/api/actions/:id/execute", async (request, reply) => {
-    const plan = await executeActionPlan(request.params.id);
-    if (!plan) return reply.code(404).send({ error: "Action plan not found" });
-    return reply.code(409).send(plan);
+    try {
+      const plan = await executeActionPlan(request.params.id);
+      if (!plan) return reply.code(404).send({ error: "Action plan not found" });
+      return plan;
+    } catch (error) {
+      if (error instanceof ActionExecutionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          detail: error.message
+        });
+      }
+      const message = error instanceof Error ? error.message : "Failed to execute action plan";
+      return reply.code(500).send({ error: "EXECUTION_FAILED", detail: message });
+    }
   });
 
   app.get<{ Params: { id: string } }>("/api/actions/:id/audit", async (request, reply) => {
