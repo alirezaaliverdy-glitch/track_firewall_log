@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { buildSecurityContext } from "../services/ai-context.service.js";
 import { chatWithAssistant, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
 import { getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
-import { getAiProviderStatus } from "../services/ai-provider.service.js";
+import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { sessionId?: string; message?: string } }>("/api/ai/chat", async (request, reply) => {
@@ -13,6 +13,15 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI chat failed";
+      if (error instanceof AiProviderFailedError) {
+        return reply.code(error.statusCode).send({
+          error: "AI_PROVIDER_FAILED",
+          statusCode: error.statusCode,
+          provider: error.provider,
+          attemptedModels: error.attemptedModels,
+          message
+        });
+      }
       return reply.code(400).send({
         error: "AI chat failed",
         detail: message

@@ -12,6 +12,12 @@ const DEFAULT_MAX_UPLOAD_MB = 25;
 const DEFAULT_AI_TIMEOUT_MS = 30000;
 const DEFAULT_AI_MAX_CONTEXT_EVENTS = 25;
 const DEFAULT_AI_MAX_CONTEXT_INCIDENTS = 10;
+const DEFAULT_OPENAI_MODEL = "openrouter/free";
+const DEFAULT_OPENAI_FALLBACK_MODELS = [
+  "nvidia/nemotron-3-super:free",
+  "openai/gpt-oss-20b:free",
+  "google/gemma-4-31b-it:free"
+];
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -30,6 +36,13 @@ function parseCorsOrigins(value: string | undefined) {
   return Array.from(new Set([...DEFAULT_CORS_ORIGINS, ...configured]));
 }
 
+function parseCsv(value: string | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parsePositiveInteger(process.env.PORT, DEFAULT_PORT),
@@ -40,7 +53,8 @@ export const env = {
   maxUploadMb: parsePositiveInteger(process.env.MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB),
   aiProvider: process.env.AI_PROVIDER ?? "mock",
   openaiApiKey: process.env.OPENAI_API_KEY,
-  openaiModel: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+  openaiModel: process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
+  openaiFallbackModels: parseCsv(process.env.OPENAI_FALLBACK_MODELS ?? DEFAULT_OPENAI_FALLBACK_MODELS.join(",")),
   openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
   aiTimeoutMs: parsePositiveInteger(process.env.AI_TIMEOUT_MS, DEFAULT_AI_TIMEOUT_MS),
   aiMaxContextEvents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_EVENTS, DEFAULT_AI_MAX_CONTEXT_EVENTS),

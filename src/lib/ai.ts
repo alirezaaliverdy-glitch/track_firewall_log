@@ -65,6 +65,7 @@ export type StructuredAiResponse = {
 export type AiProviderStatus = {
   provider: string;
   model: string;
+  fallbackModels: string[];
   keyConfigured: boolean;
   baseUrlConfigured: boolean;
   timeoutMs: number;
@@ -117,6 +118,13 @@ function parsePayload(text: string): unknown {
 
 function apiErrorMessage(url: string, status: number, payload: unknown) {
   const body = normalizeObject(payload);
+  if (body.error === "AI_PROVIDER_FAILED") {
+    const attemptedModels = normalizeArray<unknown>(body.attemptedModels).map(String);
+    const provider = typeof body.provider === "string" ? body.provider : "AI provider";
+    const message = typeof body.message === "string" ? body.message : "All configured AI models failed.";
+    const attempts = attemptedModels.length > 0 ? ` Attempted models: ${attemptedModels.join(", ")}.` : "";
+    return `${provider} failed (${status}): ${message}.${attempts} [${url}]`;
+  }
   const detail = typeof body.error === "string"
     ? `${body.error}${typeof body.detail === "string" ? `: ${body.detail}` : ""}`
     : typeof body.message === "string"
@@ -240,6 +248,7 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
   return {
     provider: String(source.provider ?? "mock"),
     model: String(source.model ?? "mock-deterministic"),
+    fallbackModels: normalizeArray<unknown>(source.fallbackModels).map(String),
     keyConfigured: Boolean(source.keyConfigured),
     baseUrlConfigured: Boolean(source.baseUrlConfigured),
     timeoutMs: safeNumber(source.timeoutMs),

@@ -1,6 +1,20 @@
 import { env } from "../../config/env.js";
 import type { AiProviderInput, StructuredAiResponse } from "../ai-provider.service.js";
 
+export class AiProviderRequestError extends Error {
+  statusCode: number;
+  provider: string;
+  model: string;
+
+  constructor(input: { statusCode: number; provider: string; model: string; message: string }) {
+    super(input.message);
+    this.name = "AiProviderRequestError";
+    this.statusCode = input.statusCode;
+    this.provider = input.provider;
+    this.model = input.model;
+  }
+}
+
 function extractJson(value: string) {
   const trimmed = value.trim();
   if (trimmed.startsWith("{")) return trimmed;
@@ -23,7 +37,36 @@ function systemPrompt() {
   ].join("\n");
 }
 
-export async function runOpenAiCompatibleProvider(input: AiProviderInput): Promise<StructuredAiResponse> {
+function providerLabel() {
+  return env.aiProvider === "openai" ? "openai" : "openai_compatible";
+}
+
+function errorDetail(payload: unknown) {
+  const source = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
+  const error = source.error;
+  if (error && typeof error === "object") {
+    const errorSource = error as Record<string, unknown>;
+    const message = typeof errorSource.message === "string" ? errorSource.message : JSON.stringify(errorSource);
+    const code = typeof errorSource.code === "string" ? ` (${errorSource.code})` : "";
+    return `${message}${code}`;
+  }
+  if (typeof source.message === "string") return source.message;
+  return JSON.stringify(payload).slice(0, 500);
+}
+
+async function parseProviderPayload(response: Response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { message: text.slice(0, 500) };
+  }
+}
+
+export async function runOpenAiCompatibleProvider(input: AiProviderInput, model = env.openaiModel): Promise<StructuredAiResponse> {
   if (!env.openaiApiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
@@ -41,7 +84,7 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput): Promi
         Authorization: `Bearer ${env.openaiApiKey}`
       },
       body: JSON.stringify({
-        model: env.openaiModel,
+        model,
         temperature: 0.1,
         response_format: { type: "json_object" },
         messages: [
@@ -57,10 +100,14 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput): Promi
       })
     });
 
-    const payload = await response.json() as Record<string, unknown>;
+    const payload = await parseProviderPayload(response);
     if (!response.ok) {
-      const detail = typeof payload.error === "object" ? JSON.stringify(payload.error) : JSON.stringify(payload).slice(0, 500);
-      throw new Error(`AI provider error ${response.status}: ${detail}`);
+      throw new AiProviderRequestError({
+        statusCode: response.status,
+        provider: providerLabel(),
+        model,
+        message: `AI provider error ${response.status} for ${model}: ${errorDetail(payload)}`
+      });
     }
 
     const choices = Array.isArray(payload.choices) ? payload.choices : [];
