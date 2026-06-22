@@ -63,7 +63,9 @@ function textArray(value: unknown): string[] {
 }
 
 function VendorPlanView({ dryRunJson }: { dryRunJson: Record<string, unknown> }) {
-  const vendorPlan = normalizeObject(dryRunJson.vendorCommandPlan ?? dryRunJson);
+  const vendorPlan = Object.keys(normalizeObject(dryRunJson)).length > 0
+    ? dryRunJson
+    : normalizeObject(dryRunJson.vendorCommandPlan);
   const commands = textArray(vendorPlan.commands);
   const apiCalls = normalizeArray<Record<string, unknown>>(vendorPlan.apiCalls);
   const warnings = textArray(vendorPlan.warnings);

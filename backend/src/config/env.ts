@@ -56,6 +56,7 @@ export const env = {
   openaiModel: process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
   openaiFallbackModels: parseCsv(process.env.OPENAI_FALLBACK_MODELS ?? DEFAULT_OPENAI_FALLBACK_MODELS.join(",")),
   openaiBaseUrl: process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+  credentialEncryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY,
   aiTimeoutMs: parsePositiveInteger(process.env.AI_TIMEOUT_MS, DEFAULT_AI_TIMEOUT_MS),
   aiMaxContextEvents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_EVENTS, DEFAULT_AI_MAX_CONTEXT_EVENTS),
   aiMaxContextIncidents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_INCIDENTS, DEFAULT_AI_MAX_CONTEXT_INCIDENTS)

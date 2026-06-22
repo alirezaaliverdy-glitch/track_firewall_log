@@ -10,6 +10,7 @@ import { analysisRoutes } from "./routes/analysis.js";
 import { aiRoutes } from "./routes/ai.js";
 import { deviceRoutes } from "./routes/devices.js";
 import { connectorPlanRoutes } from "./routes/connector-plans.js";
+import { credentialRoutes } from "./routes/credentials.js";
 import { detectionRoutes } from "./routes/detections.js";
 import { eventRoutes } from "./routes/events.js";
 import { healthRoutes } from "./routes/health.js";
@@ -66,6 +67,7 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(actionRoutes);
   await app.register(connectorPlanRoutes);
+  await app.register(credentialRoutes);
   await app.register(uploadRoutes);
   await app.register(jobRoutes);
   await app.register(analysisRoutes);

@@ -72,6 +72,8 @@ model Device {
   host              String
   managementPort    Int
   protocol          DeviceProtocol
+  credentialId      String?
+  credential        DeviceCredential?  @relation(fields: [credentialId], references: [id], onDelete: SetNull)
   credentialRef     String?
   environment       DeviceEnvironment
   tags              String[]            @default([])
@@ -93,8 +95,26 @@ model Device {
 
   @@index([type])
   @@index([host])
+  @@index([credentialId])
   @@index([credentialRef])
   @@index([status])
+}
+
+model DeviceCredential {
+  id                    String               @id @default(cuid())
+  name                  String               @unique
+  type                  DeviceCredentialType
+  username              String
+  secretEncrypted       String
+  privateKeyEncrypted   String?
+  passphraseEncrypted   String?
+  sudo                  Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  devices               Device[]
+
+  @@index([type])
+  @@index([name])
 }
 
 model AiChatSession {
@@ -471,6 +491,11 @@ enum DeviceStatus {
   online
   offline
   error
+}
+
+enum DeviceCredentialType {
+  password
+  private_key
 }
 
 enum EventSourceType {

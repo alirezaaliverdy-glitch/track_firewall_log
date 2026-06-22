@@ -32,6 +32,7 @@ type DeviceInput = {
   host?: unknown;
   managementPort?: unknown;
   protocol?: unknown;
+  credentialId?: unknown;
   credentialRef?: unknown;
   environment?: unknown;
   tags?: unknown;
@@ -95,6 +96,11 @@ function asOptionalCredentialRef(value: unknown) {
   return asNonEmptyString(value, "credentialRef");
 }
 
+function asOptionalId(value: unknown, field: string) {
+  if (value === undefined || value === null || value === "") return null;
+  return asNonEmptyString(value, field);
+}
+
 function normalizeCreateInput(input: DeviceInput) {
   const type = asEnum<DeviceType>(input.type, DEVICE_TYPES, "type");
   return {
@@ -104,6 +110,7 @@ function normalizeCreateInput(input: DeviceInput) {
     host: asNonEmptyString(input.host, "host"),
     managementPort: asPort(input.managementPort),
     protocol: asEnum<DeviceProtocol>(input.protocol, DEVICE_PROTOCOLS, "protocol"),
+    credentialId: asOptionalId(input.credentialId, "credentialId"),
     credentialRef: asOptionalCredentialRef(input.credentialRef),
     environment:
       input.environment === undefined
@@ -125,6 +132,9 @@ function normalizePatchInput(input: DeviceInput) {
   if (input.host !== undefined) data.host = asNonEmptyString(input.host, "host");
   if (input.managementPort !== undefined) data.managementPort = asPort(input.managementPort);
   if (input.protocol !== undefined) data.protocol = asEnum<DeviceProtocol>(input.protocol, DEVICE_PROTOCOLS, "protocol");
+  if (input.credentialId !== undefined) data.credential = asOptionalId(input.credentialId, "credentialId")
+    ? { connect: { id: asOptionalId(input.credentialId, "credentialId") as string } }
+    : { disconnect: true };
   if (input.credentialRef !== undefined) data.credentialRef = asOptionalCredentialRef(input.credentialRef);
   if (input.environment !== undefined) {
     data.environment = asEnum<DeviceEnvironment>(input.environment, DEVICE_ENVIRONMENTS, "environment");
@@ -145,7 +155,17 @@ function toDeviceResponse(device: NonNullable<Awaited<ReturnType<typeof getDevic
     host: device.host,
     managementPort: device.managementPort,
     protocol: device.protocol,
+    credentialId: device.credentialId,
     credentialRef: device.credentialRef,
+    credential: device.credential ? {
+      id: device.credential.id,
+      name: device.credential.name,
+      type: device.credential.type,
+      username: device.credential.username,
+      sudo: device.credential.sudo,
+      createdAt: device.credential.createdAt,
+      updatedAt: device.credential.updatedAt
+    } : null,
     environment: device.environment,
     tags: device.tags,
     status: device.status,
@@ -187,6 +207,9 @@ export async function listDevices() {
       statusChecks: {
         orderBy: { checkedAt: "desc" },
         take: 1
+      },
+      credential: {
+        select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
       }
     }
   });
@@ -200,6 +223,9 @@ export async function getDeviceById(id: string) {
       statusChecks: {
         orderBy: { checkedAt: "desc" },
         take: 5
+      },
+      credential: {
+        select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
       }
     }
   });
@@ -208,10 +234,12 @@ export async function getDeviceById(id: string) {
 export async function createDevice(rawInput: Record<string, unknown>) {
   assertNoPlaintextSecrets(rawInput);
   const input = normalizeCreateInput(rawInput);
+  const { credentialId, ...deviceInput } = input;
 
   const device = await prisma.device.create({
     data: {
-      ...input,
+      ...deviceInput,
+      ...(credentialId ? { credential: { connect: { id: credentialId } } } : {}),
       deviceCapabilities: {
         create: [
           {
@@ -239,6 +267,9 @@ export async function createDevice(rawInput: Record<string, unknown>) {
       statusChecks: {
         orderBy: { checkedAt: "desc" },
         take: 5
+      },
+      credential: {
+        select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
       }
     }
   });
@@ -264,6 +295,9 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
       statusChecks: {
         orderBy: { checkedAt: "desc" },
         take: 5
+      },
+      credential: {
+        select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
       }
     }
   });

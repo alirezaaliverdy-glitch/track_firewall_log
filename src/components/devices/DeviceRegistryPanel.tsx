@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, CheckCircle, Pencil, PlugZap, Plus, RefreshCw, Server, Trash2, XCircle } from "lucide-react";
 import {
+  createCredential,
+  deleteCredential,
+  listCredentials,
+  type CredentialInput,
+  type DeviceCredential,
+  type DeviceCredentialType,
+} from "@/lib/credentials";
+import {
   createDevice,
   deleteDevice,
   getDeviceCapabilities,
@@ -9,7 +17,6 @@ import {
   updateDevice,
   type Device,
   type DeviceCapabilities,
-  type DeviceEnvironment,
   type DeviceInput,
   type DeviceProtocol,
   type DeviceStatus,
@@ -29,15 +36,15 @@ const DEVICE_TYPES: Array<{ value: DeviceType; label: string; vendor: string }> 
 ];
 
 const PROTOCOLS: DeviceProtocol[] = ["ssh", "api", "syslog", "agent"];
-const ENVIRONMENTS: DeviceEnvironment[] = ["production", "staging", "lab"];
 
 const DEFAULT_FORM: DeviceInput = {
   name: "",
-  vendor: "MikroTik",
-  type: "mikrotik",
+  vendor: "Linux Edge",
+  type: "linux_edge",
   host: "",
-  managementPort: 8728,
-  protocol: "api",
+  managementPort: 22,
+  protocol: "ssh",
+  credentialId: "",
   credentialRef: "",
   environment: "lab",
   tags: [],
@@ -46,6 +53,16 @@ const DEFAULT_FORM: DeviceInput = {
     continuousDetection: false,
     controlledChanges: false,
   },
+};
+
+const DEFAULT_CREDENTIAL_FORM: CredentialInput = {
+  name: "",
+  type: "password",
+  username: "",
+  password: "",
+  privateKey: "",
+  passphrase: "",
+  sudo: true,
 };
 
 function statusClass(status: DeviceStatus) {
@@ -72,20 +89,15 @@ function formatType(type: DeviceType) {
   return DEVICE_TYPES?.find((entry) => entry.value === type)?.label ?? type;
 }
 
-function parseTags(value: string) {
-  return String(value ?? "")
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-}
-
 export default function DeviceRegistryPanel() {
   const [devices, setDevices] = useState<Device[]>([]);
+  const [credentials, setCredentials] = useState<DeviceCredential[]>([]);
   const [form, setForm] = useState<DeviceInput>(DEFAULT_FORM);
+  const [credentialForm, setCredentialForm] = useState<CredentialInput>(DEFAULT_CREDENTIAL_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [tagsText, setTagsText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [credentialLoading, setCredentialLoading] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [linuxStatuses, setLinuxStatuses] = useState<Record<string, LinuxStatus>>({});
   const [deviceCapabilities, setDeviceCapabilities] = useState<Record<string, DeviceCapabilities>>({});
@@ -103,13 +115,21 @@ export default function DeviceRegistryPanel() {
       .finally(() => setLoading(false));
   };
 
+  const refreshCredentials = () => {
+    setCredentialLoading(true);
+    listCredentials()
+      .then((nextCredentials) => setCredentials(normalizeArray<DeviceCredential>(nextCredentials)))
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load credentials."))
+      .finally(() => setCredentialLoading(false));
+  };
+
   useEffect(() => {
     refreshDevices();
+    refreshCredentials();
   }, []);
 
   const resetForm = () => {
     setForm(DEFAULT_FORM);
-    setTagsText("");
     setEditingId(null);
   };
 
@@ -117,9 +137,12 @@ export default function DeviceRegistryPanel() {
     event.preventDefault();
     setMessage(null);
 
-    const payload = {
+    const selectedCredential = credentials.find((credential) => credential.id === form.credentialId);
+    const payload: DeviceInput = {
       ...form,
-      tags: parseTags(tagsText),
+      credentialRef: selectedCredential?.name ?? form.credentialRef ?? "",
+      environment: "lab",
+      tags: [],
     };
 
     const request = editingId ? updateDevice(editingId, payload) : createDevice(payload);
@@ -141,12 +164,33 @@ export default function DeviceRegistryPanel() {
       host: device.host,
       managementPort: device.managementPort,
       protocol: device.protocol,
+      credentialId: device.credentialId ?? device.credential?.id ?? "",
       credentialRef: device.credentialRef ?? "",
       environment: device.environment,
-      tags: normalizeArray<string>(device.tags),
+      tags: [],
       capabilities: device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {},
     });
-    setTagsText(normalizeArray<string>(device.tags).join(", "));
+  };
+
+  const submitCredential = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage(null);
+    createCredential(credentialForm)
+      .then((credential) => {
+        setMessage(`Credential ${credential.name} saved.`);
+        setCredentialForm(DEFAULT_CREDENTIAL_FORM);
+        refreshCredentials();
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to save credential."));
+  };
+
+  const removeCredential = (credential: DeviceCredential) => {
+    deleteCredential(credential.id)
+      .then(() => {
+        setMessage(`Credential ${credential.name} removed.`);
+        refreshCredentials();
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to remove credential."));
   };
 
   const runConnectionTest = (device: Device) => {
@@ -184,6 +228,7 @@ export default function DeviceRegistryPanel() {
   };
 
   const safeDevices = normalizeArray<Device>(devices);
+  const safeCredentials = normalizeArray<DeviceCredential>(credentials);
 
   return (
     <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
@@ -202,6 +247,126 @@ export default function DeviceRegistryPanel() {
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
           Refresh
         </button>
+      </div>
+
+      <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
+        <form onSubmit={submitCredential} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-100">Credential Manager</h3>
+            <button
+              type="button"
+              onClick={refreshCredentials}
+              className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-100"
+            >
+              {credentialLoading ? "Loading" : "Refresh"}
+            </button>
+          </div>
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+              Name
+              <Input
+                value={credentialForm.name}
+                onChange={(event) => setCredentialForm((prev) => ({ ...prev, name: event.target.value }))}
+                placeholder="ubuntu-lab"
+                required
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+                Type
+                <select
+                  value={credentialForm.type}
+                  onChange={(event) => setCredentialForm((prev) => ({ ...prev, type: event.target.value as DeviceCredentialType }))}
+                  className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
+                >
+                  <option value="password">password</option>
+                  <option value="private_key">private_key</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+                Username
+                <Input
+                  value={credentialForm.username}
+                  onChange={(event) => setCredentialForm((prev) => ({ ...prev, username: event.target.value }))}
+                  placeholder="alireza"
+                  required
+                />
+              </label>
+            </div>
+            {credentialForm.type === "password" ? (
+              <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+                Password
+                <Input
+                  type="password"
+                  value={credentialForm.password ?? ""}
+                  onChange={(event) => setCredentialForm((prev) => ({ ...prev, password: event.target.value }))}
+                  required
+                />
+              </label>
+            ) : (
+              <>
+                <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+                  Private Key
+                  <textarea
+                    value={credentialForm.privateKey ?? ""}
+                    onChange={(event) => setCredentialForm((prev) => ({ ...prev, privateKey: event.target.value }))}
+                    className="min-h-28 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-blue-700"
+                    required
+                  />
+                </label>
+                <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
+                  Passphrase
+                  <Input
+                    type="password"
+                    value={credentialForm.passphrase ?? ""}
+                    onChange={(event) => setCredentialForm((prev) => ({ ...prev, passphrase: event.target.value }))}
+                  />
+                </label>
+              </>
+            )}
+            <label className="flex items-center gap-2 text-left text-xs font-medium text-zinc-400">
+              <input
+                type="checkbox"
+                checked={credentialForm.sudo}
+                onChange={(event) => setCredentialForm((prev) => ({ ...prev, sudo: event.target.checked }))}
+              />
+              Passwordless sudo available
+            </label>
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Save credential
+            </button>
+          </div>
+        </form>
+
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-zinc-100">Saved Credentials</h3>
+          {safeCredentials.length === 0 ? (
+            <p className="text-left text-sm text-zinc-500">No credentials saved yet.</p>
+          ) : (
+            <div className="divide-y divide-zinc-800">
+              {safeCredentials.map((credential) => (
+                <div key={credential.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0 text-left">
+                    <p className="truncate text-sm font-medium text-zinc-100">{credential.name}</p>
+                    <p className="text-xs text-zinc-500">{credential.type} · {credential.username} · sudo={String(credential.sudo)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeCredential(credential)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded border border-red-900/70 bg-red-950/30 px-2.5 text-xs font-medium text-red-300 hover:bg-red-950/50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(320px,420px)_1fr]">
@@ -300,36 +465,26 @@ export default function DeviceRegistryPanel() {
             </div>
 
             <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-              Credential Ref
-              <Input
-                value={form.credentialRef ?? ""}
-                onChange={(event) => setForm((prev) => ({ ...prev, credentialRef: event.target.value }))}
-                placeholder="ubuntu-lab-root"
-              />
+              Credential
+              <select
+                value={form.credentialId ?? ""}
+                onChange={(event) => {
+                  const credentialId = event.target.value;
+                  const credential = safeCredentials.find((item) => item.id === credentialId);
+                  setForm((prev) => ({
+                    ...prev,
+                    credentialId,
+                    credentialRef: credential?.name ?? "",
+                  }));
+                }}
+                className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
+              >
+                <option value="">Select credential</option>
+                {safeCredentials.map((credential) => (
+                  <option key={credential.id} value={credential.id}>{credential.name} ({credential.username})</option>
+                ))}
+              </select>
             </label>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-                Environment
-                <select
-                  value={form.environment}
-                  onChange={(event) => setForm((prev) => ({ ...prev, environment: event.target.value as DeviceEnvironment }))}
-                  className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
-                >
-                  {ENVIRONMENTS.map((environment) => (
-                    <option key={environment} value={environment}>{environment}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-                Tags
-                <Input
-                  value={tagsText}
-                  onChange={(event) => setTagsText(event.target.value)}
-                  placeholder="branch, edge"
-                />
-              </label>
-            </div>
 
             <button
               type="submit"
@@ -355,7 +510,6 @@ export default function DeviceRegistryPanel() {
           ) : (
             <div className="divide-y divide-zinc-800">
               {safeDevices.map((device) => {
-                const tags = normalizeArray<string>(device.tags);
                 const capabilities = device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {};
                 const linuxStatus = linuxStatuses[device.id] ?? (capabilities.linuxStatus && typeof capabilities.linuxStatus === "object" ? capabilities.linuxStatus as LinuxStatus : undefined);
                 const connectorCapabilities = deviceCapabilities[device.id];
@@ -375,16 +529,10 @@ export default function DeviceRegistryPanel() {
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{formatType(device.type)}</span>
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.protocol}</span>
                         <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.host}:{device.managementPort}</span>
-                        <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">{device.environment}</span>
-                        {device.credentialRef && <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">credential: {device.credentialRef}</span>}
+                        {(device.credential?.name ?? device.credentialRef) && (
+                          <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1">credential: {device.credential?.name ?? device.credentialRef}</span>
+                        )}
                       </div>
-                      {tags.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {tags.map((tag) => (
-                            <span key={tag} className="rounded bg-blue-950/50 px-2 py-0.5 text-[11px] text-blue-200">{tag}</span>
-                          ))}
-                        </div>
-                      )}
                       <p className="mt-2 text-left text-xs text-zinc-500">
                         Capabilities: {Object.entries(capabilities).map(([key, value]) => `${key}=${String(value)}`).join(", ") || "none"}
                       </p>

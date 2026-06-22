@@ -2,6 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
+import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -110,14 +111,28 @@ function credentialRef(device: Device) {
   return typeof ref === "string" && ref.trim() ? ref.trim() : undefined;
 }
 
-function getCredential(device: Device) {
-  const ref = credentialRef(device);
-  if (!ref) throw new ConnectorError("SSH_CREDENTIAL_MISSING", "Device credentialRef is required for SSH.", 400);
-  const credential = parseCredentialsJson()[ref];
-  if (!credential?.username) {
-    throw new ConnectorError("SSH_CREDENTIAL_MISSING", `No SSH credential configured for credentialRef ${ref}.`, 400);
+function credentialId(device: Device) {
+  const id = "credentialId" in device ? device.credentialId : undefined;
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+async function getCredential(device: Device) {
+  const id = credentialId(device);
+  if (id) {
+    const credential = await resolveCredentialById(id);
+    if (credential) return credential;
   }
-  return credential;
+
+  const ref = credentialRef(device);
+  if (ref) {
+    const dbCredential = await resolveCredentialByName(ref);
+    if (dbCredential) return dbCredential;
+
+    const envCredential = parseCredentialsJson()[ref];
+    if (envCredential?.username) return envCredential;
+  }
+
+  throw new ConnectorError("SSH_CREDENTIAL_MISSING", "No SSH credential is configured for this device.", 400);
 }
 
 function connectConfig(device: Device, credential: SshCredential): ConnectConfig {
@@ -145,7 +160,7 @@ function mapSshError(error: unknown): ConnectorError {
 }
 
 async function withSsh<T>(device: Device, callback: (client: Client, credential: SshCredential) => Promise<T>) {
-  const credential = getCredential(device);
+  const credential = await getCredential(device);
   const client = new Client();
 
   return new Promise<T>((resolve, reject) => {

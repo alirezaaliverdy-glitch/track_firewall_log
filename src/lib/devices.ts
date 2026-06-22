@@ -20,7 +20,15 @@ export type Device = {
   host: string;
   managementPort: number;
   protocol: DeviceProtocol;
+  credentialId: string | null;
   credentialRef: string | null;
+  credential: {
+    id: string;
+    name: string;
+    type: string;
+    username: string;
+    sudo: boolean;
+  } | null;
   environment: DeviceEnvironment;
   tags: string[];
   status: DeviceStatus;
@@ -43,6 +51,7 @@ export type DeviceInput = {
   host: string;
   managementPort: number;
   protocol: DeviceProtocol;
+  credentialId?: string | null;
   credentialRef?: string | null;
   environment: DeviceEnvironment;
   tags: string[];
@@ -110,7 +119,9 @@ export function normalizeDevice(value: unknown): Device {
     host: String(source.host ?? ""),
     managementPort: Number(source.managementPort ?? 0),
     protocol: String(source.protocol ?? "ssh") as DeviceProtocol,
+    credentialId: typeof source.credentialId === "string" ? source.credentialId : null,
     credentialRef: typeof source.credentialRef === "string" ? source.credentialRef : null,
+    credential: source.credential ? normalizeObject(source.credential) as Device["credential"] : null,
     environment: String(source.environment ?? "lab") as DeviceEnvironment,
     tags: normalizeArray<string>(source.tags),
     status: String(source.status ?? "unknown") as DeviceStatus,

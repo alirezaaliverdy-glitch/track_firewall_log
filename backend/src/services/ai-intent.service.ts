@@ -55,6 +55,14 @@ function containsAny(text: string, values: string[]) {
   return values.some((value) => text.includes(value));
 }
 
+function targetHint(text: string, nums: number[]) {
+  if (text.includes("ubuntu lab")) return "ubuntu lab";
+  if (text.includes("ubuntu")) return "ubuntu";
+  const port = nums.find((num) => num >= 1 && num <= 65535);
+  const extra = nums.find((num) => num !== port);
+  return extra ? String(extra) : undefined;
+}
+
 export function parseAiIntent(message: string): ParsedIntent | null {
   const text = normalizeText(message);
   const nums = numbers(text);
@@ -95,7 +103,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
     return {
       intentType: AiIntentType.close_port,
       riskLevel: nums[0] === 22 || nums[0] === 3389 || nums[0] === 8080 ? AiRiskLevel.high : AiRiskLevel.medium,
-      parameters: { port: nums[0], protocol: "tcp" },
+      parameters: { port: nums[0], protocol: "tcp", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
       explanation: "Closing a port may interrupt services. A future action plan must validate target device, affected rules, dry-run result, approval, and rollback."
     };
   }
@@ -104,7 +112,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
     return {
       intentType: AiIntentType.open_port,
       riskLevel: AiRiskLevel.high,
-      parameters: { port: nums[0], protocol: "tcp" },
+      parameters: { port: nums[0], protocol: "tcp", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
       explanation: "Opening a port can expose services. A future action plan must validate business need, target device, dry-run, approval, and rollback."
     };
   }
@@ -150,11 +158,12 @@ export async function createAiActionIntent(input: {
   deviceId?: string;
   parsedIntent: ParsedIntent;
 }) {
+  const deviceId = input.deviceId ?? await resolveDeviceHint(input.parsedIntent.parameters);
   return prisma.aiActionIntent.create({
     data: {
       sessionId: input.sessionId,
       messageId: input.messageId,
-      deviceId: input.deviceId,
+      deviceId,
       intentType: input.parsedIntent.intentType,
       status: AiActionIntentStatus.proposed,
       riskLevel: input.parsedIntent.riskLevel,
@@ -162,6 +171,20 @@ export async function createAiActionIntent(input: {
       explanation: input.parsedIntent.explanation
     }
   });
+}
+
+async function resolveDeviceHint(parameters: Record<string, unknown>) {
+  const hint = typeof parameters.targetDeviceHint === "string" ? parameters.targetDeviceHint.trim().toLowerCase() : "";
+  if (!hint) return undefined;
+
+  const devices = await prisma.device.findMany({
+    select: { id: true, name: true, vendor: true, host: true }
+  });
+  const matched = devices.find((device) => {
+    const values = [device.name, device.vendor, device.host].map((value) => value.toLowerCase());
+    return values.some((value) => value.includes(hint) || hint.includes(value));
+  });
+  return matched?.id;
 }
 
 export async function listAiActionIntents() {
