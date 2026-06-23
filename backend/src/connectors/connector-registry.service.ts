@@ -1,6 +1,7 @@
 import { ActionType, DeviceProtocol, DeviceType, type Device } from "@prisma/client";
 import type { ConnectorCapability, DeviceConnector, VendorPlanner } from "./types.js";
 import { linuxSshConnector } from "./linux-ssh.connector.js";
+import { mikrotikSshConnector } from "./mikrotik-ssh.connector.js";
 import { fortigatePlanner } from "./vendors/fortigate.planner.js";
 import { linuxEdgePlanner } from "./vendors/linux-edge.planner.js";
 import { mikrotikPlanner } from "./vendors/mikrotik.planner.js";
@@ -14,6 +15,7 @@ const planners: VendorPlanner[] = [
 ];
 
 const connectors: DeviceConnector[] = [
+  mikrotikSshConnector,
   linuxSshConnector
 ];
 
@@ -51,7 +53,7 @@ export function getConnectorCapabilities(): ConnectorCapability[] {
       deviceTypes: [DeviceType.mikrotik],
       protocols: [DeviceProtocol.ssh, DeviceProtocol.api],
       supportedActions: mikrotikPlanner.supportedActions,
-      executionEnabled: false
+      executionEnabled: true
     },
     {
       vendor: "linux_edge",

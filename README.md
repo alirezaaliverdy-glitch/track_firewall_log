@@ -43,6 +43,32 @@ export default defineConfig([
 ])
 ```
 
+## Linux SSH Diagnostics
+
+Manual Windows checks:
+
+```powershell
+Test-NetConnection HOST -Port PORT
+ssh -p PORT USER@HOST
+```
+
+Backend API checks:
+
+```powershell
+curl.exe http://127.0.0.1:4000/api/devices
+curl.exe -X POST http://127.0.0.1:4000/api/devices/DEVICE_ID/test-connection
+curl.exe http://127.0.0.1:4000/api/devices/DEVICE_ID/capabilities
+```
+
+Server-side read-only checks:
+
+```bash
+whoami
+hostname
+which ufw
+sudo -n /usr/sbin/ufw status numbered
+```
+
 You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
 ```js

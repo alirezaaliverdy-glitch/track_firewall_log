@@ -59,6 +59,7 @@ function IntentCard({
   const params = normalizeObject(intent.parametersJson);
   const missingFields = normalizeArray<unknown>(params.missingFields).map(String);
   const clarificationQuestions = normalizeArray<unknown>(params.clarificationQuestions).map(String);
+  const canCreatePlan = intent.status === "proposed" && intent.intentType !== "unknown";
 
   return (
     <div className="mt-3 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
@@ -96,10 +97,10 @@ function IntentCard({
       <button
         type="button"
         onClick={() => onCreateActionPlan(intent)}
-        disabled={creating || !intent.id}
+        disabled={creating || !intent.id || !canCreatePlan}
         className="mt-3 inline-flex h-8 items-center rounded-md border border-yellow-700 bg-yellow-950/40 px-3 text-xs font-semibold text-yellow-100 transition-colors hover:border-yellow-500 disabled:opacity-60"
       >
-        {creating ? "Creating..." : "Create Action Plan"}
+        {creating ? "Creating..." : canCreatePlan ? "Create Action Plan" : "ActionPlan blocked"}
       </button>
       {createdPlanId && (
         <p className="mt-2 text-xs text-green-300">

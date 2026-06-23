@@ -5,6 +5,7 @@ import {
   type AiActionIntent,
   type Prisma
 } from "@prisma/client";
+import { mikroTikSupportedActions } from "../actions/mikrotik-action-catalog.js";
 import { prisma } from "../db/prisma.js";
 
 export type ParsedIntent = {
@@ -56,6 +57,7 @@ function containsAny(text: string, values: string[]) {
 }
 
 function targetHint(text: string, nums: number[]) {
+  if (text.includes("mikrotik") || text.includes("routeros") || text.includes("میکروتیک")) return "mikrotik";
   if (text.includes("ubuntu lab")) return "ubuntu lab";
   if (text.includes("ubuntu")) return "ubuntu";
   const port = nums.find((num) => num >= 1 && num <= 65535);
@@ -63,10 +65,123 @@ function targetHint(text: string, nums: number[]) {
   return extra ? String(extra) : undefined;
 }
 
+function durationText(text: string, nums: number[]) {
+  const amount = nums.find((num) => num > 0 && num <= 3650);
+  if (!amount) return undefined;
+  if (containsAny(text, ["hour", "ساعت"])) return `${amount}h`;
+  if (containsAny(text, ["day", "روز"])) return `${amount}d`;
+  if (containsAny(text, ["week", "هفته"])) return `${amount}w`;
+  return `${amount}m`;
+}
+
 export function parseAiIntent(message: string): ParsedIntent | null {
   const text = normalizeText(message);
   const nums = numbers(text);
   const ip = ipAddress(text);
+  const mikrotik = containsAny(text, ["mikrotik", "routeros", "میکروتیک"]);
+
+  if (mikrotik && containsAny(text, ["reset-configuration", "show-sensitive", "/user", "/certificate"])) {
+    return {
+      intentType: AiIntentType.unknown,
+      riskLevel: AiRiskLevel.critical,
+      parameters: {
+        blocked: true,
+        reason: "MikroTik command is outside the controlled action catalog.",
+        rawCommandRejected: true
+      },
+      explanation: "This MikroTik request is blocked. The AI cannot execute raw RouterOS commands or create an ActionPlan outside the controlled catalog."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["reboot", "/system reboot", "restart", "schedule reboot"])) {
+    return {
+      intentType: containsAny(text, ["schedule", "scheduled"]) ? AiIntentType.mikrotik_schedule_reboot : AiIntentType.mikrotik_reboot,
+      riskLevel: AiRiskLevel.critical,
+      parameters: { ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
+      explanation: "MikroTik reboot is a critical break-glass action. It must pass PolicyGuard, backup/export preflight, approval, EXECUTE confirmation, device-name confirmation, and audit before execution."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["summary", "خلاصه", "firewall rules", "قوانین فایروال"])) {
+    return {
+      intentType: AiIntentType.mikrotik_read_firewall_summary,
+      riskLevel: AiRiskLevel.low,
+      parameters: { ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
+      explanation: "Read-only MikroTik firewall summary request. No write command is needed."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["drop rule", "managed drop", "رول drop", "رول دراپ"])) {
+    return {
+      intentType: AiIntentType.mikrotik_create_managed_drop_rule,
+      riskLevel: containsAny(text, ["input"]) ? AiRiskLevel.high : AiRiskLevel.medium,
+      parameters: {
+        chain: containsAny(text, ["input"]) ? "input" : containsAny(text, ["forward"]) ? "forward" : undefined,
+        listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Creates a disabled firewall-log-analyzer managed drop rule only after PolicyGuard, dry-run, approval, and explicit execution."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["enable", "فعال"])) {
+    return {
+      intentType: AiIntentType.mikrotik_enable_managed_rule,
+      riskLevel: AiRiskLevel.high,
+      parameters: { comment: "firewall-log-analyzer managed drop", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
+      explanation: "Enables only a firewall-log-analyzer managed MikroTik rule after dry-run and approval."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["disable", "غیرفعال"])) {
+    return {
+      intentType: AiIntentType.mikrotik_disable_managed_rule,
+      riskLevel: AiRiskLevel.medium,
+      parameters: { comment: "firewall-log-analyzer managed drop", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
+      explanation: "Disables only a firewall-log-analyzer managed MikroTik rule after dry-run and approval."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["remove", "delete", "حذف"]) && ip) {
+    return {
+      intentType: AiIntentType.mikrotik_remove_address_list_entry,
+      riskLevel: AiRiskLevel.medium,
+      parameters: {
+        address: ip,
+        listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Removes only an exact MikroTik address-list entry after dry-run and approval. It never removes a whole list."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["address-list", "address list", "لیست"]) && ip) {
+    return {
+      intentType: containsAny(text, ["block", "بلاک", "مسدود"]) ? AiIntentType.mikrotik_block_ip_temporary : AiIntentType.mikrotik_add_address_list_entry,
+      riskLevel: AiRiskLevel.medium,
+      parameters: {
+        address: ip,
+        listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
+        timeout: durationText(text, nums),
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Adds an IP to a MikroTik address-list through the controlled catalog only. Execution requires dry-run, approval, and explicit confirmation."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["block", "بلاک", "مسدود"]) && ip) {
+    return {
+      intentType: AiIntentType.mikrotik_block_ip_temporary,
+      riskLevel: AiRiskLevel.medium,
+      parameters: {
+        address: ip,
+        listName: "ai_blocklist",
+        timeout: durationText(text, nums) ?? "30m",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Adds the IP to the MikroTik ai_blocklist with a timeout. A firewall rule using that list is required for actual blocking."
+    };
+  }
 
   if (
     containsAny(text, ["egress", "outbound", "internet", "business", "office", "schedule", "خروج", "اینترنت", "اداری", "اجازه"]) ||
@@ -159,16 +274,22 @@ export async function createAiActionIntent(input: {
   parsedIntent: ParsedIntent;
 }) {
   const deviceId = input.deviceId ?? await resolveDeviceHint(input.parsedIntent.parameters);
+  const device = deviceId ? await prisma.device.findUnique({ where: { id: deviceId }, select: { type: true, vendor: true } }) : null;
+  const isMikroTik = device?.type === "mikrotik" || String(device?.vendor ?? "").toLowerCase().includes("mikrotik");
+  const mikrotikSupported = new Set<string>(mikroTikSupportedActions());
+  const mikrotikBlocked = Boolean(isMikroTik && input.parsedIntent.intentType !== AiIntentType.explain_security_status && !mikrotikSupported.has(input.parsedIntent.intentType));
   return prisma.aiActionIntent.create({
     data: {
       sessionId: input.sessionId,
       messageId: input.messageId,
       deviceId,
       intentType: input.parsedIntent.intentType,
-      status: AiActionIntentStatus.proposed,
+      status: mikrotikBlocked ? AiActionIntentStatus.discarded : AiActionIntentStatus.proposed,
       riskLevel: input.parsedIntent.riskLevel,
       parametersJson: toJson(input.parsedIntent.parameters),
-      explanation: input.parsedIntent.explanation
+      explanation: mikrotikBlocked
+        ? `${input.parsedIntent.explanation} This MikroTik request is not in the controlled action catalog; no action plan or command execution is allowed.`
+        : input.parsedIntent.explanation
     }
   });
 }

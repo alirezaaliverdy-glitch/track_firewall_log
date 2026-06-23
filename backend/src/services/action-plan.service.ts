@@ -9,6 +9,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { ConnectorError } from "../connectors/linux-ssh.connector.js";
+import { isMikroTikAction } from "../actions/mikrotik-action-catalog.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { buildDryRun } from "./dry-run.service.js";
 import { validateActionPlan } from "./policy-guard.service.js";
@@ -19,6 +20,12 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function connectorErrorLike(error: unknown) {
+  return error && typeof error === "object" && "code" in error && "statusCode" in error && "message" in error
+    ? error as { code: string; statusCode: number; message: string }
+    : null;
 }
 
 function asEnum<T extends string>(value: unknown, enumObject: Record<string, T>, field: string): T {
@@ -194,6 +201,7 @@ export async function dryRunActionPlan(id: string) {
     "Dry-run generated without executing device changes.",
     dryRun
   );
+  await audit(updated, "dry_run_generated", "Dry-run generated for review.", dryRun);
   return updated;
 }
 
@@ -220,6 +228,7 @@ export async function approveActionPlan(id: string, input: Record<string, unknow
   });
 
   await audit(updated, "action.approved", "Action plan manually approved.", approval);
+  await audit(updated, "action_approved", "Action plan manually approved.", approval);
   return updated;
 }
 
@@ -253,7 +262,8 @@ export async function executeActionPlan(id: string) {
   const plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
 
-  if (plan.status !== ActionPlanStatus.approved) {
+  const readOnlyMikroTik = isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary;
+  if (plan.status !== ActionPlanStatus.approved && !(readOnlyMikroTik && plan.status === ActionPlanStatus.dry_run_ready)) {
     await audit(plan, "execution_failed", "Execution refused because action is not approved.", { code: "ACTION_NOT_APPROVED", status: plan.status });
     throw new ActionExecutionError("ACTION_NOT_APPROVED", "ActionPlan must be approved before execution.");
   }
@@ -331,9 +341,12 @@ export async function executeActionPlan(id: string) {
     await audit(updated, result.executed ? "execution_succeeded" : "execution_failed", result.executed ? "Connector execution succeeded." : "Connector execution did not complete automatically.", result);
     return updated;
   } catch (error) {
+    const structural = connectorErrorLike(error);
     const connectorError = error instanceof ConnectorError
       ? error
-      : new ActionExecutionError("EXECUTION_FAILED", error instanceof Error ? error.message : "Execution failed.");
+      : structural
+        ? structural
+        : new ActionExecutionError("EXECUTION_FAILED", error instanceof Error ? error.message : "Execution failed.");
     const updated = await prisma.actionPlan.update({
       where: { id },
       data: {
@@ -349,7 +362,7 @@ export async function executeActionPlan(id: string) {
     await audit(updated, "connection_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message });
     await audit(updated, "command_failed", "Connector command failed or was refused.", { code: connectorError.code, message: connectorError.message });
     await audit(updated, "execution_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message });
-    throw new ActionExecutionError(connectorError.code, connectorError.message, connectorError instanceof ConnectorError ? connectorError.statusCode : 409);
+    throw new ActionExecutionError(connectorError.code, connectorError.message, connectorError.statusCode ?? 409);
   }
 }
 

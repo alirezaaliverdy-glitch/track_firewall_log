@@ -52,6 +52,12 @@ export type ConnectorCapability = {
 
 export type DeviceConnectionTestResult = {
   connected: boolean;
+  deviceId: string;
+  vendor?: VendorPlannerName;
+  host: string;
+  port: number;
+  credentialResolved?: boolean;
+  credentialName?: string;
   username?: string;
   hostname?: string;
   os?: string;
@@ -60,7 +66,26 @@ export type DeviceConnectionTestResult = {
   listeningPorts?: string;
   sshServiceStatus?: string;
   currentSshPort?: number | null;
-  warnings: string[];
+  mikrotik?: MikroTikDiscovery;
+  stages: Array<{
+    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "basic_commands" | "readonly_discovery" | "optional_capabilities";
+    status: "ok" | "warning" | "failed";
+    code?: string;
+    message?: string;
+  }>;
+  warnings: Array<{ code: string; message: string }>;
+  capabilities: {
+    canConnect: boolean;
+    canRunBasicReadOnly?: boolean;
+    canUseUfw?: boolean;
+    canOpenPort?: boolean;
+    canClosePort?: boolean;
+    canReadSystem?: boolean;
+    canReadInterfaces?: boolean;
+    canReadFirewall?: boolean;
+    canReadLogs?: boolean;
+    canExecuteWriteActions?: boolean;
+  };
   errorCode?: string;
   message?: string;
 };
@@ -68,14 +93,51 @@ export type DeviceConnectionTestResult = {
 export type DeviceCapabilities = {
   canTestConnection: boolean;
   canCollectStatus: boolean;
-  canUseUfw: boolean;
-  canOpenPort: boolean;
-  canClosePort: boolean;
-  canBlockSourceIp: boolean;
-  canUnblockSourceIp: boolean;
-  canChangeSshPortDryRunOnly: boolean;
+  canUseUfw?: boolean;
+  canOpenPort?: boolean;
+  canClosePort?: boolean;
+  canBlockSourceIp?: boolean;
+  canUnblockSourceIp?: boolean;
+  canChangeSshPortDryRunOnly?: boolean;
+  canReadSystem?: boolean;
+  canReadInterfaces?: boolean;
+  canReadFirewall?: boolean;
+  canReadLogs?: boolean;
+  canExecuteWriteActions?: boolean;
+  identity?: string;
+  routerosVersion?: string;
+  architecture?: string;
+  uptime?: string;
+  cpuLoad?: string;
+  memoryFree?: string;
+  interfaceCount?: number;
+  firewallFilterRuleCount?: number;
+  natRuleCount?: number;
+  addressListCount?: number;
+  serviceSummary?: string[];
+  warnings?: Array<{ code: string; message: string }>;
+  mikrotik?: MikroTikDiscovery;
   canExecuteChangeSshPort: false;
   supportedActions: ActionType[];
+};
+
+export type MikroTikDiscovery = {
+  identity?: string;
+  routerosVersion?: string;
+  architecture?: string;
+  uptime?: string;
+  cpuLoad?: string;
+  memoryFree?: string;
+  interfaces: string[];
+  ipAddresses: string[];
+  routes: string[];
+  firewallFilterRules: string[];
+  natRules: string[];
+  mangleRules: string[];
+  addressLists: string[];
+  services: string[];
+  recentLogs: string[];
+  raw?: Record<string, string>;
 };
 
 export type ConnectorDryRun = {
@@ -86,6 +148,13 @@ export type ConnectorDryRun = {
   rollbackSteps: string[];
   riskLevel: AiRiskLevel | string;
   requiresApproval: true;
+  commandSpecs?: Array<{
+    template: string;
+    command: string;
+    write: boolean;
+    target: Record<string, unknown>;
+  }>;
+  exactTarget?: Record<string, unknown>;
 };
 
 export type ConnectorExecutionResult = {

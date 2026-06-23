@@ -156,6 +156,19 @@ function PlanSummary({ plan }: { plan: ActionPlan }) {
   );
 }
 
+function actionMatchesFilter(action: ActionPlan, filter: string) {
+  if (filter === "all") return true;
+  const actionType = action.actionType.toLowerCase();
+  const deviceType = String(action.device?.type ?? "").toLowerCase();
+  if (filter === "mikrotik") return actionType.includes("mikrotik") || deviceType.includes("mikrotik");
+  if (filter === "linux") return deviceType.includes("linux");
+  if (filter === "firewall") return actionType.includes("firewall") || actionType.includes("filter") || actionType.includes("address_list") || actionType.includes("block");
+  if (filter === "nat") return actionType.includes("nat");
+  if (filter === "management") return actionType.includes("service") || actionType.includes("interface") || actionType.includes("route") || actionType.includes("reboot");
+  if (filter === "critical") return action.riskLevel === "critical";
+  return true;
+}
+
 export default function ActionCenterPanel() {
   const [actions, setActions] = useState<ActionPlan[]>([]);
   const [selectedAction, setSelectedAction] = useState<ActionPlan | null>(null);
@@ -168,6 +181,7 @@ export default function ActionCenterPanel() {
   const [executeText, setExecuteText] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
 
   const refreshActions = useCallback(() => {
     setLoading(true);
@@ -186,6 +200,7 @@ export default function ActionCenterPanel() {
   }, [refreshActions]);
 
   const safeActions = useMemo(() => normalizeArray<ActionPlan>(actions), [actions]);
+  const visibleActions = useMemo(() => safeActions.filter((action) => actionMatchesFilter(action, filter)), [safeActions, filter]);
   const safeAudit = useMemo(() => normalizeArray<ActionAuditEntry>(auditEntries), [auditEntries]);
 
   const reloadSelected = (id: string) => {
@@ -287,7 +302,7 @@ export default function ActionCenterPanel() {
           No action is executed until approved and confirmed.
         </div>
         <p className="mt-1 text-xs text-yellow-100/75">
-          Linux Edge execution uses fixed UFW templates only. There is no arbitrary command field and AI cannot execute directly.
+          Linux Edge and MikroTik execution use fixed templates only. There is no arbitrary command field and AI cannot execute directly.
         </p>
       </div>
 
@@ -310,6 +325,19 @@ export default function ActionCenterPanel() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {["all", "mikrotik", "linux", "firewall", "nat", "management", "critical"].map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setFilter(item)}
+            className={`h-8 rounded border px-2.5 text-xs font-medium ${filter === item ? "border-blue-600 bg-blue-950/50 text-blue-100" : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-blue-200"}`}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
       <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-zinc-800 text-left text-sm">
@@ -328,14 +356,14 @@ export default function ActionCenterPanel() {
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-sm text-zinc-500">Loading action plans...</td>
                 </tr>
-              ) : safeActions.length === 0 ? (
+              ) : visibleActions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-sm text-zinc-500">
                     No action plans yet. Ask the AI for a safe action proposal, then create an Action Plan.
                   </td>
                 </tr>
               ) : (
-                safeActions.map((action) => (
+                visibleActions.map((action) => (
                   <tr key={action.id} className="text-zinc-300">
                     <td className="min-w-72 px-3 py-2">
                       <p className="font-medium text-zinc-100">{action.actionType}</p>
@@ -474,7 +502,7 @@ export default function ActionCenterPanel() {
 
               <div className="mb-4 rounded border border-yellow-900/70 bg-yellow-950/20 p-3 text-left">
                 <label className="text-xs font-semibold text-yellow-100" htmlFor="action-execute-confirm">
-                  Real command will be executed on selected Linux device. Type EXECUTE to enable execution.
+                  Real connector command will be executed on the selected device. Type EXECUTE to enable execution.
                 </label>
                 <input
                   id="action-execute-confirm"

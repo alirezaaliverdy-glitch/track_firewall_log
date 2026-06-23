@@ -60,16 +60,53 @@ export type DeviceInput = {
 
 export type ConnectionTestResult = {
   deviceId: string;
+  vendor?: string;
+  host?: string;
+  port?: number;
   status: DeviceStatus;
   message: string;
   latencyMs: number;
   checkedAt: string;
+  connected?: boolean;
+  stages?: DeviceConnectionStatus["stages"];
+  warnings?: DeviceConnectionStatus["warnings"];
+  capabilities?: DeviceConnectionStatus["capabilities"];
   linuxStatus?: LinuxStatus;
+  mikrotikStatus?: MikroTikStatus;
 };
 
-export type LinuxStatus = {
+export type DeviceConnectionStatus = {
   connected: boolean;
+  vendor?: string;
+  host?: string;
+  port?: number;
   username?: string;
+  credentialResolved?: boolean;
+  credentialName?: string;
+  stages: Array<{
+    name: string;
+    status: "ok" | "warning" | "failed";
+    code?: string;
+    message?: string;
+  }>;
+  warnings: Array<{ code: string; message: string }>;
+  capabilities?: {
+    canConnect: boolean;
+    canRunBasicReadOnly?: boolean;
+    canUseUfw?: boolean;
+    canOpenPort?: boolean;
+    canClosePort?: boolean;
+    canReadSystem?: boolean;
+    canReadInterfaces?: boolean;
+    canReadFirewall?: boolean;
+    canReadLogs?: boolean;
+    canExecuteWriteActions?: boolean;
+  };
+  errorCode?: string;
+  message?: string;
+};
+
+export type LinuxStatus = DeviceConnectionStatus & {
   hostname?: string;
   os?: string;
   ufwAvailable?: boolean;
@@ -77,20 +114,58 @@ export type LinuxStatus = {
   listeningPorts?: string;
   sshServiceStatus?: string;
   currentSshPort?: number | null;
-  warnings: string[];
-  errorCode?: string;
-  message?: string;
+};
+
+export type MikroTikDiscovery = {
+  identity?: string;
+  routerosVersion?: string;
+  architecture?: string;
+  uptime?: string;
+  cpuLoad?: string;
+  memoryFree?: string;
+  interfaces?: string[];
+  ipAddresses?: string[];
+  routes?: string[];
+  firewallFilterRules?: string[];
+  natRules?: string[];
+  mangleRules?: string[];
+  addressLists?: string[];
+  services?: string[];
+  recentLogs?: string[];
+};
+
+export type MikroTikStatus = DeviceConnectionStatus & {
+  vendor: "mikrotik";
+  mikrotik?: MikroTikDiscovery;
 };
 
 export type DeviceCapabilities = {
   canTestConnection: boolean;
   canCollectStatus: boolean;
-  canUseUfw: boolean;
-  canOpenPort: boolean;
-  canClosePort: boolean;
-  canBlockSourceIp: boolean;
-  canUnblockSourceIp: boolean;
-  canChangeSshPortDryRunOnly: boolean;
+  canUseUfw?: boolean;
+  canOpenPort?: boolean;
+  canClosePort?: boolean;
+  canBlockSourceIp?: boolean;
+  canUnblockSourceIp?: boolean;
+  canChangeSshPortDryRunOnly?: boolean;
+  canReadSystem?: boolean;
+  canReadInterfaces?: boolean;
+  canReadFirewall?: boolean;
+  canReadLogs?: boolean;
+  canExecuteWriteActions?: boolean;
+  identity?: string;
+  routerosVersion?: string;
+  architecture?: string;
+  uptime?: string;
+  cpuLoad?: string;
+  memoryFree?: string;
+  interfaceCount?: number;
+  firewallFilterRuleCount?: number;
+  natRuleCount?: number;
+  addressListCount?: number;
+  serviceSummary?: string[];
+  warnings?: Array<{ code: string; message: string }>;
+  mikrotik?: MikroTikDiscovery;
   canExecuteChangeSshPort: boolean;
   supportedActions: string[];
 };

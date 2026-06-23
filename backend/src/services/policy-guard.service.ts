@@ -1,4 +1,6 @@
 import { ActionType, AiRiskLevel, type ActionPlan, type Device } from "@prisma/client";
+import { isMikroTikAction, validateMikroTikAction } from "../actions/mikrotik-action-catalog.js";
+import { evaluateMikroTikExpertPolicy } from "./mikrotik-policy-guard.service.js";
 import { prisma } from "../db/prisma.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
@@ -13,7 +15,15 @@ const DEVICE_REQUIRED_ACTIONS = new Set<ActionType>([
   ActionType.add_firewall_rule,
   ActionType.remove_firewall_rule,
   ActionType.enable_rule,
-  ActionType.disable_rule
+  ActionType.disable_rule,
+  ActionType.mikrotik_add_address_list_entry,
+  ActionType.mikrotik_remove_address_list_entry,
+  ActionType.mikrotik_block_ip_temporary,
+  ActionType.mikrotik_create_managed_drop_rule,
+  ActionType.mikrotik_enable_managed_rule,
+  ActionType.mikrotik_disable_managed_rule,
+  ActionType.mikrotik_add_comment_to_rule,
+  ActionType.mikrotik_read_firewall_summary
 ]);
 
 type ValidationResult = {
@@ -103,6 +113,41 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
 
   if (!(plan.actionType in ActionType)) errors.push("actionType is not supported.");
   if (containsShellShape(parameters)) errors.push("Free-form shell, command, script, or exec parameters are not allowed.");
+
+  if (isMikroTikAction(plan.actionType)) {
+    if (!device) {
+      errors.push(`${plan.actionType} requires a valid registered MikroTik device.`);
+    } else if (device.type !== "mikrotik" && !String(device.vendor ?? "").toLowerCase().includes("mikrotik")) {
+      errors.push(`${plan.actionType} requires a MikroTik device.`);
+    } else if (device.protocol !== "ssh") {
+      errors.push(`${plan.actionType} requires MikroTik SSH protocol.`);
+    }
+
+    const expert = device ? evaluateMikroTikExpertPolicy(plan, device) : null;
+    const mikrotikValidation = expert?.validation ?? validateMikroTikAction(plan);
+    errors.push(...(expert?.errors ?? mikrotikValidation.errors));
+    warnings.push(...(expert?.warnings ?? mikrotikValidation.warnings));
+    if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
+    if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
+    if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
+
+    return {
+      valid: errors.length === 0,
+      requiresApproval: plan.actionType !== ActionType.mikrotik_read_firewall_summary,
+      riskLevel: mikrotikValidation.riskLevel,
+      errors,
+      warnings,
+      normalizedParameters: mikrotikValidation.normalizedParameters,
+      rollbackJson: {
+        ...mikrotikValidation.rollbackJson,
+        backupName: expert?.backupName,
+        requiresBackup: expert?.requiresBackup,
+        requiresBreakGlass: expert?.requiresBreakGlass,
+        lockoutSensitive: expert?.lockoutSensitive
+      },
+      device
+    };
+  }
 
   if (DEVICE_REQUIRED_ACTIONS.has(plan.actionType)) {
     if (!plan.deviceId) errors.push(`${plan.actionType} requires deviceId.`);

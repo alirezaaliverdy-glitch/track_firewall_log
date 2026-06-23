@@ -22,6 +22,7 @@ import {
   type DeviceStatus,
   type DeviceType,
   type LinuxStatus,
+  type MikroTikStatus,
   normalizeArray,
 } from "@/lib/devices";
 import { Input } from "@/components/ui/input";
@@ -101,6 +102,7 @@ export default function DeviceRegistryPanel() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [linuxStatuses, setLinuxStatuses] = useState<Record<string, LinuxStatus>>({});
+  const [mikrotikStatuses, setMikrotikStatuses] = useState<Record<string, MikroTikStatus>>({});
   const [deviceCapabilities, setDeviceCapabilities] = useState<Record<string, DeviceCapabilities>>({});
 
   const editingDevice = useMemo(
@@ -209,6 +211,9 @@ export default function DeviceRegistryPanel() {
         setMessage(`${device.name}: ${result.message}`);
         if (result.linuxStatus) {
           setLinuxStatuses((current) => ({ ...current, [device.id]: result.linuxStatus as LinuxStatus }));
+        }
+        if (result.mikrotikStatus) {
+          setMikrotikStatuses((current) => ({ ...current, [device.id]: result.mikrotikStatus as MikroTikStatus }));
         }
         refreshDevices();
       })
@@ -416,12 +421,16 @@ export default function DeviceRegistryPanel() {
                   onChange={(event) => {
                     const type = event.target.value as DeviceType;
                     const vendor = DEVICE_TYPES?.find((entry) => entry.value === type)?.vendor ?? form.vendor;
-                    setForm((prev) => ({
-                      ...prev,
-                      type,
-                      vendor,
-                      managementPort: protocolDefaultPort(prev.protocol, type),
-                    }));
+                    setForm((prev) => {
+                      const protocol = type === "mikrotik" ? "ssh" : prev.protocol;
+                      return {
+                        ...prev,
+                        type,
+                        vendor,
+                        protocol,
+                        managementPort: protocolDefaultPort(protocol, type),
+                      };
+                    });
                   }}
                   className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
                 >
@@ -439,13 +448,13 @@ export default function DeviceRegistryPanel() {
                     const protocol = event.target.value as DeviceProtocol;
                     setForm((prev) => ({
                       ...prev,
-                      protocol,
-                      managementPort: protocolDefaultPort(protocol, prev.type),
+                      protocol: prev.type === "mikrotik" ? "ssh" : protocol,
+                      managementPort: protocolDefaultPort(prev.type === "mikrotik" ? "ssh" : protocol, prev.type),
                     }));
                   }}
                   className="h-9 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
                 >
-                  {PROTOCOLS.map((protocol) => (
+                  {(form.type === "mikrotik" ? ["ssh"] as DeviceProtocol[] : PROTOCOLS).map((protocol) => (
                     <option key={protocol} value={protocol}>{protocol}</option>
                   ))}
                 </select>
@@ -523,8 +532,10 @@ export default function DeviceRegistryPanel() {
               {safeDevices.map((device) => {
                 const capabilities = device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {};
                 const linuxStatus = linuxStatuses[device.id] ?? (capabilities.linuxStatus && typeof capabilities.linuxStatus === "object" ? capabilities.linuxStatus as LinuxStatus : undefined);
+                const mikrotikStatus = mikrotikStatuses[device.id] ?? (capabilities.mikrotikStatus && typeof capabilities.mikrotikStatus === "object" ? capabilities.mikrotikStatus as MikroTikStatus : undefined);
                 const connectorCapabilities = deviceCapabilities[device.id];
                 const statusChecks = normalizeArray<NonNullable<Device["statusChecks"]>[number]>(device.statusChecks);
+                const mikrotikDiscovery = connectorCapabilities?.mikrotik ?? mikrotikStatus?.mikrotik;
                 return (
                 <article key={device.id} className="p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -548,17 +559,73 @@ export default function DeviceRegistryPanel() {
                         Capabilities: {Object.entries(capabilities).map(([key, value]) => `${key}=${String(value)}`).join(", ") || "none"}
                       </p>
                       {connectorCapabilities && (
-                        <p className="mt-1 text-left text-xs text-green-300">
-                          Linux SSH: UFW={String(connectorCapabilities.canUseUfw)} open={String(connectorCapabilities.canOpenPort)} close={String(connectorCapabilities.canClosePort)} block={String(connectorCapabilities.canBlockSourceIp)}
-                        </p>
+                        device.type === "mikrotik" ? (
+                          <p className="mt-1 text-left text-xs text-green-300">
+                            MikroTik: readFirewall={String(connectorCapabilities.canReadFirewall)} readLogs={String(connectorCapabilities.canReadLogs)} writeActions={String(connectorCapabilities.canExecuteWriteActions)}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-left text-xs text-green-300">
+                            Linux SSH: UFW={String(connectorCapabilities.canUseUfw)} open={String(connectorCapabilities.canOpenPort)} close={String(connectorCapabilities.canClosePort)} block={String(connectorCapabilities.canBlockSourceIp)}
+                          </p>
+                        )
+                      )}
+                      {(mikrotikStatus || mikrotikDiscovery) && (
+                        <div className="mt-2 rounded border border-zinc-800 bg-black/30 p-2 text-left text-xs text-zinc-400">
+                          {mikrotikStatus && (
+                            <>
+                              <p className="text-zinc-300">MikroTik SSH: {mikrotikStatus.connected ? "connected" : mikrotikStatus.errorCode ?? "failed"} · {mikrotikStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
+                              <p className="mt-1">Credential: {mikrotikStatus.credentialResolved ? mikrotikStatus.credentialName ?? "resolved" : "missing"} · Write actions: {mikrotikStatus.capabilities?.canExecuteWriteActions ? "controlled templates enabled" : "disabled"}</p>
+                            </>
+                          )}
+                          {mikrotikDiscovery && (
+                            <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                              <p>Identity: {mikrotikDiscovery.identity ?? connectorCapabilities?.identity ?? "unknown"}</p>
+                              <p>RouterOS: {mikrotikDiscovery.routerosVersion ?? connectorCapabilities?.routerosVersion ?? "unknown"}</p>
+                              <p>Interfaces: {normalizeArray<string>(mikrotikDiscovery.interfaces).length || (connectorCapabilities?.interfaceCount ?? 0)}</p>
+                              <p>Filter rules: {normalizeArray<string>(mikrotikDiscovery.firewallFilterRules).length || (connectorCapabilities?.firewallFilterRuleCount ?? 0)}</p>
+                              <p>NAT rules: {normalizeArray<string>(mikrotikDiscovery.natRules).length || (connectorCapabilities?.natRuleCount ?? 0)}</p>
+                              <p>Address lists: {normalizeArray<string>(mikrotikDiscovery.addressLists).length || (connectorCapabilities?.addressListCount ?? 0)}</p>
+                              <p className="sm:col-span-2">Services: {normalizeArray<string>(mikrotikDiscovery.services).slice(0, 6).join(", ") || normalizeArray<string>(connectorCapabilities?.serviceSummary).slice(0, 6).join(", ") || "unknown"}</p>
+                            </div>
+                          )}
+                          {mikrotikStatus && normalizeArray<{ name: string; status: string; code?: string }>(mikrotikStatus.stages).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {normalizeArray<{ name: string; status: string; code?: string }>(mikrotikStatus.stages).map((stage) => (
+                                <span key={stage.name} className={`rounded border px-1.5 py-0.5 ${stage.status === "failed" ? "border-red-900 text-red-300" : stage.status === "warning" ? "border-yellow-900 text-yellow-300" : "border-green-900 text-green-300"}`}>
+                                  {stage.name}:{stage.status}{stage.code ? `/${stage.code}` : ""}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {normalizeArray<{ code: string; message: string }>(mikrotikStatus?.warnings ?? connectorCapabilities?.warnings).length > 0 && (
+                            <div className="mt-2 text-yellow-300">
+                              {normalizeArray<{ code: string; message: string }>(mikrotikStatus?.warnings ?? connectorCapabilities?.warnings).map((warning) => (
+                                <p key={`${warning.code}-${warning.message}`}>{warning.code}: {warning.message}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                       {linuxStatus && (
                         <div className="mt-2 rounded border border-zinc-800 bg-black/30 p-2 text-left text-xs text-zinc-400">
-                          <p className="text-zinc-300">SSH: {linuxStatus.connected ? "connected" : linuxStatus.errorCode ?? "failed"} · {linuxStatus.username ?? "unknown"}@{linuxStatus.hostname ?? device.host}</p>
-                          <p className="mt-1">UFW: {linuxStatus.ufwAvailable ? "available" : "not found"} · SSH port: {linuxStatus.currentSshPort ?? "unknown"}</p>
+                          <p className="text-zinc-300">SSH: {linuxStatus.connected ? "connected" : linuxStatus.errorCode ?? "failed"} · {linuxStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
+                          <p className="mt-1">Credential: {linuxStatus.credentialResolved ? linuxStatus.credentialName ?? "resolved" : "missing"} · UFW: {linuxStatus.capabilities?.canUseUfw ? "available" : "unavailable"} · SSH port: {linuxStatus.currentSshPort ?? "unknown"}</p>
                           {linuxStatus.sshServiceStatus && <p className="mt-1">Service: {linuxStatus.sshServiceStatus}</p>}
-                          {normalizeArray<string>(linuxStatus.warnings).length > 0 && (
-                            <p className="mt-1 text-yellow-300">{normalizeArray<string>(linuxStatus.warnings).join(", ")}</p>
+                          {normalizeArray<{ name: string; status: string; code?: string }>(linuxStatus.stages).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {normalizeArray<{ name: string; status: string; code?: string }>(linuxStatus.stages).map((stage) => (
+                                <span key={stage.name} className={`rounded border px-1.5 py-0.5 ${stage.status === "failed" ? "border-red-900 text-red-300" : stage.status === "warning" ? "border-yellow-900 text-yellow-300" : "border-green-900 text-green-300"}`}>
+                                  {stage.name}:{stage.status}{stage.code ? `/${stage.code}` : ""}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {normalizeArray<{ code: string; message: string }>(linuxStatus.warnings).length > 0 && (
+                            <div className="mt-2 text-yellow-300">
+                              {normalizeArray<{ code: string; message: string }>(linuxStatus.warnings).map((warning) => (
+                                <p key={`${warning.code}-${warning.message}`}>{warning.code}: {warning.message}</p>
+                              ))}
+                            </div>
                           )}
                         </div>
                       )}

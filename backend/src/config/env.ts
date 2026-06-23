@@ -20,6 +20,9 @@ const DEFAULT_EVENT_MAX_ROWS = 200000;
 const DEFAULT_EVENT_MAX_RAW_SNIPPET_CHARS = 2000;
 const DEFAULT_EVENT_DEDUP_WINDOW_MINUTES = 60;
 const DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES = 60;
+const DEFAULT_SSH_CONNECT_TIMEOUT_MS = 15000;
+const DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS = 15000;
+const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 10000;
 const DEFAULT_OPENAI_MODEL = "openrouter/free";
 const DEFAULT_OPENAI_FALLBACK_MODELS = [
   "nvidia/nemotron-3-super:free",
@@ -75,7 +78,10 @@ export const env = {
   eventMaxRows: parsePositiveInteger(process.env.EVENT_MAX_ROWS, DEFAULT_EVENT_MAX_ROWS),
   eventMaxRawSnippetChars: parsePositiveInteger(process.env.EVENT_MAX_RAW_SNIPPET_CHARS, DEFAULT_EVENT_MAX_RAW_SNIPPET_CHARS),
   eventDedupWindowMinutes: parsePositiveInteger(process.env.EVENT_DEDUP_WINDOW_MINUTES, DEFAULT_EVENT_DEDUP_WINDOW_MINUTES),
-  eventRetentionRunIntervalMinutes: parsePositiveInteger(process.env.EVENT_RETENTION_RUN_INTERVAL_MINUTES, DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES)
+  eventRetentionRunIntervalMinutes: parsePositiveInteger(process.env.EVENT_RETENTION_RUN_INTERVAL_MINUTES, DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES),
+  sshConnectTimeoutMs: parsePositiveInteger(process.env.SSH_CONNECT_TIMEOUT_MS, DEFAULT_SSH_CONNECT_TIMEOUT_MS),
+  sshHandshakeTimeoutMs: parsePositiveInteger(process.env.SSH_HANDSHAKE_TIMEOUT_MS, DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS),
+  sshCommandTimeoutMs: parsePositiveInteger(process.env.SSH_COMMAND_TIMEOUT_MS, DEFAULT_SSH_COMMAND_TIMEOUT_MS)
 };
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;

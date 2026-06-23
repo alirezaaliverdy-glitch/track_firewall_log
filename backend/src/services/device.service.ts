@@ -354,6 +354,7 @@ export async function testDeviceConnection(id: string) {
     const started = Date.now();
     const result = await connector.testConnection(device);
     const status = result.connected ? DeviceStatus.online : DeviceStatus.error;
+    const statusKey = connector.name === "mikrotik" ? "mikrotikStatus" : "linuxStatus";
     const statusCheck = await prisma.deviceStatusCheck.create({
       data: {
         deviceId: device.id,
@@ -369,7 +370,7 @@ export async function testDeviceConnection(id: string) {
         status,
         capabilities: toJson({
           ...(device.capabilities && typeof device.capabilities === "object" && !Array.isArray(device.capabilities) ? device.capabilities : {}),
-          linuxStatus: result
+          [statusKey]: result
         })
       }
     });
@@ -380,21 +381,23 @@ export async function testDeviceConnection(id: string) {
       dryRun: true,
       metadata: {
         protocol: device.protocol,
+        vendor: connector.name,
         host: device.host,
         port: device.managementPort,
         connected: result.connected,
         errorCode: result.errorCode,
-        warnings: result.warnings
+        warnings: result.warnings,
+        stages: result.stages
       }
     });
 
     return {
-      deviceId: device.id,
+      ...result,
       status,
       message: result.message ?? (result.connected ? "SSH connection succeeded." : result.errorCode ?? "SSH connection failed."),
       latencyMs: Date.now() - started,
       checkedAt: statusCheck.checkedAt,
-      linuxStatus: result
+      [statusKey]: result
     };
   }
 

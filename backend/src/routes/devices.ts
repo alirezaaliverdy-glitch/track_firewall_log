@@ -71,7 +71,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
       const result = await testDeviceConnection(request.params.id);
 
       if (!result) {
-        return reply.code(404).send({ error: "Device not found" });
+        return reply.code(404).send({ error: "Device not found", code: "DEVICE_NOT_FOUND" });
       }
 
       return result;
@@ -85,7 +85,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
     const capabilities = await getDeviceCapabilities(request.params.id);
 
     if (!capabilities) {
-      return reply.code(404).send({ error: "Device not found" });
+      return reply.code(404).send({ error: "Device not found", code: "DEVICE_NOT_FOUND" });
     }
 
     return capabilities;

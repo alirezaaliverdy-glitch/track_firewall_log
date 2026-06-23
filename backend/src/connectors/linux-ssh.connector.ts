@@ -2,6 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
+import { env } from "../config/env.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import type {
   ConnectorAudit,
@@ -13,6 +14,7 @@ import type {
 } from "./types.js";
 
 type SshCredential = {
+  name?: string;
   username: string;
   password?: string;
   privateKey?: string;
@@ -100,7 +102,8 @@ function parseCredentialsJson() {
   if (!raw) return {};
   const normalized = raw.replace(/[“”]/g, "\"").replace(/[‘’]/g, "'");
   try {
-    return JSON.parse(normalized) as Record<string, SshCredential>;
+    const parsed = JSON.parse(normalized) as Record<string, SshCredential>;
+    return Object.fromEntries(Object.entries(parsed).map(([name, credential]) => [name, { ...credential, name }]));
   } catch {
     throw new ConnectorError("SSH_CREDENTIALS_INVALID", "SSH_CREDENTIALS_JSON is not valid JSON.", 500);
   }
@@ -140,7 +143,7 @@ function connectConfig(device: Device, credential: SshCredential): ConnectConfig
     host: device.host,
     port: device.managementPort,
     username: credential.username,
-    readyTimeout: 8000
+    readyTimeout: env.sshHandshakeTimeoutMs
   };
 
   if (credential.password) config.password = credential.password;
@@ -156,11 +159,34 @@ function mapSshError(error: unknown): ConnectorError {
   if (source?.level === "client-authentication" || /auth|authentication/i.test(message)) {
     return new ConnectorError("SSH_AUTH_FAILED", "SSH authentication failed.", 401);
   }
-  return new ConnectorError("SSH_CONNECTION_FAILED", message, 502);
+  if (source?.code === "ETIMEDOUT" || /timed out|timeout/i.test(message)) {
+    return new ConnectorError("SSH_HANDSHAKE_TIMEOUT", "SSH handshake timed out.", 504);
+  }
+  return new ConnectorError("SSH_TCP_CONNECT_FAILED", message, 502);
+}
+
+function tcpConnect(host: string, port: number) {
+  return new Promise<void>((resolve, reject) => {
+    const socket = net.createConnection({ host, port });
+    const finish = (error?: Error) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      if (error) reject(error);
+      else resolve();
+    };
+    socket.setTimeout(env.sshConnectTimeoutMs);
+    socket.once("connect", () => finish());
+    socket.once("timeout", () => finish(new ConnectorError("SSH_TCP_CONNECT_FAILED", `TCP connection to ${host}:${port} timed out.`, 502)));
+    socket.once("error", (error) => finish(new ConnectorError("SSH_TCP_CONNECT_FAILED", error.message, 502)));
+  });
 }
 
 async function withSsh<T>(device: Device, callback: (client: Client, credential: SshCredential) => Promise<T>) {
   const credential = await getCredential(device);
+  return withSshWithCredential(device, credential, (client) => callback(client, credential));
+}
+
+async function withSshWithCredential<T>(device: Device, credential: SshCredential, callback: (client: Client) => Promise<T>) {
   const client = new Client();
 
   return new Promise<T>((resolve, reject) => {
@@ -174,17 +200,17 @@ async function withSsh<T>(device: Device, callback: (client: Client, credential:
     };
 
     client.once("ready", () => {
-      callback(client, credential)
+      callback(client)
         .then((value) => finish(() => resolve(value)))
         .catch((error) => finish(() => reject(error)));
     });
     client.once("error", (error) => finish(() => reject(mapSshError(error))));
-    client.once("timeout", () => finish(() => reject(new ConnectorError("SSH_CONNECTION_FAILED", "SSH connection timed out.", 502))));
+    client.once("timeout", () => finish(() => reject(new ConnectorError("SSH_HANDSHAKE_TIMEOUT", "SSH handshake timed out.", 504))));
     client.connect(connectConfig(device, credential));
   });
 }
 
-function exec(client: Client, command: string, timeoutMs = 12000): Promise<ExecResult> {
+function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeoutMs): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     client.exec(command, (error, stream) => {
       if (error) {
@@ -239,37 +265,130 @@ function commandLabel(command: string) {
 }
 
 async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestResult> {
-  const warnings: string[] = [];
+  const stages: DeviceConnectionTestResult["stages"] = [{ name: "resolve_device", status: "ok" }];
+  const warnings: DeviceConnectionTestResult["warnings"] = [];
+  const base = {
+    deviceId: device.id,
+    host: device.host,
+    port: device.managementPort,
+    stages,
+    warnings
+  };
 
-  return withSsh(device, async (client, credential) => {
+  let credential: SshCredential;
+  try {
+    credential = await getCredential(device);
+    stages.push({ name: "resolve_credential", status: "ok" });
+  } catch (error) {
+    const connectorError = error instanceof ConnectorError ? error : new ConnectorError("SSH_CREDENTIAL_MISSING", "No SSH credential is configured for this device.");
+    stages.push({ name: "resolve_credential", status: "failed", code: connectorError.code, message: connectorError.message });
+    return {
+      ...base,
+      connected: false,
+      credentialResolved: false,
+      capabilities: { canConnect: false, canRunBasicReadOnly: false, canUseUfw: false, canOpenPort: false, canClosePort: false },
+      errorCode: connectorError.code,
+      message: connectorError.message
+    };
+  }
+
+  try {
+    await tcpConnect(device.host, device.managementPort);
+    stages.push({ name: "tcp_connect", status: "ok" });
+  } catch (error) {
+    const connectorError = error instanceof ConnectorError ? error : new ConnectorError("SSH_TCP_CONNECT_FAILED", "TCP connection failed.");
+    stages.push({ name: "tcp_connect", status: "failed", code: connectorError.code, message: connectorError.message });
+    return {
+      ...base,
+      connected: false,
+      credentialResolved: true,
+      credentialName: credential.name ?? credentialRef(device),
+      username: credential.username,
+      capabilities: { canConnect: false, canRunBasicReadOnly: false, canUseUfw: false, canOpenPort: false, canClosePort: false },
+      errorCode: connectorError.code,
+      message: connectorError.message
+    };
+  }
+
+  return withSshWithCredential(device, credential, async (client) => {
+    stages.push({ name: "ssh_handshake", status: "ok" }, { name: "ssh_auth", status: "ok" });
     const sudo = sudoPrefix(credential);
-    const [whoami, hostname, os, id, ufwPath, ufwStatus, ports, sshStatus, sshdPort] = await Promise.all([
-      exec(client, "whoami"),
-      exec(client, "hostname"),
-      exec(client, "uname -a"),
-      exec(client, "id"),
+    const [hostname, whoami, os] = await Promise.all([exec(client, "hostname"), exec(client, "whoami"), exec(client, "uname -a")]);
+    const basicFailed = [hostname, whoami, os].find((result) => result.exitCode !== 0);
+    if (basicFailed) {
+      stages.push({ name: "basic_commands", status: "failed", code: "SSH_COMMAND_FAILED", message: basicFailed.stderr || "Basic read-only command failed." });
+      return {
+        ...base,
+        connected: false,
+        credentialResolved: true,
+        credentialName: credential.name ?? credentialRef(device),
+        username: credential.username,
+        capabilities: { canConnect: true, canRunBasicReadOnly: false, canUseUfw: false, canOpenPort: false, canClosePort: false },
+        errorCode: "SSH_COMMAND_FAILED",
+        message: basicFailed.stderr || "Basic read-only command failed."
+      };
+    }
+    stages.push({ name: "basic_commands", status: "ok" });
+
+    const [ufwPath, ufwStatus, ports, sshStatus, sshdPort] = await Promise.all([
       exec(client, "command -v ufw"),
-      exec(client, `${sudo}ufw status verbose`),
+      exec(client, `${sudo}/usr/sbin/ufw status verbose`),
       exec(client, "ss -lntup"),
       exec(client, "systemctl is-active ssh || systemctl is-active sshd"),
       exec(client, "grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config | tail -n 1")
     ]);
 
-    if (ufwStatus.exitCode !== 0) warnings.push("UFW status command failed or requires passwordless sudo.");
-    if (ports.exitCode !== 0) warnings.push("Listening port collection failed.");
-    if (sshStatus.exitCode !== 0) warnings.push("SSH service status check failed.");
+    if (ufwPath.exitCode !== 0 || !ufwPath.stdout) warnings.push({ code: "UFW_NOT_FOUND", message: "ufw command not available" });
+    if (ufwStatus.exitCode !== 0) warnings.push({ code: "SUDO_PERMISSION_DENIED", message: "NOPASSWD sudo for ufw is missing or ufw status failed" });
+    if (ports.exitCode !== 0) warnings.push({ code: "SSH_COMMAND_FAILED", message: "ss command unavailable or permission denied" });
+    if (sshStatus.exitCode !== 0) warnings.push({ code: "SSH_COMMAND_FAILED", message: "systemctl ssh status unavailable" });
+    if (sshdPort.exitCode !== 0) warnings.push({ code: "SSH_COMMAND_FAILED", message: "Could not read SSH port from sshd_config" });
+    stages.push({ name: "optional_capabilities", status: warnings.length > 0 ? "warning" : "ok" });
+    const canUseUfw = ufwPath.exitCode === 0 && Boolean(ufwPath.stdout) && ufwStatus.exitCode === 0;
 
     return {
+      ...base,
       connected: true,
+      credentialResolved: true,
+      credentialName: credential.name ?? credentialRef(device),
       username: whoami.stdout || credential.username,
       hostname: hostname.stdout,
       os: os.stdout,
-      ufwAvailable: ufwPath.exitCode === 0 && Boolean(ufwPath.stdout),
+      ufwAvailable: canUseUfw,
       ufwStatus: ufwStatus.stdout || ufwStatus.stderr,
       listeningPorts: ports.stdout || ports.stderr,
       sshServiceStatus: sshStatus.stdout || sshStatus.stderr,
       currentSshPort: parseCurrentSshPort(sshdPort.stdout),
-      warnings
+      capabilities: {
+        canConnect: true,
+        canRunBasicReadOnly: true,
+        canUseUfw,
+        canOpenPort: canUseUfw,
+        canClosePort: canUseUfw
+      },
+      message: warnings.length > 0 ? "SSH connection succeeded with optional capability warnings." : "SSH connection succeeded."
+    };
+  }).catch((error) => {
+    const connectorError = error instanceof ConnectorError ? error : mapSshError(error);
+    if (!stages.some((stage) => stage.name === "ssh_handshake")) {
+      if (connectorError.code === "SSH_AUTH_FAILED") {
+        stages.push(
+          { name: "ssh_handshake", status: "ok" },
+          { name: "ssh_auth", status: "failed", code: connectorError.code, message: connectorError.message }
+        );
+      } else {
+        stages.push({ name: "ssh_handshake", status: "failed", code: connectorError.code, message: connectorError.message });
+      }
+    }
+    return {
+      ...base,
+      connected: false,
+      credentialResolved: true,
+      credentialName: credential.name ?? credentialRef(device),
+      username: credential.username,
+      capabilities: { canConnect: true, canRunBasicReadOnly: false, canUseUfw: false, canOpenPort: false, canClosePort: false },
+      errorCode: connectorError.code,
+      message: connectorError.message
     };
   });
 }
@@ -450,21 +569,34 @@ export const linuxSshConnector: DeviceConnector = {
       const connectorError = error instanceof ConnectorError ? error : mapSshError(error);
       return {
         connected: false,
+        deviceId: device.id,
+        host: device.host,
+        port: device.managementPort,
+        credentialResolved: false,
+        stages: [
+          { name: "resolve_device", status: "ok" },
+          { name: "ssh_handshake", status: "failed", code: connectorError.code, message: connectorError.message }
+        ],
         warnings: [],
+        capabilities: { canConnect: false, canRunBasicReadOnly: false, canUseUfw: false, canOpenPort: false, canClosePort: false },
         errorCode: connectorError.code,
         message: connectorError.message
       };
     }
   },
-  async getCapabilities() {
+  async getCapabilities(device) {
+    const stored = asObject(device.capabilities);
+    const linuxStatus = asObject(stored.linuxStatus);
+    const statusCapabilities = asObject(linuxStatus.capabilities);
+    const canUseUfw = typeof statusCapabilities.canUseUfw === "boolean" ? statusCapabilities.canUseUfw : true;
     return {
       canTestConnection: true,
       canCollectStatus: true,
-      canUseUfw: true,
-      canOpenPort: true,
-      canClosePort: true,
-      canBlockSourceIp: true,
-      canUnblockSourceIp: true,
+      canUseUfw,
+      canOpenPort: canUseUfw,
+      canClosePort: canUseUfw,
+      canBlockSourceIp: canUseUfw,
+      canUnblockSourceIp: canUseUfw,
       canChangeSshPortDryRunOnly: true,
       canExecuteChangeSshPort: false,
       supportedActions: SUPPORTED_ACTIONS

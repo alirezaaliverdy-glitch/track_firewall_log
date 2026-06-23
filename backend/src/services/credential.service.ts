@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { decryptSecret, encryptSecret } from "./credential-crypto.service.js";
 
 export type ResolvedDeviceCredential = {
+  name?: string;
   username: string;
   password?: string;
   privateKey?: string;
@@ -125,6 +126,7 @@ export async function resolveCredentialByName(name: string): Promise<ResolvedDev
 
 function decryptCredential(credential: DeviceCredential): ResolvedDeviceCredential {
   return {
+    name: credential.name,
     username: credential.username,
     password: credential.type === DeviceCredentialType.password ? decryptSecret(credential.secretEncrypted) : undefined,
     privateKey: credential.type === DeviceCredentialType.private_key ? decryptSecret(credential.privateKeyEncrypted) : undefined,
