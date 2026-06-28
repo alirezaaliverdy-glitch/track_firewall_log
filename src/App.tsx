@@ -25,6 +25,7 @@ import ErrorBoundary from "./components/common/ErrorBoundary";
 import IncidentsPanel from "./components/incidents/IncidentsPanel";
 import AiSecurityAssistantPanel from "./components/ai/AiSecurityAssistantPanel";
 import ActionCenterPanel from "./components/actions/ActionCenterPanel";
+import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapabilityMatrixPanel";
 
 function App() {
   return (
@@ -49,25 +50,43 @@ function App() {
             </div>
           </div>
 
-          <ErrorBoundary title="Upload panel unavailable">
-            <FirewallTypeSelector />
-            <CsvUploader />
-          </ErrorBoundary>
-          <ErrorBoundary title="Device Registry unavailable">
-            <DeviceRegistryPanel />
-          </ErrorBoundary>
-          <ErrorBoundary title="Security Events unavailable">
-            <SecurityEventsPanel />
-          </ErrorBoundary>
-          <ErrorBoundary title="Incidents unavailable">
-            <IncidentsPanel />
-          </ErrorBoundary>
           <ErrorBoundary title="AI Security Assistant unavailable">
             <AiSecurityAssistantPanel />
           </ErrorBoundary>
           <ErrorBoundary title="Action Center unavailable">
             <ActionCenterPanel />
           </ErrorBoundary>
+          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Manage Devices</summary>
+            <div className="mt-4">
+              <ErrorBoundary title="Device Registry unavailable">
+                <DeviceRegistryPanel />
+              </ErrorBoundary>
+            </div>
+          </details>
+          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Events / Incidents / Logs</summary>
+            <div className="mt-4">
+              <ErrorBoundary title="Upload panel unavailable">
+                <div id="log-upload" className="scroll-mt-4">
+                  <FirewallTypeSelector />
+                  <CsvUploader />
+                </div>
+              </ErrorBoundary>
+              <ErrorBoundary title="Security Events unavailable">
+                <SecurityEventsPanel />
+              </ErrorBoundary>
+              <ErrorBoundary title="Incidents unavailable">
+                <IncidentsPanel />
+              </ErrorBoundary>
+              <details className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Import Diagnostics</summary>
+                <div className="mt-4">
+                  <DataQualityPanel />
+                </div>
+              </details>
+            </div>
+          </details>
           <WorkflowGuide />
           <ColumnMappingWizard />
           <SummaryCards />
@@ -81,7 +100,6 @@ function App() {
           </div>
           <LogChart />
 
-          <DataQualityPanel />
           <TrafficDirectionPanel />
           <PolicyReviewPanel />
           <FindingsPanel />
@@ -89,6 +107,14 @@ function App() {
           <LogTable />
           <SensitivePortsExplorer />
           <ExportButtons />
+          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Vendor Readiness / Admin</summary>
+            <div className="mt-4">
+              <ErrorBoundary title="FortiGate Capability Matrix unavailable">
+                <FortiGateCapabilityMatrixPanel />
+              </ErrorBoundary>
+            </div>
+          </details>
         </div>
       </LogProvider>
     </Suspense>

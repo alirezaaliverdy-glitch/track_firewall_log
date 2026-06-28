@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, RefreshCw, Send, ShieldAlert, Sparkles, TriangleAlert } from "lucide-react";
+import { Bot, RefreshCw, Send, ShieldAlert, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import {
   getAiProviderStatus,
   getSecuritySummary,
+  completeAiActionRequest,
+  type AiActionDebug,
   normalizeAiMessage,
   normalizeArray,
   normalizeObject,
@@ -13,7 +15,8 @@ import {
   type SecuritySummary,
   type StructuredAiResponse,
 } from "@/lib/ai";
-import { proposeAction } from "@/lib/actions";
+import { listDevices, type Device } from "@/lib/devices";
+import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 
 const EXAMPLES = [
   "امروز چه تهدیدهایی داشتیم؟",
@@ -22,6 +25,9 @@ const EXAMPLES = [
   "پورت ۲۲ رو عوض کن روی ۲۲۰۲۲",
   "پورت ۸۰۸۰ رو ببند",
   "این IP رو ۳۰ دقیقه بلاک کن",
+  "FortiGate: create address object for 192.168.8.2",
+  "FortiGate: create VIP for port 443",
+  "MikroTik: change SSH port to 22022 trusted source 192.168.1.0/24",
 ];
 
 const safeNumber = (value: unknown): number => {
@@ -44,43 +50,182 @@ function riskClass(risk: string) {
   return "border-blue-800 bg-blue-950/40 text-blue-200";
 }
 
+function normalizedVendor(value: unknown, intentType?: string) {
+  const token = typeof value === "string" ? value.trim().toLowerCase().replace(/[\s_-]+/g, "") : "";
+  if (["mikrotik", "routeros", "mt", "mkt"].includes(token) || intentType?.startsWith("mikrotik_")) return "mikrotik";
+  if (["fortigate", "fortinet", "fortios"].includes(token) || intentType?.startsWith("fortigate_")) return "fortigate";
+  if (["linux", "linuxedge", "ubuntu"].includes(token) || intentType?.startsWith("linux_")) return "linux_edge";
+  return null;
+}
+
 function IntentCard({
   intent,
-  creating,
+  debug,
   createdPlanId,
-  onCreateActionPlan,
+  onCompleted,
 }: {
   intent: AiActionIntent | null;
-  creating: boolean;
+  debug: AiActionDebug | null;
   createdPlanId: string | null;
-  onCreateActionPlan: (intent: AiActionIntent) => void;
+  onCompleted: (input: { actionPlanId: string | null; intent: AiActionIntent | null; message: string }) => void;
 }) {
-  if (!intent) return null;
-  const params = normalizeObject(intent.parametersJson);
-  const missingFields = normalizeArray<unknown>(params.missingFields).map(String);
+  const [missingValues, setMissingValues] = useState<Record<string, string>>({});
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
+  const params = normalizeObject(intent?.parametersJson);
+  const rawMissingFields = debug?.missingFields.length ? debug.missingFields : normalizeArray<unknown>(params.missingFields).map(String);
+  const missingFields = rawMissingFields.filter((field) => field !== "deviceId");
+  const needsDevice = !debug?.deviceId && !intent?.deviceId && !createdPlanId;
   const clarificationQuestions = normalizeArray<unknown>(params.clarificationQuestions).map(String);
-  const canCreatePlan = intent.status === "proposed" && intent.intentType !== "unknown";
+  const canCreatePlan = Boolean(debug?.canCreateActionPlan);
+  const riskLevel = intent?.riskLevel ?? "medium";
+  const sshPortChange = intent?.intentType === "mikrotik_change_service_port" && params.service === "ssh";
+  const intentType = String(intent?.intentType ?? debug?.intentType ?? "");
+  const vendor = normalizedVendor(debug?.vendor ?? params.vendor ?? params.targetDeviceHint, intentType);
+  const compatibleDevices = devices.filter((device) => {
+    if (vendor === "mikrotik") return device.type === "mikrotik";
+    if (vendor === "fortigate") return device.type === "fortigate";
+    if (vendor === "linux_edge") return device.type === "linux_edge";
+    if (intentType.startsWith("mikrotik_")) return device.type === "mikrotik";
+    if (intentType.startsWith("fortigate_")) return device.type === "fortigate";
+    if (intentType.startsWith("linux_")) return device.type === "linux_edge";
+    return true;
+  });
+  const targetDevice = devices.find((device) => device.id === (intent?.deviceId ?? debug?.deviceId ?? selectedDeviceId));
+
+  useEffect(() => {
+    listDevices()
+      .then((nextDevices) => setDevices(nextDevices))
+      .catch(() => setDevices([]));
+  }, [intent?.id]);
+
+  useEffect(() => {
+    if (selectedDeviceId || compatibleDevices.length !== 1) return;
+    setSelectedDeviceId(compatibleDevices[0].id);
+  }, [compatibleDevices, selectedDeviceId]);
+
+  if (!intent && !debug) return null;
+
+  const completeRequest = () => {
+    if (!intent?.id) return;
+    const fields: Record<string, unknown> = { ...params };
+    if (selectedDeviceId) fields.deviceId = selectedDeviceId;
+    for (const [key, value] of Object.entries(missingValues)) {
+      if (value.trim()) fields[key] = value.trim();
+    }
+    if (needsDevice && !fields.deviceId) {
+      setLocalMessage("Select a device first.");
+      return;
+    }
+    const stillMissing = missingFields.filter((field) => !String(fields[field] ?? "").trim());
+    if (stillMissing.length > 0) {
+      setLocalMessage(`Fill missing fields: ${stillMissing.join(", ")}`);
+      return;
+    }
+    setSubmitting(true);
+    setLocalMessage(null);
+    completeAiActionRequest(intent.id, fields)
+      .then((result) => {
+        onCompleted({
+          actionPlanId: result.actionPlanId,
+          intent: result.intent,
+          message: result.actionPlanId ? "ActionPlan created. Review in Action Center." : result.blockedReason ?? "ActionPlan not created."
+        });
+        if (result.actionPlanId) {
+          publishActionPlanCreated(result.actionPlanId);
+          reviewInActionCenter();
+        }
+      })
+      .catch((error: unknown) => setLocalMessage(error instanceof Error ? error.message : "Failed to complete action request."))
+      .finally(() => setSubmitting(false));
+  };
 
   return (
     <div className="mt-3 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
       <div className="flex flex-wrap items-center gap-2">
         <TriangleAlert className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-        <span className="text-sm font-semibold text-yellow-100">Proposed action only</span>
-        <span className={`rounded border px-2 py-0.5 text-xs ${riskClass(intent.riskLevel)}`}>{intent.riskLevel}</span>
-        <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">{intent.status}</span>
+        <span className="text-sm font-semibold text-yellow-100">{createdPlanId ? "ActionPlan proposed" : "Action request reviewed"}</span>
+        <span className={`rounded border px-2 py-0.5 text-xs ${riskClass(riskLevel)}`}>{riskLevel}</span>
+        <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">{intent?.status ?? "not_supported_yet"}</span>
       </div>
-      <p className="mt-2 text-xs text-yellow-100/80">
-        Not executed. Requires dry-run and approval before any future connector can act.
-      </p>
-      <div className="mt-3 grid gap-2 text-xs text-zinc-300 sm:grid-cols-2">
-        <p><span className="text-zinc-500">Intent:</span> {intent.intentType}</p>
-        <p><span className="text-zinc-500">Target:</span> {intent.device?.name ?? intent.deviceId ?? "not selected"}</p>
+      <div className="mt-3 grid gap-2 text-xs text-zinc-300">
+        <p><span className="text-zinc-500">intentType:</span> {debug?.intentType ?? intent?.intentType ?? "none"}</p>
+        <p><span className="text-zinc-500">vendor:</span> {vendor ?? "not selected"}</p>
+        <p><span className="text-zinc-500">deviceId:</span> {debug?.deviceId ?? intent?.deviceId ?? "missing"}</p>
+        <p><span className="text-zinc-500">canCreateActionPlan:</span> {String(canCreatePlan)}</p>
+        {createdPlanId && <p><span className="text-zinc-500">actionPlanId:</span> {createdPlanId}</p>}
       </div>
-      <p className="mt-2 text-xs text-zinc-400">{intent.explanation || "No explanation provided."}</p>
-      {missingFields.length > 0 && (
+      <div className="mt-3 rounded border border-zinc-800 bg-black/20 p-2 text-xs text-zinc-300">
+        <p className="font-semibold text-zinc-200">Planned action summary</p>
+        <p className="mt-1">actionType: {sshPortChange ? "Change MikroTik SSH port" : intent?.intentType ?? debug?.intentType ?? "unknown"}</p>
+        <p>risk: {riskLevel}</p>
+        {sshPortChange && <p>target device: {targetDevice?.name ?? intent?.deviceId ?? "select a MikroTik device"}</p>}
+        {sshPortChange && <p>new port: {String(params.newPort ?? "missing")}</p>}
+        {sshPortChange && <p>trusted source: {String(params.trustedSourceIp ?? params.trustedSourceCidr ?? params.trustedSource ?? "required")}</p>}
+        <pre className="mt-2 max-h-32 overflow-auto rounded bg-black/30 p-2">{JSON.stringify(params, null, 2)}</pre>
+      </div>
+      {sshPortChange && (
+        <p className="mt-2 rounded border border-red-900/70 bg-red-950/20 p-2 text-xs font-medium text-red-200">
+          Lockout warning: the trusted-source firewall rule must be reviewed before the SSH service port changes.
+        </p>
+      )}
+      {!canCreatePlan && (
+        <p className="mt-2 text-xs text-yellow-200">blockedReason: {debug?.blockedReason ?? debug?.reason ?? "blocked"}</p>
+      )}
+      <p className="mt-2 text-xs text-zinc-400">{intent?.explanation || "No explanation provided."}</p>
+      {(needsDevice || missingFields.length > 0) && (
         <div className="mt-3 rounded border border-yellow-800/70 bg-yellow-950/20 p-2">
           <p className="text-xs font-semibold text-yellow-100">Missing fields</p>
-          <p className="mt-1 text-xs text-yellow-100/80">{missingFields.join(", ")}</p>
+          <p className="mt-1 text-xs text-yellow-100/80">{[...(needsDevice ? ["device"] : []), ...missingFields].join(", ")}</p>
+          <div className="mt-2 grid gap-2">
+            {needsDevice && (
+              compatibleDevices.length === 0 ? (
+                <p className="rounded border border-red-900/60 bg-red-950/20 p-2 text-xs text-red-200">
+                  No device found. Add one in Device Registry.
+                </p>
+              ) : (
+                <select
+                  value={selectedDeviceId}
+                  onChange={(event) => setSelectedDeviceId(event.target.value)}
+                  className="h-9 rounded border border-yellow-900/60 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"
+                >
+                  <option value="">Select device</option>
+                  {(["mikrotik", "fortigate", "linux_edge"] as const).map((type) => {
+                    const group = compatibleDevices.filter((device) => device.type === type);
+                    if (group.length === 0) return null;
+                    return (
+                      <optgroup key={type} label={type === "linux_edge" ? "Linux" : type === "mikrotik" ? "MikroTik" : "FortiGate"}>
+                        {group.map((device) => (
+                          <option key={device.id} value={device.id}>
+                            {device.name} - {device.host}:{device.managementPort} - {device.vendor}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                </select>
+              )
+            )}
+            {missingFields.map((field) => (
+              <input
+                key={field}
+                value={missingValues[field] ?? ""}
+                onChange={(event) => setMissingValues((current) => ({ ...current, [field]: event.target.value }))}
+                placeholder={field === "trustedSourceIp" ? "trustedSourceIp or trustedSourceCidr" : field}
+                className="h-8 rounded border border-yellow-900/60 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"
+              />
+            ))}
+            <button
+              type="button"
+              onClick={completeRequest}
+              className="h-8 rounded border border-yellow-700 bg-yellow-950/40 px-2 text-xs font-semibold text-yellow-100 disabled:opacity-50"
+              disabled={submitting || (needsDevice && compatibleDevices.length === 0)}
+            >
+              {submitting ? "Creating..." : "Create ActionPlan"}
+            </button>
+          </div>
         </div>
       )}
       {clarificationQuestions.length > 0 && (
@@ -91,21 +236,44 @@ function IntentCard({
           </ul>
         </div>
       )}
-      <pre className="mt-3 max-h-40 overflow-auto rounded border border-zinc-800 bg-black/40 p-2 text-xs text-zinc-300">
-        {JSON.stringify(params, null, 2)}
-      </pre>
-      <button
-        type="button"
-        onClick={() => onCreateActionPlan(intent)}
-        disabled={creating || !intent.id || !canCreatePlan}
-        className="mt-3 inline-flex h-8 items-center rounded-md border border-yellow-700 bg-yellow-950/40 px-3 text-xs font-semibold text-yellow-100 transition-colors hover:border-yellow-500 disabled:opacity-60"
-      >
-        {creating ? "Creating..." : canCreatePlan ? "Create Action Plan" : "ActionPlan blocked"}
-      </button>
       {createdPlanId && (
-        <p className="mt-2 text-xs text-green-300">
-          ActionPlan created: <span className="font-mono">{createdPlanId}</span>
-        </p>
+        <div className="mt-3 rounded border border-green-900/70 bg-green-950/20 p-3">
+          <p className="text-xs font-medium text-green-200">ActionPlan created. Review in Action Center.</p>
+          <button
+            type="button"
+            onClick={reviewInActionCenter}
+            className="mt-2 inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
+          >
+            Review in Action Center
+          </button>
+        </div>
+      )}
+      {localMessage && <p className="mt-2 text-xs text-zinc-300">{localMessage}</p>}
+    </div>
+  );
+}
+
+function ChatMessageBubble({ message }: { message: AiMessage }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = message.content.length > 360;
+  const content = long && !expanded ? `${message.content.slice(0, 360)}...` : message.content;
+  return (
+    <div
+      className={`rounded-lg border px-3 py-2 text-left ${
+        message.role === "user"
+          ? "ml-auto max-w-[82%] border-blue-800/70 bg-blue-950/30"
+          : "mr-auto max-w-[88%] border-zinc-800 bg-zinc-900/70"
+      }`}
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-medium uppercase text-zinc-500">{message.role}</span>
+        <span className="text-[10px] text-zinc-600">{formatDateTime(message.createdAt)}</span>
+      </div>
+      <p className="whitespace-pre-wrap text-xs leading-5 text-zinc-200">{content}</p>
+      {long && (
+        <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-1 text-xs text-blue-300">
+          {expanded ? "Show less" : "Show more"}
+        </button>
       )}
     </div>
   );
@@ -120,14 +288,18 @@ export default function AiSecurityAssistantPanel() {
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [creatingActionPlan, setCreatingActionPlan] = useState(false);
   const [createdPlanId, setCreatedPlanId] = useState<string | null>(null);
+  const [actionDebug, setActionDebug] = useState<AiActionDebug | null>(null);
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   const refreshSummary = () => {
     setSummaryLoading(true);
+    setSummary(null);
+    setProviderStatus(null);
+    setError(null);
+    setLastRefreshedAt(null);
     Promise.all([getSecuritySummary(), getAiProviderStatus()])
       .then(([nextSummary, nextStatus]) => {
         setSummary(nextSummary);
@@ -136,6 +308,16 @@ export default function AiSecurityAssistantPanel() {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load security summary."))
       .finally(() => setSummaryLoading(false));
+  };
+
+  const clearChat = () => {
+    setSessionId(null);
+    setMessages([]);
+    setLastIntent(null);
+    setStructuredResponse(null);
+    setActionDebug(null);
+    setCreatedPlanId(null);
+    setError(null);
   };
 
   useEffect(() => {
@@ -172,27 +354,19 @@ export default function AiSecurityAssistantPanel() {
           ...(response.assistantMessage ? [response.assistantMessage] : []),
         ]);
         setLastIntent(response.actionIntent);
+        setActionDebug(response.actionDebug);
         setProviderStatus(response.providerStatus ?? providerStatus);
         setStructuredResponse(response.structured);
-        setCreatedPlanId(null);
+        setCreatedPlanId(response.actionPlan?.id ?? null);
+        if (response.actionPlan?.id) {
+          publishActionPlanCreated(response.actionPlan.id);
+        }
         refreshSummary();
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to send AI message.");
       })
       .finally(() => setLoading(false));
-  };
-
-  const createActionPlanFromIntent = (intent: AiActionIntent) => {
-    if (!intent.id || creatingActionPlan) return;
-    setCreatingActionPlan(true);
-    setError(null);
-    proposeAction({ aiIntentId: intent.id })
-      .then((plan) => setCreatedPlanId(plan.id || null))
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to create ActionPlan from AI intent.");
-      })
-      .finally(() => setCreatingActionPlan(false));
   };
 
   return (
@@ -216,7 +390,22 @@ export default function AiSecurityAssistantPanel() {
           className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
         >
           <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-          Refresh Summary
+          {summaryLoading ? "Refreshing..." : "Refresh Summary"}
+        </button>
+        <button
+          type="button"
+          onClick={clearChat}
+          className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-red-800 hover:text-red-200"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          Clear Chat
+        </button>
+        <button
+          type="button"
+          onClick={clearChat}
+          className="inline-flex h-9 w-fit items-center rounded-md border border-blue-800 bg-blue-950/30 px-3 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-950/50"
+        >
+          New Request
         </button>
       </div>
 
@@ -242,8 +431,8 @@ export default function AiSecurityAssistantPanel() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950">
-          <div className="max-h-[420px] min-h-[260px] overflow-y-auto p-4">
+        <div className="flex h-[500px] min-h-0 flex-col rounded-lg border border-zinc-800 bg-zinc-950">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {safeMessages.length === 0 ? (
               <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-center text-zinc-500">
                 <Sparkles className="h-8 w-8" aria-hidden="true" />
@@ -251,22 +440,7 @@ export default function AiSecurityAssistantPanel() {
               </div>
             ) : (
               <div className="space-y-3">
-                {safeMessages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`rounded-lg border p-3 text-left ${
-                      message.role === "user"
-                        ? "ml-auto max-w-[86%] border-blue-800/70 bg-blue-950/30"
-                        : "mr-auto max-w-[92%] border-zinc-800 bg-zinc-900/70"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium uppercase text-zinc-500">{message.role}</span>
-                      <span className="text-[11px] text-zinc-600">{formatDateTime(message.createdAt)}</span>
-                    </div>
-                    <p className="whitespace-pre-wrap text-sm text-zinc-200">{message.content}</p>
-                  </div>
-                ))}
+                {safeMessages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}
                 {loading && (
                   <p className="text-left text-xs text-zinc-500">Assistant is thinking...</p>
                 )}
@@ -343,9 +517,14 @@ export default function AiSecurityAssistantPanel() {
           </div>
           <IntentCard
             intent={lastIntent}
-            creating={creatingActionPlan}
+            debug={actionDebug}
             createdPlanId={createdPlanId}
-            onCreateActionPlan={createActionPlanFromIntent}
+            onCompleted={({ actionPlanId, intent, message }) => {
+              setCreatedPlanId(actionPlanId);
+              if (intent) setLastIntent(intent);
+              setError(null);
+              if (!actionPlanId) setError(message);
+            }}
           />
         </aside>
       </div>

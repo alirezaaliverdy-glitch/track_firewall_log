@@ -230,6 +230,36 @@ function cleanOutput(value: string) {
   return value.replace(/\u001b\[[0-9;]*m/g, "").trim();
 }
 
+function quoteRouterOs(value: string | number | boolean) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function addressListCommands(parameters: Record<string, unknown>) {
+  const listName = String(parameters.listName ?? "ai_blocklist");
+  const address = String(parameters.address ?? parameters.srcIp ?? "");
+  const timeout = typeof parameters.timeout === "string" && parameters.timeout.trim() ? parameters.timeout.trim() : undefined;
+  const comment = String(parameters.comment ?? "created-by-firewall-log-analyzer");
+  const timeoutPart = timeout ? ` timeout=${quoteRouterOs(timeout)}` : "";
+  return {
+    listName,
+    address,
+    timeout,
+    comment,
+    check: `/ip firewall address-list print terse where list=${quoteRouterOs(listName)} address=${quoteRouterOs(address)}`,
+    add: `/ip firewall address-list add list=${quoteRouterOs(listName)} address=${quoteRouterOs(address)}${timeoutPart} comment=${quoteRouterOs(comment)}`,
+    update: `/ip firewall address-list set [find list=${quoteRouterOs(listName)} address=${quoteRouterOs(address)}]${timeoutPart} comment=${quoteRouterOs(comment)}`
+  };
+}
+
+function addressListEntryExists(result: ExecResult, address: string) {
+  const combined = `${result.stdout}\n${result.stderr}`.trim();
+  return result.exitCode === 0 && combined.length > 0 && combined.includes(address);
+}
+
+function duplicateAddressEntry(result: ExecResult) {
+  return /already have such entry/i.test(`${result.stdout}\n${result.stderr}`);
+}
+
 function lines(value: string, limit?: number) {
   const result = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return typeof limit === "number" ? result.slice(0, limit) : result;
@@ -439,7 +469,7 @@ function capabilitiesFromStatus(status: Record<string, unknown>): DeviceCapabili
     canReadFirewall: capabilities.canReadFirewall === true,
     canReadLogs: capabilities.canReadLogs === true,
     canExecuteWriteActions: true,
-    canExecuteChangeSshPort: false,
+    canExecuteChangeSshPort: true,
     supportedActions: SUPPORTED_ACTIONS,
     identity: mikrotik.identity,
     routerosVersion: mikrotik.routerosVersion,
@@ -483,7 +513,7 @@ export const mikrotikSshConnector: DeviceConnector = {
       canReadFirewall: false,
       canReadLogs: false,
       canExecuteWriteActions: true,
-      canExecuteChangeSshPort: false,
+      canExecuteChangeSshPort: true,
       supportedActions: SUPPORTED_ACTIONS,
       warnings: [{ code: "MIKROTIK_READONLY_DISCOVERY_PARTIAL", message: "Run Test first to populate MikroTik read-only discovery." }]
     };
@@ -504,6 +534,9 @@ export const mikrotikSshConnector: DeviceConnector = {
       target: { backupName: policy.backupName, preflight: true }
     }));
 
+    const sshPortChange = actionPlan.actionType === ActionType.mikrotik_change_service_port && validation.normalizedParameters.service === "ssh";
+    const newPort = Number(validation.normalizedParameters.newPort ?? validation.normalizedParameters.port);
+    const oldPort = Number(validation.normalizedParameters.oldPort);
     return {
       plannedCommands: [...policy.backupCommands, ...validation.commandSpecs.map((spec) => spec.command)],
       validationWarnings: [
@@ -512,8 +545,10 @@ export const mikrotikSshConnector: DeviceConnector = {
         ...(policy.requiresBreakGlass ? ["Break-glass confirmation is required for this critical MikroTik action."] : []),
         ...(policy.lockoutWarning ? [policy.lockoutWarning] : [])
       ],
-      affectedPorts: [],
-      affectedServices: ["routeros-firewall"],
+      affectedPorts: sshPortChange
+        ? [newPort, ...(Number.isInteger(oldPort) && oldPort > 0 ? [oldPort] : [])]
+        : [],
+      affectedServices: sshPortChange ? ["routeros-firewall", "routeros-ssh"] : ["routeros-firewall"],
       rollbackSteps: validation.commandSpecs.flatMap((spec) => spec.rollbackSteps),
       riskLevel: validation.riskLevel,
       requiresApproval: true,
@@ -547,10 +582,29 @@ export const mikrotikSshConnector: DeviceConnector = {
       throw new MikroTikConnectorError("MIKROTIK_BREAK_GLASS_REQUIRED", "Critical MikroTik action requires breakGlass=true, matching deviceNameConfirmation, and a reason.", 409);
     }
 
-    const allowedCommands = new Set([...policy.backupCommands, ...validation.commandSpecs.map((spec) => spec.command)]);
+    const idempotentAddressList = actionPlan.actionType === ActionType.mikrotik_block_ip_temporary;
+    const updateAddressList = actionPlan.actionType === ActionType.mikrotik_update_address_list_entry;
+    const addressListPlan = idempotentAddressList || updateAddressList ? addressListCommands(validation.normalizedParameters) : null;
+    const allowedCommands = new Set([
+      ...policy.backupCommands,
+      ...validation.commandSpecs.map((spec) => spec.command),
+      ...(addressListPlan ? [addressListPlan.check, addressListPlan.add, addressListPlan.update] : [])
+    ]);
     const commands: ConnectorExecutionResult["commands"] = [];
     const warnings = [...validation.warnings];
     const credential = await getCredential(device);
+    const sshPortChange = actionPlan.actionType === ActionType.mikrotik_change_service_port && validation.normalizedParameters.service === "ssh";
+
+    if (sshPortChange) {
+      await audit?.("ssh_port_change_execution_started", "Approved MikroTik SSH port change execution started.", {
+        deviceId: device.id,
+        oldPort: validation.normalizedParameters.oldPort ?? null,
+        newPort: validation.normalizedParameters.newPort,
+        trustedSource: validation.normalizedParameters.trustedSource,
+        approvalStatus: "approved",
+        rollbackPreview: validation.rollbackJson
+      });
+    }
 
     await audit?.("policy_guard_passed", "MikroTik catalog validation passed.", {
       actionType: actionPlan.actionType,
@@ -585,6 +639,107 @@ export const mikrotikSshConnector: DeviceConnector = {
         }
       }
 
+      if (addressListPlan && idempotentAddressList) {
+        const checkResult = await exec(client, addressListPlan.check, env.sshCommandTimeoutMs, allowedCommands);
+        commands.push({
+          template: "check exact address-list entry by list/address",
+          stdout: checkResult.stdout,
+          stderr: checkResult.stderr,
+          exitCode: checkResult.exitCode
+        });
+        await audit?.("command_executed", "MikroTik address-list existence check executed.", {
+          template: "check exact address-list entry by list/address",
+          command: addressListPlan.check,
+          target: { listName: addressListPlan.listName, address: addressListPlan.address },
+          exitCode: checkResult.exitCode,
+          stdout: checkResult.stdout.slice(0, 2000),
+          stderr: checkResult.stderr.slice(0, 2000)
+        });
+
+        const exists = addressListEntryExists(checkResult, addressListPlan.address);
+        const writeCommand = exists ? addressListPlan.update : addressListPlan.add;
+        const writeTemplate = exists
+          ? "existing entry found: update timeout/comment"
+          : "missing entry: add address-list entry";
+        let writeResult = await exec(client, writeCommand, env.sshCommandTimeoutMs, allowedCommands);
+        let recoveredDuplicate = false;
+        if (!exists && writeResult.exitCode !== 0 && duplicateAddressEntry(writeResult)) {
+          recoveredDuplicate = true;
+          commands.push({
+            template: "add address-list entry returned duplicate; recovering with update",
+            stdout: writeResult.stdout,
+            stderr: writeResult.stderr,
+            exitCode: writeResult.exitCode
+          });
+          await audit?.("address_list_duplicate_recovered", "Existing entry found during add; updating timeout/comment instead.", {
+            target: { listName: addressListPlan.listName, address: addressListPlan.address },
+            stdout: writeResult.stdout.slice(0, 2000),
+            stderr: writeResult.stderr.slice(0, 2000)
+          });
+          writeResult = await exec(client, addressListPlan.update, env.sshCommandTimeoutMs, allowedCommands);
+        }
+        commands.push({
+          template: recoveredDuplicate ? "existing entry found: timeout/comment updated after duplicate add" : writeTemplate,
+          stdout: writeResult.stdout,
+          stderr: writeResult.stderr,
+          exitCode: writeResult.exitCode
+        });
+        await audit?.("command_executed", recoveredDuplicate || exists ? "MikroTik address-list entry updated." : "MikroTik address-list entry added.", {
+          template: recoveredDuplicate || exists ? "address-list set existing entry" : "address-list add missing entry",
+          command: recoveredDuplicate || exists ? addressListPlan.update : addressListPlan.add,
+          target: { listName: addressListPlan.listName, address: addressListPlan.address, timeout: addressListPlan.timeout, comment: addressListPlan.comment },
+          exitCode: writeResult.exitCode,
+          stdout: writeResult.stdout.slice(0, 2000),
+          stderr: writeResult.stderr.slice(0, 2000),
+          note: recoveredDuplicate || exists ? "Existing entry found; timeout/comment updated." : undefined
+        });
+        if (writeResult.exitCode !== 0) {
+          throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", writeResult.stderr || writeResult.stdout || "RouterOS address-list upsert failed.", 502);
+        }
+        await audit?.("rollback_available", "Rollback metadata is available for this MikroTik action.", validation.rollbackJson);
+        return {
+          executed: true,
+          actionType: actionPlan.actionType,
+          deviceId: device.id,
+          commands,
+          warnings: [
+            ...warnings,
+            recoveredDuplicate || exists ? "Existing entry found; timeout/comment updated." : "Address-list entry added."
+          ],
+          rollbackJson: validation.rollbackJson
+        };
+      }
+
+      if (addressListPlan && updateAddressList) {
+        const result = await exec(client, addressListPlan.update, env.sshCommandTimeoutMs, allowedCommands);
+        commands.push({
+          template: "/ip firewall address-list set [find list=<listName> address=<address>] timeout=<timeout> comment=<comment>",
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode
+        });
+        await audit?.("command_executed", "MikroTik address-list entry update executed.", {
+          template: "address-list set existing entry",
+          command: addressListPlan.update,
+          target: { listName: addressListPlan.listName, address: addressListPlan.address, timeout: addressListPlan.timeout, comment: addressListPlan.comment },
+          exitCode: result.exitCode,
+          stdout: result.stdout.slice(0, 2000),
+          stderr: result.stderr.slice(0, 2000)
+        });
+        if (result.exitCode !== 0) {
+          throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || result.stdout || "RouterOS address-list update failed.", 502);
+        }
+        await audit?.("rollback_available", "Rollback metadata is available for this MikroTik action.", validation.rollbackJson);
+        return {
+          executed: true,
+          actionType: actionPlan.actionType,
+          deviceId: device.id,
+          commands,
+          warnings,
+          rollbackJson: validation.rollbackJson
+        };
+      }
+
       for (const spec of validation.commandSpecs) {
         const result = await exec(client, spec.command, env.sshCommandTimeoutMs, allowedCommands);
         commands.push({
@@ -608,6 +763,18 @@ export const mikrotikSshConnector: DeviceConnector = {
       }
 
       await audit?.("rollback_available", "Rollback metadata is available for this MikroTik action.", validation.rollbackJson);
+
+      if (sshPortChange) {
+        await audit?.("ssh_port_change_execution_succeeded", "MikroTik SSH port change command sequence completed.", {
+          deviceId: device.id,
+          oldPort: validation.normalizedParameters.oldPort ?? null,
+          newPort: validation.normalizedParameters.newPort,
+          trustedSource: validation.normalizedParameters.trustedSource,
+          approvalStatus: "approved",
+          executionResult: "succeeded",
+          rollbackPreview: validation.rollbackJson
+        });
+      }
 
       return {
         executed: true,

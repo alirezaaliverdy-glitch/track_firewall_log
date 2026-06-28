@@ -22,9 +22,11 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
   const parsed = parseAiIntent(input.message);
 
   if (parsed && parsed.intentType !== AiIntentType.explain_security_status) {
+    const parsedMissingFields = Array.isArray(parsed.parameters.missingFields) ? parsed.parameters.missingFields.map(String) : [];
+    const parsedQuestions = Array.isArray(parsed.parameters.clarificationQuestions) ? parsed.parameters.clarificationQuestions.map(String) : [];
     const policyMissing = parsed.intentType === AiIntentType.create_egress_policy
       ? ["deviceId", ...(!("sourceIp" in parsed.parameters) && !("sourceCidr" in parsed.parameters) ? ["sourceIp"] : []), "srcInterface", "dstInterface", "services", "exact schedule"]
-      : ["deviceId"];
+      : parsedMissingFields;
     return {
       assistantMessage: `I understood this as a proposed ${parsed.intentType} request. I will not execute it. ${parsed.explanation}`,
       shouldCreateIntent: true,
@@ -41,7 +43,7 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
               "Which source and destination interfaces should be used?",
               "Which services should be allowed during business hours?"
             ]
-          : ["Which registered device should this proposed action target?"],
+          : parsedQuestions,
         explanation: parsed.explanation
       },
       confidence: 0.86

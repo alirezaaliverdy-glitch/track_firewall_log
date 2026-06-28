@@ -87,10 +87,18 @@ export default function SecurityEventsPanel() {
   const [retentionStatus, setRetentionStatus] = useState<RetentionStatus | null>(null);
   const [collectorRunningId, setCollectorRunningId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const refresh = useCallback(() => {
     setLoading(true);
     setMessage(null);
+    setEvents([]);
+    setSummary(EMPTY_SUMMARY);
+    setBatches([]);
+    setCollectorStatuses({});
+    setRetentionStatus(null);
+    setSelectedEvent(null);
+    setLastRefreshedAt(null);
     Promise.all([
       listSecurityEvents(filters),
       getSecurityEventsSummary(filters),
@@ -167,6 +175,7 @@ export default function SecurityEventsPanel() {
   const countBySeverity = safeArray<{ severity: string; count: number }>(safeSummary.countBySeverity);
   const topSourceIps = safeArray<{ value: string; count: number }>(safeSummary.topSourceIps);
   const linuxDevices = safeArray<Device>(devices).filter((device) => device.type === "linux_edge" && device.protocol === "ssh");
+  const isEmptyStartup = safeSummary.totalEvents === 0 && safeEvents.length === 0 && !expanded;
 
   return (
     <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
@@ -183,7 +192,7 @@ export default function SecurityEventsPanel() {
           className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-          Refresh
+          {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -202,6 +211,40 @@ export default function SecurityEventsPanel() {
         </button>
         {retentionStatus && <span>Rows: {formatNumber(retentionStatus.totalEvents)}/{formatNumber(retentionStatus.maxRows)}</span>}
       </div>
+
+      {isEmptyStartup && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-left">
+          <p className="text-sm font-semibold text-zinc-100">No security events yet. Upload logs or enable realtime collection.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex h-9 items-center rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 hover:text-blue-200"
+            >
+              Show Security Events
+            </button>
+            <button
+              type="button"
+              onClick={() => document.getElementById("log-upload")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-500"
+            >
+              Upload Logs
+            </button>
+            <button
+              type="button"
+              onClick={() => linuxDevices[0] && runCollection(linuxDevices[0])}
+              disabled={!linuxDevices[0] || Boolean(collectorRunningId)}
+              className="inline-flex h-9 items-center rounded-md border border-blue-900/70 bg-blue-950/30 px-3 text-sm font-medium text-blue-200 disabled:opacity-60"
+            >
+              Run Collection
+            </button>
+          </div>
+          {message && <p className="mt-3 text-xs text-zinc-400">{message}</p>}
+        </div>
+      )}
+
+      {!isEmptyStartup && (
+        <>
 
       {linuxDevices.length > 0 && (
         <div className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
@@ -306,7 +349,7 @@ export default function SecurityEventsPanel() {
               {loading ? (
                 <tr>
                   <td colSpan={8} className="px-3 py-8 text-center text-sm text-zinc-500">
-                    Loading security events...
+                    Refreshing...
                   </td>
                 </tr>
               ) : safeEvents.length === 0 ? (
@@ -394,6 +437,8 @@ export default function SecurityEventsPanel() {
         <p className="mt-3 text-left text-xs text-zinc-400" role="status" aria-live="polite">
           {message}
         </p>
+      )}
+        </>
       )}
     </section>
   );

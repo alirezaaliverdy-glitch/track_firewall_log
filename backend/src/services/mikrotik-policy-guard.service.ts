@@ -21,9 +21,32 @@ function deviceNameConfirmed(device: Device, parameters: Record<string, unknown>
   return text(parameters.deviceNameConfirmation) === device.name;
 }
 
+function discoveredServicePorts(device: Device) {
+  const capabilities = asObject(device.capabilities);
+  const status = asObject(capabilities.mikrotikStatus);
+  const discovery = asObject(status.mikrotik);
+  const lines = Array.isArray(discovery.services) ? discovery.services.map(String) : [];
+  return lines.flatMap((line) => {
+    const name = line.match(/(?:^|\s)name=([^\s]+)/)?.[1]?.replace(/^"|"$/g, "");
+    const port = Number(line.match(/(?:^|\s)port=(\d+)/)?.[1]);
+    return name && Number.isInteger(port) ? [{ name, port }] : [];
+  });
+}
+
+function detectedSshPort(device: Device) {
+  const discovered = discoveredServicePorts(device).find((service) => service.name === "ssh")?.port;
+  if (discovered) return discovered;
+  return Number.isInteger(device.managementPort) && device.managementPort > 0 ? device.managementPort : undefined;
+}
+
 export function evaluateMikroTikExpertPolicy(plan: ActionPlan, device: Device) {
   const parameters = asObject(plan.parametersJson);
-  const validation = validateMikroTikAction(plan);
+  const sshPortChange = plan.actionType === ActionType.mikrotik_change_service_port && text(parameters.service) === "ssh";
+  const oldPort = sshPortChange ? detectedSshPort(device) : undefined;
+  const validation = validateMikroTikAction({
+    ...plan,
+    parametersJson: oldPort && parameters.oldPort === undefined ? { ...parameters, oldPort } : parameters
+  });
   const errors = [...validation.errors];
   const warnings = [...validation.warnings];
   const breakGlass = parameters.breakGlass === true;
@@ -40,6 +63,14 @@ export function evaluateMikroTikExpertPolicy(plan: ActionPlan, device: Device) {
     ActionType.mikrotik_remove_rule_by_id
   ]);
   const lockoutSensitive = lockoutSensitiveActions.has(plan.actionType);
+
+  if (sshPortChange) {
+    const newPort = Number(validation.normalizedParameters.newPort ?? validation.normalizedParameters.port);
+    const collision = discoveredServicePorts(device).find((service) => service.name !== "ssh" && service.port === newPort);
+    if (collision) errors.push(`newPort ${newPort} is already used by MikroTik service ${collision.name}.`);
+    warnings.push("LOCKOUT WARNING: the SSH management endpoint changes immediately after the firewall allow rule is ensured.");
+    if (!oldPort) warnings.push("Old SSH port could not be detected; rollback can only show a manual verification warning.");
+  }
 
   if (requiresBreakGlass && !breakGlass) warnings.push("Critical MikroTik action requires breakGlass=true before execution.");
   if (requiresBreakGlass && !deviceNameConfirmed(device, parameters)) warnings.push("Critical MikroTik action requires deviceNameConfirmation to match the device name before execution.");
@@ -65,6 +96,7 @@ export function evaluateMikroTikExpertPolicy(plan: ActionPlan, device: Device) {
     requiresBreakGlass,
     breakGlass,
     lockoutSensitive,
-    lockoutWarning: lockoutSensitive ? "This action may affect the current management path. Verify alternate access before executing." : undefined
+    lockoutWarning: lockoutSensitive ? "This action may affect the current management path. Verify alternate access before executing." : undefined,
+    detectedOldPort: oldPort
   };
 }

@@ -45,7 +45,8 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.open_port,
   ActionType.close_port,
   ActionType.block_source_ip_temporary,
-  ActionType.unblock_source_ip
+  ActionType.unblock_source_ip,
+  ActionType.linux_check_service_status
 ];
 
 const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
@@ -80,6 +81,14 @@ function ipParam(value: unknown) {
     throw new ConnectorError("INVALID_IP", "A valid source IP address is required.");
   }
   return ip;
+}
+
+function serviceParam(value: unknown) {
+  const service = text(value) ?? "nginx";
+  if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) {
+    throw new ConnectorError("INVALID_SERVICE", "Service name must contain only letters, numbers, dot, underscore, dash, or @.");
+  }
+  return service;
 }
 
 function isPrivateOrLocalIp(ip: string) {
@@ -431,6 +440,11 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     validationWarnings.push("Exact deny rule number will be discovered at execution time. No guessed deletion is allowed.");
   } else if (plan.actionType === ActionType.change_ssh_port) {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Changing SSH port is dry-run only and cannot be executed by this MVP connector.");
+  } else if (plan.actionType === ActionType.linux_check_service_status) {
+    const service = serviceParam(parameters.serviceName ?? parameters.service);
+    affectedServices.push(service);
+    plannedCommands = [`systemctl is-active ${service}`, `systemctl status ${service} --no-pager -l`];
+    validationWarnings.push("Read-only service status check. No service restart or config change is planned.");
   } else {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} is not supported by the Linux SSH connector.`);
   }
@@ -537,6 +551,14 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       await pushCommand(`ufw delete rule ${matchingRules[0]}`, `${sudo}ufw --force delete ${matchingRules[0]}`);
       await pushCommand("ufw status numbered", `${sudo}ufw status numbered`);
       rollbackJson.steps = [`${sudo}ufw deny from ${srcIp}`];
+    } else if (plan.actionType === ActionType.linux_check_service_status) {
+      const service = serviceParam(parameters.serviceName ?? parameters.service);
+      const active = await exec(client, `systemctl is-active ${service}`);
+      commands.push({ template: `systemctl is-active ${service}`, stdout: active.stdout, stderr: active.stderr, exitCode: active.exitCode });
+      const status = await exec(client, `systemctl status ${service} --no-pager -l`);
+      commands.push({ template: `systemctl status ${service} --no-pager -l`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
+      rollbackJson.readOnly = true;
+      warnings.push(active.exitCode === 0 ? "SERVICE_ACTIVE" : "SERVICE_NOT_ACTIVE");
     }
 
     await audit?.("rollback_available", "Rollback metadata is available for this connector result.", rollbackJson);

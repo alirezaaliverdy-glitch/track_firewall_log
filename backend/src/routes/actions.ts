@@ -2,12 +2,15 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   approveActionPlan,
   ActionExecutionError,
+  correctAndRevalidateActionPlan,
   dryRunActionPlan,
   executeActionPlan,
   getActionAudit,
   getActionPlan,
   listActionPlans,
   proposeActionPlan,
+  quickExecuteActionPlan,
+  QuickExecuteConfirmationRequiredError,
   rejectActionPlan,
   validateAndStoreActionPlan
 } from "../services/action-plan.service.js";
@@ -36,6 +39,17 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     return plan;
   });
 
+  app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/parameters", async (request, reply) => {
+    try {
+      const plan = await correctAndRevalidateActionPlan(request.params.id, request.body ?? {});
+      if (!plan) return reply.code(404).send({ error: "Action plan not found" });
+      return plan;
+    } catch (error) {
+      if (error instanceof ActionExecutionError) return reply.code(error.statusCode).send({ error: error.code, detail: error.message });
+      throw error;
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/actions/:id/dry-run", async (request, reply) => {
     const plan = await dryRunActionPlan(request.params.id);
     if (!plan) return reply.code(404).send({ error: "Action plan not found" });
@@ -43,9 +57,16 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/approve", async (request, reply) => {
-    const plan = await approveActionPlan(request.params.id, request.body ?? {});
-    if (!plan) return reply.code(404).send({ error: "Action plan not found" });
-    return plan;
+    try {
+      const plan = await approveActionPlan(request.params.id, request.body ?? {});
+      if (!plan) return reply.code(404).send({ error: "Action plan not found" });
+      return plan;
+    } catch (error) {
+      if (error instanceof ActionExecutionError) {
+        return reply.code(error.statusCode).send({ error: error.code, detail: error.message });
+      }
+      throw error;
+    }
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/reject", async (request, reply) => {
@@ -54,9 +75,9 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     return plan;
   });
 
-  app.post<{ Params: { id: string } }>("/api/actions/:id/execute", async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/execute", async (request, reply) => {
     try {
-      const plan = await executeActionPlan(request.params.id);
+      const plan = await executeActionPlan(request.params.id, request.body ?? {});
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
     } catch (error) {
@@ -68,6 +89,30 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
       }
       const message = error instanceof Error ? error.message : "Failed to execute action plan";
       return reply.code(500).send({ error: "EXECUTION_FAILED", detail: message });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/quick-execute", async (request, reply) => {
+    try {
+      const plan = await quickExecuteActionPlan(request.params.id, request.body ?? {});
+      if (!plan) return reply.code(404).send({ error: "Action plan not found" });
+      return plan;
+    } catch (error) {
+      if (error instanceof QuickExecuteConfirmationRequiredError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          detail: error.message,
+          plan: error.plan
+        });
+      }
+      if (error instanceof ActionExecutionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          detail: error.message
+        });
+      }
+      const message = error instanceof Error ? error.message : "Failed to quick execute action plan";
+      return reply.code(500).send({ error: "QUICK_EXECUTE_FAILED", detail: message });
     }
   });
 

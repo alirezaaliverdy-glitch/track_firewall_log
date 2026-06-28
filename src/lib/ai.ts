@@ -41,8 +41,30 @@ export type AiChatResponse = {
   message: AiMessage | null;
   assistantMessage: AiMessage | null;
   actionIntent: AiActionIntent | null;
+  actionPlan: { id: string; status: string; actionType: string } | null;
+  actionDebug: AiActionDebug | null;
   providerStatus: AiProviderStatus | null;
   structured: StructuredAiResponse | null;
+};
+
+export type AiActionDebug = {
+  intentType: string;
+  vendor: string | null;
+  deviceId: string | null;
+  missingFields: string[];
+  canCreateActionPlan: boolean;
+  reason: string | null;
+  blockedReason: string | null;
+};
+
+export type CompleteActionRequestResponse = {
+  canCreateActionPlan: boolean;
+  actionPlanId: string | null;
+  status: string;
+  missingFields: string[];
+  blockedReason: string | null;
+  intent: AiActionIntent | null;
+  actionPlan: { id: string; status: string; actionType: string } | null;
 };
 
 export type StructuredAiIntent = {
@@ -243,6 +265,20 @@ function normalizeStructured(value: unknown): StructuredAiResponse | null {
   };
 }
 
+function normalizeActionDebug(value: unknown): AiActionDebug | null {
+  const source = normalizeObject(value);
+  if (Object.keys(source).length === 0) return null;
+  return {
+    intentType: String(source.intentType ?? "none"),
+    vendor: typeof source.vendor === "string" ? source.vendor : null,
+    deviceId: typeof source.deviceId === "string" ? source.deviceId : null,
+    missingFields: normalizeArray<unknown>(source.missingFields).map(String),
+    canCreateActionPlan: Boolean(source.canCreateActionPlan),
+    reason: typeof source.reason === "string" ? source.reason : null,
+    blockedReason: typeof source.blockedReason === "string" ? source.blockedReason : typeof source.reason === "string" ? source.reason : null,
+  };
+}
+
 function normalizeProviderStatus(value: unknown): AiProviderStatus {
   const source = normalizeObject(value);
   return {
@@ -270,6 +306,8 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
     message: source.message ? normalizeAiMessage(source.message) : null,
     assistantMessage: source.assistantMessage ? normalizeAiMessage(source.assistantMessage) : null,
     actionIntent: source.actionIntent ? normalizeAiIntent(source.actionIntent) : null,
+    actionPlan: source.actionPlan ? normalizeObject(source.actionPlan) as AiChatResponse["actionPlan"] : null,
+    actionDebug: source.actionDebug ? normalizeActionDebug(source.actionDebug) : null,
     providerStatus: source.providerStatus ? normalizeProviderStatus(source.providerStatus) : null,
     structured: source.structured ? normalizeStructured(source.structured) : null,
   } satisfies AiChatResponse;
@@ -308,4 +346,21 @@ export async function updateAiIntent(id: string, patch: Partial<AiActionIntent>)
     method: "PATCH",
     body: JSON.stringify(patch),
   }).then(normalizeAiIntent);
+}
+
+export async function completeAiActionRequest(id: string, fields: Record<string, unknown>) {
+  const payload = await requestJson<unknown>(`/ai/action-requests/${id}/complete`, {
+    method: "POST",
+    body: JSON.stringify({ fields }),
+  });
+  const source = normalizeObject(payload);
+  return {
+    canCreateActionPlan: Boolean(source.canCreateActionPlan),
+    actionPlanId: typeof source.actionPlanId === "string" ? source.actionPlanId : null,
+    status: String(source.status ?? ""),
+    missingFields: normalizeArray<unknown>(source.missingFields).map(String),
+    blockedReason: typeof source.blockedReason === "string" ? source.blockedReason : null,
+    intent: source.intent ? normalizeAiIntent(source.intent) : null,
+    actionPlan: source.actionPlan ? normalizeObject(source.actionPlan) as CompleteActionRequestResponse["actionPlan"] : null,
+  } satisfies CompleteActionRequestResponse;
 }

@@ -67,8 +67,9 @@ export type DeviceConnectionTestResult = {
   sshServiceStatus?: string;
   currentSshPort?: number | null;
   mikrotik?: MikroTikDiscovery;
+  fortigate?: FortiGateDiscovery;
   stages: Array<{
-    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "basic_commands" | "readonly_discovery" | "optional_capabilities";
+    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
     status: "ok" | "warning" | "failed";
     code?: string;
     message?: string;
@@ -117,7 +118,8 @@ export type DeviceCapabilities = {
   serviceSummary?: string[];
   warnings?: Array<{ code: string; message: string }>;
   mikrotik?: MikroTikDiscovery;
-  canExecuteChangeSshPort: false;
+  fortigate?: FortiGateDiscovery;
+  canExecuteChangeSshPort: boolean;
   supportedActions: ActionType[];
 };
 
@@ -137,6 +139,26 @@ export type MikroTikDiscovery = {
   addressLists: string[];
   services: string[];
   recentLogs: string[];
+  raw?: Record<string, string>;
+};
+
+export type FortiGateDiscovery = {
+  version?: string;
+  model?: string;
+  serial?: string;
+  hostname?: string;
+  vdomMode?: "enabled" | "disabled" | "unknown";
+  currentVdom?: string;
+  zones: string[];
+  interfaces: string[];
+  policies: string[];
+  addressObjects: string[];
+  addressGroups: string[];
+  services: string[];
+  serviceGroups: string[];
+  schedules: string[];
+  routes: string[];
+  haStatus?: string[];
   raw?: Record<string, string>;
 };
 

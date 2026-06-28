@@ -1,7 +1,12 @@
 import { ActionType, AiRiskLevel, type ActionPlan, type Device } from "@prisma/client";
+import { isFortiGateAction, validateFortiGateAction } from "../actions/fortigate-action-catalog.js";
 import { isMikroTikAction, validateMikroTikAction } from "../actions/mikrotik-action-catalog.js";
+import { evaluateFortiGatePolicy } from "./fortigate-policy-guard.service.js";
 import { evaluateMikroTikExpertPolicy } from "./mikrotik-policy-guard.service.js";
 import { prisma } from "../db/prisma.js";
+import { getActionCatalogEntry, validateCatalogParameters } from "../actions/action-catalog.js";
+import { EXPECTED_FORMATS, validateCanonicalFieldShapes, validationError, type StructuredValidationError } from "../actions/action-validators.js";
+import { normalizeIntent } from "../actions/intent-normalizer.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
@@ -23,7 +28,9 @@ const DEVICE_REQUIRED_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_enable_managed_rule,
   ActionType.mikrotik_disable_managed_rule,
   ActionType.mikrotik_add_comment_to_rule,
-  ActionType.mikrotik_read_firewall_summary
+  ActionType.mikrotik_read_firewall_summary,
+  ActionType.linux_check_service_status,
+  ...Object.values(ActionType).filter((actionType) => actionType.startsWith("fortigate_"))
 ]);
 
 type ValidationResult = {
@@ -31,7 +38,12 @@ type ValidationResult = {
   requiresApproval: boolean;
   riskLevel: AiRiskLevel;
   errors: string[];
+  fieldErrors: StructuredValidationError[];
   warnings: string[];
+  missingFields: string[];
+  compilerError?: string | null;
+  policyGuardError?: string | null;
+  exactReason?: string | null;
   normalizedParameters: Record<string, unknown>;
   rollbackJson?: Record<string, unknown>;
   device?: Device | null;
@@ -72,7 +84,7 @@ function hasSource(parameters: Record<string, unknown>) {
 }
 
 function hasDestination(parameters: Record<string, unknown>) {
-  return Boolean(textParam(parameters, "destination") || textParam(parameters, "dstCidr") || textParam(parameters, "destinationAddressObject"));
+  return Boolean(textParam(parameters, "destinationIp") || textParam(parameters, "destinationCidr") || textParam(parameters, "destination") || textParam(parameters, "dstCidr") || textParam(parameters, "destinationAddressObject"));
 }
 
 function isAny(value: unknown) {
@@ -100,10 +112,100 @@ function isPrivateOrLocalIp(ip: string) {
     (a === 169 && b === 254);
 }
 
+function missingFieldsFromErrors(errors: string[]) {
+  return Array.from(new Set(errors.flatMap((error) => {
+    if (/Allowed source is required/i.test(error)) return ["trustedSourceCidr"];
+    const required = error.match(/\b([A-Za-z0-9_]+) is required\b/);
+    if (required) return [required[1]];
+    const requires = error.match(/requires ([A-Za-z0-9_]+)/);
+    if (requires) return [requires[1].replace(/\.$/, "")];
+    if (error.includes("deviceId")) return ["deviceId"];
+    if (error.includes("target device") || error.includes("registered device")) return ["deviceId"];
+    return [];
+  })));
+}
+
+function exactReasonFrom(errors: string[]) {
+  const invalidIp = errors.find((error) => /valid IPv4|valid IP|invalid IP|address is invalid/i.test(error));
+  if (invalidIp) return "invalid IP address";
+  return errors[0] ?? null;
+}
+
+async function credentialExists(device: Device | null) {
+  if (!device) return false;
+  if (device.credentialId) {
+    return (await prisma.deviceCredential.count({ where: { id: device.credentialId } })) > 0;
+  }
+  if (device.credentialRef) {
+    const dbCredential = await prisma.deviceCredential.count({ where: { name: device.credentialRef } });
+    if (dbCredential > 0) return true;
+    try {
+      const envCredentials = JSON.parse(process.env.SSH_CREDENTIALS_JSON ?? "{}") as Record<string, unknown>;
+      return Boolean(envCredentials[device.credentialRef]);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge") {
+  if (!device) return false;
+  const deviceVendor = String(device.vendor ?? "").toLowerCase();
+  if (vendor === "mikrotik") {
+    return device.protocol === "ssh" && (device.type === "mikrotik" || deviceVendor.includes("mikrotik") || deviceVendor.includes("routeros"));
+  }
+  if (vendor === "fortigate") {
+    return device.protocol === "ssh" && (device.type === "fortigate" || deviceVendor.includes("forti"));
+  }
+  return device.protocol === "ssh" && (device.type === "linux_edge" || deviceVendor.includes("linux"));
+}
+
+function inferFieldError(message: string, parameters: Record<string, unknown>, actionType: ActionType): StructuredValidationError {
+  let field = message.match(/^([A-Za-z][A-Za-z0-9_]*)\s+(?:is|has|must|may|requires)/)?.[1];
+  const aliases: Record<string, string> = { srcIp: "sourceIp", address: "sourceIp", ip: "sourceIp", cidr: "sourceCidr", dstCidr: "destinationCidr", trustedSourceIp: "trustedSource", toPort: "newPort", srcintf: "srcInterface", dstintf: "dstInterface", scheduleName: "schedule", service: "serviceName" };
+  if (field && aliases[field]) field = aliases[field];
+  if (!field && /device|credential|connector/i.test(message)) field = "deviceId";
+  if (/Allowed source is required/i.test(message)) field = "trustedSourceCidr";
+  if (!field && /interface\/zone|Policy interface\/zone/i.test(message)) {
+    const value = message.match(/(?:interface\/zone|zone)\s+([^ ]+)/i)?.[1];
+    field = value && value === parameters.srcInterface ? "srcInterface" : "dstInterface";
+  }
+  if (!field && /address is invalid|valid IPv4|invalid IP/i.test(message)) {
+    if (actionType === ActionType.mikrotik_change_service_port) field = parameters.trustedSourceCidr ? "trustedSourceCidr" : "trustedSource";
+    else field = parameters.sourceCidr ? "sourceCidr" : "sourceIp";
+  }
+  field ??= "parameters";
+  return validationError(field, message, parameters[field], EXPECTED_FORMATS[field] ?? "valid value for this action");
+}
+
+function finish(input: Omit<ValidationResult, "valid" | "missingFields" | "policyGuardError" | "exactReason" | "fieldErrors"> & { errors: string[]; fieldErrors?: StructuredValidationError[]; parameters?: Record<string, unknown>; actionType?: ActionType }): ValidationResult {
+  const inferred = input.errors.map((message) => inferFieldError(message, input.parameters ?? {}, input.actionType ?? ActionType.create_egress_policy));
+  const fieldErrors = [...(input.fieldErrors ?? []), ...inferred].filter((issue, index, all) => all.findIndex((candidate) => candidate.field === issue.field && candidate.message === issue.message) === index);
+  const { parameters: _parameters, actionType: _actionType, ...result } = input;
+  return {
+    ...result,
+    valid: input.errors.length === 0,
+    fieldErrors,
+    missingFields: Array.from(new Set([...missingFieldsFromErrors(input.errors), ...fieldErrors.filter((issue) => issue.currentValue === null || issue.currentValue === "").map((issue) => issue.field)])),
+    policyGuardError: input.errors.length > 0 ? input.errors.join(" ") : null,
+    exactReason: exactReasonFrom(input.errors)
+  };
+}
+
 export async function validateActionPlan(plan: ActionPlan): Promise<ValidationResult> {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const parameters = asObject(plan.parametersJson);
+  const originalParameters = asObject(plan.parametersJson);
+  const canonical = normalizeIntent({ ...originalParameters, actionType: plan.actionType });
+  delete canonical.actionType;
+  const parameters = { ...originalParameters, ...canonical };
+  const normalizedPlan = { ...plan, parametersJson: JSON.parse(JSON.stringify(parameters)) } as ActionPlan;
+  const catalog = getActionCatalogEntry(plan.actionType);
+  const catalogValidation = catalog ? validateCatalogParameters(catalog, parameters) : { valid: true, errors: [], fieldErrors: [] };
+  const canonicalShapeErrors = validateCanonicalFieldShapes(parameters);
+  const fieldErrors = [...catalogValidation.fieldErrors, ...canonicalShapeErrors];
+  errors.push(...catalogValidation.errors, ...canonicalShapeErrors.map((issue) => issue.message));
   let device: Device | null = null;
 
   if (plan.deviceId) {
@@ -122,20 +224,24 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     } else if (device.protocol !== "ssh") {
       errors.push(`${plan.actionType} requires MikroTik SSH protocol.`);
     }
+    if (device && !await credentialExists(device)) errors.push(`${plan.actionType} requires an existing credential for the target device.`);
+    if (device && !connectorExists(device, "mikrotik")) errors.push(`${plan.actionType} requires a registered MikroTik connector.`);
 
-    const expert = device ? evaluateMikroTikExpertPolicy(plan, device) : null;
-    const mikrotikValidation = expert?.validation ?? validateMikroTikAction(plan);
+    const expert = device ? evaluateMikroTikExpertPolicy(normalizedPlan, device) : null;
+    const mikrotikValidation = expert?.validation ?? validateMikroTikAction(normalizedPlan);
     errors.push(...(expert?.errors ?? mikrotikValidation.errors));
     warnings.push(...(expert?.warnings ?? mikrotikValidation.warnings));
     if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
     if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
     if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
 
-    return {
-      valid: errors.length === 0,
+    return finish({
       requiresApproval: plan.actionType !== ActionType.mikrotik_read_firewall_summary,
       riskLevel: mikrotikValidation.riskLevel,
       errors,
+      fieldErrors,
+      parameters,
+      actionType: plan.actionType,
       warnings,
       normalizedParameters: mikrotikValidation.normalizedParameters,
       rollbackJson: {
@@ -146,12 +252,63 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
         lockoutSensitive: expert?.lockoutSensitive
       },
       device
-    };
+    });
+  }
+
+  if (isFortiGateAction(plan.actionType)) {
+    if (!device) {
+      errors.push(`${plan.actionType} requires a valid registered FortiGate device.`);
+    } else if (device.type !== "fortigate" && !String(device.vendor ?? "").toLowerCase().includes("forti")) {
+      errors.push(`${plan.actionType} requires a FortiGate device.`);
+    } else if (device.protocol !== "ssh") {
+      errors.push(`${plan.actionType} requires FortiGate SSH protocol.`);
+    }
+    if (device && !await credentialExists(device)) errors.push(`${plan.actionType} requires an existing credential for the target device.`);
+    if (device && !connectorExists(device, "fortigate")) errors.push(`${plan.actionType} requires a registered FortiGate connector.`);
+
+    const expert = device ? evaluateFortiGatePolicy(normalizedPlan, device) : null;
+    const fortigateValidation = expert?.validation ?? validateFortiGateAction(normalizedPlan);
+    errors.push(...(expert?.errors ?? fortigateValidation.errors));
+    warnings.push(...(expert?.warnings ?? fortigateValidation.warnings));
+    if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
+    if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
+    if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
+
+    return finish({
+      requiresApproval: fortigateValidation.commandSpecs.some((spec) => spec.write),
+      riskLevel: fortigateValidation.riskLevel,
+      errors,
+      fieldErrors,
+      parameters,
+      actionType: plan.actionType,
+      warnings,
+      normalizedParameters: fortigateValidation.normalizedParameters,
+      rollbackJson: {
+        ...fortigateValidation.rollbackJson,
+        backupName: expert?.backupName,
+        requiresBackup: expert?.requiresBackup,
+        requiresBreakGlass: expert?.requiresBreakGlass,
+        lockoutSensitive: expert?.lockoutSensitive
+      },
+      device
+    });
   }
 
   if (DEVICE_REQUIRED_ACTIONS.has(plan.actionType)) {
     if (!plan.deviceId) errors.push(`${plan.actionType} requires deviceId.`);
     if (plan.deviceId && !device) errors.push(`${plan.actionType} requires a valid registered device.`);
+  }
+
+  if (plan.actionType === ActionType.linux_check_service_status) {
+    if (device && device.type !== "linux_edge" && !String(device.vendor ?? "").toLowerCase().includes("linux")) {
+      errors.push("linux_check_service_status requires a Linux Edge device.");
+    }
+    if (device && device.protocol !== "ssh") errors.push("linux_check_service_status requires SSH protocol.");
+    if (device && !await credentialExists(device)) errors.push("linux_check_service_status requires an existing credential for the target device.");
+    if (device && !connectorExists(device, "linux_edge")) errors.push("linux_check_service_status requires a registered Linux connector.");
+    const service = textParam(parameters, "serviceName") ?? textParam(parameters, "service");
+    if (!service) errors.push("linux_check_service_status requires serviceName.");
+    else if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) errors.push("linux_check_service_status serviceName is invalid.");
   }
 
   if (plan.actionType === ActionType.create_egress_policy) {
@@ -232,16 +389,18 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     errors.push("change_ssh_port requires rollback metadata.");
   }
 
-  return {
-    valid: errors.length === 0,
+  return finish({
     requiresApproval: true,
     riskLevel: plan.riskLevel,
     errors,
+    fieldErrors,
+    parameters,
+    actionType: plan.actionType,
     warnings,
     normalizedParameters: parameters,
     rollbackJson,
     device
-  };
+  });
 }
 
 export function rollbackFor(actionType: ActionType, parameters: Record<string, unknown>) {

@@ -64,10 +64,16 @@ export default function IncidentsPanel() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<DetectionRunResult | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const refreshIncidents = useCallback(() => {
     setLoading(true);
     setMessage(null);
+    setIncidents([]);
+    setSelectedIncident(null);
+    setIncidentEvents([]);
+    setRunResult(null);
+    setLastRefreshedAt(null);
     getIncidents()
       .then((nextIncidents) => {
         setIncidents(normalizeArray<Incident>(nextIncidents));
@@ -125,6 +131,7 @@ export default function IncidentsPanel() {
 
   const safeIncidents = normalizeArray<Incident>(incidents);
   const safeEvents = normalizeArray<SecurityEvent>(incidentEvents);
+  const isEmptyStartup = safeIncidents.length === 0 && !runResult && !expanded;
 
   return (
     <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
@@ -146,7 +153,7 @@ export default function IncidentsPanel() {
             className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-            Refresh
+            {loading ? "Refreshing..." : "Refresh"}
           </button>
           <button
             type="button"
@@ -161,6 +168,31 @@ export default function IncidentsPanel() {
       </div>
 
       <p className="mb-4 text-left text-xs text-zinc-500">Last refreshed: {formatDateTime(lastRefreshedAt)}</p>
+
+      {isEmptyStartup && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-left">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-zinc-100">No incidents detected yet.</p>
+            <span
+              title="Incidents are generated from Security Events by detection rules."
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-zinc-700 text-xs text-zinc-400"
+            >
+              ?
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="mt-3 inline-flex h-9 items-center rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 hover:text-blue-200"
+          >
+            Show Incidents
+          </button>
+          {message && <p className="mt-3 text-xs text-zinc-400">{message}</p>}
+        </div>
+      )}
+
+      {!isEmptyStartup && (
+        <>
 
       {runResult && (
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -201,7 +233,7 @@ export default function IncidentsPanel() {
               {loading ? (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-sm text-zinc-500">
-                    Loading incidents...
+                    Refreshing...
                   </td>
                 </tr>
               ) : safeIncidents.length === 0 ? (
@@ -356,6 +388,8 @@ export default function IncidentsPanel() {
           <ShieldCheck className="h-3.5 w-3.5 text-blue-300" aria-hidden="true" />
           {message}
         </p>
+      )}
+        </>
       )}
     </section>
   );

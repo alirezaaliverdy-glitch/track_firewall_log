@@ -21,6 +21,7 @@ import {
   type DeviceProtocol,
   type DeviceStatus,
   type DeviceType,
+  type FortiGateStatus,
   type LinuxStatus,
   type MikroTikStatus,
   normalizeArray,
@@ -103,6 +104,7 @@ export default function DeviceRegistryPanel() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [linuxStatuses, setLinuxStatuses] = useState<Record<string, LinuxStatus>>({});
   const [mikrotikStatuses, setMikrotikStatuses] = useState<Record<string, MikroTikStatus>>({});
+  const [fortigateStatuses, setFortigateStatuses] = useState<Record<string, FortiGateStatus>>({});
   const [deviceCapabilities, setDeviceCapabilities] = useState<Record<string, DeviceCapabilities>>({});
 
   const editingDevice = useMemo(
@@ -112,6 +114,13 @@ export default function DeviceRegistryPanel() {
 
   const refreshDevices = () => {
     setLoading(true);
+    setMessage(null);
+    setDevices([]);
+    setLinuxStatuses({});
+    setMikrotikStatuses({});
+    setFortigateStatuses({});
+    setDeviceCapabilities({});
+    setLastRefreshedAt(null);
     listDevices()
       .then((nextDevices) => {
         setDevices(normalizeArray<Device>(nextDevices));
@@ -123,6 +132,8 @@ export default function DeviceRegistryPanel() {
 
   const refreshCredentials = () => {
     setCredentialLoading(true);
+    setCredentials([]);
+    setMessage(null);
     listCredentials()
       .then((nextCredentials) => setCredentials(normalizeArray<DeviceCredential>(nextCredentials)))
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load credentials."))
@@ -215,6 +226,9 @@ export default function DeviceRegistryPanel() {
         if (result.mikrotikStatus) {
           setMikrotikStatuses((current) => ({ ...current, [device.id]: result.mikrotikStatus as MikroTikStatus }));
         }
+        if (result.fortigateStatus) {
+          setFortigateStatuses((current) => ({ ...current, [device.id]: result.fortigateStatus as FortiGateStatus }));
+        }
         refreshDevices();
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Connection test failed."))
@@ -222,6 +236,12 @@ export default function DeviceRegistryPanel() {
   };
 
   const loadCapabilities = (device: Device) => {
+    setDeviceCapabilities((current) => {
+      const next = { ...current };
+      delete next[device.id];
+      return next;
+    });
+    setMessage(`${device.name}: refreshing capabilities...`);
     getDeviceCapabilities(device.id)
       .then((capabilities) => {
         setDeviceCapabilities((current) => ({ ...current, [device.id]: capabilities }));
@@ -368,7 +388,7 @@ export default function DeviceRegistryPanel() {
                 <div key={credential.id} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0 text-left">
                     <p className="truncate text-sm font-medium text-zinc-100">{credential.name}</p>
-                    <p className="text-xs text-zinc-500">{credential.type} · {credential.username} · sudo={String(credential.sudo)}</p>
+                    <p className="text-xs text-zinc-500">{credential.type} - {credential.username} - sudo={String(credential.sudo)}</p>
                   </div>
                   <button
                     type="button"
@@ -520,7 +540,7 @@ export default function DeviceRegistryPanel() {
           {loading ? (
             <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 p-6 text-center text-zinc-500">
               <RefreshCw className="h-8 w-8 animate-spin" aria-hidden="true" />
-              <p className="text-sm">Loading devices...</p>
+              <p className="text-sm">Refreshing...</p>
             </div>
           ) : safeDevices.length === 0 ? (
             <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 p-6 text-center text-zinc-500">
@@ -533,9 +553,11 @@ export default function DeviceRegistryPanel() {
                 const capabilities = device.capabilities && typeof device.capabilities === "object" ? device.capabilities : {};
                 const linuxStatus = linuxStatuses[device.id] ?? (capabilities.linuxStatus && typeof capabilities.linuxStatus === "object" ? capabilities.linuxStatus as LinuxStatus : undefined);
                 const mikrotikStatus = mikrotikStatuses[device.id] ?? (capabilities.mikrotikStatus && typeof capabilities.mikrotikStatus === "object" ? capabilities.mikrotikStatus as MikroTikStatus : undefined);
+                const fortigateStatus = fortigateStatuses[device.id] ?? (capabilities.fortigateStatus && typeof capabilities.fortigateStatus === "object" ? capabilities.fortigateStatus as FortiGateStatus : undefined);
                 const connectorCapabilities = deviceCapabilities[device.id];
                 const statusChecks = normalizeArray<NonNullable<Device["statusChecks"]>[number]>(device.statusChecks);
                 const mikrotikDiscovery = connectorCapabilities?.mikrotik ?? mikrotikStatus?.mikrotik;
+                const fortigateDiscovery = connectorCapabilities?.fortigate ?? fortigateStatus?.fortigate;
                 return (
                 <article key={device.id} className="p-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
@@ -563,18 +585,62 @@ export default function DeviceRegistryPanel() {
                           <p className="mt-1 text-left text-xs text-green-300">
                             MikroTik: readFirewall={String(connectorCapabilities.canReadFirewall)} readLogs={String(connectorCapabilities.canReadLogs)} writeActions={String(connectorCapabilities.canExecuteWriteActions)}
                           </p>
+                        ) : device.type === "fortigate" ? (
+                          <p className="mt-1 text-left text-xs text-green-300">
+                            FortiGate: readFirewall={String(connectorCapabilities.canReadFirewall)} readLogs={String(connectorCapabilities.canReadLogs)} writeActions={String(connectorCapabilities.canExecuteWriteActions)}
+                          </p>
                         ) : (
                           <p className="mt-1 text-left text-xs text-green-300">
                             Linux SSH: UFW={String(connectorCapabilities.canUseUfw)} open={String(connectorCapabilities.canOpenPort)} close={String(connectorCapabilities.canClosePort)} block={String(connectorCapabilities.canBlockSourceIp)}
                           </p>
                         )
                       )}
+                      {(fortigateStatus || fortigateDiscovery) && (
+                        <div className="mt-2 rounded border border-zinc-800 bg-black/30 p-2 text-left text-xs text-zinc-400">
+                          {fortigateStatus && (
+                            <>
+                              <p className="text-zinc-300">FortiGate SSH: {fortigateStatus.connected ? "connected" : fortigateStatus.errorCode ?? "failed"} - {fortigateStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
+                              <p className="mt-1">Credential: {fortigateStatus.credentialResolved ? fortigateStatus.credentialName ?? "resolved" : "missing"} - Write actions: {fortigateStatus.capabilities?.canExecuteWriteActions ? "controlled templates enabled" : "disabled"}</p>
+                            </>
+                          )}
+                          {fortigateDiscovery && (
+                            <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                              <p>Hostname: {fortigateDiscovery.hostname ?? connectorCapabilities?.identity ?? "unknown"}</p>
+                              <p>FortiOS: {fortigateDiscovery.version ?? "unknown"}</p>
+                              <p>Model: {fortigateDiscovery.model ?? "unknown"}</p>
+                              <p>Serial: {fortigateDiscovery.serial ?? "unknown"}</p>
+                              <p>VDOM: {fortigateDiscovery.vdomMode ?? "unknown"} {fortigateDiscovery.currentVdom ? `(${fortigateDiscovery.currentVdom})` : ""}</p>
+                              <p>Zones: {normalizeArray<string>(fortigateDiscovery.zones).length}</p>
+                              <p>Interfaces: {normalizeArray<string>(fortigateDiscovery.interfaces).length || (connectorCapabilities?.interfaceCount ?? 0)}</p>
+                              <p>Policies: {normalizeArray<string>(fortigateDiscovery.policies).length || (connectorCapabilities?.firewallFilterRuleCount ?? 0)}</p>
+                              <p>Addresses: {normalizeArray<string>(fortigateDiscovery.addressObjects).length}</p>
+                              <p className="sm:col-span-2">Services: {normalizeArray<string>(fortigateDiscovery.services).slice(0, 6).join(", ") || normalizeArray<string>(connectorCapabilities?.serviceSummary).slice(0, 6).join(", ") || "unknown"}</p>
+                            </div>
+                          )}
+                          {fortigateStatus && normalizeArray<{ name: string; status: string; code?: string }>(fortigateStatus.stages).length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {normalizeArray<{ name: string; status: string; code?: string }>(fortigateStatus.stages).map((stage) => (
+                                <span key={stage.name} className={`rounded border px-1.5 py-0.5 ${stage.status === "failed" ? "border-red-900 text-red-300" : stage.status === "warning" ? "border-yellow-900 text-yellow-300" : "border-green-900 text-green-300"}`}>
+                                  {stage.name}:{stage.status}{stage.code ? `/${stage.code}` : ""}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {normalizeArray<{ code: string; message: string }>(fortigateStatus?.warnings ?? connectorCapabilities?.warnings).length > 0 && (
+                            <div className="mt-2 text-yellow-300">
+                              {normalizeArray<{ code: string; message: string }>(fortigateStatus?.warnings ?? connectorCapabilities?.warnings).map((warning) => (
+                                <p key={`${warning.code}-${warning.message}`}>{warning.code}: {warning.message}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {(mikrotikStatus || mikrotikDiscovery) && (
                         <div className="mt-2 rounded border border-zinc-800 bg-black/30 p-2 text-left text-xs text-zinc-400">
                           {mikrotikStatus && (
                             <>
-                              <p className="text-zinc-300">MikroTik SSH: {mikrotikStatus.connected ? "connected" : mikrotikStatus.errorCode ?? "failed"} · {mikrotikStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
-                              <p className="mt-1">Credential: {mikrotikStatus.credentialResolved ? mikrotikStatus.credentialName ?? "resolved" : "missing"} · Write actions: {mikrotikStatus.capabilities?.canExecuteWriteActions ? "controlled templates enabled" : "disabled"}</p>
+                              <p className="text-zinc-300">MikroTik SSH: {mikrotikStatus.connected ? "connected" : mikrotikStatus.errorCode ?? "failed"} - {mikrotikStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
+                              <p className="mt-1">Credential: {mikrotikStatus.credentialResolved ? mikrotikStatus.credentialName ?? "resolved" : "missing"} - Write actions: {mikrotikStatus.capabilities?.canExecuteWriteActions ? "controlled templates enabled" : "disabled"}</p>
                             </>
                           )}
                           {mikrotikDiscovery && (
@@ -608,8 +674,8 @@ export default function DeviceRegistryPanel() {
                       )}
                       {linuxStatus && (
                         <div className="mt-2 rounded border border-zinc-800 bg-black/30 p-2 text-left text-xs text-zinc-400">
-                          <p className="text-zinc-300">SSH: {linuxStatus.connected ? "connected" : linuxStatus.errorCode ?? "failed"} · {linuxStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
-                          <p className="mt-1">Credential: {linuxStatus.credentialResolved ? linuxStatus.credentialName ?? "resolved" : "missing"} · UFW: {linuxStatus.capabilities?.canUseUfw ? "available" : "unavailable"} · SSH port: {linuxStatus.currentSshPort ?? "unknown"}</p>
+                          <p className="text-zinc-300">SSH: {linuxStatus.connected ? "connected" : linuxStatus.errorCode ?? "failed"} - {linuxStatus.username ?? "unknown"}@{device.host}:{device.managementPort}</p>
+                          <p className="mt-1">Credential: {linuxStatus.credentialResolved ? linuxStatus.credentialName ?? "resolved" : "missing"} - UFW: {linuxStatus.capabilities?.canUseUfw ? "available" : "unavailable"} - SSH port: {linuxStatus.currentSshPort ?? "unknown"}</p>
                           {linuxStatus.sshServiceStatus && <p className="mt-1">Service: {linuxStatus.sshServiceStatus}</p>}
                           {normalizeArray<{ name: string; status: string; code?: string }>(linuxStatus.stages).length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-1">

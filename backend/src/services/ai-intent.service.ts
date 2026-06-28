@@ -5,8 +5,12 @@ import {
   type AiActionIntent,
   type Prisma
 } from "@prisma/client";
+import { fortiGateSupportedActions } from "../actions/fortigate-action-catalog.js";
 import { mikroTikSupportedActions } from "../actions/mikrotik-action-catalog.js";
 import { prisma } from "../db/prisma.js";
+import { proposeActionPlan } from "./action-plan.service.js";
+import { normalizeIntentType, normalizeVendor, resolveDeviceIdFromCandidates } from "./ai-normalization.js";
+import { normalizeIntent } from "../actions/intent-normalizer.js";
 
 export type ParsedIntent = {
   intentType: AiIntentType;
@@ -52,11 +56,76 @@ function ipAddress(text: string) {
   return text.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)?.[0];
 }
 
+function ipv4OrCidr(text: string) {
+  return text.match(/\b(?:\d{1,3}\.){3}\d{1,3}(?:\/(?:[0-9]|[12][0-9]|3[0-2]))?\b/)?.[0];
+}
+
 function containsAny(text: string, values: string[]) {
   return values.some((value) => text.includes(value));
 }
 
+function normalizeUnicodePersian(value: string) {
+  return value.replace(/[\u06f0-\u06f9\u0660-\u0669]/g, (digit) => {
+    if (digit >= "\u06f0" && digit <= "\u06f9") return String(digit.charCodeAt(0) - 0x06f0);
+    return String(digit.charCodeAt(0) - 0x0660);
+  });
+}
+
+function persianNumber(text: string) {
+  if (containsAny(text, ["\u06cc\u06a9", "\u064a\u06a9"])) return 1;
+  if (text.includes("\u062f\u0648")) return 2;
+  if (text.includes("\u0633\u0647")) return 3;
+  return undefined;
+}
+
+function durationTimeoutFromText(text: string, nums: number[]) {
+  if (containsAny(text, ["\u0646\u06cc\u0645 \u0633\u0627\u0639\u062a", "\u0646\u064a\u0645 \u0633\u0627\u0639\u062a"])) return "30m";
+  const amount = nums.find((num) => num > 0 && num <= 3650) ?? persianNumber(text);
+  if (!amount) return durationText(text, nums);
+  if (containsAny(text, ["hour", "Ø³Ø§Ø¹Øª", "\u0633\u0627\u0639\u062a"])) return `${amount}h`;
+  if (containsAny(text, ["day", "Ø±ÙˆØ²", "\u0631\u0648\u0632"])) return `${amount}d`;
+  if (containsAny(text, ["week", "Ù‡ÙØªÙ‡", "\u0647\u0641\u062a\u0647"])) return `${amount}w`;
+  return `${amount}m`;
+}
+
+function durationMinutesFromText(text: string, nums: number[]) {
+  const timeout = durationTimeoutFromText(text, nums);
+  const match = timeout?.match(/^(\d+)([mhdw])$/);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  if (match[2] === "m") return amount;
+  if (match[2] === "h") return amount * 60;
+  if (match[2] === "d") return amount * 1440;
+  return amount * 10080;
+}
+
+function explicitTimeout(text: string) {
+  const withoutIps = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, " ");
+  const compact = withoutIps.match(/\b\d+[smhdw]\b/)?.[0];
+  if (compact) return compact;
+  const amount = withoutIps.match(/\b\d+\b/)?.[0];
+  if (!amount) return undefined;
+  if (text.includes("hour") || text.includes("ساعت")) return `${amount}h`;
+  if (text.includes("day") || text.includes("روز")) return `${amount}d`;
+  if (text.includes("week") || text.includes("هفته")) return `${amount}w`;
+  if (text.includes("minute") || text.includes("دقیقه")) return `${amount}m`;
+  return undefined;
+}
+
+function commentFromText(text: string) {
+  const quoted = text.match(/["']([^"']{1,120})["']/)?.[1];
+  if (quoted) return quoted;
+  return text.match(/\bupdated-by-[A-Za-z0-9_.:-]{1,100}\b/)?.[0] ??
+    text.match(/\b[A-Za-z0-9_.:-]{1,120}\b(?=\s*(?:بذار|کن)$)/)?.[0];
+}
+
+function uniqueStrings(values: unknown[]) {
+  return Array.from(new Set(values.map((value) => String(value)).filter(Boolean)));
+}
+
 function targetHint(text: string, nums: number[]) {
+  if (text.includes("fortigate") || text.includes("fortinet") || text.includes("fortios")) return "fortigate";
+  if (text.includes("linux") || text.includes("\u0644\u06cc\u0646\u0648\u06a9\u0633")) return "linux";
   if (text.includes("mikrotik") || text.includes("routeros") || text.includes("میکروتیک")) return "mikrotik";
   if (text.includes("ubuntu lab")) return "ubuntu lab";
   if (text.includes("ubuntu")) return "ubuntu";
@@ -75,10 +144,209 @@ function durationText(text: string, nums: number[]) {
 }
 
 export function parseAiIntent(message: string): ParsedIntent | null {
-  const text = normalizeText(message);
-  const nums = numbers(text);
+  const text = normalizeUnicodePersian(normalizeText(message));
   const ip = ipAddress(text);
+  const nums = numbers(ip ? text.replace(ip, " ") : text);
+  const fortigate = containsAny(text, ["fortigate", "fortinet", "fortios"]);
+
+  if (text.trim().startsWith("/") || containsAny(text, ["raw cli", "execute command", "run command"])) {
+    return {
+      intentType: AiIntentType.unknown,
+      riskLevel: AiRiskLevel.critical,
+      parameters: { blocked: true, reason: "Raw device commands are not supported by the controlled action catalog.", rawCommandRejected: true },
+      explanation: "Raw CLI requests are blocked. Use a supported catalog action so the system can produce a dry-run, approval gate, rollback metadata, and audit trail."
+    };
+  }
+
+  if (containsAny(text, ["linux", "\u0644\u06cc\u0646\u0648\u06a9\u0633"]) && containsAny(text, ["status", "check", "\u0648\u0636\u0639\u06cc\u062a", "\u0686\u06a9"])) {
+    const serviceName = text.includes("nginx") ? "nginx" : text.match(/\b(?:apache2?|httpd|ssh|sshd|ufw|docker|postgresql|mysql|mariadb|redis)\b/)?.[0];
+    return {
+      intentType: AiIntentType.linux_check_service_status,
+      riskLevel: AiRiskLevel.low,
+      parameters: {
+        serviceName,
+        missingFields: serviceName ? [] : ["serviceName"],
+        clarificationQuestions: serviceName ? [] : ["Which Linux service should be checked?"],
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Checks Linux service status through a controlled read-only systemctl template. It still requires dry-run and approval before any SSH connection is used."
+    };
+  }
+
+  if (fortigate && containsAny(text, ["factory reset", "factoryreset", "raw cli", "execute ", "config "])) {
+    return {
+      intentType: AiIntentType.unknown,
+      riskLevel: AiRiskLevel.critical,
+      parameters: { blocked: true, reason: "FortiGate command is outside the controlled action catalog.", rawCommandRejected: true },
+      explanation: "This FortiGate request is blocked. The AI cannot execute raw FortiOS CLI or create an ActionPlan outside the controlled catalog."
+    };
+  }
+
+  if (fortigate && containsAny(text, ["vip", "443", "port 443"])) {
+    const vipIps = Array.from(text.matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)).map((match) => match[0]);
+    const vipPorts = numbers(vipIps.reduce((value, address) => value.replace(address, " "), text));
+    const externalIp = vipIps.length > 1 ? vipIps[0] : undefined;
+    const mappedIp = vipIps.length > 1 ? vipIps[1] : vipIps[0];
+    const externalPort = vipPorts[0] ?? 443;
+    const mappedPort = vipPorts[1] ?? vipPorts[0] ?? 443;
+    return {
+      intentType: AiIntentType.fortigate_create_vip,
+      riskLevel: AiRiskLevel.high,
+      parameters: {
+        name: mappedIp ? `vip_${mappedIp.replace(/\./g, "_")}_${externalPort}` : undefined,
+        externalIp,
+        mappedIp,
+        externalPort,
+        mappedPort,
+        missingFields: uniqueStrings([...(mappedIp ? [] : ["mappedIp"])]),
+        clarificationQuestions: mappedIp ? [] : ["Which destination/internal IP should receive TCP/443?"],
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Creates a structured FortiGate VIP intent only. Backend compiler, dry-run, backup, approval, and audit are required before execution."
+    };
+  }
+
+  if (fortigate && containsAny(text, ["disable"]) && containsAny(text, ["policy", "rule"])) {
+    const id = nums.find((num) => num > 0);
+    return {
+      intentType: AiIntentType.fortigate_disable_policy,
+      riskLevel: AiRiskLevel.medium,
+      parameters: {
+        policyId: id ? String(id) : undefined,
+        missingFields: id ? [] : ["policyId"],
+        clarificationQuestions: id ? [] : ["Which FortiGate policy ID should be disabled?"],
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Disables only an explicitly selected managed FortiGate policy after dry-run and approval."
+    };
+  }
+
+  if (fortigate && containsAny(text, ["block", "deny"]) && ip) {
+    const sourceObject = `src_${ip.replace(/\./g, "_")}`;
+    return {
+      intentType: AiIntentType.fortigate_create_deny_policy,
+      riskLevel: AiRiskLevel.high,
+      parameters: {
+        sourceObject,
+        srcaddr: [sourceObject],
+        dstaddr: ["all"],
+        services: ["ALL"],
+        schedule: "always",
+        disabled: true,
+        missingFields: ["srcintf", "dstintf"],
+        clarificationQuestions: ["Which source interface/zone should the deny policy use?", "Which destination interface/zone should the deny policy use?"],
+        comment: "FortiGate deny policy proposed by AI. Create address object first if it does not exist.",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Maps to a FortiGate deny policy plan. Interfaces are required from discovery and are not guessed."
+    };
+  }
+
+  if (fortigate && containsAny(text, ["address object", "object"]) && ipv4OrCidr(text)) {
+    const addressValue = ipv4OrCidr(text)!;
+    return {
+      intentType: AiIntentType.fortigate_create_address_object,
+      riskLevel: AiRiskLevel.low,
+      parameters: {
+        name: `addr_${addressValue.replace(/[./]/g, "_")}`,
+        ...(addressValue.includes("/") ? { sourceCidr: addressValue } : { sourceIp: addressValue }),
+        comment: "FortiGate address object proposed by AI.",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Creates a structured FortiGate address object intent only. Execution requires dry-run and approval."
+    };
+  }
+
+  if (fortigate && containsAny(text, ["create firewall policy", "add firewall policy", "create policy", "add policy"])) {
+    const interfaceMatch = text.match(/\bfrom\s+([a-z0-9_.:-]+)\s+to\s+([a-z0-9_.:-]+)\b/);
+    const services = Array.from(text.matchAll(/\b(https|http|ssh|dns|all)\b/g)).map((match) => match[1].toUpperCase());
+    const source = ipv4OrCidr(text);
+    const srcintf = interfaceMatch?.[1];
+    const dstintf = interfaceMatch?.[2];
+    return {
+      intentType: AiIntentType.fortigate_create_policy,
+      riskLevel: AiRiskLevel.high,
+      parameters: {
+        name: "firewall-log-analyzer-policy", srcintf, dstintf,
+        dstaddr: ["all"], services: services.length > 0 ? Array.from(new Set(services)) : ["ALL"], schedule: "always",
+        ...(source?.includes("/") ? { sourceCidr: source } : source ? { sourceIp: source } : {}),
+        action: containsAny(text, ["deny", "block"]) ? "deny" : "accept",
+        nat: containsAny(text, [" nat", "internet", "outbound"]), logTraffic: true, disabled: true,
+        missingFields: uniqueStrings([...(srcintf ? [] : ["srcInterface"]), ...(dstintf ? [] : ["dstInterface"])]),
+        clarificationQuestions: [...(!srcintf ? ["Which source interface/zone should the policy use?"] : []), ...(!dstintf ? ["Which destination interface/zone should the policy use?"] : [])],
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Creates a disabled FortiGate firewall policy through the controlled catalog. Validation, dry-run, approval, connector execution, audit, and rollback preview remain mandatory."
+    };
+  }
+
+  if (fortigate && (
+    containsAny(text, ["egress", "outbound", "internet", "business", "office", "schedule"]) ||
+    (containsAny(text, ["allow", "deny"]) && containsAny(text, ["internet", "outbound"]))
+  )) {
+    const sourceObject = ip ? `src_${ip.replace(/\./g, "_")}` : undefined;
+    return {
+      intentType: AiIntentType.fortigate_create_egress_policy,
+      riskLevel: AiRiskLevel.high,
+      parameters: {
+        ...(sourceObject ? { sourceObject, srcaddr: [sourceObject] } : {}),
+        dstaddr: ["all"],
+        services: ["ALL"],
+        schedule: containsAny(text, ["business", "office"]) ? "business_hours" : "always",
+        nat: true,
+        disabled: true,
+        missingFields: ["srcintf", "dstintf", ...(sourceObject ? [] : ["source IP or source address object"])],
+        clarificationQuestions: ["Which source interface/zone should the policy use?", "Which destination interface/zone should the policy use?", "Should services remain ALL or be narrowed?"],
+        comment: "FortiGate egress policy proposed by AI. Created disabled until a separate enable action is approved.",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
+      },
+      explanation: "Maps to a FortiGate egress policy intent. Missing interfaces/services must be confirmed from discovery; the AI will not guess silently."
+    };
+  }
   const mikrotik = containsAny(text, ["mikrotik", "routeros", "میکروتیک"]);
+
+  if (mikrotik && containsAny(text, ["ssh", "secure shell"]) && containsAny(text, ["change", "set", "move", "عوض", "تغییر"])) {
+    const trustedSource = ipv4OrCidr(text);
+    const portCandidates = numbers(trustedSource ? text.replace(trustedSource, " ") : text);
+    const newPort = portCandidates.length > 0 ? portCandidates[portCandidates.length - 1] : undefined;
+    const missingFields = uniqueStrings([
+      ...(newPort ? [] : ["newPort"])
+    ]);
+    return {
+      intentType: AiIntentType.mikrotik_change_service_port,
+      riskLevel: AiRiskLevel.high,
+      parameters: {
+        vendor: "mikrotik",
+        service: "ssh",
+        serviceName: "ssh",
+        newPort,
+        ...(trustedSource?.includes("/") ? { trustedSourceCidr: trustedSource } : trustedSource ? { trustedSourceIp: trustedSource } : {}),
+        missingFields,
+        clarificationQuestions: [
+          ...(!newPort ? ["Which new MikroTik SSH port (1-65535) should be used?"] : [])
+        ],
+        targetDeviceHint: targetHint(text, nums) ?? "mikrotik"
+      },
+      explanation: "Proposes a controlled MikroTik SSH port change. Read-only preflight discovers the current port and allowed source when possible, then the backend creates the allow rule before changing and verifying the service port."
+    };
+  }
+
+  if ((mikrotik || containsAny(text, ["address-list", "address list", "ai_blocklist"])) &&
+      ip &&
+      containsAny(text, ["update", "set", "timeout", "comment", "عوض", "بذار"])) {
+    return {
+      intentType: AiIntentType.mikrotik_update_address_list_entry,
+      riskLevel: AiRiskLevel.medium,
+      parameters: {
+        address: ip,
+        listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
+        timeout: explicitTimeout(text) ?? durationTimeoutFromText(text, nums) ?? "10m",
+        comment: commentFromText(text) ?? "created-by-firewall-log-analyzer",
+        ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : { targetDeviceHint: "mikrotik" })
+      },
+      explanation: "Updates an existing MikroTik address-list entry timeout/comment through the controlled catalog only."
+    };
+  }
 
   if (mikrotik && containsAny(text, ["reset-configuration", "show-sensitive", "/user", "/certificate"])) {
     return {
@@ -108,6 +376,49 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       riskLevel: AiRiskLevel.low,
       parameters: { ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
       explanation: "Read-only MikroTik firewall summary request. No write command is needed."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["allow", "accept", "deny", "drop"]) && containsAny(text, ["tcp", "udp"])) {
+    const source = ipv4OrCidr(text);
+    const dstPort = numbers(source ? text.replace(source, " ") : text).find((value) => value >= 1 && value <= 65535);
+    return {
+      intentType: AiIntentType.mikrotik_create_filter_rule,
+      riskLevel: AiRiskLevel.medium,
+      parameters: {
+        chain: "forward",
+        action: containsAny(text, ["allow", "accept"]) ? "accept" : "drop",
+        protocol: text.includes("udp") ? "udp" : "tcp",
+        dstPort,
+        port: dstPort,
+        ...(source?.includes("/") ? { sourceCidr: source } : source ? { sourceIp: source } : {}),
+        disabled: true,
+        comment: "managed filter rule",
+        missingFields: uniqueStrings([...(dstPort ? [] : ["port"]), ...(source ? [] : ["sourceIp"])]),
+        clarificationQuestions: [...(!dstPort ? ["Which destination port should the rule match?"] : []), ...(!source ? ["Which source IPv4 address or CIDR should the rule match?"] : [])],
+        targetDeviceHint: targetHint(text, nums) ?? "mikrotik"
+      },
+      explanation: "Creates a disabled MikroTik firewall rule from structured source, protocol, and port fields. Dry-run and approval are required before execution."
+    };
+  }
+
+  if (mikrotik && containsAny(text, ["add firewall rule", "create firewall rule", "add filter rule", "create filter rule"])) {
+    const dstPort = nums.find((value) => value >= 1 && value <= 65535);
+    return {
+      intentType: AiIntentType.mikrotik_create_filter_rule,
+      riskLevel: containsAny(text, ["input"]) ? AiRiskLevel.high : AiRiskLevel.medium,
+      parameters: {
+        chain: containsAny(text, ["input"]) ? "input" : "forward",
+        action: containsAny(text, ["allow", "accept"]) ? "accept" : "drop",
+        protocol: containsAny(text, ["udp"]) ? "udp" : "tcp",
+        dstPort,
+        disabled: true,
+        comment: "managed filter rule",
+        missingFields: dstPort ? [] : ["port"],
+        clarificationQuestions: dstPort ? [] : ["Which destination port should the firewall rule match?"],
+        targetDeviceHint: targetHint(text, nums) ?? "mikrotik"
+      },
+      explanation: "Creates a disabled, managed MikroTik filter rule through the catalog. Dry-run and approval are required before connector execution."
     };
   }
 
@@ -162,7 +473,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       parameters: {
         address: ip,
         listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
-        timeout: durationText(text, nums),
+        timeout: durationTimeoutFromText(text, nums),
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
       explanation: "Adds an IP to a MikroTik address-list through the controlled catalog only. Execution requires dry-run, approval, and explicit confirmation."
@@ -176,7 +487,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       parameters: {
         address: ip,
         listName: "ai_blocklist",
-        timeout: durationText(text, nums) ?? "30m",
+        timeout: durationTimeoutFromText(text, nums) ?? "10m",
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
       explanation: "Adds the IP to the MikroTik ai_blocklist with a timeout. A firewall rule using that list is required for actual blocking."
@@ -232,8 +543,18 @@ export function parseAiIntent(message: string): ParsedIntent | null {
     };
   }
 
+  if ((text.includes("\u0628\u0644\u0627\u06a9") || text.includes("\u0645\u0633\u062f\u0648\u062f")) && (ip || text.includes("\u0622\u06cc \u067e\u06cc") || text.includes("\u0627\u06cc \u067e\u06cc"))) {
+    const duration = durationMinutesFromText(text, nums) ?? nums.find((n) => n > 0 && n <= 10080) ?? 30;
+    return {
+      intentType: AiIntentType.block_source_ip_temporary,
+      riskLevel: AiRiskLevel.medium,
+      parameters: { ...(ip ? { srcIp: ip } : {}), durationMinutes: duration },
+      explanation: "Temporarily blocking a source IP requires target device selection, validation, dry-run, approval, audit logging, and expiry/rollback metadata."
+    };
+  }
+
   if ((text.includes("block") || text.includes("بلاک") || text.includes("مسدود")) && (ip || text.includes("ip"))) {
-    const duration = nums.find((n) => n > 0 && n <= 10080) ?? 30;
+    const duration = durationMinutesFromText(text, nums) ?? nums.find((n) => n > 0 && n <= 10080) ?? 30;
     return {
       intentType: AiIntentType.block_source_ip_temporary,
       riskLevel: AiRiskLevel.medium,
@@ -267,45 +588,70 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 export async function createAiActionIntent(input: {
   sessionId: string;
   messageId?: string;
   deviceId?: string;
   parsedIntent: ParsedIntent;
 }) {
-  const deviceId = input.deviceId ?? await resolveDeviceHint(input.parsedIntent.parameters);
+  const canonical = normalizeIntent({ ...input.parsedIntent.parameters, actionType: input.parsedIntent.intentType });
+  const vendor = normalizeVendor(canonical.vendor) ?? normalizeVendor(input.parsedIntent.parameters.targetDeviceHint) ?? (input.parsedIntent.intentType.startsWith("mikrotik_") ? "mikrotik" : input.parsedIntent.intentType.startsWith("fortigate_") ? "fortigate" : null);
+  const intentType = normalizeIntentType(input.parsedIntent.intentType, vendor) ?? AiIntentType.unknown;
+  const parameterDeviceId = typeof input.parsedIntent.parameters.deviceId === "string" ? input.parsedIntent.parameters.deviceId.trim() : undefined;
+  const intentParameters = { ...input.parsedIntent.parameters, ...canonical };
+  delete intentParameters.actionType;
+  delete intentParameters.deviceId;
+  delete intentParameters.targetDeviceId;
+  const parameters = intentType === AiIntentType.mikrotik_change_service_port
+    ? {
+        ...intentParameters,
+        vendor: "mikrotik",
+        service: "ssh",
+        serviceName: "ssh"
+      }
+    : intentParameters;
+  const deviceId = input.deviceId ?? parameterDeviceId ?? await resolveDeviceHint(parameters, intentType);
+  const persistedParameters: Record<string, unknown> = { ...parameters };
+  if (deviceId) delete persistedParameters.targetDeviceHint;
   const device = deviceId ? await prisma.device.findUnique({ where: { id: deviceId }, select: { type: true, vendor: true } }) : null;
   const isMikroTik = device?.type === "mikrotik" || String(device?.vendor ?? "").toLowerCase().includes("mikrotik");
+  const isFortiGate = device?.type === "fortigate" || String(device?.vendor ?? "").toLowerCase().includes("forti");
   const mikrotikSupported = new Set<string>(mikroTikSupportedActions());
-  const mikrotikBlocked = Boolean(isMikroTik && input.parsedIntent.intentType !== AiIntentType.explain_security_status && !mikrotikSupported.has(input.parsedIntent.intentType));
+  const fortigateSupported = new Set<string>(fortiGateSupportedActions());
+  const mikrotikBlocked = Boolean(isMikroTik && intentType !== AiIntentType.explain_security_status && !mikrotikSupported.has(intentType));
+  const fortigateBlocked = Boolean(isFortiGate && intentType !== AiIntentType.explain_security_status && !fortigateSupported.has(intentType));
   return prisma.aiActionIntent.create({
     data: {
       sessionId: input.sessionId,
       messageId: input.messageId,
       deviceId,
-      intentType: input.parsedIntent.intentType,
-      status: mikrotikBlocked ? AiActionIntentStatus.discarded : AiActionIntentStatus.proposed,
+      intentType,
+      status: mikrotikBlocked || fortigateBlocked ? AiActionIntentStatus.discarded : AiActionIntentStatus.proposed,
       riskLevel: input.parsedIntent.riskLevel,
-      parametersJson: toJson(input.parsedIntent.parameters),
+      parametersJson: toJson(persistedParameters),
       explanation: mikrotikBlocked
         ? `${input.parsedIntent.explanation} This MikroTik request is not in the controlled action catalog; no action plan or command execution is allowed.`
+        : fortigateBlocked
+          ? `${input.parsedIntent.explanation} This FortiGate request is not in the controlled action catalog; no action plan or command execution is allowed.`
         : input.parsedIntent.explanation
     }
   });
 }
 
-async function resolveDeviceHint(parameters: Record<string, unknown>) {
-  const hint = typeof parameters.targetDeviceHint === "string" ? parameters.targetDeviceHint.trim().toLowerCase() : "";
-  if (!hint) return undefined;
-
+async function resolveDeviceHint(parameters: Record<string, unknown>, intentType: AiIntentType) {
   const devices = await prisma.device.findMany({
-    select: { id: true, name: true, vendor: true, host: true }
+    select: { id: true, name: true, vendor: true, host: true, type: true }
   });
-  const matched = devices.find((device) => {
-    const values = [device.name, device.vendor, device.host].map((value) => value.toLowerCase());
-    return values.some((value) => value.includes(hint) || hint.includes(value));
+  const vendor = normalizeVendor(parameters.vendor) ?? normalizeVendor(parameters.targetDeviceHint) ?? (intentType.startsWith("mikrotik_") ? "mikrotik" : null);
+  return resolveDeviceIdFromCandidates(devices, {
+    deviceId: parameters.deviceId,
+    vendor,
+    deviceHint: parameters.targetDeviceHint
   });
-  return matched?.id;
 }
 
 export async function listAiActionIntents() {
@@ -346,4 +692,105 @@ export async function updateAiActionIntent(id: string, input: Record<string, unk
     where: { id },
     data
   });
+}
+
+function normalizeCompletionFields(fields: Record<string, unknown>) {
+  const next = { ...fields };
+  if (next.address === undefined) {
+    const address = next.srcIP ?? next.srcIp ?? next.sourceIp ?? next.sourceIP ?? next.ip;
+    if (typeof address === "string" && address.trim()) next.address = address.trim();
+  }
+  if (next.durationMinutes !== undefined && next.timeout === undefined) {
+    const minutes = Number(next.durationMinutes);
+    if (Number.isFinite(minutes) && minutes > 0) next.timeout = minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
+  }
+  if (next.duration !== undefined && next.timeout === undefined) {
+    const duration = String(next.duration).trim().toLowerCase();
+    const amount = duration.includes("\u06cc\u06a9") || duration.includes("\u064a\u06a9")
+      ? 1
+      : duration.includes("\u0646\u06cc\u0645 \u0633\u0627\u0639\u062a") || duration.includes("\u0646\u064a\u0645 \u0633\u0627\u0639\u062a")
+        ? 0.5
+        : Number(duration.match(/\d+/)?.[0]);
+    if (Number.isFinite(amount) && amount > 0) {
+      if (duration.includes("hour") || duration.includes("\u0633\u0627\u0639\u062a")) next.timeout = amount === 0.5 ? "30m" : `${amount}h`;
+      else next.timeout = `${amount}m`;
+    }
+  }
+  return next;
+}
+
+function remainingMissingFields(parameters: Record<string, unknown>, fields: Record<string, unknown>) {
+  const missing = Array.isArray(parameters.missingFields) ? parameters.missingFields.map(String) : [];
+  const provided = new Set(Object.entries(fields).filter(([, value]) => String(value ?? "").trim()).map(([key]) => key));
+  return missing.filter((field) => {
+    if (field === "deviceId") return !provided.has("deviceId");
+    if (field === "durationMinutes") return !provided.has("durationMinutes") && !provided.has("timeout");
+    return !provided.has(field);
+  });
+}
+
+export async function completeAiActionRequest(id: string, input: { fields?: Record<string, unknown> }) {
+  const intent = await prisma.aiActionIntent.findUnique({ where: { id }, include: { device: { select: { id: true, name: true, type: true, host: true } } } });
+  if (!intent) throw new Error("AiActionIntent not found");
+
+  const fields = normalizeCompletionFields(input.fields && typeof input.fields === "object" ? input.fields : {});
+  const deviceId = typeof fields.deviceId === "string" && fields.deviceId.trim() ? fields.deviceId.trim() : intent.deviceId;
+  const currentParameters = asRecord(intent.parametersJson);
+  const nextParameters = {
+    ...currentParameters,
+    ...Object.fromEntries(Object.entries(fields).filter(([key]) => key !== "deviceId"))
+  };
+  delete nextParameters.deviceId;
+  delete nextParameters.targetDeviceId;
+  if (deviceId) delete nextParameters.targetDeviceHint;
+  const missingFields = remainingMissingFields(currentParameters, fields);
+  if (missingFields.length > 0) nextParameters.missingFields = missingFields;
+  else delete nextParameters.missingFields;
+
+  const updatedIntent = await prisma.aiActionIntent.update({
+    where: { id },
+    data: {
+      deviceId,
+      parametersJson: toJson(nextParameters),
+      status: intent.status === AiActionIntentStatus.discarded ? AiActionIntentStatus.discarded : AiActionIntentStatus.proposed
+    },
+    include: { device: { select: { id: true, name: true, type: true, host: true } } }
+  });
+
+  const canCreateActionPlan = updatedIntent.status === AiActionIntentStatus.proposed &&
+    updatedIntent.intentType !== AiIntentType.unknown &&
+    Boolean(updatedIntent.deviceId) &&
+    missingFields.length === 0;
+
+  if (!canCreateActionPlan) {
+    return {
+      canCreateActionPlan: false,
+      actionPlanId: null,
+      status: updatedIntent.status,
+      missingFields: [
+        ...missingFields,
+        ...(!updatedIntent.deviceId ? ["deviceId"] : [])
+      ],
+      blockedReason: updatedIntent.status === AiActionIntentStatus.discarded || updatedIntent.intentType === AiIntentType.unknown
+        ? "not_supported_yet"
+        : "missing_fields",
+      intent: updatedIntent
+    };
+  }
+
+  const plan = await proposeActionPlan({ aiIntentId: updatedIntent.id });
+  await prisma.aiActionIntent.update({
+    where: { id },
+    data: { status: AiActionIntentStatus.converted_to_action_plan }
+  });
+
+  return {
+    canCreateActionPlan: true,
+    actionPlanId: plan.id,
+    status: plan.status,
+    missingFields: [],
+    blockedReason: null,
+    intent: updatedIntent,
+    actionPlan: plan
+  };
 }

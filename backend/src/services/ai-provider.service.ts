@@ -4,6 +4,7 @@ import type { buildSecurityContext } from "./ai-context.service.js";
 import { runMockAiProvider } from "./providers/mock-ai.provider.js";
 import { AiProviderRequestError, runOpenAiCompatibleProvider } from "./providers/openai-compatible.provider.js";
 import { runOpenAiProvider } from "./providers/openai.provider.js";
+import { normalizeIntentType, normalizeVendor } from "./ai-normalization.js";
 
 export type AiProviderName = "mock" | "openai" | "openai_compatible";
 
@@ -78,12 +79,16 @@ function uniqueModels(models: string[]) {
 function normalizeResponse(value: unknown): StructuredAiResponse {
   const source = objectValue(value);
   const intentSource = source.intent === null ? null : objectValue(source.intent);
+  const intentParameters = intentSource ? objectValue(intentSource.parameters) : {};
+  const vendor = normalizeVendor(intentSource?.targetDeviceHint) ?? normalizeVendor(intentParameters.vendor) ?? normalizeVendor(intentParameters.targetDeviceHint);
+  const intentType = normalizeIntentType(intentSource?.intentType, vendor);
+  const rawDeviceHint = typeof intentSource?.targetDeviceHint === "string" ? intentSource.targetDeviceHint.trim() : "";
   const normalizedIntent = intentSource && Object.keys(intentSource).length > 0
     ? {
-        intentType: INTENT_TYPES.has(String(intentSource.intentType) as AiIntentType) ? String(intentSource.intentType) : "unknown",
+        intentType: intentType && INTENT_TYPES.has(intentType) ? intentType : "unknown",
         riskLevel: RISK_LEVELS.has(String(intentSource.riskLevel) as AiRiskLevel) ? String(intentSource.riskLevel) as StructuredAiIntent["riskLevel"] : "medium",
-        targetDeviceHint: typeof intentSource.targetDeviceHint === "string" ? intentSource.targetDeviceHint : null,
-        parameters: objectValue(intentSource.parameters),
+        targetDeviceHint: vendor ?? (rawDeviceHint.length >= 2 ? rawDeviceHint : null),
+        parameters: intentParameters,
         missingFields: stringArray(intentSource.missingFields),
         clarificationQuestions: stringArray(intentSource.clarificationQuestions),
         explanation: String(intentSource.explanation ?? "")

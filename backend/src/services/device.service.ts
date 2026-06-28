@@ -354,7 +354,7 @@ export async function testDeviceConnection(id: string) {
     const started = Date.now();
     const result = await connector.testConnection(device);
     const status = result.connected ? DeviceStatus.online : DeviceStatus.error;
-    const statusKey = connector.name === "mikrotik" ? "mikrotikStatus" : "linuxStatus";
+    const statusKey = connector.name === "mikrotik" ? "mikrotikStatus" : connector.name === "fortigate" ? "fortigateStatus" : "linuxStatus";
     const statusCheck = await prisma.deviceStatusCheck.create({
       data: {
         deviceId: device.id,

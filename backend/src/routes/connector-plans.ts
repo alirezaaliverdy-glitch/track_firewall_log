@@ -1,8 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
+import { getFortiGateCapabilities } from "../capabilities/fortigate-capability-registry.js";
 import { getConnectorCapabilities, getConnectorVendors } from "../connectors/connector-registry.service.js";
 import { dryRunActionPlan, getActionPlan } from "../services/action-plan.service.js";
 
 export const connectorPlanRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/api/vendors/fortigate/capabilities", async () => getFortiGateCapabilities());
+
   app.get("/api/connectors/capabilities", async () => ({
     executionEnabled: false,
     capabilities: getConnectorCapabilities()

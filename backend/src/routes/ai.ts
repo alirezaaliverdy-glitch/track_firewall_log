@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { buildSecurityContext } from "../services/ai-context.service.js";
 import { chatWithAssistant, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
-import { getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
+import { completeAiActionRequest, getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
 import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
@@ -61,6 +61,19 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
       const statusCode = message.includes("Record to update not found") ? 404 : 400;
       return reply.code(statusCode).send({
         error: statusCode === 404 ? "AI action intent not found" : "Failed to update AI action intent",
+        detail: message
+      });
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { fields?: Record<string, unknown> } }>("/api/ai/action-requests/:id/complete", async (request, reply) => {
+    try {
+      return await completeAiActionRequest(request.params.id, request.body ?? {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to complete AI action request";
+      const statusCode = message.includes("not found") ? 404 : 400;
+      return reply.code(statusCode).send({
+        error: statusCode === 404 ? "AI action request not found" : "Failed to complete AI action request",
         detail: message
       });
     }

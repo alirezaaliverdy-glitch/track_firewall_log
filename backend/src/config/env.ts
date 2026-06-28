@@ -54,6 +54,12 @@ function parseCsv(value: string | undefined) {
     .filter(Boolean);
 }
 
+export type ActionExecutionMode = "safe" | "lab_fast";
+
+function parseActionExecutionMode(value: string | undefined): ActionExecutionMode {
+  return value === "lab_fast" ? "lab_fast" : "safe";
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parsePositiveInteger(process.env.PORT, DEFAULT_PORT),
@@ -81,7 +87,8 @@ export const env = {
   eventRetentionRunIntervalMinutes: parsePositiveInteger(process.env.EVENT_RETENTION_RUN_INTERVAL_MINUTES, DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES),
   sshConnectTimeoutMs: parsePositiveInteger(process.env.SSH_CONNECT_TIMEOUT_MS, DEFAULT_SSH_CONNECT_TIMEOUT_MS),
   sshHandshakeTimeoutMs: parsePositiveInteger(process.env.SSH_HANDSHAKE_TIMEOUT_MS, DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS),
-  sshCommandTimeoutMs: parsePositiveInteger(process.env.SSH_COMMAND_TIMEOUT_MS, DEFAULT_SSH_COMMAND_TIMEOUT_MS)
+  sshCommandTimeoutMs: parsePositiveInteger(process.env.SSH_COMMAND_TIMEOUT_MS, DEFAULT_SSH_COMMAND_TIMEOUT_MS),
+  actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE)
 };
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;

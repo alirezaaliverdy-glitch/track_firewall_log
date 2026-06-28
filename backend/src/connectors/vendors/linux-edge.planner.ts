@@ -87,7 +87,8 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.close_port,
     ActionType.block_source_ip_temporary,
     ActionType.unblock_source_ip,
-    ActionType.change_ssh_port
+    ActionType.change_ssh_port,
+    ActionType.linux_check_service_status
   ],
   supports(device) {
     return device?.type === DeviceType.linux_edge || String(device?.vendor ?? "").toLowerCase().includes("linux");
@@ -103,6 +104,16 @@ export const linuxEdgePlanner: VendorPlanner = {
       const plan = base(input);
       plan.commands = [`ufw delete deny from ${srcIp}`];
       plan.rollbackSteps = [`ufw deny from ${srcIp}`];
+      return plan;
+    }
+    if (input.actionType === ActionType.linux_check_service_status) {
+      const service = str(input.parameters.serviceName) ?? str(input.parameters.service) ?? "nginx";
+      const plan = base(input);
+      plan.commands = [
+        `systemctl is-active ${service}`,
+        `systemctl status ${service} --no-pager -l`
+      ];
+      plan.warnings.push("Read-only service status check. No service restart or config change is planned.");
       return plan;
     }
     return { ...base(input), status: "unsupported", transport: "manual", unsupportedReason: "Linux Edge UFW template for this action is not implemented yet." };

@@ -1,5 +1,6 @@
 import { ActionType, DeviceProtocol, DeviceType, type Device } from "@prisma/client";
 import type { ConnectorCapability, DeviceConnector, VendorPlanner } from "./types.js";
+import { fortigateSshConnector } from "./fortigate-ssh.connector.js";
 import { linuxSshConnector } from "./linux-ssh.connector.js";
 import { mikrotikSshConnector } from "./mikrotik-ssh.connector.js";
 import { fortigatePlanner } from "./vendors/fortigate.planner.js";
@@ -15,6 +16,7 @@ const planners: VendorPlanner[] = [
 ];
 
 const connectors: DeviceConnector[] = [
+  fortigateSshConnector,
   mikrotikSshConnector,
   linuxSshConnector
 ];
@@ -44,9 +46,9 @@ export function getConnectorCapabilities(): ConnectorCapability[] {
     {
       vendor: "fortigate",
       deviceTypes: [DeviceType.fortigate],
-      protocols: [DeviceProtocol.ssh, DeviceProtocol.api],
+      protocols: [DeviceProtocol.ssh],
       supportedActions: fortigatePlanner.supportedActions,
-      executionEnabled: false
+      executionEnabled: true
     },
     {
       vendor: "mikrotik",

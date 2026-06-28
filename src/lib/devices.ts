@@ -73,6 +73,7 @@ export type ConnectionTestResult = {
   capabilities?: DeviceConnectionStatus["capabilities"];
   linuxStatus?: LinuxStatus;
   mikrotikStatus?: MikroTikStatus;
+  fortigateStatus?: FortiGateStatus;
 };
 
 export type DeviceConnectionStatus = {
@@ -139,6 +140,30 @@ export type MikroTikStatus = DeviceConnectionStatus & {
   mikrotik?: MikroTikDiscovery;
 };
 
+export type FortiGateDiscovery = {
+  version?: string;
+  model?: string;
+  serial?: string;
+  hostname?: string;
+  vdomMode?: string;
+  currentVdom?: string;
+  zones?: string[];
+  interfaces?: string[];
+  policies?: string[];
+  addressObjects?: string[];
+  addressGroups?: string[];
+  services?: string[];
+  serviceGroups?: string[];
+  schedules?: string[];
+  routes?: string[];
+  haStatus?: string[];
+};
+
+export type FortiGateStatus = DeviceConnectionStatus & {
+  vendor: "fortigate";
+  fortigate?: FortiGateDiscovery;
+};
+
 export type DeviceCapabilities = {
   canTestConnection: boolean;
   canCollectStatus: boolean;
@@ -166,6 +191,7 @@ export type DeviceCapabilities = {
   serviceSummary?: string[];
   warnings?: Array<{ code: string; message: string }>;
   mikrotik?: MikroTikDiscovery;
+  fortigate?: FortiGateDiscovery;
   canExecuteChangeSshPort: boolean;
   supportedActions: string[];
 };

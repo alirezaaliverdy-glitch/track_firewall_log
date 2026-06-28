@@ -25,6 +25,7 @@ const MIKROTIK_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_add_address_list_entry,
   ActionType.mikrotik_remove_address_list_entry,
   ActionType.mikrotik_block_ip_temporary,
+  ActionType.mikrotik_update_address_list_entry,
   ActionType.mikrotik_create_managed_drop_rule,
   ActionType.mikrotik_enable_managed_rule,
   ActionType.mikrotik_disable_managed_rule,
@@ -85,6 +86,7 @@ const TASK27_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_add_address_list_entry,
   ActionType.mikrotik_remove_address_list_entry,
   ActionType.mikrotik_block_ip_temporary,
+  ActionType.mikrotik_update_address_list_entry,
   ActionType.mikrotik_create_managed_drop_rule,
   ActionType.mikrotik_enable_managed_rule,
   ActionType.mikrotik_disable_managed_rule,
@@ -157,6 +159,15 @@ function validateRuleTarget(ruleId: string | undefined, comment: string | undefi
 
 function findAddressEntryScript(listName: string, address: string) {
   return `:local ids [/ip firewall address-list find where list=${quote(listName)} address=${quote(address)}]; :if ([:len $ids] = 1) do={/ip firewall address-list remove $ids} else={:error "expected exactly one address-list match"}`;
+}
+
+function addressEntryCheckCommand(listName: string, address: string) {
+  return `/ip firewall address-list print terse where list=${quote(listName)} address=${quote(address)}`;
+}
+
+function updateAddressEntryCommand(listName: string, address: string, timeout: string | undefined, comment: string) {
+  const timeoutPart = timeout ? ` timeout=${quote(timeout)}` : "";
+  return `/ip firewall address-list set [find list=${quote(listName)} address=${quote(address)}]${timeoutPart} comment=${quote(comment)}`;
 }
 
 function managedRuleFind(ruleId: string | undefined, comment: string | undefined) {
@@ -232,11 +243,11 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
     }
   }
 
-  if (plan.actionType === ActionType.mikrotik_add_address_list_entry || plan.actionType === ActionType.mikrotik_block_ip_temporary) {
+  if (plan.actionType === ActionType.mikrotik_add_address_list_entry || plan.actionType === ActionType.mikrotik_block_ip_temporary || plan.actionType === ActionType.mikrotik_update_address_list_entry) {
     const address = text(parameters, "address") ?? text(parameters, "srcIp");
     const listName = text(parameters, "listName") ?? "ai_blocklist";
-    const timeout = text(parameters, "timeout") ?? (plan.actionType === ActionType.mikrotik_block_ip_temporary ? "30m" : undefined);
-    const comment = safeComment(text(parameters, "comment"), plan.actionType === ActionType.mikrotik_block_ip_temporary ? `${MANAGED_COMMENT_PREFIX} temporary block` : `${MANAGED_COMMENT_PREFIX} address-list entry`);
+    const timeout = text(parameters, "timeout") ?? (plan.actionType === ActionType.mikrotik_block_ip_temporary ? "10m" : undefined);
+    const comment = safeComment(text(parameters, "comment"), "created-by-firewall-log-analyzer");
 
     if (!validIpv4OrCidr(address)) errors.push("address must be a valid IPv4 address or CIDR.");
     validateSafeName(listName, "listName", errors);
@@ -248,17 +259,57 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
     normalized.comment = comment;
 
     const timeoutPart = timeout ? ` timeout=${quote(timeout)}` : "";
-    commandSpecs.push(commandSpec({
-      template: "/ip firewall address-list add list=<listName> address=<address> comment=<comment> timeout=<timeout>",
-      command: `/ip firewall address-list add list=${quote(listName)} address=${quote(address ?? "")} comment=${quote(comment)}${timeoutPart}`,
-      target: { listName, address, timeout: timeout ?? null },
-      warnings: plan.actionType === ActionType.mikrotik_block_ip_temporary
-        ? ["Address will be added to the list. Blocking requires an existing firewall rule that uses this list."]
-        : [],
-      rollbackSteps: [`Remove exact address-list entry where list=${listName} and address=${address}.`]
-    }));
-    warnings.push(...commandSpecs[0].warnings);
-    rollbackJson = { type: "remove_exact_address_list_entry", listName, address };
+    const blockCommand = `/ip firewall address-list add list=${quote(listName)} address=${quote(address ?? "")}${timeoutPart} comment=${quote(comment)}`;
+    const addCommand = `/ip firewall address-list add list=${quote(listName)} address=${quote(address ?? "")} comment=${quote(comment)}${timeoutPart}`;
+    const updateCommand = updateAddressEntryCommand(listName, address ?? "", timeout, comment);
+    if (plan.actionType === ActionType.mikrotik_block_ip_temporary) {
+      commandSpecs.push(
+        commandSpec({
+          template: "check exact address-list entry by list/address",
+          command: addressEntryCheckCommand(listName, address ?? ""),
+          write: false,
+          target: { listName, address },
+          warnings: [],
+          rollbackSteps: []
+        }),
+        commandSpec({
+          template: "if missing: /ip firewall address-list add list=<listName> address=<address> timeout=<timeout> comment=<comment>",
+          command: blockCommand,
+          target: { listName, address, timeout: timeout ?? null, branch: "missing" },
+          warnings: [],
+          rollbackSteps: [`Remove exact address-list entry where list=${listName} and address=${address}.`]
+        }),
+        commandSpec({
+          template: "if exists: /ip firewall address-list set [find list=<listName> address=<address>] timeout=<timeout> comment=<comment>",
+          command: updateCommand,
+          target: { listName, address, timeout: timeout ?? null, branch: "exists" },
+          warnings: [],
+          rollbackSteps: ["Previous timeout/comment are not known from dry-run; restore manually from audit/export if needed."]
+        })
+      );
+      warnings.push("This action is idempotent. If the entry already exists, timeout/comment will be updated instead of adding a duplicate.");
+      warnings.push("Blocking requires an existing firewall rule that uses this list.");
+      rollbackJson = { type: "remove_or_restore_address_list_entry", listName, address };
+    } else if (plan.actionType === ActionType.mikrotik_update_address_list_entry) {
+      commandSpecs.push(commandSpec({
+        template: "/ip firewall address-list set [find list=<listName> address=<address>] timeout=<timeout> comment=<comment>",
+        command: updateCommand,
+        target: { listName, address, timeout: timeout ?? null },
+        warnings: ["Update requires an existing exact address-list entry."],
+        rollbackSteps: ["Restore previous timeout/comment from audit/export if needed."]
+      }));
+      warnings.push(commandSpecs[0].warnings[0]);
+      rollbackJson = { type: "restore_previous_address_list_entry_manual", listName, address };
+    } else {
+      commandSpecs.push(commandSpec({
+        template: "/ip firewall address-list add list=<listName> address=<address> comment=<comment> timeout=<timeout>",
+        command: addCommand,
+        target: { listName, address, timeout: timeout ?? null },
+        warnings: [],
+        rollbackSteps: [`Remove exact address-list entry where list=${listName} and address=${address}.`]
+      }));
+      rollbackJson = { type: "remove_exact_address_list_entry", listName, address };
+    }
   }
 
   if (plan.actionType === ActionType.mikrotik_remove_address_list_entry) {

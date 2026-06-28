@@ -21,6 +21,13 @@ const SAFE_TEXT = /^[A-Za-z0-9_.:\/ -]{1,120}$/;
 const SAFE_NAME = /^[A-Za-z0-9_.:-]{1,64}$/;
 const SAFE_ID = /^\*?[A-Fa-f0-9]{1,16}$/;
 const SAFE_DURATION = /^(\d+[smhdw]){1,4}$/;
+const COMMON_RESERVED_OR_SERVICE_PORTS = new Set([
+  21, 22, 23, 25, 53, 67, 68, 69, 80, 110, 123, 135, 137, 138, 139, 143,
+  161, 389, 443, 445, 465, 514, 587, 636, 993, 995,
+  1080, 1433, 1521, 1723, 1883, 2049, 2375, 2376, 3000, 3306, 3389, 5060,
+  5432, 5672, 5900, 6379, 6443, 8080, 8291, 8728, 8729, 9200, 9300, 27017
+]);
+const SSH_PORT_RULE_COMMENT = "allow-new-ssh-port-from-ai-orchestrator";
 
 function failParam(name: string): never {
   throw new Error(`${name} is invalid or missing.`);
@@ -155,16 +162,18 @@ export function compileRouterOsAction(input: {
     const chain = safeName(p, "chain", "forward");
     const action = safeName(p, "action", "drop");
     const srcAddressList = text(p, "srcAddressList") ?? text(p, "listName");
+    const srcAddress = text(p, "sourceCidr") ?? text(p, "sourceIp") ?? text(p, "srcAddress");
     const protocol = text(p, "protocol");
     const dstPort = p.dstPort ?? p.port;
     const comment = managedComment(safeText(p, "comment", "managed filter rule") ?? "managed filter rule");
     const disabled = bool(p, "disabled", true);
     const parts = [`/ip firewall filter add chain=${quote(chain)}`, `action=${quote(action)}`, `comment=${quote(comment)}`, `disabled=${disabled ? "yes" : "no"}`];
     if (srcAddressList) parts.push(`src-address-list=${quote(safeName({ srcAddressList }, "srcAddressList"))}`);
+    if (srcAddress) parts.push(`src-address=${quote(cidr({ srcAddress }, "srcAddress"))}`);
     if (protocol) parts.push(`protocol=${quote(safeName({ protocol }, "protocol"))}`);
     if (dstPort) parts.push(`dst-port=${quote(numberPort({ dstPort }, "dstPort"))}`);
     const riskLevel = chain === "input" ? AiRiskLevel.high : AiRiskLevel.medium;
-    return result({ category: "firewall", riskLevel, normalizedParameters: { chain, action, srcAddressList, protocol, dstPort, comment, disabled }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: chain === "input", warnings: ["Created firewall filter rules are disabled by default unless explicitly requested."], commandSpecs: [spec({ template: "/ip firewall filter add ... disabled=yes", command: parts.join(" "), target: { chain, comment }, rollbackSteps: [`Remove only managed filter rule comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_created_managed_filter_rule", comment } });
+    return result({ category: "firewall", riskLevel, normalizedParameters: { chain, action, srcAddressList, sourceIp: text(p, "sourceIp") ?? null, sourceCidr: text(p, "sourceCidr") ?? null, protocol, dstPort, comment, disabled }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: chain === "input", warnings: ["Created firewall filter rules are disabled by default unless explicitly requested."], commandSpecs: [spec({ template: "/ip firewall filter add ... disabled=yes", command: parts.join(" "), target: { chain, comment }, rollbackSteps: [`Remove only managed filter rule comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_created_managed_filter_rule", comment } });
   }
 
   if (actionType === ActionType.mikrotik_create_dstnat_rule) {
@@ -209,7 +218,84 @@ export function compileRouterOsAction(input: {
   if (serviceActions.has(actionType)) {
     const service = safeName(p, "service");
     const addressValue = text(p, "address");
-    const port = p.port ? numberPort(p, "port") : undefined;
+    const port = p.newPort !== undefined ? numberPort(p, "newPort") : p.port !== undefined ? numberPort(p, "port") : undefined;
+    if (actionType === ActionType.mikrotik_change_service_port && service === "ssh") {
+      const newPort = port ?? failParam("newPort");
+      if (newPort < 1) throw new Error("newPort must be between 1 and 65535.");
+      if (COMMON_RESERVED_OR_SERVICE_PORTS.has(newPort)) throw new Error(`newPort ${newPort} is reserved for a common management or application service.`);
+      if (!p.trustedSourceCidr && !p.trustedSourceIp && !p.trustedSource) {
+        throw new Error("Allowed source is required for SSH management changes.");
+      }
+      const trustedSource = cidr({
+        address: p.trustedSourceCidr ?? p.trustedSourceIp ?? p.trustedSource
+      }, "address");
+      if (trustedSource === "0.0.0.0/0") throw new Error("trusted source must not allow every IPv4 address.");
+      const oldPortValue = p.oldPort === undefined || p.oldPort === null ? undefined : numberPort(p, "oldPort");
+      if (oldPortValue === newPort) throw new Error("newPort must be different from the detected old SSH port.");
+
+      const ensureRule = `:if ([:len [/ip firewall filter find where chain="input" action="accept" protocol="tcp" src-address=${quote(trustedSource)} dst-port=${newPort} comment=${quote(SSH_PORT_RULE_COMMENT)}]] = 0) do={/ip firewall filter add chain="input" action="accept" protocol="tcp" src-address=${quote(trustedSource)} dst-port=${newPort} comment=${quote(SSH_PORT_RULE_COMMENT)}}`;
+      const changePort = `/ip service set [find where name="ssh"] port=${newPort}`;
+      const verify = "/ip service print where name=ssh";
+      const rollbackSteps = [
+        ...(oldPortValue ? [`Restore SSH with /ip service set [find where name=\"ssh\"] port=${oldPortValue}.`] : ["Old SSH port was not detected; verify the previous port before attempting rollback."]),
+        `Optionally remove the firewall rule whose exact comment is ${SSH_PORT_RULE_COMMENT}.`
+      ];
+
+      return result({
+        category: "management",
+        riskLevel: AiRiskLevel.high,
+        normalizedParameters: {
+          service: "ssh",
+          newPort,
+          port: newPort,
+          trustedSource,
+          trustedSourceIp: p.trustedSourceIp ?? null,
+          trustedSourceCidr: p.trustedSourceCidr ?? null,
+          oldPort: oldPortValue ?? null,
+          firewallRuleComment: SSH_PORT_RULE_COMMENT
+        },
+        requiresBackup: true,
+        requiresBreakGlass: false,
+        lockoutSensitive: true,
+        warnings: [
+          "Changing the MikroTik SSH service port can lock out administrators. Keep the current session open and verify alternate access.",
+          ...(oldPortValue ? [] : ["Old SSH port could not be detected; automatic rollback is not available."])
+        ],
+        commandSpecs: [
+          spec({
+            template: "/ip firewall filter ensure accept tcp from <trustedSource> to <newPort>",
+            command: ensureRule,
+            target: { trustedSource, newPort, comment: SSH_PORT_RULE_COMMENT },
+            rollbackSteps: [`Remove the exact firewall rule with comment=${SSH_PORT_RULE_COMMENT} if it was created by this action.`],
+            warnings: []
+          }),
+          spec({
+            template: "/ip service set [find where name=ssh] port=<newPort>",
+            command: changePort,
+            target: { service: "ssh", oldPort: oldPortValue ?? null, newPort },
+            rollbackSteps,
+            warnings: []
+          }),
+          spec({
+            template: "/ip service print where name=ssh",
+            command: verify,
+            write: false,
+            target: { service: "ssh", expectedPort: newPort },
+            rollbackSteps: [],
+            warnings: []
+          })
+        ],
+        rollbackJson: {
+          type: "restore_mikrotik_ssh_port",
+          oldPort: oldPortValue ?? null,
+          newPort,
+          trustedSource,
+          firewallRuleComment: SSH_PORT_RULE_COMMENT,
+          oldPortDetected: oldPortValue !== undefined,
+          steps: rollbackSteps
+        }
+      });
+    }
     let command = "";
     if (actionType === ActionType.mikrotik_restrict_service_by_address) command = `/ip service set [find where name=${quote(service)}] address=${quote(cidr({ address: addressValue }, "address"))}`;
     else if (actionType === ActionType.mikrotik_change_service_port) command = `/ip service set [find where name=${quote(service)}] port=${quote(port ?? failParam("port"))}`;

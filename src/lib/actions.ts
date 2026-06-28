@@ -31,6 +31,7 @@ export type ActionType =
   | "mikrotik_add_address_list_entry"
   | "mikrotik_remove_address_list_entry"
   | "mikrotik_block_ip_temporary"
+  | "mikrotik_update_address_list_entry"
   | "mikrotik_create_managed_drop_rule"
   | "mikrotik_enable_managed_rule"
   | "mikrotik_disable_managed_rule"
@@ -84,7 +85,59 @@ export type ActionType =
   | "mikrotik_reboot"
   | "mikrotik_schedule_reboot"
   | "mikrotik_disable_rule_by_id"
-  | "mikrotik_remove_rule_by_id";
+  | "mikrotik_remove_rule_by_id"
+  | "fortigate_create_address_object"
+  | "fortigate_update_address_object"
+  | "fortigate_delete_managed_address_object"
+  | "fortigate_create_address_group"
+  | "fortigate_add_member_to_address_group"
+  | "fortigate_remove_member_from_address_group"
+  | "fortigate_create_service_object"
+  | "fortigate_update_service_object"
+  | "fortigate_create_service_group"
+  | "fortigate_create_recurring_schedule"
+  | "fortigate_update_schedule"
+  | "fortigate_create_egress_policy"
+  | "fortigate_create_deny_policy"
+  | "fortigate_enable_policy"
+  | "fortigate_disable_policy"
+  | "fortigate_move_policy"
+  | "fortigate_update_policy_comment"
+  | "fortigate_delete_managed_policy"
+  | "fortigate_create_vip"
+  | "fortigate_create_vip_group"
+  | "fortigate_create_dstnat_policy"
+  | "fortigate_create_snat_policy"
+  | "fortigate_list_admins"
+  | "fortigate_restrict_admin_trusthost"
+  | "fortigate_change_admin_port"
+  | "fortigate_disable_unused_admin_service"
+  | "fortigate_backup_config"
+  | "fortigate_export_sanitized_config"
+  | "fortigate_show_logs"
+  | "fortigate_show_sessions"
+  | "fortigate_create_zone"
+  | "fortigate_add_interface_to_zone"
+  | "fortigate_remove_interface_from_zone"
+  | "fortigate_delete_managed_zone"
+  | "fortigate_list_zones"
+  | "fortigate_set_interface_alias"
+  | "fortigate_set_interface_role"
+  | "fortigate_enable_interface"
+  | "fortigate_disable_interface"
+  | "fortigate_create_vlan_interface"
+  | "fortigate_update_interface_ip"
+  | "fortigate_create_tcp_service"
+  | "fortigate_create_udp_service"
+  | "fortigate_create_tcp_udp_service"
+  | "fortigate_update_service_ports"
+  | "fortigate_delete_managed_service"
+  | "fortigate_add_service_to_group"
+  | "fortigate_remove_service_from_group"
+  | "fortigate_create_policy"
+  | "fortigate_create_zone_policy"
+  | "fortigate_update_policy"
+  | "linux_check_service_status";
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
@@ -105,7 +158,7 @@ export type ActionPlan = {
   rollbackJson: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
-  device?: { id: string; name: string; type?: string; host?: string } | null;
+  device?: { id: string; name: string; vendor?: string; type?: string; host?: string; protocol?: string; credentialId?: string | null; credentialRef?: string | null } | null;
   aiIntent?: { id: string; intentType: string; status: string; riskLevel: string } | null;
   approvals?: Array<Record<string, unknown>>;
 };
@@ -133,7 +186,18 @@ export type ProposeActionInput = {
 export type ApprovalInput = {
   approvedBy?: string;
   reason?: string;
+  approvalConfirmation?: string;
+  breakGlass?: boolean;
 };
+
+export type StructuredValidationError = {
+  field: string;
+  message: string;
+  expectedFormat: string;
+  currentValue: unknown;
+};
+
+export { actionExecutionUiState } from "./actionApprovalState";
 
 export const normalizeArray = <T,>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[];
@@ -184,7 +248,10 @@ async function requestJson<T>(path: string, init?: RequestInit, options?: { allo
 
   const payload = parsePayload(await response.text());
   if (!response.ok && !(options?.allowConflict && response.status === 409)) {
-    throw new Error(apiErrorMessage(url, response.status, payload));
+    const error = new Error(apiErrorMessage(url, response.status, payload)) as QuickExecuteError;
+    const body = normalizeObject(payload);
+    if (body.plan) error.plan = normalizeActionPlan(body.plan);
+    throw error;
   }
   return payload as T;
 }
@@ -213,6 +280,8 @@ export function normalizeActionPlan(value: unknown): ActionPlan {
     approvals: normalizeArray<Record<string, unknown>>(source.approvals),
   };
 }
+
+export type QuickExecuteError = Error & { plan?: ActionPlan };
 
 export function normalizeActionAuditEntry(value: unknown): ActionAuditEntry {
   const source = normalizeObject(value);
@@ -248,6 +317,13 @@ export async function validateAction(id: string) {
   return requestJson<unknown>(`/actions/${id}/validate`, { method: "POST" }).then(normalizeActionPlan);
 }
 
+export async function correctActionFields(id: string, fields: Record<string, unknown>) {
+  return requestJson<unknown>(`/actions/${id}/parameters`, {
+    method: "PATCH",
+    body: JSON.stringify({ fields }),
+  }).then(normalizeActionPlan);
+}
+
 export async function dryRunAction(id: string) {
   return requestJson<unknown>(`/actions/${id}/dry-run`, { method: "POST" }).then(normalizeActionPlan);
 }
@@ -266,8 +342,18 @@ export async function rejectAction(id: string, input: ApprovalInput = {}) {
   }).then(normalizeActionPlan);
 }
 
-export async function executeAction(id: string) {
-  return requestJson<unknown>(`/actions/${id}/execute`, { method: "POST" }).then(normalizeActionPlan);
+export async function executeAction(id: string, input: Record<string, unknown> = {}) {
+  return requestJson<unknown>(`/actions/${id}/execute`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  }).then(normalizeActionPlan);
+}
+
+export async function quickExecuteAction(id: string, input: Record<string, unknown> = {}) {
+  return requestJson<unknown>(`/actions/${id}/quick-execute`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  }).then(normalizeActionPlan);
 }
 
 export async function getActionAudit(id: string) {
