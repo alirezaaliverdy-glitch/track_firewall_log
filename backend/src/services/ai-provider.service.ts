@@ -180,6 +180,8 @@ export async function runAiProvider(input: AiProviderInput): Promise<AiProviderR
     statusCode: lastStatusCode,
     provider,
     attemptedModels: models,
-    message: errors.at(-1) ?? "AI provider failed for all configured models"
+    message: lastStatusCode === 429
+      ? "سرویس هوش مصنوعی به محدودیت تعداد درخواست خورده است. کمی بعد دوباره تلاش کنید یا مدل/Provider دیگری انتخاب کنید."
+      : errors.at(-1) ?? "ارتباط با سرویس هوش مصنوعی ناموفق بود."
   });
 }

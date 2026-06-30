@@ -116,6 +116,6 @@ test("assistant exposes both quick actions and Action Center keeps Execute-only 
   const actionCenter = readFileSync(new URL("../../src/components/actions/ActionCenterPanel.tsx", import.meta.url), "utf8");
   assert.match(assistant, /تحلیل کامل/);
   assert.match(assistant, /پیشنهاد ایمن‌سازی/);
-  assert.match(actionCenter, />\s*Execute\s*</);
+  assert.match(actionCenter, /Confirm &(?:amp;)? Execute/);
   assert.doesNotMatch(actionCenter, /Approve\s*&(?:amp;)?\s*Execute|Run Dry-run|Type APPROVE/i);
 });

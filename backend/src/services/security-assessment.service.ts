@@ -12,6 +12,8 @@ type AssessmentFinding = {
   severity: "low" | "medium" | "high" | "critical";
   category: string;
   affectedDevices: string[];
+  vendor: string;
+  device: string;
   evidence: Record<string, unknown>;
   explanation: string;
   recommendedNextStep: string;
@@ -65,61 +67,66 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
   if (criticalIncidents + highIncidents > 0) {
     findings.push({
       id: "active-high-severity-incidents",
-      title: "High-severity incidents require attention",
+      title: "رخدادهای امنیتی شدید نیازمند رسیدگی فوری هستند",
       severity: criticalIncidents > 0 ? "critical" : "high",
       category: "incident_trend",
       affectedDevices: context.incidents.recent.map((incident) => incident.device?.id).filter((id): id is string => Boolean(id)),
+      vendor: "همه", device: "چند دستگاه",
       evidence: { criticalIncidents, highIncidents, recent: context.incidents.recent.slice(0, 5) },
-      explanation: "Recent high-impact detections indicate active or unresolved security pressure.",
-      recommendedNextStep: "Review incident evidence and contain confirmed hostile sources with a controlled catalog action."
+      explanation: "تشخیص‌های اخیر نشان‌دهنده فشار امنیتی فعال یا رخدادهای حل‌نشده است.",
+      recommendedNextStep: "شواهد رخدادها بررسی و منبع مخرب تأییدشده فقط با اکشن کنترل‌شده مهار شود."
     });
   }
   if (sensitiveHits > 0) {
     findings.push({
       id: "sensitive-management-port-activity",
-      title: "Sensitive services received recent traffic",
+      title: "ترافیک به سرویس‌های حساس مشاهده شده است",
       severity: sensitiveHits > 25 ? "high" : "medium",
       category: "exposed_services",
       affectedDevices: context.devices.map((device) => device.id),
+      vendor: "همه", device: "دستگاه‌های ثبت‌شده",
       evidence: { sensitivePorts: context.events.sensitivePorts, recentEventCount: context.events.recentCount },
-      explanation: "Traffic to management and data-service ports increases exposure and should be restricted to trusted sources.",
-      recommendedNextStep: "Verify listeners and restrict management access using vendor catalog actions where parameters are known."
+      explanation: "ترافیک پورت‌های مدیریتی و داده، سطح حمله را افزایش می‌دهد و باید به مبدأهای مورد اعتماد محدود شود.",
+      recommendedNextStep: "سرویس‌های در حال گوش‌دادن بررسی و دسترسی مدیریتی با اکشن کاتالوگ محدود شود."
     });
   }
   if (unhealthyDevices.length > 0) {
     findings.push({
       id: "device-health-visibility",
-      title: "Some registered devices are not confirmed online",
+      title: "اتصال برخی دستگاه‌های ثبت‌شده تأیید نشده است",
       severity: "medium",
       category: "device_health",
       affectedDevices: unhealthyDevices.map((device) => device.id),
+      vendor: "همه", device: unhealthyDevices.map((device) => device.name).join("، "),
       evidence: { devices: unhealthyDevices.map((device) => ({ id: device.id, name: device.name, status: device.status })) },
-      explanation: "Incomplete device health reduces confidence in firewall posture and connector coverage.",
-      recommendedNextStep: "Verify credentials and connector reachability in Device Registry."
+      explanation: "نبود وضعیت سلامت معتبر، اطمینان به ارزیابی فایروال و پوشش جمع‌آوری داده را کم می‌کند.",
+      recommendedNextStep: "وضعیت credential (بدون مشاهده مقدار محرمانه) و دسترسی connector بررسی شود."
     });
   }
   if (failedActions.length > 0) {
     findings.push({
       id: "failed-controlled-actions",
-      title: "Controlled actions recently failed",
+      title: "برخی اکشن‌های کنترل‌شده ناموفق بوده‌اند",
       severity: "medium",
       category: "action_history",
       affectedDevices: failedActions.map((plan) => plan.deviceId).filter((id): id is string => Boolean(id)),
+      vendor: "همه", device: "دستگاه‌های مرتبط با اکشن",
       evidence: { failedActions },
-      explanation: "Failed actions can leave intended hardening incomplete even when no unsafe command was run.",
-      recommendedNextStep: "Review connector output and audit timelines before retrying."
+      explanation: "اکشن ناموفق می‌تواند ایمن‌سازی برنامه‌ریزی‌شده را ناقص باقی بگذارد.",
+      recommendedNextStep: "پیش از تلاش مجدد، خروجی connector و تاریخچه ممیزی بررسی شود."
     });
   }
   if (context.events.recentCount === 0) {
     findings.push({
       id: "no-recent-security-events",
-      title: "No recent security telemetry is available",
+      title: "داده امنیتی تازه در دسترس نیست",
       severity: "medium",
       category: "logging",
       affectedDevices: context.devices.map((device) => device.id),
+      vendor: "همه", device: "همه دستگاه‌ها",
       evidence: { recentWindowMinutes: context.recentWindowMinutes, eventCount: 0 },
-      explanation: "An empty event window may indicate a quiet network or a logging/collector gap.",
-      recommendedNextStep: "Verify collectors, log forwarding, timestamps, and retention settings."
+      explanation: "خالی بودن بازه رویداد می‌تواند ناشی از نبود رخداد یا شکاف در لاگ و collector باشد.",
+      recommendedNextStep: "collector، ارسال لاگ، زمان سیستم و نگهداری داده بررسی شود."
     });
   }
 
@@ -135,10 +142,15 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
   const topRisks = [...findings].sort((a, b) => ["low", "medium", "high", "critical"].indexOf(b.severity) - ["low", "medium", "high", "critical"].indexOf(a.severity)).slice(0, 5);
   const affectedDevices = Array.from(new Set(findings.flatMap((finding) => finding.affectedDevices)));
   const summary = score >= 70
-    ? "High security risk: immediate review and prioritized containment are recommended."
+    ? "ریسک امنیتی بالا است؛ بررسی فوری و مهار اولویت‌بندی‌شده توصیه می‌شود."
     : score >= 40
-      ? "Moderate security risk: several hardening and visibility improvements are recommended."
-      : "Current observed risk is low, but routine hardening and telemetry checks should continue.";
+      ? "ریسک امنیتی متوسط است؛ چند بهبود مهم در ایمن‌سازی و مشاهده‌پذیری لازم است."
+      : "ریسک مشاهده‌شده پایین است؛ ایمن‌سازی دوره‌ای و کنترل پوشش لاگ باید ادامه یابد.";
+
+  const vendorCounts = Object.fromEntries(["mikrotik", "fortigate", "linux"].map((vendor) => [vendor, context.devices.filter((d) => normalizeVendor(d.vendor || d.type) === vendor).length]));
+  const connected = context.devices.filter((d) => ["online", "connected"].includes(String(d.status).toLowerCase())).length;
+  const noDeviceData = snapshotCount === 0;
+  const riskLabel = score >= 70 ? "بحرانی" : score >= 40 ? "بالا" : score >= 20 ? "متوسط" : "پایین";
 
   return {
     riskScore: score,
@@ -155,7 +167,30 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
       sensitivePorts: context.events.sensitivePorts,
       topSourceIps: context.events.topSourceIps
     },
-    explanation: "The score is deterministic and combines incident severity, sensitive-port activity, device health, action failures, and telemetry coverage.",
+    language: "fa",
+    dataNotice: context.devices.length === 0 && context.events.recentCount === 0 && context.incidents.recent.length === 0
+      ? "داده کافی از دستگاه‌ها یا لاگ‌ها موجود نیست؛ تحلیل بر اساس اطلاعات ثبت‌شده فعلی انجام شد."
+      : noDeviceData ? "داده خوانده‌شده از دستگاه موجود نیست؛ تحلیل بر اساس داده‌های ثبت‌شده در برنامه انجام شده است." : "تحلیل از داده خواندنی دستگاه و داده‌های ثبت‌شده در برنامه استفاده کرده است.",
+    sections: {
+      executiveSummary: { title: "خلاصه مدیریتی", securityStatus: summary, overallRisk: riskLabel, mainProblems: topRisks.map((item) => item.title) },
+      assetsAndVendors: { title: "دارایی‌ها و Vendorها", mikrotik: vendorCounts.mikrotik, fortigate: vendorCounts.fortigate, linux: vendorCounts.linux, registeredDevices: context.devices.length, connected, readOnlySnapshots: snapshotCount },
+      attackSurface: { title: "وضعیت سطح حمله", exposedServices: context.events.sensitivePorts, managementPorts: context.devices.map((d) => ({ device: d.name, port: d.managementPort, protocol: d.protocol })), publicServices: "در داده‌های موجود مشخص نشده است", unnecessaryServices: "نیازمند snapshot خواندنی سرویس‌ها" },
+      firewallPolicies: { title: "وضعیت فایروال و Policyها", status: noDeviceData ? "قواعد فایروال، NAT/VIP، نسبت allow/drop، any/any و logging بدون snapshot قابل تأیید نیست." : "اطلاعات خواندنی موجود است؛ یافته‌های مرتبط باید با شواهد snapshot تطبیق داده شوند." },
+      managementAccess: { title: "وضعیت دسترسی مدیریتی", paths: context.devices.map((d) => ({ device: d.name, protocol: d.protocol, port: d.managementPort })), trustedSources: "در داده‌های ثبت‌شده مشخص نشده است", adminRisk: "محدودیت مبدأ و سطح دسترسی مدیر باید راستی‌آزمایی شود." },
+      loggingMonitoring: { title: "وضعیت لاگ و مانیتورینگ", availableLogs: context.events.recentCount, missingLogs: context.events.recentCount === 0, recentSecurityEvents: context.events.recentCount, incidents: context.incidents.recent.length, detectionCoverage: context.detections.recentRules.length },
+      hardeningStatus: { title: "وضعیت Hardening", applied: "از تاریخچه اکشن‌های موفق قابل بررسی است", missing: findings.map((f) => f.title), riskyDefaults: "نیازمند داده خواندنی vendor-specific", backupConfigStatus: "در داده‌های موجود تأیید نشده است" },
+      vendorSpecificChecks: {
+        title: "کنترل‌های اختصاصی Vendor",
+        mikrotik: "SSH/Winbox/API، پورت سرویس‌ها، مبدأ مدیریت، DNS از WAN، input chain، established/related، drop invalid، address-list، NAT و backup/export",
+        fortigate: "admin access، local-in policy، لاگ Policy، broad allow، address object، VIP، route، security profile، backup و system logging",
+        linux: "SSH root login و port، listening ports، UFW/iptables/nftables، fail2ban، sudo users، auth logs، Docker، Nginx و شاخص به‌روزرسانی",
+        result: noDeviceData ? "به دلیل نبود snapshot خواندنی، این کنترل‌ها تأیید نشده‌اند و به بررسی دستی نیاز دارند." : "کنترل‌ها بر اساس snapshot خواندنی و شواهد ثبت‌شده ارزیابی می‌شوند."
+      },
+      findings: { title: "یافته‌ها", items: findings },
+      nextActions: { title: "اقدامات پیشنهادی بعدی", prioritized: findings.map((f) => f.recommendedNextStep), quickWins: ["بررسی پوشش لاگ", "محدودسازی مبدأ دسترسی مدیریتی"], highImpact: ["رسیدگی به رخدادهای شدید", "بازبینی سرویس‌های حساس"] },
+      riskScore: { title: "امتیاز ریسک", score, label: riskLabel, explanation: "امتیاز به‌صورت قطعی از شدت رخدادها، ترافیک پورت حساس، سلامت دستگاه، شکست اکشن و پوشش داده محاسبه شده است." }
+    },
+    explanation: "امتیاز به‌صورت قطعی از شدت رخدادها، ترافیک پورت حساس، سلامت دستگاه، شکست اکشن و پوشش داده محاسبه شده است.",
     recommendedNextSteps: findings.map((finding) => finding.recommendedNextStep),
     catalogCoverage
   };
@@ -185,6 +220,12 @@ export async function runFullAnalysis(input: { scopeType?: string; scopeId?: str
     buildSecurityContext({ recentMinutes: 1440 }),
     input.collectConnectorData === false ? Promise.resolve([]) : collectReadOnlySnapshots()
   ]);
+  const [credentialLinks, capabilityRecords, storedSnapshots, auditLogs] = await Promise.all([
+    prisma.device.count({ where: { OR: [{ credentialId: { not: null } }, { credentialRef: { not: null } }] } }),
+    prisma.deviceCapability.count(),
+    prisma.deviceSnapshot.count(),
+    prisma.actionAuditLog.count()
+  ]);
   const draft = buildAssessmentDraft(context, snapshots.length);
   return prisma.securityAssessment.create({
     data: {
@@ -193,10 +234,93 @@ export async function runFullAnalysis(input: { scopeType?: string; scopeId?: str
       status: "completed",
       riskScore: draft.riskScore,
       summary: draft.summary,
-      findingsJson: toJson(draft)
+      findingsJson: toJson(draft),
+      dataSourcesJson: toJson({ device: context.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
+      language: "fa"
     },
     include: { recommendations: { include: { device: { select: { id: true, name: true, vendor: true, type: true } } } } }
   });
+}
+
+function publicFinding(finding: AssessmentFinding) {
+  return {
+    id: finding.id,
+    titleFa: finding.title,
+    severity: finding.severity,
+    vendor: finding.vendor,
+    deviceName: finding.device,
+    deviceId: finding.affectedDevices[0] ?? null,
+    evidence: finding.evidence,
+    whyItMattersFa: finding.explanation,
+    recommendationFa: finding.recommendedNextStep,
+    executable: false,
+    catalogActionId: null
+  };
+}
+
+function stableAssessment(draft: ReturnType<typeof buildAssessmentDraft>, createdAt = new Date().toISOString(), id: string | null = null) {
+  return {
+    id,
+    riskScore: draft.riskScore,
+    summaryFa: draft.summary,
+    sections: Object.values(draft.sections),
+    findings: draft.findings.map(publicFinding),
+    dataSources: Object.entries(draft.evidence).map(([name, value]) => ({ name, available: Array.isArray(value) ? value.length > 0 : Boolean(value), value })),
+    dataNoticeFa: draft.dataNotice,
+    createdAt,
+    // Compatibility fields for existing clients while the public API uses the fields above.
+    status: "completed", scopeType: "all", scopeId: null, summary: draft.summary, language: "fa",
+    findingsJson: draft, dataSourcesJson: draft.evidence, recommendations: []
+  };
+}
+
+export async function runStableFullAnalysis(input: { scopeType?: string; scopeId?: string; collectConnectorData?: boolean } = {}) {
+  try {
+    const stored = await runFullAnalysis(input);
+    const draft = object(stored.findingsJson) as ReturnType<typeof buildAssessmentDraft>;
+    return { ok: true as const, source: "deterministic" as const, assessment: stableAssessment(draft, stored.createdAt.toISOString(), stored.id), technicalError: null };
+  } catch (error) {
+    const context = await buildSecurityContext({ recentMinutes: 1440 });
+    const draft = buildAssessmentDraft(context, 0);
+    return { ok: true as const, source: "deterministic" as const, assessment: stableAssessment(draft), technicalError: error instanceof Error ? error.message : "Unknown assessment error" };
+  }
+}
+
+export async function generateStandaloneHardeningSuggestions() {
+  const context = await buildSecurityContext({ recentMinutes: 1440 });
+  const draft = buildAssessmentDraft(context, 0);
+  const devices = context.devices.map((device) => ({ id: device.id, name: device.name, vendor: String(device.vendor), type: String(device.type), managementPort: device.managementPort }));
+  let persisted: Awaited<ReturnType<typeof getSecurityAssessment>> = null;
+  try {
+    const assessment = await runFullAnalysis({ collectConnectorData: false });
+    persisted = await generateHardeningSuggestions(assessment.id);
+  } catch {
+    // Missing tables/columns or an unavailable database must not block local analysis.
+  }
+  const localDrafts = buildHardeningRecommendationDrafts({ findingsJson: draft }, devices);
+  const sourceItems = persisted?.recommendations ?? localDrafts;
+  const recommendations = sourceItems.map((raw) => {
+    const item = "evidenceJson" in raw ? {
+      ...raw,
+      evidence: object(raw.evidenceJson),
+      parameters: object(raw.parametersJson)
+    } : raw;
+    return ({
+    id: "id" in item ? item.id : null,
+    titleFa: item.title,
+    severity: item.severity,
+    vendor: item.vendor,
+    deviceId: item.deviceId,
+    deviceName: devices.find((device) => device.id === item.deviceId)?.name ?? "همه دستگاه‌ها",
+    category: item.category,
+    evidence: Object.entries(item.evidence).map(([name, value]) => ({ name, value })),
+    recommendationFa: item.recommendation,
+    reasonFa: item.reason,
+    executable: item.executable && ("id" in item),
+    catalogActionId: item.catalogActionId,
+    suggestedParameters: item.parameters
+  }); });
+  return { ok: true as const, source: "deterministic" as const, assessmentId: persisted?.id ?? null, recommendations, dataNoticeFa: draft.dataNotice, createdAt: new Date().toISOString() };
 }
 
 export async function getSecurityAssessment(id: string) {
@@ -227,44 +351,47 @@ export function buildHardeningRecommendationDrafts(
     const vendor = normalizeVendor(device.vendor || device.type);
     if (vendor === "mikrotik") {
       recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: "Create a current sanitized configuration export", severity: "medium", category: "backup",
-        reason: "A current export makes controlled rollback and incident recovery safer.", evidence: { device: device.name },
-        recommendation: "Create and securely retain a hide-sensitive RouterOS export.", catalogActionId: "mikrotik.export_config", parameters: {}
+        deviceId: device.id, vendor, title: "تهیه خروجی امن و به‌روز از تنظیمات MikroTik", severity: "medium", category: "پشتیبان‌گیری و بازیابی",
+        reason: "نسخه به‌روز، بازگشت کنترل‌شده و بازیابی پس از رخداد را قابل اتکاتر می‌کند.", evidence: { device: device.name, status: "وضعیت پشتیبان در داده موجود تأیید نشده است" },
+        recommendation: "یک export بدون اطلاعات حساس تهیه و در محل امن نگهداری شود.", catalogActionId: "mikrotik.export_config", parameters: {}
       }));
+      recommendations.push({ deviceId: device.id, vendor, title: "بازبینی زنجیره input و سرویس‌های WAN در MikroTik", severity: "high", category: "Vendor Hardening", reason: "نبود drop invalid، established/related یا محدودیت DNS و Winbox/API می‌تواند سطح حمله را افزایش دهد.", evidence: { checks: ["SSH/Winbox/API", "DNS از WAN", "drop invalid", "established/related", "NAT حساس"], status: "نیازمند snapshot خواندنی" }, recommendation: "قواعد input، سرویس‌های مدیریتی، DNS و port-forwardها به‌صورت دستی بازبینی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
       recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: "Restrict SSH management access", severity: "high", category: "management_access",
-        reason: "Management services should accept traffic only from an explicitly trusted source.", evidence: { managementPort: device.managementPort },
-        recommendation: "Choose an allowed management CIDR, then restrict the SSH service.", catalogActionId: "mikrotik.allow_management_source", parameters: { serviceName: "ssh" }
+        deviceId: device.id, vendor, title: "محدودسازی دسترسی مدیریتی SSH", severity: "high", category: "دسترسی مدیریتی",
+        reason: "سرویس مدیریتی باید فقط از شبکه‌های صریحاً مورد اعتماد در دسترس باشد.", evidence: { managementPort: device.managementPort, trustedSource: "نامشخص" },
+        recommendation: "CIDR مدیریتی مجاز تعیین و سپس دسترسی SSH محدود شود.", catalogActionId: "mikrotik.allow_management_source", parameters: { serviceName: "ssh" }
       }));
     } else if (vendor === "fortigate") {
       recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: "Create a current FortiGate configuration backup", severity: "medium", category: "backup",
-        reason: "A current backup supports recovery before policy and NAT changes.", evidence: { device: device.name },
-        recommendation: "Collect a controlled configuration backup.", catalogActionId: "fortigate.backup_config", parameters: {}
+        deviceId: device.id, vendor, title: "تهیه پشتیبان به‌روز از تنظیمات FortiGate", severity: "medium", category: "پشتیبان‌گیری و بازیابی",
+        reason: "پشتیبان به‌روز، بازیابی پیش از تغییر Policy و NAT را ممکن می‌کند.", evidence: { device: device.name, backupStatus: "تأیید نشده" },
+        recommendation: "نسخه پشتیبان کنترل‌شده از تنظیمات تهیه شود.", catalogActionId: "fortigate.backup_config", parameters: {}
       }));
+      recommendations.push({ deviceId: device.id, vendor, title: "بازبینی Policy، VIP و دسترسی مدیریتی FortiGate", severity: "high", category: "Firewall Policy", reason: "Policy گسترده، VIP در معرض، local-in باز و نبود security profile ریسک نفوذ را بالا می‌برد.", evidence: { checks: ["broad allow", "VIP", "local-in/admin", "policy logging", "security profiles"], status: "نیازمند snapshot خواندنی" }, recommendation: "Policyها، VIPها، local-in و پروفایل‌های امنیتی با اصل حداقل دسترسی بازبینی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
       recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: "Enable logging on important firewall policies", severity: "medium", category: "logging",
-        reason: "Policy logging improves incident evidence and traffic trend visibility.", evidence: { device: device.name },
-        recommendation: "Select the managed policy ID that should log all traffic.", catalogActionId: "fortigate.enable_policy_logging", parameters: {}
+        deviceId: device.id, vendor, title: "فعال‌سازی لاگ برای Policyهای مهم فایروال", severity: "medium", category: "لاگ و مانیتورینگ",
+        reason: "لاگ Policy شواهد رخداد و دید روند ترافیک را بهبود می‌دهد.", evidence: { device: device.name, policyId: "مشخص نشده" },
+        recommendation: "Policy مدیریت‌شده انتخاب و ثبت همه ترافیک آن فعال شود.", catalogActionId: "fortigate.enable_policy_logging", parameters: {}
       }));
     } else if (vendor === "linux") {
       recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: "Review listening ports", severity: "medium", category: "exposed_services",
-        reason: "Unexpected listeners can expose management or application services.", evidence: { device: device.name },
-        recommendation: "Collect the controlled listening-port inventory and close unnecessary services.", catalogActionId: "linux.read_listening_ports", parameters: {}
+        deviceId: device.id, vendor, title: "بازبینی پورت‌های در حال گوش‌دادن Linux", severity: "medium", category: "سرویس‌های در معرض",
+        reason: "listenerهای غیرمنتظره می‌توانند سرویس مدیریتی یا برنامه را در معرض قرار دهند.", evidence: { device: device.name, listeningPorts: "هنوز خوانده نشده" },
+        recommendation: "فهرست پورت‌ها با اکشن خواندنی کنترل‌شده جمع‌آوری و سرویس غیرضروری بسته شود.", catalogActionId: "linux.read_listening_ports", parameters: {}
       }));
+      recommendations.push({ deviceId: device.id, vendor, title: "بازبینی SSH، فایروال و سرویس‌های حفاظتی Linux", severity: "high", category: "Authentication", reason: "ورود root، وضعیت نامشخص فایروال/fail2ban، sudo و Docker می‌تواند مسیر دسترسی ناامن ایجاد کند.", evidence: { checks: ["PermitRootLogin", "sudo users", "UFW/iptables/nftables", "fail2ban", "Docker ports", "auth logs"], status: "نیازمند snapshot خواندنی" }, recommendation: "تنظیمات SSH، کاربران sudo، فایروال، fail2ban، پورت‌های Docker و پوشش auth log بررسی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
       if (leadingSource) recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: `Temporarily block suspicious source ${leadingSource}`, severity: "high", category: "containment",
-        reason: "This source generated the highest recent event volume.", evidence: { sourceIp: leadingSource, source: topSources[0] },
-        recommendation: "Confirm the source is hostile, then apply a time-bounded managed UFW block.", catalogActionId: "linux.temporary_block_ip", parameters: { srcIp: leadingSource, durationMinutes: 30 }
+        deviceId: device.id, vendor, title: `مسدودسازی موقت مبدأ مشکوک ${leadingSource}`, severity: "high", category: "سرویس‌های در معرض",
+        reason: "این مبدأ بیشترین حجم رویداد اخیر را ایجاد کرده است.", evidence: { sourceIp: leadingSource, source: topSources[0] },
+        recommendation: "پس از تأیید مخرب بودن مبدأ، مسدودسازی مدیریت‌شده و زمان‌دار UFW اعمال شود.", catalogActionId: "linux.temporary_block_ip", parameters: { srcIp: leadingSource, durationMinutes: 30 }
       }));
     }
   }
 
   recommendations.push({
-    deviceId: null, vendor: "manual", title: "Verify end-to-end log coverage", severity: "medium", category: "logging",
-    reason: "Assessment confidence depends on complete, timely telemetry from every managed device.", evidence: { recentEvents: evidence.recentEvents ?? 0 },
-    recommendation: "Compare registered devices with active collectors and repair any gaps.", catalogActionId: null, actionType: null, parameters: {}, executable: false
+    deviceId: null, vendor: "همه", title: "راستی‌آزمایی پوشش سراسری لاگ", severity: "medium", category: "لاگ و مانیتورینگ",
+    reason: "اعتبار ارزیابی به داده کامل و به‌موقع همه دستگاه‌های مدیریت‌شده وابسته است.", evidence: { recentEvents: evidence.recentEvents ?? 0 },
+    recommendation: "دستگاه‌های ثبت‌شده با collectorهای فعال مقایسه و شکاف‌ها رفع شود.", catalogActionId: null, actionType: null, parameters: {}, executable: false
   });
   return recommendations;
 }
@@ -305,11 +432,11 @@ export async function createActionPlanFromRecommendation(id: string) {
     if (existing) return { recommendationId: id, actionPlan: existing };
   }
   if (!recommendation.executable || !recommendation.catalogActionId || !recommendation.actionType || !recommendation.deviceId) {
-    throw new Error("This recommendation is manual or is not supported by the controlled catalog yet.");
+    throw new Error("این پیشنهاد دستی است یا هنوز در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.");
   }
   const entry = getCommandCatalogEntry(recommendation.catalogActionId);
   if (!entry?.supportsExecution || entry.actionType !== recommendation.actionType || !Object.values(ActionType).includes(recommendation.actionType as ActionType)) {
-    throw new Error("The recommendation no longer maps to an executable controlled catalog action.");
+    throw new Error("این پیشنهاد دیگر به اکشن اجرایی کاتالوگ کنترل‌شده نگاشت نمی‌شود.");
   }
   const parameters = object(recommendation.parametersJson);
   const missing = entry.requiredParams.filter((field) => parameters[field] === undefined || parameters[field] === "");

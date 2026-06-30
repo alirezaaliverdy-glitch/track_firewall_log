@@ -244,6 +244,8 @@ model SecurityAssessment {
   riskScore       Int
   summary         String
   findingsJson    Json
+  dataSourcesJson Json                      @default("{}")
+  language        String                    @default("fa")
   createdAt       DateTime                  @default(now())
   updatedAt       DateTime                  @updatedAt
   recommendations HardeningRecommendation[]

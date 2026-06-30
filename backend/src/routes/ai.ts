@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { buildSecurityContext } from "../services/ai-context.service.js";
-import { chatWithAssistant, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
+import { chatWithAssistant, clearAiChatSessionMessages, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
 import { completeAiActionRequest, getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
 import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
 
@@ -37,6 +37,16 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     const session = await getAiChatSession(request.params.id);
     if (!session) return reply.code(404).send({ error: "AI chat session not found" });
     return session;
+  });
+
+  app.delete<{ Params: { id: string } }>("/api/ai/chat/sessions/:id/messages", async (request, reply) => {
+    try {
+      const result = await clearAiChatSessionMessages(request.params.id);
+      return result ?? reply.code(404).send({ ok: false, message: "گفت‌وگو پیدا نشد." });
+    } catch (error) {
+      request.log.error({ err: error }, "Failed to clear AI chat messages");
+      return reply.code(200).send({ ok: false, message: "پاک‌کردن سابقه سمت سرور انجام نشد؛ نمایش محلی پاک شده است." });
+    }
   });
 
   app.get("/api/ai/context/security-summary", async () => buildSecurityContext());

@@ -87,7 +87,7 @@ test("raw commands do not become executable catalog actions", () => {
 
 test("Action Center exposes Execute and hides manual preview/approval UX", () => {
   const source = readFileSync(new URL("../../src/components/actions/ActionCenterPanel.tsx", import.meta.url), "utf8");
-  assert.match(source, />\s*Execute\s*</);
+  assert.match(source, /Confirm &(?:amp;)? Execute/);
   assert.doesNotMatch(source, /Approve\s*&(?:amp;)?\s*Execute/i);
   assert.doesNotMatch(source, /Run Dry-run|Dry-run only|Type APPROVE/i);
 });
@@ -99,4 +99,3 @@ test("controlled execution records command-plan and result audit events", () => 
   assert.match(source, /controlled_execution_blocked/);
   assert.match(source, /connector\.execute/);
 });
-

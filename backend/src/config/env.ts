@@ -54,10 +54,15 @@ function parseCsv(value: string | undefined) {
     .filter(Boolean);
 }
 
-export type ActionExecutionMode = "safe" | "lab_fast" | "direct_controlled";
+export type ActionExecutionMode = "safe" | "lab_fast" | "direct_controlled" | "quick_controlled";
 
 function parseActionExecutionMode(value: string | undefined): ActionExecutionMode {
-  return value === "lab_fast" || value === "direct_controlled" ? value : "safe";
+  return value === "lab_fast" || value === "direct_controlled" || value === "quick_controlled" ? value : "quick_controlled";
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean) {
+  if (value === undefined) return fallback;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 export const env = {
@@ -88,7 +93,10 @@ export const env = {
   sshConnectTimeoutMs: parsePositiveInteger(process.env.SSH_CONNECT_TIMEOUT_MS, DEFAULT_SSH_CONNECT_TIMEOUT_MS),
   sshHandshakeTimeoutMs: parsePositiveInteger(process.env.SSH_HANDSHAKE_TIMEOUT_MS, DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS),
   sshCommandTimeoutMs: parsePositiveInteger(process.env.SSH_COMMAND_TIMEOUT_MS, DEFAULT_SSH_COMMAND_TIMEOUT_MS),
-  actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE)
+  actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE),
+  actionRequireManagementSource: parseBoolean(process.env.ACTION_REQUIRE_MANAGEMENT_SOURCE, false),
+  actionDefaultTrustedSource: process.env.ACTION_DEFAULT_TRUSTED_SOURCE?.trim() || "auto",
+  actionAllowLabUnrestrictedManagement: parseBoolean(process.env.ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT, true)
 };
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;

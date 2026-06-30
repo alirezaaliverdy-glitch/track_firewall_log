@@ -281,3 +281,11 @@ export async function getAiChatSession(id: string) {
     }
   });
 }
+
+export async function clearAiChatSessionMessages(id: string) {
+  const session = await prisma.aiChatSession.findUnique({ where: { id }, select: { id: true } });
+  if (!session) return null;
+  const result = await prisma.aiChatMessage.deleteMany({ where: { sessionId: id } });
+  await prisma.aiChatSession.update({ where: { id }, data: { updatedAt: new Date() } });
+  return { ok: true, sessionId: id, deletedMessages: result.count };
+}

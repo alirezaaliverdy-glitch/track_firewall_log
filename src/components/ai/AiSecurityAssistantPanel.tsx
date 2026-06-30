@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import {
   getAiProviderStatus,
@@ -15,6 +15,7 @@ import {
   type SecuritySummary,
   type StructuredAiResponse,
   createRecommendationActionPlan,
+  clearAiSessionMessages,
   generateHardeningSuggestions,
   runFullSecurityAnalysis,
   type SecurityAssessment,
@@ -284,6 +285,7 @@ function ChatMessageBubble({ message }: { message: AiMessage }) {
 }
 
 export default function AiSecurityAssistantPanel() {
+  const viewGeneration = useRef(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [lastIntent, setLastIntent] = useState<AiActionIntent | null>(null);
@@ -292,6 +294,7 @@ export default function AiSecurityAssistantPanel() {
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [technicalError, setTechnicalError] = useState<string | null>(null);
   const [createdPlanId, setCreatedPlanId] = useState<string | null>(null);
   const [actionDebug, setActionDebug] = useState<AiActionDebug | null>(null);
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
@@ -314,11 +317,16 @@ export default function AiSecurityAssistantPanel() {
         setProviderStatus(nextStatus);
         setLastRefreshedAt(new Date().toISOString());
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed to load security summary."))
+      .catch((err: unknown) => {
+        setError("دریافت خلاصه امنیتی انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در دریافت خلاصه امنیتی");
+      })
       .finally(() => setSummaryLoading(false));
   };
 
   const clearChat = () => {
+    viewGeneration.current += 1;
+    const activeSessionId = sessionId;
     setSessionId(null);
     setMessages([]);
     setLastIntent(null);
@@ -326,6 +334,17 @@ export default function AiSecurityAssistantPanel() {
     setActionDebug(null);
     setCreatedPlanId(null);
     setError(null);
+    setTechnicalError(null);
+    setAssessment(null);
+    setAssessmentLoading(false);
+    setHardeningLoading(false);
+    setRecommendationWorking(null);
+    setInput("");
+    if (activeSessionId) {
+      void clearAiSessionMessages(activeSessionId).catch((reason: unknown) => {
+        setTechnicalError(reason instanceof Error ? reason.message : "پاک‌کردن سابقه سمت سرور ناموفق بود.");
+      });
+    }
   };
 
   useEffect(() => {
@@ -337,25 +356,42 @@ export default function AiSecurityAssistantPanel() {
   const sensitivePorts = normalizeArray<{ dstPort: number | null; count: number }>(summary?.events.sensitivePorts);
   const assessmentDetails = normalizeObject(assessment?.findingsJson);
   const assessmentFindings = normalizeArray<Record<string, unknown>>(assessmentDetails.findings);
+  const assessmentSections = normalizeObject(assessmentDetails.sections);
+  const severityFa = (value: string) => ({ low: "کم", medium: "متوسط", high: "زیاد", critical: "بحرانی" }[value.toLowerCase()] ?? value);
+  const evidenceText = (value: unknown): string => {
+    if (value === null || value === undefined || value === "") return "نامشخص";
+    if (Array.isArray(value)) return value.length ? value.map(evidenceText).join("، ") : "موردی ثبت نشده";
+    if (typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key}: ${evidenceText(item)}`).join("؛ ");
+    if (typeof value === "boolean") return value ? "بله" : "خیر";
+    return String(value);
+  };
 
   const runAssessment = () => {
+    const generation = viewGeneration.current;
     setAssessmentLoading(true);
     setError(null);
     runFullSecurityAnalysis()
-      .then(setAssessment)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Full analysis failed."))
-      .finally(() => setAssessmentLoading(false));
+      .then((result) => { if (generation === viewGeneration.current) setAssessment(result); })
+      .catch((err: unknown) => {
+        if (generation !== viewGeneration.current) return;
+        setError("تحلیل کامل انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در تحلیل کامل");
+      })
+      .finally(() => { if (generation === viewGeneration.current) setAssessmentLoading(false); });
   };
 
   const runHardening = () => {
+    const generation = viewGeneration.current;
     setHardeningLoading(true);
     setError(null);
-    const source = assessment ? Promise.resolve(assessment) : runFullSecurityAnalysis();
-    source
-      .then((current) => generateHardeningSuggestions(current.id))
-      .then(setAssessment)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Hardening suggestions failed."))
-      .finally(() => setHardeningLoading(false));
+    generateHardeningSuggestions(assessment?.id)
+      .then((result) => { if (generation === viewGeneration.current) setAssessment(result); })
+      .catch((err: unknown) => {
+        if (generation !== viewGeneration.current) return;
+        setError("پیشنهادهای ایمن‌سازی تولید نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در پیشنهادهای ایمن‌سازی");
+      })
+      .finally(() => { if (generation === viewGeneration.current) setHardeningLoading(false); });
   };
 
   const createRecommendationPlan = (recommendationId: string) => {
@@ -371,7 +407,10 @@ export default function AiSecurityAssistantPanel() {
         } : current);
         reviewInActionCenter();
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not create ActionPlan."))
+      .catch((err: unknown) => {
+        setError("ساخت برنامه اقدام انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در ساخت برنامه اقدام");
+      })
       .finally(() => setRecommendationWorking(null));
   };
 
@@ -391,6 +430,7 @@ export default function AiSecurityAssistantPanel() {
     }
 
     setLoading(true);
+    const generation = viewGeneration.current;
     setError(null);
     setCreatedPlanId(null);
     const optimisticUser = normalizeAiMessage({
@@ -405,6 +445,7 @@ export default function AiSecurityAssistantPanel() {
 
     sendAiMessage(sessionId, trimmed)
       .then((response) => {
+        if (generation !== viewGeneration.current) return;
         setSessionId(response.sessionId || sessionId);
         setMessages((current) => [
           ...current.filter((message) => message.id !== optimisticUser.id),
@@ -422,9 +463,11 @@ export default function AiSecurityAssistantPanel() {
         refreshSummary();
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to send AI message.");
+        if (generation !== viewGeneration.current) return;
+        setError("پاسخ سرویس هوش مصنوعی دریافت نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته سرویس هوش مصنوعی");
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (generation === viewGeneration.current) setLoading(false); });
   };
 
   return (
@@ -478,8 +521,8 @@ export default function AiSecurityAssistantPanel() {
             <ScanSearch className="h-5 w-5" aria-hidden="true" />
             تحلیل کامل
           </span>
-          <span className="mt-1 block text-xs text-zinc-400">Full Analysis across devices, events, incidents, actions, connector snapshots, and catalog coverage.</span>
-          <span className="mt-2 block text-xs font-medium text-blue-300">{assessmentLoading ? "Analyzing..." : "Run Full Analysis"}</span>
+          <span className="mt-1 block text-xs text-zinc-400">ارزیابی ساختاریافته دستگاه‌ها، رخدادها، سطح حمله، Policyها و پوشش لاگ</span>
+          <span className="mt-2 block text-xs font-medium text-blue-300">{assessmentLoading ? "در حال تحلیل..." : "اجرای تحلیل کامل"}</span>
         </button>
         <button
           type="button"
@@ -491,38 +534,47 @@ export default function AiSecurityAssistantPanel() {
             <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             پیشنهاد ایمن‌سازی
           </span>
-          <span className="mt-1 block text-xs text-zinc-400">Prioritized recommendations mapped to controlled catalog actions whenever possible.</span>
-          <span className="mt-2 block text-xs font-medium text-green-300">{hardeningLoading ? "Generating..." : "Generate Hardening Suggestions"}</span>
+          <span className="mt-1 block text-xs text-zinc-400">پیشنهادهای اولویت‌بندی‌شده با نگاشت امن به اکشن‌های کاتالوگ</span>
+          <span className="mt-2 block text-xs font-medium text-green-300">{hardeningLoading ? "در حال تولید..." : "تولید پیشنهادهای ایمن‌سازی"}</span>
         </button>
       </div>
 
       {assessment && (
-        <div className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/80 p-4 text-left">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-zinc-100">Security Assessment</p>
-              <p className="mt-1 text-xs text-zinc-400">{assessment.summary}</p>
-            </div>
-            <span className={`rounded border px-3 py-1 text-sm font-bold ${assessment.riskScore >= 70 ? "border-red-700 text-red-200" : assessment.riskScore >= 40 ? "border-yellow-700 text-yellow-200" : "border-green-700 text-green-200"}`}>
-              Risk {assessment.riskScore}/100
-            </span>
+        <div dir="rtl" className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/80 p-4 text-right">
+          <h3 className="text-base font-semibold text-zinc-100">گزارش ارزیابی امنیتی</h3>
+          <p className="mt-2 text-xs text-zinc-400">{assessment.summary}</p>
+          <p className="mt-2 rounded border border-amber-900/60 bg-amber-950/20 p-2 text-xs text-amber-200">{String(assessmentDetails.dataNotice ?? "داده خوانده‌شده از دستگاه موجود نیست؛ تحلیل بر اساس داده‌های ثبت‌شده در برنامه انجام شده است.")}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">امتیاز ریسک</p><p className="mt-1 text-xl font-bold text-red-200">{assessment.riskScore} از ۱۰۰</p></div>
+            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">یافته‌های مهم</p><p className="mt-1 text-xl font-bold text-yellow-200">{assessmentFindings.length}</p></div>
+            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">پوشش دستگاه</p><p className="mt-1 text-sm text-blue-200">{evidenceText(normalizeObject(assessmentSections.assetsAndVendors).connected)} دستگاه متصل</p></div>
+            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">پیشرفت ایمن‌سازی</p><p className="mt-1 text-sm text-green-200">{assessment.recommendations.filter((item) => item.status === "action_plan_created").length} اقدام برنامه‌ریزی‌شده</p></div>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {Object.values(assessmentSections).filter((section) => section && typeof section === "object" && !Array.isArray(section)).map((section, index) => {
+              const item = normalizeObject(section);
+              if (item.title === "یافته‌ها") return null;
+              return <div key={index} className="rounded border border-zinc-800 bg-black/20 p-3"><h4 className="text-xs font-semibold text-blue-100">{String(item.title ?? "بخش گزارش")}</h4><p className="mt-2 text-xs leading-6 text-zinc-400">{evidenceText(Object.fromEntries(Object.entries(item).filter(([key]) => key !== "title")))}</p></div>;
+            })}
           </div>
           {assessmentFindings.length > 0 && (
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="mt-4"><h3 className="mb-2 text-sm font-semibold text-zinc-100">یافته‌ها</h3><div className="grid gap-2 md:grid-cols-2">
               {assessmentFindings.slice(0, 6).map((finding, index) => (
                 <div key={String(finding.id ?? index)} className="rounded border border-zinc-800 bg-black/20 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-zinc-200">{String(finding.title ?? "Finding")}</p>
-                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(String(finding.severity ?? "medium"))}`}>{String(finding.severity ?? "medium")}</span>
+                    <p className="text-xs font-semibold text-zinc-200">{String(finding.title ?? "یافته امنیتی")}</p>
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(String(finding.severity ?? "medium"))}`}>{severityFa(String(finding.severity ?? "medium"))}</span>
                   </div>
                   <p className="mt-1 text-xs text-zinc-400">{String(finding.explanation ?? "")}</p>
+                  <p className="mt-2 text-xs text-zinc-500"><span className="text-zinc-300">شواهد:</span> {evidenceText(finding.evidence)}</p>
+                  <p className="mt-1 text-xs text-green-300"><span className="text-zinc-300">اقدام پیشنهادی:</span> {String(finding.recommendedNextStep ?? "نیازمند بررسی دستی")}</p>
                 </div>
               ))}
-            </div>
+            </div></div>
           )}
           {assessment.recommendations.length > 0 && (
             <div className="mt-4">
-              <h3 className="text-sm font-semibold text-zinc-100">Hardening Suggestions</h3>
+              <h3 className="text-sm font-semibold text-zinc-100">پیشنهادهای ایمن‌سازی</h3>
               <div className="mt-2 space-y-2">
                 {assessment.recommendations.map((recommendation) => (
                   <div key={recommendation.id} className="rounded border border-zinc-800 bg-black/20 p-3">
@@ -530,14 +582,16 @@ export default function AiSecurityAssistantPanel() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-xs font-semibold text-zinc-100">{recommendation.title}</p>
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(recommendation.severity)}`}>{recommendation.severity}</span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(recommendation.severity)}`}>{severityFa(recommendation.severity)}</span>
                           <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">{recommendation.vendor}</span>
                           <span className={`rounded border px-1.5 py-0.5 text-[10px] ${recommendation.executable ? "border-green-800 text-green-300" : "border-zinc-700 text-zinc-500"}`}>
-                            {recommendation.executable ? "Executable" : "Manual"}
+                            {recommendation.executable ? "قابل اجرا" : "نیاز به بررسی دستی"}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-zinc-400">{recommendation.reason}</p>
-                        <p className="mt-1 text-xs text-zinc-500">{recommendation.device?.name ?? "All devices"} · {recommendation.catalogActionId ?? "No catalog action"}</p>
+                        <p className="mt-1 text-xs text-zinc-500">دستگاه: {recommendation.device?.name ?? "همه دستگاه‌ها"} · دسته: {recommendation.category}</p>
+                        <p className="mt-1 text-xs text-zinc-500">شواهد: {evidenceText(recommendation.evidenceJson)}</p>
+                        <p className="mt-1 text-xs text-green-300">اقدام پیشنهادی: {recommendation.recommendation}</p>
                       </div>
                       {recommendation.executable && !recommendation.actionPlanId && (
                         <button
@@ -547,25 +601,17 @@ export default function AiSecurityAssistantPanel() {
                           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {recommendationWorking === recommendation.id ? "Creating..." : "Create ActionPlan"}
+                          {recommendationWorking === recommendation.id ? "در حال ساخت..." : "ساخت اکشن"}
                         </button>
                       )}
-                      {recommendation.actionPlanId && <span className="text-xs font-medium text-green-300">Ready in Action Center</span>}
+                      {recommendation.actionPlanId && <span className="text-xs font-medium text-green-300">در مرکز اکشن آماده است</span>}
                     </div>
-                    <details className="mt-2 text-xs text-zinc-400">
-                      <summary className="cursor-pointer">Evidence and recommendation</summary>
-                      <p className="mt-2">{recommendation.recommendation}</p>
-                      <pre className="mt-2 max-h-32 overflow-auto rounded bg-black/30 p-2">{JSON.stringify(recommendation.evidenceJson, null, 2)}</pre>
-                    </details>
+                    {recommendation.executable && <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer">جزئیات فنی اکشن</summary><p className="mt-2">شناسه کاتالوگ: {recommendation.catalogActionId}</p><p className="mt-1">پارامترها: {evidenceText(recommendation.parametersJson)}</p></details>}
                   </div>
                 ))}
               </div>
             </div>
           )}
-          <details className="mt-4 rounded border border-zinc-800 p-3">
-            <summary className="cursor-pointer text-xs font-semibold text-zinc-300">Assessment details</summary>
-            <pre className="mt-2 max-h-64 overflow-auto text-[11px] text-zinc-400">{JSON.stringify(assessment.findingsJson, null, 2)}</pre>
-          </details>
         </div>
       )}
 
@@ -693,6 +739,12 @@ export default function AiSecurityAssistantPanel() {
         <p className="mt-3 text-left text-xs text-red-300" role="alert">
           {error}
         </p>
+      )}
+      {technicalError && (
+        <details dir="rtl" className="mt-2 rounded border border-zinc-800 p-2 text-right text-xs text-zinc-500">
+          <summary className="cursor-pointer">جزئیات فنی</summary>
+          <p className="mt-2 break-words" dir="ltr">{technicalError}</p>
+        </details>
       )}
     </section>
   );

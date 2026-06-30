@@ -68,6 +68,14 @@ async function parseProviderPayload(response: Response) {
   }
 }
 
+export function retryAfterMilliseconds(value: string | null, now = Date.now()) {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, Math.min(seconds * 1000, 5000));
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, Math.min(date - now, 5000)) : 0;
+}
+
 export async function runOpenAiCompatibleProvider(input: AiProviderInput, model = env.openaiModel): Promise<StructuredAiResponse> {
   if (!env.openaiApiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
@@ -78,7 +86,7 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput, model 
   const url = `${env.openaiBaseUrl.replace(/\/$/, "")}/chat/completions`;
 
   try {
-    const response = await fetch(url, {
+    const request = () => fetch(url, {
       method: "POST",
       signal: controller.signal,
       headers: {
@@ -101,6 +109,12 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput, model 
         ]
       })
     });
+    let response = await request();
+    if (response.status === 429) {
+      const delay = retryAfterMilliseconds(response.headers.get("Retry-After"));
+      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+      response = await request();
+    }
 
     const payload = await parseProviderPayload(response);
     if (!response.ok) {

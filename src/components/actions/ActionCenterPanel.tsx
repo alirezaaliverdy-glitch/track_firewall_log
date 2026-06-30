@@ -107,7 +107,9 @@ function structuredFieldErrors(action: ActionPlan): StructuredValidationError[] 
 function fixableFields(action: ActionPlan) {
   const validation = normalizeObject(action.validationJson);
   const fields = [...structuredFieldErrors(action).map((issue) => issue.field), ...textArray(validation.missingFields)];
-  return Array.from(new Set(fields.filter((field) => EDITABLE_FIX_FIELDS.has(field))));
+  return Array.from(new Set(fields.filter((field) => EDITABLE_FIX_FIELDS.has(field) && !(
+    validation.executionMode === "quick_controlled" && ["trustedSource", "trustedSourceCidr"].includes(field)
+  ))));
 }
 
 function initialFixValues(action: ActionPlan) {
@@ -658,7 +660,7 @@ export default function ActionCenterPanel() {
                           className="inline-flex h-8 min-w-24 items-center justify-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          Execute
+                          Confirm &amp; Execute
                         </button>
                       )}
                       <button
@@ -698,7 +700,7 @@ export default function ActionCenterPanel() {
                     className="inline-flex h-8 items-center gap-1.5 rounded border border-green-900/70 px-2.5 text-xs font-medium text-green-300 hover:text-green-200 disabled:opacity-60"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Execute
+                    Confirm &amp; Execute
                   </button>
                 )}
                 <button
@@ -772,7 +774,7 @@ export default function ActionCenterPanel() {
 
               {fixableFields(selectedAction).length > 0 && !["executing", "succeeded", "rolled_back"].includes(selectedAction.status) && (
                 <div className="mb-4 rounded border border-blue-900/70 bg-blue-950/15 p-3 text-left">
-                  <h4 className="text-sm font-semibold text-blue-100">One value is needed</h4>
+                  <h4 className="text-sm font-semibold text-blue-100">Fix Fields</h4>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     {fixableFields(selectedAction).map((field) => {
                       const issue = structuredFieldErrors(selectedAction).find((item) => item.field === field);
@@ -797,7 +799,7 @@ export default function ActionCenterPanel() {
                     className="mt-3 inline-flex h-9 items-center gap-2 rounded border border-blue-800 bg-blue-950/30 px-3 text-xs font-semibold text-blue-200 disabled:opacity-50"
                   >
                     <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    Execute
+                    Fix Fields &amp; Execute
                   </button>
                 </div>
               )}

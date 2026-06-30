@@ -306,7 +306,7 @@ export function approvalPreconditionError(plan: Pick<ActionPlan, "actionType" | 
 export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status">, mode: ActionExecutionMode = env.actionExecutionMode) {
   const catalog = getActionCatalogEntry(plan.actionType);
   const controlled = Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
-  if (mode === "direct_controlled" && controlled) return null;
+  if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
   if (plan.status !== ActionPlanStatus.approved && !(readOnly && plan.status === ActionPlanStatus.dry_run_ready)) {
     return new ActionExecutionError("ACTION_NOT_APPROVED", "ActionPlan must be approved before execution.");
@@ -319,7 +319,7 @@ export function requiresManualApprovalWorkflow(actionType: ActionType) {
 }
 
 export function approvalRequirements(riskLevel: AiRiskLevel, mode: ActionExecutionMode = env.actionExecutionMode) {
-  const direct = mode === "direct_controlled";
+  const direct = mode === "direct_controlled" || mode === "quick_controlled";
   return {
     typedApprove: !direct && (riskLevel === AiRiskLevel.critical || (mode === "safe" && riskLevel === AiRiskLevel.high)),
     breakGlass: !direct && riskLevel === AiRiskLevel.critical,
@@ -553,11 +553,30 @@ export async function dryRunActionPlan(id: string) {
           suggestions: preflight.suggestions ?? {},
           discoveryError: preflight.discoveryError
         });
+        if (preflight.autoResolved) {
+          await audit(plan, "parameters_auto_resolved", "Management source was resolved automatically for quick execution.", {
+            trustedSource: asObject(preflight.parameters).trustedSource,
+            resolution: asObject(preflight.parameters).trustedSourceResolution
+          });
+          await audit(plan, "policy_warning", "Management source was auto-resolved or unrestricted because quick execution mode is enabled.", {
+            unrestricted: preflight.unrestricted,
+            warnings: preflight.warnings ?? []
+          });
+        }
       }
     }
   }
 
   const validation = await validateActionPlan(plan);
+  if (validation.normalizedParameters.trustedSourceAutoResolved === true && !preflight?.autoResolved) {
+    await audit(plan, "parameters_auto_resolved", "Management source was resolved automatically for quick execution.", {
+      trustedSource: validation.normalizedParameters.trustedSource,
+      resolution: validation.normalizedParameters.trustedSourceResolution
+    });
+    await audit(plan, "policy_warning", "Management source was auto-resolved or unrestricted because quick execution mode is enabled.", {
+      unrestricted: validation.normalizedParameters.trustedSource === "0.0.0.0/0"
+    });
+  }
   if (!validation.valid) {
     const details = validationDetails({ plan, validation, stage: "validation" });
     const combinedMissingFields = Array.from(new Set([...(validation.missingFields ?? []), ...(preflight?.missingFields ?? [])]));
@@ -809,6 +828,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     include: includeRelations()
   });
 
+  await audit(executing, "execution_started", "Controlled catalog execution started.", { actionType: plan.actionType });
+
   await audit(executing, "connection_attempt", "Connector execution connection attempt started.", {
     connector: connector.name,
     host: device.host,
@@ -896,7 +917,11 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
     throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "This action is not supported in the command catalog yet.", 409);
   }
 
-  if (env.actionExecutionMode === "direct_controlled") {
+  if (env.actionExecutionMode === "direct_controlled" || env.actionExecutionMode === "quick_controlled") {
+    await audit(plan, "execution_confirmed", "User confirmed one-click controlled execution.", {
+      actionType: plan.actionType,
+      executionMode: env.actionExecutionMode
+    });
     await audit(plan, "direct_controlled_execution_requested", "One-click controlled execution requested; command planning was automatic.", {
       actionType: plan.actionType,
       catalogControlled: true

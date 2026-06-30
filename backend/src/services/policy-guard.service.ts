@@ -7,6 +7,7 @@ import { prisma } from "../db/prisma.js";
 import { getActionCatalogEntry, validateCatalogParameters } from "../actions/action-catalog.js";
 import { EXPECTED_FORMATS, validateCanonicalFieldShapes, validationError, type StructuredValidationError } from "../actions/action-validators.js";
 import { normalizeIntent } from "../actions/intent-normalizer.js";
+import { resolveTrustedManagementSource } from "./action-preflight.service.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
@@ -212,6 +213,27 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   if (plan.deviceId) {
     device = await prisma.device.findUnique({ where: { id: plan.deviceId } });
     if (!device) errors.push("Target device does not exist.");
+  }
+
+  const managementActions = new Set<ActionType>([
+    ActionType.mikrotik_change_service_port,
+    ActionType.mikrotik_enable_service,
+    ActionType.mikrotik_disable_service,
+    ActionType.change_ssh_port,
+    ActionType.fortigate_restrict_admin_trusthost,
+    ActionType.fortigate_change_admin_port,
+    ActionType.fortigate_disable_unused_admin_service
+  ]);
+  if (device && managementActions.has(plan.actionType)) {
+    const resolved = resolveTrustedManagementSource(parameters, device);
+    if (resolved && !parameters.trustedSource && !parameters.trustedSourceCidr && !parameters.trustedSourceIp) {
+      parameters.trustedSource = resolved.value;
+      parameters.trustedSourceCidr = resolved.value;
+      parameters.trustedSourceAutoResolved = resolved.autoResolved;
+      parameters.trustedSourceResolution = resolved.source;
+      normalizedPlan.parametersJson = JSON.parse(JSON.stringify(parameters));
+      if (resolved.autoResolved) warnings.push("Management source was auto-resolved or unrestricted because quick execution mode is enabled.");
+    }
   }
 
   if (!(plan.actionType in ActionType)) errors.push("actionType is not supported.");

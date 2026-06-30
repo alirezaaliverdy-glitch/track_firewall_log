@@ -227,10 +227,10 @@ test("FortiGate VIP aliases normalize and validate after the missing external IP
 test("approval rules support fast low/medium execution and typed high-risk approval", () => {
   assert.equal(approvalRequirements(AiRiskLevel.low).approveAndExecute, true);
   assert.equal(approvalRequirements(AiRiskLevel.medium).approveAndExecute, true);
-  assert.match(approvalInputError(AiRiskLevel.high, {}) ?? "", /APPROVE/);
-  assert.equal(approvalInputError(AiRiskLevel.high, { approvalConfirmation: "APPROVE" }), null);
-  assert.match(approvalInputError(AiRiskLevel.critical, { approvalConfirmation: "APPROVE" }) ?? "", /break-glass/);
-  assert.equal(approvalInputError(AiRiskLevel.critical, { approvalConfirmation: "APPROVE", breakGlass: true, reason: "Emergency recovery" }), null);
+  assert.match(approvalInputError(AiRiskLevel.high, {}, "safe") ?? "", /APPROVE/);
+  assert.equal(approvalInputError(AiRiskLevel.high, { approvalConfirmation: "APPROVE" }, "safe"), null);
+  assert.match(approvalInputError(AiRiskLevel.critical, { approvalConfirmation: "APPROVE" }, "safe") ?? "", /break-glass/);
+  assert.equal(approvalInputError(AiRiskLevel.critical, { approvalConfirmation: "APPROVE", breakGlass: true, reason: "Emergency recovery" }, "safe"), null);
   assert.equal(approvalInputError(AiRiskLevel.high, {}, "lab_fast"), null);
   assert.match(approvalInputError(AiRiskLevel.high, {}, "safe") ?? "", /Safe mode requires APPROVE/);
   assert.equal(approvalRequirements(AiRiskLevel.high, "lab_fast").approveAndExecute, true);

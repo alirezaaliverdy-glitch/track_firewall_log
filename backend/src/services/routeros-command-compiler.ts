@@ -1,5 +1,6 @@
 import net from "node:net";
 import { ActionType, AiRiskLevel } from "@prisma/client";
+import { env } from "../config/env.js";
 import type { MikroTikCommandSpec } from "../actions/mikrotik-action-catalog.js";
 import type { RouterOsDialect } from "./routeros-version.service.js";
 
@@ -229,7 +230,9 @@ export function compileRouterOsAction(input: {
       const trustedSource = cidr({
         address: p.trustedSourceCidr ?? p.trustedSourceIp ?? p.trustedSource
       }, "address");
-      if (trustedSource === "0.0.0.0/0") throw new Error("trusted source must not allow every IPv4 address.");
+      if (trustedSource === "0.0.0.0/0" && !(env.actionExecutionMode === "quick_controlled" && env.actionAllowLabUnrestrictedManagement && p.trustedSourceAutoResolved === true)) {
+        throw new Error("trusted source must not allow every IPv4 address.");
+      }
       const oldPortValue = p.oldPort === undefined || p.oldPort === null ? undefined : numberPort(p, "oldPort");
       if (oldPortValue === newPort) throw new Error("newPort must be different from the detected old SSH port.");
 

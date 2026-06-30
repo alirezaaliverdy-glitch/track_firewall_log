@@ -137,6 +137,8 @@ export type SecurityAssessment = {
   status: string;
   riskScore: number;
   summary: string;
+  language: string;
+  dataSourcesJson: Record<string, unknown>;
   findingsJson: Record<string, unknown>;
   recommendations: HardeningRecommendation[];
   createdAt: string;
@@ -269,6 +271,8 @@ function normalizeSecurityAssessment(value: unknown): SecurityAssessment {
     status: String(source.status ?? "completed"),
     riskScore: safeNumber(source.riskScore),
     summary: String(source.summary ?? ""),
+    language: String(source.language ?? "fa"),
+    dataSourcesJson: normalizeObject(source.dataSourcesJson),
     findingsJson: normalizeObject(source.findingsJson),
     recommendations: normalizeArray<unknown>(source.recommendations).map(normalizeHardeningRecommendation),
     createdAt: String(source.createdAt ?? ""),
@@ -395,6 +399,10 @@ export async function getAiSession(id: string) {
   return requestJson<unknown>(`/ai/chat/sessions/${id}`).then(normalizeSession);
 }
 
+export async function clearAiSessionMessages(id: string) {
+  return requestJson<unknown>(`/ai/chat/sessions/${id}/messages`, { method: "DELETE" });
+}
+
 export async function getSecuritySummary() {
   return requestJson<unknown>("/ai/context/security-summary").then(normalizeSummary);
 }
@@ -441,15 +449,46 @@ export async function runFullSecurityAnalysis() {
   return requestJson<unknown>("/assessments/full-analysis", {
     method: "POST",
     body: JSON.stringify({ scopeType: "all", collectConnectorData: true }),
-  }).then(normalizeSecurityAssessment);
+  }).then((payload) => {
+    const source = normalizeObject(payload);
+    if (source.ok === false) throw new Error(String(source.message ?? "تحلیل کامل انجام نشد."));
+    return normalizeSecurityAssessment(source.assessment ?? payload);
+  });
 }
 
 export async function getSecurityAssessment(id: string) {
   return requestJson<unknown>(`/assessments/${id}`).then(normalizeSecurityAssessment);
 }
 
-export async function generateHardeningSuggestions(id: string) {
-  return requestJson<unknown>(`/assessments/${id}/hardening-suggestions`, { method: "POST" }).then(normalizeSecurityAssessment);
+export async function generateHardeningSuggestions(_id?: string) {
+  return requestJson<unknown>("/assessments/hardening-suggestions", { method: "POST" }).then((payload) => {
+    const source = normalizeObject(payload);
+    if (source.ok === false) throw new Error(String(source.message ?? "پیشنهادهای ایمن‌سازی تولید نشد."));
+    const recommendations = normalizeArray<unknown>(source.recommendations).map((value) => {
+      const item = normalizeObject(value);
+      return normalizeHardeningRecommendation({
+        ...item,
+        id: item.id ?? "",
+        assessmentId: source.assessmentId ?? "",
+        title: item.titleFa,
+        reason: item.reasonFa,
+        evidenceJson: Object.fromEntries(normalizeArray<Record<string, unknown>>(item.evidence).map((row) => [String(row.name ?? "شاهد"), row.value])),
+        recommendation: item.recommendationFa,
+        parametersJson: item.suggestedParameters,
+        device: item.deviceId ? { id: item.deviceId, name: item.deviceName, vendor: item.vendor, type: item.vendor } : null
+      });
+    });
+    return normalizeSecurityAssessment({
+      id: source.assessmentId,
+      status: source.ok ? "completed" : "failed",
+      summary: source.dataNoticeFa,
+      language: "fa",
+      findingsJson: { dataNotice: source.dataNoticeFa, sections: {} },
+      recommendations,
+      createdAt: source.createdAt,
+      updatedAt: source.createdAt
+    });
+  });
 }
 
 export async function createRecommendationActionPlan(id: string) {

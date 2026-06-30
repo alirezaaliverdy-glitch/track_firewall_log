@@ -110,12 +110,12 @@ test("execution and approval are blocked before their required states", () => {
   const executionError = executionApprovalError({
     actionType: ActionType.mikrotik_change_service_port,
     status: ActionPlanStatus.dry_run_ready
-  });
+  }, "safe");
   assert.equal(executionError?.code, "ACTION_NOT_APPROVED");
   assert.equal(executionApprovalError({
     actionType: ActionType.mikrotik_change_service_port,
     status: ActionPlanStatus.approved
-  }), null);
+  }, "safe"), null);
 
   const approvalError = approvalPreconditionError({
     actionType: ActionType.mikrotik_change_service_port,
