@@ -72,7 +72,7 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
           "Which source and destination interfaces should be used?",
           "Which services should be allowed during business hours?"
         ],
-        explanation: "Creating an egress policy requires explicit device, interfaces, source, services, dry-run, approval, and rollback metadata."
+        explanation: "Creating an egress policy requires explicit device, interfaces, source, services, controlled planning, and rollback metadata."
       },
       confidence: 0.82
     };

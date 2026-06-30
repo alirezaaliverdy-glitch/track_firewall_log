@@ -22,6 +22,7 @@ import { CANONICAL_INTENT_FIELDS } from "../actions/intent-normalizer.js";
 import { normalizeVendor } from "./ai-normalization.js";
 import { env, type ActionExecutionMode } from "../config/env.js";
 import { preflightActionPlan } from "./action-preflight.service.js";
+import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -302,8 +303,10 @@ export function approvalPreconditionError(plan: Pick<ActionPlan, "actionType" | 
   return null;
 }
 
-export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status">) {
+export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status">, mode: ActionExecutionMode = env.actionExecutionMode) {
   const catalog = getActionCatalogEntry(plan.actionType);
+  const controlled = Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
+  if (mode === "direct_controlled" && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
   if (plan.status !== ActionPlanStatus.approved && !(readOnly && plan.status === ActionPlanStatus.dry_run_ready)) {
     return new ActionExecutionError("ACTION_NOT_APPROVED", "ActionPlan must be approved before execution.");
@@ -316,11 +319,12 @@ export function requiresManualApprovalWorkflow(actionType: ActionType) {
 }
 
 export function approvalRequirements(riskLevel: AiRiskLevel, mode: ActionExecutionMode = env.actionExecutionMode) {
+  const direct = mode === "direct_controlled";
   return {
-    typedApprove: riskLevel === AiRiskLevel.critical || (mode === "safe" && riskLevel === AiRiskLevel.high),
-    breakGlass: riskLevel === AiRiskLevel.critical,
-    reason: riskLevel === AiRiskLevel.critical,
-    approveAndExecute: riskLevel !== AiRiskLevel.critical,
+    typedApprove: !direct && (riskLevel === AiRiskLevel.critical || (mode === "safe" && riskLevel === AiRiskLevel.high)),
+    breakGlass: !direct && riskLevel === AiRiskLevel.critical,
+    reason: !direct && riskLevel === AiRiskLevel.critical,
+    approveAndExecute: direct || riskLevel !== AiRiskLevel.critical,
     executionMode: mode
   };
 }
@@ -391,9 +395,9 @@ function validationDetails(input: {
 function userValidationMessage(errors: string[], missingFields: string[]) {
   const text = errors.join(" ");
   if (missingFields.includes("trustedSourceCidr") || /Allowed source is required/i.test(text)) return "Allowed source is required for SSH management changes.";
-  if (/credential/i.test(text)) return "Device credential is missing.";
+  if (/credential/i.test(text)) return "Device credential is missing. Add credential in Device Registry.";
   if (/device/i.test(text)) return "Device is missing or unavailable.";
-  if (/not supported|not in .*catalog|unsupported/i.test(text)) return "This action is not supported yet.";
+  if (/not supported|not in .*catalog|unsupported/i.test(text)) return "This action is not supported in the command catalog yet.";
   if (/port|newPort/i.test(text)) return "Port is blocked by policy or has an invalid value.";
   return "This action cannot execute with its current values.";
 }
@@ -523,7 +527,7 @@ export async function correctAndRevalidateActionPlan(id: string, input: Record<s
       rollbackJson: Prisma.JsonNull
     }
   });
-  await audit(updated, "action.parameters_corrected", "Canonical ActionPlan fields were corrected; previous dry-run and approval were invalidated.", { fields: Object.keys(corrections) });
+  await audit(updated, "action.parameters_corrected", "Canonical ActionPlan fields were corrected; the previous command plan was invalidated.", { fields: Object.keys(corrections) });
   const validated = await validateAndStoreActionPlan(id);
   if (validated?.status === ActionPlanStatus.awaiting_approval) return dryRunActionPlan(id);
   return validated;
@@ -573,7 +577,7 @@ export async function dryRunActionPlan(id: string) {
       },
       include: includeRelations()
     });
-    await audit(failed, "action.dry_run_blocked", "Dry-run blocked by policy validation.", validation);
+    await audit(failed, "action.command_plan_blocked", "Command plan blocked by policy validation.", validation);
     return failed;
   }
 
@@ -607,7 +611,7 @@ export async function dryRunActionPlan(id: string) {
       },
       include: includeRelations()
     });
-    await audit(failed, "action.dry_run_failed", "Dry-run command compiler failed.", { reason, parameters: asObject(plan.parametersJson) });
+    await audit(failed, "action.command_plan_failed", "Command plan compiler failed.", { reason, parameters: asObject(plan.parametersJson) });
     return failed;
   }
   const dryRunObject = asObject(dryRun);
@@ -623,7 +627,7 @@ export async function dryRunActionPlan(id: string) {
       riskLevel: validation.riskLevel,
       parametersJson: toJson(storedNormalizedParameters(plan, validation.normalizedParameters)),
       validationJson: toJson({
-        ...validationDetails({ plan, validation, stage: "dry_run" }),
+        ...validationDetails({ plan, validation, stage: "command_plan" }),
         plannerStatus: dryRunObject.status,
         needsClarification: dryRunObject.status === "needs_clarification",
         missingFields: dryRunObject.missingFields ?? [],
@@ -638,11 +642,11 @@ export async function dryRunActionPlan(id: string) {
 
   await audit(
     updated,
-    dryRunObject.status === "needs_clarification" ? "action.dry_run_needs_clarification" : dryRunObject.status === "unsupported" ? "action.dry_run_unsupported" : "action.dry_run_ready",
-    "Dry-run generated without executing device changes.",
+    dryRunObject.status === "needs_clarification" ? "action.command_plan_needs_clarification" : dryRunObject.status === "unsupported" ? "action.command_plan_unsupported" : "action.command_plan_ready",
+    "Internal command plan generated without executing device changes.",
     dryRun
   );
-  await audit(updated, "dry_run_generated", "Dry-run generated for review.", dryRun);
+  await audit(updated, "command_plan_generated", "Internal command plan generated for controlled execution.", dryRun);
   return updated;
 }
 
@@ -713,6 +717,20 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   if (!plan) return null;
   plan = await prepareActionPlan(plan);
 
+  const catalogActionType = plan.actionType;
+  const catalogControlled = Boolean(getActionCatalogEntry(catalogActionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === catalogActionType);
+  if (!catalogControlled) {
+    await audit(plan, "controlled_execution_blocked", "Execution refused because the action is not in the controlled catalog.", { actionType: plan.actionType });
+    throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "This action is not supported in the command catalog yet.", 409);
+  }
+
+  if (env.actionExecutionMode === "direct_controlled" && !plan.dryRunJson) {
+    const planned = await dryRunActionPlan(id);
+    if (!planned) return null;
+    plan = planned;
+    if (plan.status === ActionPlanStatus.validation_failed || plan.status === ActionPlanStatus.proposed) return plan;
+  }
+
   const executionParameters = Object.fromEntries(
     Object.entries(executionInput).filter(([key]) => ["breakGlass", "executeConfirmation", "deviceNameConfirmation", "reason"].includes(key))
   );
@@ -735,15 +753,15 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   }
 
   if (!plan.dryRunJson) {
-    await audit(plan, "execution_failed", "Execution refused because dry-run is missing.", { code: "DRY_RUN_REQUIRED" });
-    throw new ActionExecutionError("DRY_RUN_REQUIRED", "Dry-run is required before execution.");
+    await audit(plan, "execution_failed", "Execution refused because the command plan is missing.", { code: "COMMAND_PLAN_REQUIRED" });
+    throw new ActionExecutionError("COMMAND_PLAN_REQUIRED", "An internal command plan is required before execution.");
   }
   const dryRunParameters = asObject(asObject(plan.dryRunJson).parameters);
   if (Object.keys(dryRunParameters).length > 0 && controlledParameterJson(dryRunParameters) !== controlledParameterJson(plan.parametersJson)) {
-    await audit(plan, "execution_failed", "Execution refused because the dry-run is stale.", { code: "DRY_RUN_STALE" });
-    throw new ActionExecutionError("DRY_RUN_STALE", "Run Dry-run first; ActionPlan parameters changed after the preview.");
+    await audit(plan, "execution_failed", "Execution refused because the command plan is stale.", { code: "COMMAND_PLAN_STALE" });
+    throw new ActionExecutionError("COMMAND_PLAN_STALE", "The command plan is stale because the ActionPlan parameters changed.");
   }
-  if (plan.riskLevel === AiRiskLevel.critical) {
+  if (plan.riskLevel === AiRiskLevel.critical && env.actionExecutionMode !== "direct_controlled") {
     const reason = typeof executionInput.reason === "string" ? executionInput.reason.trim() : "";
     if (executionInput.breakGlass !== true || !reason) {
       throw new ActionExecutionError("BREAK_GLASS_REQUIRED", "Critical execution requires break-glass mode and a reason.", 428);
@@ -871,6 +889,27 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
     return plan;
   }
 
+  const catalogActionType = plan.actionType;
+  const catalogControlled = Boolean(getActionCatalogEntry(catalogActionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === catalogActionType);
+  if (!catalogControlled) {
+    await audit(plan, "controlled_execution_blocked", "Execution refused because the action is not in the controlled catalog.", { actionType: plan.actionType });
+    throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "This action is not supported in the command catalog yet.", 409);
+  }
+
+  if (env.actionExecutionMode === "direct_controlled") {
+    await audit(plan, "direct_controlled_execution_requested", "One-click controlled execution requested; command planning was automatic.", {
+      actionType: plan.actionType,
+      catalogControlled: true
+    });
+    try {
+      return await executeActionPlan(id, input);
+    } catch (error) {
+      const latest = await getActionPlan(id);
+      if (latest) return latest;
+      throw error;
+    }
+  }
+
   const requirements = approvalRequirements(plan.riskLevel);
   if (requirements.typedApprove) {
     const confirmed = typeof input.approvalConfirmation === "string" && input.approvalConfirmation.trim() === "APPROVE";
@@ -892,7 +931,7 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
 
   plan = await approveActionPlan(id, {
     approvedBy: typeof input.approvedBy === "string" ? input.approvedBy : "quick-execute",
-    reason: typeof input.reason === "string" && input.reason.trim() ? input.reason.trim() : "Approve & Execute from Action Center",
+    reason: typeof input.reason === "string" && input.reason.trim() ? input.reason.trim() : "Execute from Action Center",
     approvalConfirmation: input.approvalConfirmation,
     breakGlass: input.breakGlass
   });

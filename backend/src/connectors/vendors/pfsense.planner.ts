@@ -10,7 +10,7 @@ function planManual(input: PlannerInput, reason: string): VendorCommandPlan {
     transport: "manual",
     commands: [],
     apiCalls: [],
-    warnings: ["pfSense API connector is not enabled in this task.", "Dry-run only. No pfSense change was executed."],
+    warnings: ["pfSense API connector is not enabled in this task.", "Execution preview only. No pfSense change was executed."],
     rollbackSteps: ["Document the current pfSense rule/object state before any future manual change."],
     riskLevel: input.riskLevel,
     requiresApproval: true,

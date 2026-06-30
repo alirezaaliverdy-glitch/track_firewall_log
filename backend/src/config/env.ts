@@ -54,10 +54,10 @@ function parseCsv(value: string | undefined) {
     .filter(Boolean);
 }
 
-export type ActionExecutionMode = "safe" | "lab_fast";
+export type ActionExecutionMode = "safe" | "lab_fast" | "direct_controlled";
 
 function parseActionExecutionMode(value: string | undefined): ActionExecutionMode {
-  return value === "lab_fast" ? "lab_fast" : "safe";
+  return value === "lab_fast" || value === "direct_controlled" ? value : "safe";
 }
 
 export const env = {

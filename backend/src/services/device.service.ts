@@ -194,7 +194,7 @@ async function writeAudit(input: {
       metadata: toJson({
         ...(typeof input.metadata === "object" && input.metadata !== null ? input.metadata : {}),
         safety:
-          "Future device actions must be audited, support dry-run, and require manual approval for dangerous changes."
+          "Device actions must be audited and use automatic controlled command planning."
       })
     }
   });

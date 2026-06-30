@@ -16,7 +16,7 @@ function genericPlan(plan: ActionPlan, reason: string): VendorCommandPlan {
     transport: "manual",
     commands: [],
     apiCalls: [],
-    warnings: ["No vendor-specific connector template matched this action/device.", "Dry-run only. No command or API call was executed."],
+    warnings: ["No vendor-specific connector template matched this action/device.", "Execution preview only. No command or API call was executed."],
     rollbackSteps: ["A future connector must provide rollback metadata before execution."],
     riskLevel: plan.riskLevel,
     requiresApproval: true,

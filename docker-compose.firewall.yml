@@ -38,7 +38,7 @@ services:
       CORS_ORIGIN: http://192.168.7.13
       MAX_UPLOAD_MB: 25
       UPLOAD_DIR: /app/storage/uploads
-      ACTION_EXECUTION_MODE: ${ACTION_EXECUTION_MODE:-safe}
+      ACTION_EXECUTION_MODE: ${ACTION_EXECUTION_MODE:-direct_controlled}
     expose:
       - "4000"
     volumes:

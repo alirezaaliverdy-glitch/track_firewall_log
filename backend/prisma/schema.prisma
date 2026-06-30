@@ -7,38 +7,38 @@ datasource db {
 }
 
 model Upload {
-  id                      String        @id @default(cuid())
-  fileName                String
-  originalFileName        String
-  fileSize                Int
-  mimeType                String?
-  fileExtension           String
-  detectedFormat          String?
-  selectedVendor          String?
-  detectedVendor          String?
-  status                  UploadStatus
-  rowCount                Int?
-  parseWarningCount       Int?
-  checksum                String?
-  storagePath             String?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-  jobs                    Job[]
-  analysisRuns            AnalysisRun[]
+  id                String        @id @default(cuid())
+  fileName          String
+  originalFileName  String
+  fileSize          Int
+  mimeType          String?
+  fileExtension     String
+  detectedFormat    String?
+  selectedVendor    String?
+  detectedVendor    String?
+  status            UploadStatus
+  rowCount          Int?
+  parseWarningCount Int?
+  checksum          String?
+  storagePath       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  jobs              Job[]
+  analysisRuns      AnalysisRun[]
 }
 
 model Job {
-  id            String    @id @default(cuid())
-  uploadId      String
-  upload        Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
-  type          JobType
-  status        JobStatus
-  progress      Int       @default(0)
-  errorMessage  String?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  uploadId     String
+  upload       Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  type         JobType
+  status       JobStatus
+  progress     Int       @default(0)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([uploadId])
 }
@@ -65,34 +65,36 @@ model AnalysisRun {
 }
 
 model Device {
-  id                String              @id @default(cuid())
-  name              String
-  vendor            String
-  type              DeviceType
-  host              String
-  managementPort    Int
-  protocol          DeviceProtocol
-  credentialId      String?
-  credential        DeviceCredential?  @relation(fields: [credentialId], references: [id], onDelete: SetNull)
-  credentialRef     String?
-  environment       DeviceEnvironment
-  tags              String[]            @default([])
-  status            DeviceStatus        @default(unknown)
-  capabilities      Json?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  authProfiles      DeviceAuthProfile[]
-  deviceCapabilities DeviceCapability[]
-  statusChecks      DeviceStatusCheck[]
-  auditLogs         AuditLog[]
-  eventSources      EventSource[]
-  eventBatches      EventBatch[]
-  securityEvents    SecurityEvent[]
-  collectorStates   EventCollectorState[]
-  incidents         Incident[]
-  aiActionIntents   AiActionIntent[]
-  actionPlans       ActionPlan[]
-  actionAuditLogs   ActionAuditLog[]
+  id                       String                    @id @default(cuid())
+  name                     String
+  vendor                   String
+  type                     DeviceType
+  host                     String
+  managementPort           Int
+  protocol                 DeviceProtocol
+  credentialId             String?
+  credential               DeviceCredential?         @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  credentialRef            String?
+  environment              DeviceEnvironment
+  tags                     String[]                  @default([])
+  status                   DeviceStatus              @default(unknown)
+  capabilities             Json?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  authProfiles             DeviceAuthProfile[]
+  deviceCapabilities       DeviceCapability[]
+  statusChecks             DeviceStatusCheck[]
+  auditLogs                AuditLog[]
+  eventSources             EventSource[]
+  eventBatches             EventBatch[]
+  securityEvents           SecurityEvent[]
+  collectorStates          EventCollectorState[]
+  incidents                Incident[]
+  aiActionIntents          AiActionIntent[]
+  actionPlans              ActionPlan[]
+  actionAuditLogs          ActionAuditLog[]
+  hardeningRecommendations HardeningRecommendation[]
+  deviceSnapshots          DeviceSnapshot[]
 
   @@index([type])
   @@index([host])
@@ -102,28 +104,28 @@ model Device {
 }
 
 model DeviceCredential {
-  id                    String               @id @default(cuid())
-  name                  String               @unique
-  type                  DeviceCredentialType
-  username              String
-  secretEncrypted       String
-  privateKeyEncrypted   String?
-  passphraseEncrypted   String?
-  sudo                  Boolean              @default(false)
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
-  devices               Device[]
+  id                  String               @id @default(cuid())
+  name                String               @unique
+  type                DeviceCredentialType
+  username            String
+  secretEncrypted     String
+  privateKeyEncrypted String?
+  passphraseEncrypted String?
+  sudo                Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  devices             Device[]
 
   @@index([type])
   @@index([name])
 }
 
 model AiChatSession {
-  id        String          @id @default(cuid())
+  id        String           @id @default(cuid())
   title     String
   userId    String?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   messages  AiChatMessage[]
   intents   AiActionIntent[]
 
@@ -132,13 +134,13 @@ model AiChatSession {
 }
 
 model AiChatMessage {
-  id             String          @id @default(cuid())
+  id             String           @id @default(cuid())
   sessionId      String
-  session        AiChatSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session        AiChatSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   role           AiChatRole
   content        String
   structuredJson Json?
-  createdAt      DateTime        @default(now())
+  createdAt      DateTime         @default(now())
   actionIntents  AiActionIntent[]
 
   @@index([sessionId])
@@ -173,15 +175,15 @@ model AiActionIntent {
 }
 
 model ActionPlan {
-  id             String             @id @default(cuid())
+  id             String           @id @default(cuid())
   source         ActionPlanSource
   requestedBy    String?
   deviceId       String?
-  device         Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  device         Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   aiIntentId     String?
-  aiIntent       AiActionIntent?    @relation(fields: [aiIntentId], references: [id], onDelete: SetNull)
+  aiIntent       AiActionIntent?  @relation(fields: [aiIntentId], references: [id], onDelete: SetNull)
   actionType     ActionType
-  status         ActionPlanStatus   @default(proposed)
+  status         ActionPlanStatus @default(proposed)
   riskLevel      AiRiskLevel
   parametersJson Json
   validationJson Json?
@@ -189,8 +191,8 @@ model ActionPlan {
   approvalJson   Json?
   resultJson     Json?
   rollbackJson   Json?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   auditLogs      ActionAuditLog[]
   approvals      ActionApproval[]
 
@@ -204,15 +206,15 @@ model ActionPlan {
 }
 
 model ActionAuditLog {
-  id             String     @id @default(cuid())
-  actionPlanId   String
-  actionPlan     ActionPlan @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
-  deviceId       String?
-  device         Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  eventType      String
-  message        String
-  metadataJson   Json?
-  createdAt      DateTime   @default(now())
+  id           String     @id @default(cuid())
+  actionPlanId String
+  actionPlan   ActionPlan @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  deviceId     String?
+  device       Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  eventType    String
+  message      String
+  metadataJson Json?
+  createdAt    DateTime   @default(now())
 
   @@index([actionPlanId])
   @@index([deviceId])
@@ -221,29 +223,96 @@ model ActionAuditLog {
 }
 
 model ActionApproval {
-  id             String           @id @default(cuid())
-  actionPlanId   String
-  actionPlan     ActionPlan       @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
-  approvedBy     String?
-  decision       ApprovalDecision
-  reason         String?
-  createdAt      DateTime         @default(now())
+  id           String           @id @default(cuid())
+  actionPlanId String
+  actionPlan   ActionPlan       @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  approvedBy   String?
+  decision     ApprovalDecision
+  reason       String?
+  createdAt    DateTime         @default(now())
 
   @@index([actionPlanId])
   @@index([decision])
   @@index([createdAt])
 }
 
+model SecurityAssessment {
+  id              String                    @id @default(cuid())
+  scopeType       String
+  scopeId         String?
+  status          String                    @default("completed")
+  riskScore       Int
+  summary         String
+  findingsJson    Json
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  recommendations HardeningRecommendation[]
+
+  @@index([scopeType])
+  @@index([scopeId])
+  @@index([status])
+  @@index([riskScore])
+  @@index([createdAt])
+}
+
+model HardeningRecommendation {
+  id              String             @id @default(cuid())
+  assessmentId    String
+  assessment      SecurityAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  deviceId        String?
+  device          Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  vendor          String
+  title           String
+  severity        String
+  category        String
+  reason          String
+  evidenceJson    Json
+  recommendation  String
+  catalogActionId String?
+  actionType      String?
+  parametersJson  Json
+  executable      Boolean            @default(false)
+  status          String             @default("proposed")
+  actionPlanId    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([assessmentId])
+  @@index([deviceId])
+  @@index([vendor])
+  @@index([severity])
+  @@index([category])
+  @@index([catalogActionId])
+  @@index([executable])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DeviceSnapshot {
+  id           String   @id @default(cuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  vendor       String
+  snapshotType String
+  dataJson     Json
+  collectedAt  DateTime @default(now())
+
+  @@index([deviceId])
+  @@index([vendor])
+  @@index([snapshotType])
+  @@index([collectedAt])
+}
+
 model EventSource {
-  id             String             @id @default(cuid())
+  id             String            @id @default(cuid())
   name           String
   type           EventSourceType
   deviceId       String?
-  device         Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  status         EventSourceStatus  @default(active)
+  device         Device?           @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  status         EventSourceStatus @default(active)
   lastSeenAt     DateTime?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   batches        EventBatch[]
   securityEvents SecurityEvent[]
   incidents      Incident[]
@@ -275,15 +344,15 @@ model EventBatch {
 }
 
 model SecurityEvent {
-  id             String       @id @default(cuid())
+  id             String          @id @default(cuid())
   deviceId       String?
-  device         Device?      @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   sourceId       String?
-  source         EventSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  source         EventSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   batchId        String?
-  batch          EventBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  batch          EventBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
   timestamp      DateTime?
-  receivedAt     DateTime     @default(now())
+  receivedAt     DateTime        @default(now())
   sourceType     String?
   vendor         String?
   eventType      String
@@ -302,12 +371,12 @@ model SecurityEvent {
   rawSnippet     String?
   normalizedJson Json
   evidenceJson   Json?
-  dedupeKey      String?      @unique
+  dedupeKey      String?         @unique
   firstSeen      DateTime?
   lastSeen       DateTime?
-  count          Int          @default(1)
+  count          Int             @default(1)
   tags           Json?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime        @default(now())
   incidentEvents IncidentEvent[]
 
   @@index([deviceId])
@@ -328,18 +397,18 @@ model SecurityEvent {
 }
 
 model EventCollectorState {
-  id               String   @id @default(cuid())
-  deviceId         String
-  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  sourceType       String
-  lastCollectedAt  DateTime?
-  lastSuccessAt    DateTime?
-  lastErrorAt      DateTime?
-  lastError        String?
-  enabled          Boolean  @default(false)
-  intervalSeconds  Int      @default(60)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String    @id @default(cuid())
+  deviceId        String
+  device          Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sourceType      String
+  lastCollectedAt DateTime?
+  lastSuccessAt   DateTime?
+  lastErrorAt     DateTime?
+  lastError       String?
+  enabled         Boolean   @default(false)
+  intervalSeconds Int       @default(60)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([deviceId, sourceType])
   @@index([deviceId])
@@ -360,29 +429,29 @@ model DetectionRule {
   updatedAt     DateTime          @updatedAt
   incidents     Incident[]
 
+  @@unique([ruleType, name])
   @@index([enabled])
   @@index([ruleType])
-  @@unique([ruleType, name])
 }
 
 model Incident {
-  id          String             @id @default(cuid())
+  id          String           @id @default(cuid())
   title       String
   description String
   severity    IncidentSeverity
-  status      IncidentStatus     @default(open)
+  status      IncidentStatus   @default(open)
   deviceId    String?
-  device      Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  device      Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   sourceId    String?
-  source      EventSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  source      EventSource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   ruleId      String?
-  rule        DetectionRule?      @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  rule        DetectionRule?   @relation(fields: [ruleId], references: [id], onDelete: SetNull)
   firstSeenAt DateTime
   lastSeenAt  DateTime
-  eventCount  Int                @default(0)
+  eventCount  Int              @default(0)
   summaryJson Json?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   events      IncidentEvent[]
 
   @@index([status])
@@ -402,20 +471,20 @@ model IncidentEvent {
   securityEvent   SecurityEvent @relation(fields: [securityEventId], references: [id], onDelete: Cascade)
   createdAt       DateTime      @default(now())
 
+  @@unique([incidentId, securityEventId])
   @@index([incidentId])
   @@index([securityEventId])
-  @@unique([incidentId, securityEventId])
 }
 
 model DeviceAuthProfile {
-  id               String   @id @default(cuid())
-  deviceId         String
-  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  name             String
-  credentialRef    String
-  authType         String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id            String   @id @default(cuid())
+  deviceId      String
+  device        Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  name          String
+  credentialRef String
+  authType      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([deviceId])
 }
@@ -437,13 +506,13 @@ model DeviceCapability {
 }
 
 model DeviceStatusCheck {
-  id          String       @id @default(cuid())
-  deviceId    String
-  device      Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  status      DeviceStatus
-  message     String?
-  latencyMs   Int?
-  checkedAt   DateTime     @default(now())
+  id        String       @id @default(cuid())
+  deviceId  String
+  device    Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  status    DeviceStatus
+  message   String?
+  latencyMs Int?
+  checkedAt DateTime     @default(now())
 
   @@index([deviceId])
   @@index([checkedAt])
@@ -722,6 +791,15 @@ enum AiIntentType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_read_hostname
+  linux_read_interfaces
+  linux_read_routes
+  linux_read_listening_ports
+  linux_read_firewall_status
+  linux_read_auth_logs
+  linux_read_users
+  linux_read_docker
+  linux_read_nginx
   explain_security_status
   unknown
 }
@@ -876,6 +954,15 @@ enum ActionType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_read_hostname
+  linux_read_interfaces
+  linux_read_routes
+  linux_read_listening_ports
+  linux_read_firewall_status
+  linux_read_auth_logs
+  linux_read_users
+  linux_read_docker
+  linux_read_nginx
 }
 
 enum ApprovalDecision {

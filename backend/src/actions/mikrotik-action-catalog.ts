@@ -284,7 +284,7 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
           command: updateCommand,
           target: { listName, address, timeout: timeout ?? null, branch: "exists" },
           warnings: [],
-          rollbackSteps: ["Previous timeout/comment are not known from dry-run; restore manually from audit/export if needed."]
+          rollbackSteps: ["Previous timeout/comment are not known from the execution preview; restore manually from audit/export if needed."]
         })
       );
       warnings.push("This action is idempotent. If the entry already exists, timeout/comment will be updated instead of adding a duplicate.");
@@ -394,7 +394,7 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
       template: "/ip firewall filter set <ruleId> comment=<comment>",
       command: addCommentScript(ruleId ?? "", comment),
       target: { ruleId, comment },
-      rollbackSteps: ["Restore the previous comment manually if needed; previous value is not changed by dry-run."],
+      rollbackSteps: ["Restore the previous comment manually if needed; the execution preview does not change the previous value."],
       warnings: ["This action can modify an existing non-managed rule comment only when explicitly selected and approved."]
     }));
     warnings.push(commandSpecs[0].warnings[0]);

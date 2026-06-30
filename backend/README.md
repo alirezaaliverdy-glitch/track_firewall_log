@@ -99,6 +99,17 @@ Returns a specific stored analysis run.
 
 Environment variables:
 
+- `ACTION_EXECUTION_MODE=direct_controlled` enables one-click Execute for validated catalog actions. `lab_fast` and `safe` remain available. Raw AI/CLI text is never sent to a connector in any mode.
+
+Assessment endpoints:
+
+- `POST /api/assessments/full-analysis`
+- `GET /api/assessments/:id`
+- `POST /api/assessments/:id/hardening-suggestions`
+- `POST /api/recommendations/:id/create-action-plan`
+- `GET /api/actions/catalog` and `GET /api/actions/catalog/:vendor`
+- `POST /api/actions/match`
+
 - `PORT`: server port, default `4000`
 - `CORS_ORIGIN`: allowed frontend origin, default `http://localhost:5173`
 - `DATABASE_URL`: PostgreSQL connection string

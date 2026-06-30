@@ -149,12 +149,12 @@ export function parseAiIntent(message: string): ParsedIntent | null {
   const nums = numbers(ip ? text.replace(ip, " ") : text);
   const fortigate = containsAny(text, ["fortigate", "fortinet", "fortios"]);
 
-  if (text.trim().startsWith("/") || containsAny(text, ["raw cli", "execute command", "run command"])) {
+  if (text.trim().startsWith("/") || containsAny(text, ["raw cli", "raw command", "execute command", "run command"])) {
     return {
       intentType: AiIntentType.unknown,
       riskLevel: AiRiskLevel.critical,
       parameters: { blocked: true, reason: "Raw device commands are not supported by the controlled action catalog.", rawCommandRejected: true },
-      explanation: "Raw CLI requests are blocked. Use a supported catalog action so the system can produce a dry-run, approval gate, rollback metadata, and audit trail."
+      explanation: "Raw CLI requests are blocked. Use a supported catalog action so the system can build a controlled command plan with rollback metadata and an audit trail."
     };
   }
 
@@ -169,7 +169,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         clarificationQuestions: serviceName ? [] : ["Which Linux service should be checked?"],
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Checks Linux service status through a controlled read-only systemctl template. It still requires dry-run and approval before any SSH connection is used."
+      explanation: "Checks Linux service status through a controlled read-only systemctl template. Execute automatically validates and builds the command plan."
     };
   }
 
@@ -202,7 +202,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         clarificationQuestions: mappedIp ? [] : ["Which destination/internal IP should receive TCP/443?"],
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Creates a structured FortiGate VIP intent only. Backend compiler, dry-run, backup, approval, and audit are required before execution."
+      explanation: "Creates a structured FortiGate VIP intent. Execute automatically compiles the controlled plan, verifies backup safeguards, and records audit evidence."
     };
   }
 
@@ -217,7 +217,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         clarificationQuestions: id ? [] : ["Which FortiGate policy ID should be disabled?"],
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Disables only an explicitly selected managed FortiGate policy after dry-run and approval."
+      explanation: "Disables only an explicitly selected managed FortiGate policy through a validated command plan."
     };
   }
 
@@ -253,7 +253,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         comment: "FortiGate address object proposed by AI.",
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Creates a structured FortiGate address object intent only. Execution requires dry-run and approval."
+      explanation: "Creates a structured FortiGate address object through the controlled catalog."
     };
   }
 
@@ -276,7 +276,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         clarificationQuestions: [...(!srcintf ? ["Which source interface/zone should the policy use?"] : []), ...(!dstintf ? ["Which destination interface/zone should the policy use?"] : [])],
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Creates a disabled FortiGate firewall policy through the controlled catalog. Validation, dry-run, approval, connector execution, audit, and rollback preview remain mandatory."
+      explanation: "Creates a disabled FortiGate firewall policy through the controlled catalog with automatic validation, audit, and rollback metadata."
     };
   }
 
@@ -366,7 +366,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: containsAny(text, ["schedule", "scheduled"]) ? AiIntentType.mikrotik_schedule_reboot : AiIntentType.mikrotik_reboot,
       riskLevel: AiRiskLevel.critical,
       parameters: { ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
-      explanation: "MikroTik reboot is a critical break-glass action. It must pass PolicyGuard, backup/export preflight, approval, EXECUTE confirmation, device-name confirmation, and audit before execution."
+      explanation: "MikroTik reboot is a critical action and remains subject to PolicyGuard, backup/export safeguards, controlled execution, and audit logging."
     };
   }
 
@@ -398,7 +398,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         clarificationQuestions: [...(!dstPort ? ["Which destination port should the rule match?"] : []), ...(!source ? ["Which source IPv4 address or CIDR should the rule match?"] : [])],
         targetDeviceHint: targetHint(text, nums) ?? "mikrotik"
       },
-      explanation: "Creates a disabled MikroTik firewall rule from structured source, protocol, and port fields. Dry-run and approval are required before execution."
+      explanation: "Creates a disabled MikroTik firewall rule from validated source, protocol, and port fields using a controlled command plan."
     };
   }
 
@@ -418,7 +418,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         clarificationQuestions: dstPort ? [] : ["Which destination port should the firewall rule match?"],
         targetDeviceHint: targetHint(text, nums) ?? "mikrotik"
       },
-      explanation: "Creates a disabled, managed MikroTik filter rule through the catalog. Dry-run and approval are required before connector execution."
+      explanation: "Creates a disabled, managed MikroTik filter rule through the controlled catalog."
     };
   }
 
@@ -431,7 +431,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Creates a disabled firewall-log-analyzer managed drop rule only after PolicyGuard, dry-run, approval, and explicit execution."
+      explanation: "Creates a disabled firewall-log-analyzer managed drop rule after automatic PolicyGuard validation."
     };
   }
 
@@ -440,7 +440,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.mikrotik_enable_managed_rule,
       riskLevel: AiRiskLevel.high,
       parameters: { comment: "firewall-log-analyzer managed drop", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
-      explanation: "Enables only a firewall-log-analyzer managed MikroTik rule after dry-run and approval."
+      explanation: "Enables only a firewall-log-analyzer managed MikroTik rule through a controlled plan."
     };
   }
 
@@ -449,7 +449,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.mikrotik_disable_managed_rule,
       riskLevel: AiRiskLevel.medium,
       parameters: { comment: "firewall-log-analyzer managed drop", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
-      explanation: "Disables only a firewall-log-analyzer managed MikroTik rule after dry-run and approval."
+      explanation: "Disables only a firewall-log-analyzer managed MikroTik rule through a controlled plan."
     };
   }
 
@@ -462,7 +462,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         listName: text.match(/\b[a-zA-Z0-9_.:-]*blocklist[a-zA-Z0-9_.:-]*\b/)?.[0] ?? "ai_blocklist",
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Removes only an exact MikroTik address-list entry after dry-run and approval. It never removes a whole list."
+      explanation: "Removes only an exact managed MikroTik address-list entry. It never removes a whole list."
     };
   }
 
@@ -476,7 +476,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         timeout: durationTimeoutFromText(text, nums),
         ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {})
       },
-      explanation: "Adds an IP to a MikroTik address-list through the controlled catalog only. Execution requires dry-run, approval, and explicit confirmation."
+      explanation: "Adds an IP to a MikroTik address-list through the controlled catalog only."
     };
   }
 
@@ -508,9 +508,9 @@ export function parseAiIntent(message: string): ParsedIntent | null {
         action: containsAny(text, ["deny"]) ? "deny" : "allow",
         nat: true,
         log: true,
-        comment: "Proposed egress policy from AI intent. Requires device, interfaces, services, dry-run, approval, and audit before execution."
+        comment: "Proposed egress policy from AI intent. Requires device, interfaces, services, controlled planning, and audit before execution."
       },
-      explanation: "Creating an egress policy can alter outbound access. Backend PolicyGuard and vendor planners must validate device, interfaces, services, schedule, dry-run, approval, and rollback before any future execution."
+      explanation: "Creating an egress policy can alter outbound access. PolicyGuard and vendor planners validate device, interfaces, services, schedule, and rollback before execution."
     };
   }
 
@@ -521,7 +521,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.change_ssh_port,
       riskLevel: AiRiskLevel.high,
       parameters: { fromPort: nums[0], toPort: nums[1] },
-      explanation: "Changing the SSH management port can break administrator access. It requires validation, dry-run, manual approval, and rollback metadata before any future execution."
+      explanation: "Changing the SSH management port can break administrator access. Execute requires automatic validation and rollback metadata."
     };
   }
 
@@ -530,7 +530,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.close_port,
       riskLevel: nums[0] === 22 || nums[0] === 3389 || nums[0] === 8080 ? AiRiskLevel.high : AiRiskLevel.medium,
       parameters: { port: nums[0], protocol: "tcp", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
-      explanation: "Closing a port may interrupt services. A future action plan must validate target device, affected rules, dry-run result, approval, and rollback."
+      explanation: "Closing a port may interrupt services. The controlled ActionPlan validates the device, affected rules, and rollback."
     };
   }
 
@@ -539,7 +539,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.open_port,
       riskLevel: AiRiskLevel.high,
       parameters: { port: nums[0], protocol: "tcp", ...(targetHint(text, nums) ? { targetDeviceHint: targetHint(text, nums) } : {}) },
-      explanation: "Opening a port can expose services. A future action plan must validate business need, target device, dry-run, approval, and rollback."
+      explanation: "Opening a port can expose services. The controlled ActionPlan validates the target device and rollback."
     };
   }
 
@@ -549,7 +549,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.block_source_ip_temporary,
       riskLevel: AiRiskLevel.medium,
       parameters: { ...(ip ? { srcIp: ip } : {}), durationMinutes: duration },
-      explanation: "Temporarily blocking a source IP requires target device selection, validation, dry-run, approval, audit logging, and expiry/rollback metadata."
+      explanation: "Temporarily blocking a source IP requires target device selection, validation, audit logging, and expiry/rollback metadata."
     };
   }
 
@@ -559,7 +559,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.block_source_ip_temporary,
       riskLevel: AiRiskLevel.medium,
       parameters: { ...(ip ? { srcIp: ip } : {}), durationMinutes: duration },
-      explanation: "Temporarily blocking a source IP requires target device selection, validation, dry-run, approval, audit logging, and expiry/rollback metadata."
+      explanation: "Temporarily blocking a source IP requires target device selection, validation, audit logging, and expiry/rollback metadata."
     };
   }
 
@@ -568,7 +568,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       intentType: AiIntentType.unblock_source_ip,
       riskLevel: AiRiskLevel.medium,
       parameters: { ...(ip ? { srcIp: ip } : {}) },
-      explanation: "Unblocking a source IP can re-enable traffic. It requires approval and audit logging in a future action plan."
+      explanation: "Unblocking a source IP can re-enable traffic and is always recorded in the ActionPlan audit trail."
     };
   }
 

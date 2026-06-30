@@ -30,6 +30,7 @@ const DEVICE_REQUIRED_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_add_comment_to_rule,
   ActionType.mikrotik_read_firewall_summary,
   ActionType.linux_check_service_status,
+  ...Object.values(ActionType).filter((actionType) => actionType.startsWith("linux_")),
   ...Object.values(ActionType).filter((actionType) => actionType.startsWith("fortigate_"))
 ]);
 
@@ -299,16 +300,18 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     if (plan.deviceId && !device) errors.push(`${plan.actionType} requires a valid registered device.`);
   }
 
-  if (plan.actionType === ActionType.linux_check_service_status) {
+  if (plan.actionType.startsWith("linux_")) {
     if (device && device.type !== "linux_edge" && !String(device.vendor ?? "").toLowerCase().includes("linux")) {
       errors.push("linux_check_service_status requires a Linux Edge device.");
     }
     if (device && device.protocol !== "ssh") errors.push("linux_check_service_status requires SSH protocol.");
     if (device && !await credentialExists(device)) errors.push("linux_check_service_status requires an existing credential for the target device.");
     if (device && !connectorExists(device, "linux_edge")) errors.push("linux_check_service_status requires a registered Linux connector.");
-    const service = textParam(parameters, "serviceName") ?? textParam(parameters, "service");
-    if (!service) errors.push("linux_check_service_status requires serviceName.");
-    else if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) errors.push("linux_check_service_status serviceName is invalid.");
+    if (plan.actionType === ActionType.linux_check_service_status) {
+      const service = textParam(parameters, "serviceName") ?? textParam(parameters, "service");
+      if (!service) errors.push("linux_check_service_status requires serviceName.");
+      else if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) errors.push("linux_check_service_status serviceName is invalid.");
+    }
   }
 
   if (plan.actionType === ActionType.create_egress_policy) {

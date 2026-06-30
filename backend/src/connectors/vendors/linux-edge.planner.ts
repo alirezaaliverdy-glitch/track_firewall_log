@@ -2,6 +2,17 @@ import { ActionType, DeviceType } from "@prisma/client";
 import type { PlannerInput, VendorCommandPlan, VendorPlanner } from "../types.js";
 
 const WARNING_PORTS = new Set([22, 80, 443, 8080, 4000, 4050, 50]);
+const READ_ACTIONS = new Map<ActionType, string>([
+  [ActionType.linux_read_hostname, "hostname"],
+  [ActionType.linux_read_interfaces, "ip -brief address"],
+  [ActionType.linux_read_routes, "ip route show"],
+  [ActionType.linux_read_listening_ports, "ss -lntup"],
+  [ActionType.linux_read_firewall_status, "ufw status verbose"],
+  [ActionType.linux_read_auth_logs, "journalctl SSH authentication events for the last 24 hours"],
+  [ActionType.linux_read_users, "getent passwd"],
+  [ActionType.linux_read_docker, "docker ps --no-trunc"],
+  [ActionType.linux_read_nginx, "nginx -t"]
+]);
 
 function str(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -21,7 +32,7 @@ function base(input: PlannerInput): VendorCommandPlan {
     transport: "ssh",
     commands: [],
     apiCalls: [],
-    warnings: ["Dry-run only. No SSH command was executed."],
+    warnings: ["Execution preview only. No SSH command was executed while planning."],
     rollbackSteps: [],
     riskLevel: input.riskLevel,
     requiresApproval: true
@@ -49,7 +60,7 @@ function blockTemporary(input: PlannerInput): VendorCommandPlan {
   if (!srcIp) return needs(input, ["srcIp"], ["Which source IP should be blocked temporarily?"]);
   const plan = base(input);
   plan.commands = [
-    `ufw insert 1 deny from ${srcIp} comment "temporary block ${duration}m - Firewall Log Analyzer dry-run"`,
+    `ufw insert 1 deny from ${srcIp} comment "temporary block ${duration}m - Firewall Log Analyzer"`,
     `systemd-run --on-active=${duration}m /usr/sbin/ufw delete deny from ${srcIp}`
   ];
   plan.rollbackSteps = [`ufw delete deny from ${srcIp}`];
@@ -88,7 +99,8 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.block_source_ip_temporary,
     ActionType.unblock_source_ip,
     ActionType.change_ssh_port,
-    ActionType.linux_check_service_status
+    ActionType.linux_check_service_status,
+    ...READ_ACTIONS.keys()
   ],
   supports(device) {
     return device?.type === DeviceType.linux_edge || String(device?.vendor ?? "").toLowerCase().includes("linux");
@@ -114,6 +126,14 @@ export const linuxEdgePlanner: VendorPlanner = {
         `systemctl status ${service} --no-pager -l`
       ];
       plan.warnings.push("Read-only service status check. No service restart or config change is planned.");
+      return plan;
+    }
+    const readCommand = READ_ACTIONS.get(input.actionType);
+    if (readCommand) {
+      const plan = base(input);
+      plan.commands = [readCommand];
+      plan.requiresApproval = false;
+      plan.warnings.push("Read-only catalog action. No device state change is planned.");
       return plan;
     }
     return { ...base(input), status: "unsupported", transport: "manual", unsupportedReason: "Linux Edge UFW template for this action is not implemented yet." };

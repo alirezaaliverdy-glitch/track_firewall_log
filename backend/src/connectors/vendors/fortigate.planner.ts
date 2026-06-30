@@ -46,7 +46,7 @@ export const fortigatePlanner: VendorPlanner = {
         ...plan,
         status: "needs_clarification",
         missingFields: ["parameters"],
-        questions: ["Complete the required FortiGate fields from device discovery, then dry-run again."],
+        questions: ["Complete the required FortiGate fields from device discovery, then select Execute again."],
         warnings: ["FortiGate commands are compiled only from structured parameters; raw CLI is not accepted."],
         unsupportedReason: error instanceof Error ? error.message : "FortiGate action could not be compiled."
       };

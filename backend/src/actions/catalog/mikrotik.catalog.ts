@@ -1,0 +1,40 @@
+import { ActionType, AiRiskLevel } from "@prisma/client";
+import { catalogEntry as e } from "./helpers.js";
+
+export const MIKROTIK_COMMAND_CATALOG = Object.freeze([
+  e("mikrotik", "system_backup", "Create system backup", "system backup", ActionType.mikrotik_create_backup, ["system backup", "create backup", "پشتیبان سیستم"], AiRiskLevel.low, true),
+  e("mikrotik", "export_config", "Export sanitized configuration", "system backup", ActionType.mikrotik_create_export_sanitized, ["export config hide-sensitive", "sanitized config", "خروجی کانفیگ"], AiRiskLevel.low, true),
+  e("mikrotik", "read_interfaces", "Read interfaces", "interfaces", ActionType.mikrotik_list_interfaces, ["show interfaces", "read interfaces", "نمایش اینترفیس"], AiRiskLevel.low, true),
+  e("mikrotik", "read_ip_addresses", "Read IP addresses", "network", "mikrotik_list_ip_addresses", ["show ip addresses", "read ip addresses", "نمایش آدرس ip"], AiRiskLevel.low, true, [], [], { supported: false }),
+  e("mikrotik", "read_routes", "Read routes", "routing", ActionType.mikrotik_list_routes, ["show routes", "read routes", "نمایش route", "نمایش مسیرها"], AiRiskLevel.low, true),
+  e("mikrotik", "read_dns", "Read DNS settings", "dns", ActionType.mikrotik_show_dns_settings, ["show dns", "read dns", "نمایش dns"], AiRiskLevel.low, true),
+  e("mikrotik", "read_services", "Read IP services", "services", ActionType.mikrotik_list_ip_services, ["show services", "read services", "نمایش سرویس ها"], AiRiskLevel.low, true),
+  e("mikrotik", "enable_service", "Enable service", "services", ActionType.mikrotik_enable_service, ["enable service", "فعال کردن سرویس"], AiRiskLevel.medium, false, ["serviceName"]),
+  e("mikrotik", "disable_service", "Disable service", "services", ActionType.mikrotik_disable_service, ["disable service", "غیرفعال کردن سرویس"], AiRiskLevel.high, false, ["serviceName"]),
+  e("mikrotik", "change_service_port", "Change service port", "services", ActionType.mikrotik_change_service_port, ["change ssh port", "change service port", "تغییر پورت ssh", "پورت ssh را تغییر بده"], AiRiskLevel.high, false, ["serviceName", "newPort"], ["trustedSourceCidr", "oldPort", "comment"]),
+  e("mikrotik", "read_firewall_summary", "Read firewall summary", "firewall", ActionType.mikrotik_read_firewall_summary, ["show firewall summary", "firewall summary", "خلاصه فایروال"], AiRiskLevel.low, true),
+  e("mikrotik", "read_firewall_filters", "Read firewall filter rules", "firewall", ActionType.mikrotik_list_filter_rules, ["show firewall filters", "show firewall rules", "read filter rules", "نمایش قوانین فایروال"], AiRiskLevel.low, true),
+  e("mikrotik", "add_firewall_filter", "Add firewall filter rule", "firewall", ActionType.mikrotik_create_filter_rule, ["add firewall rule", "create filter rule", "افزودن قانون فایروال"], AiRiskLevel.medium, false, [], ["sourceIp", "sourceCidr", "destinationIp", "port", "protocol", "srcInterface", "dstInterface"]),
+  e("mikrotik", "disable_firewall_rule", "Disable firewall rule", "firewall", ActionType.mikrotik_disable_filter_rule, ["disable firewall rule", "غیرفعال کردن قانون فایروال"], AiRiskLevel.medium, false, [], ["ruleId", "comment"]),
+  e("mikrotik", "enable_firewall_rule", "Enable firewall rule", "firewall", ActionType.mikrotik_enable_filter_rule, ["enable firewall rule", "فعال کردن قانون فایروال"], AiRiskLevel.high, false, [], ["ruleId", "comment"]),
+  e("mikrotik", "add_address_list_item", "Add address-list item", "address list", ActionType.mikrotik_add_address_list_entry, ["add address list item", "add address-list", "افزودن به لیست آدرس"], AiRiskLevel.medium, false, [], ["sourceIp", "sourceCidr", "listName", "timeout", "comment"]),
+  e("mikrotik", "remove_address_list_item", "Remove managed address-list item", "address list", ActionType.mikrotik_remove_address_list_entry, ["remove address list item", "delete managed address-list", "حذف از لیست آدرس"], AiRiskLevel.medium, false, [], ["sourceIp", "sourceCidr", "listName"]),
+  e("mikrotik", "temporary_block_ip", "Temporarily block IP", "address list", ActionType.mikrotik_block_ip_temporary, ["block ip", "block", "temporary block", "مسدود کردن ip", "بلاک ip"], AiRiskLevel.medium, false, [], ["sourceIp", "sourceCidr", "timeout"]),
+  e("mikrotik", "allow_management_source", "Allow management source", "services", ActionType.mikrotik_restrict_service_by_address, ["allow management source", "restrict service address", "اجازه دسترسی مدیریت"], AiRiskLevel.high, false, ["serviceName", "trustedSourceCidr"]),
+  e("mikrotik", "add_nat_masquerade", "Add NAT masquerade", "nat", ActionType.mikrotik_create_srcnat_masquerade_rule, ["add nat masquerade", "create masquerade", "افزودن masquerade"], AiRiskLevel.medium, false),
+  e("mikrotik", "add_port_forward", "Add destination NAT / port forward", "nat", ActionType.mikrotik_create_dstnat_rule, ["add port forward", "create dst-nat", "port forward", "انتقال پورت"], AiRiskLevel.high, false, ["dstPort", "toAddress"], ["toPort", "protocol", "srcInterface"]),
+  e("mikrotik", "read_nat_rules", "Read NAT rules", "nat", ActionType.mikrotik_list_nat_rules, ["show nat rules", "read nat", "نمایش قوانین nat"], AiRiskLevel.low, true),
+  e("mikrotik", "add_static_route", "Add static route", "routing", ActionType.mikrotik_add_static_route, ["add static route", "افزودن مسیر ثابت"], AiRiskLevel.high, false, ["destinationCidr"], ["gateway", "dstInterface"]),
+  e("mikrotik", "remove_static_route", "Remove managed static route", "routing", ActionType.mikrotik_remove_managed_static_route, ["remove managed static route", "حذف مسیر ثابت مدیریت شده"], AiRiskLevel.high, false, [], ["routeId", "comment"]),
+  e("mikrotik", "read_logs", "Read logs", "observability", ActionType.mikrotik_show_logs, ["show logs", "read logs", "نمایش لاگ"], AiRiskLevel.low, true),
+  e("mikrotik", "read_dhcp_leases", "Read DHCP leases", "dhcp", ActionType.mikrotik_list_dhcp_leases, ["show dhcp leases", "read dhcp leases", "نمایش lease های dhcp"], AiRiskLevel.low, true),
+  e("mikrotik", "read_arp", "Read ARP table", "network", "mikrotik_read_arp", ["show arp", "read arp", "نمایش arp"], AiRiskLevel.low, true, [], [], { supported: false }),
+  e("mikrotik", "read_users", "Read users", "system", "mikrotik_read_users", ["show users", "read users", "نمایش کاربران"], AiRiskLevel.low, true, [], [], { supported: false }),
+  e("mikrotik", "read_system_health", "Read system resources and health", "system", ActionType.mikrotik_show_resources, ["show resources", "system health", "نمایش منابع سیستم"], AiRiskLevel.low, true)
+  ,e("mikrotik", "read_address_list", "Read address lists", "address list", ActionType.mikrotik_list_address_list, ["show address list", "read address-list", "نمایش لیست آدرس"], AiRiskLevel.low, true)
+  ,e("mikrotik", "unblock_ip", "Unblock managed IP", "address list", ActionType.mikrotik_unblock_ip, ["unblock ip", "remove ip block", "رفع مسدودی آی پی"], AiRiskLevel.medium, false, ["sourceIp"], ["listName"])
+  ,e("mikrotik", "add_allow_rule", "Add managed allow rule", "firewall", ActionType.mikrotik_create_filter_rule, ["add allow firewall rule", "allow firewall traffic", "افزودن قانون اجازه فایروال"], AiRiskLevel.high, false, ["protocol", "port"], ["sourceIp", "sourceCidr", "srcInterface", "dstInterface"])
+  ,e("mikrotik", "add_drop_rule", "Add managed drop rule", "firewall", ActionType.mikrotik_create_filter_rule, ["add drop firewall rule", "drop firewall traffic", "افزودن قانون مسدودسازی فایروال"], AiRiskLevel.medium, false, [], ["sourceIp", "sourceCidr", "protocol", "port", "srcInterface", "dstInterface"])
+  ,e("mikrotik", "dns_wan_protection", "Protect DNS from WAN", "hardening", "mikrotik_dns_wan_protection", ["protect dns from wan", "block wan dns", "محافظت dns از wan"], AiRiskLevel.high, false, [], ["wanInterface"], { supportsExecution: false })
+  ,e("mikrotik", "basic_input_hardening", "Apply basic input-chain hardening", "hardening", "mikrotik_basic_input_hardening", ["basic input hardening", "harden input chain", "ایمن سازی زنجیره input"], AiRiskLevel.high, false, [], ["managementCidr", "wanInterface"], { supportsExecution: false })
+]);

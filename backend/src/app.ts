@@ -18,6 +18,7 @@ import { healthRoutes } from "./routes/health.js";
 import { incidentRoutes } from "./routes/incidents.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
+import { assessmentRoutes } from "./routes/assessments.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -67,6 +68,7 @@ export async function buildApp() {
 
   await app.register(healthRoutes);
   await app.register(actionRoutes);
+  await app.register(assessmentRoutes);
   await app.register(connectorPlanRoutes);
   await app.register(collectorRoutes);
   await app.register(credentialRoutes);

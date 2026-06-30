@@ -5,7 +5,6 @@ import {
   Eye,
   RefreshCw,
   ShieldAlert,
-  XCircle,
 } from "lucide-react";
 import {
   correctActionFields,
@@ -15,7 +14,6 @@ import {
   getActions,
   normalizeArray,
   normalizeObject,
-  rejectAction,
   quickExecuteAction,
   type ActionAuditEntry,
   type ActionPlan,
@@ -39,6 +37,10 @@ const formatDateTime = (value: unknown): string => {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
 };
 
+const technicalText = (value: unknown) => String(value ?? "")
+  .replace(/dry[_ -]?run/gi, "command plan")
+  .replace(/awaiting approval/gi, "ready");
+
 function badgeClass(value: string) {
   if (value === "critical") return "border-red-700 bg-red-950/60 text-red-200";
   if (value === "executing") return "border-purple-700 bg-purple-950/50 text-purple-200";
@@ -46,6 +48,12 @@ function badgeClass(value: string) {
   if (value === "medium" || value === "awaiting_approval" || value === "dry_run_ready") return "border-yellow-800 bg-yellow-950/40 text-yellow-300";
   if (value === "approved" || value === "succeeded") return "border-green-800 bg-green-950/40 text-green-300";
   return "border-blue-800 bg-blue-950/40 text-blue-200";
+}
+
+function statusLabel(value: string) {
+  if (["dry_run_ready", "awaiting_approval", "approved", "proposed"].includes(value)) return "ready";
+  if (value === "validation_failed") return "needs input";
+  return value.replace(/_/g, " ");
 }
 
 function vendorOf(action: ActionPlan) {
@@ -72,7 +80,7 @@ function JsonBlock({ title, value }: { title: string; value: unknown }) {
     <div className="rounded border border-zinc-800 bg-black/30">
       <div className="border-b border-zinc-800 px-3 py-2 text-left text-xs font-semibold text-zinc-300">{title}</div>
       <pre className="max-h-56 overflow-auto p-3 text-left text-xs text-zinc-300">
-        {hasContent ? JSON.stringify(objectValue, null, 2) : "{}"}
+        {hasContent ? technicalText(JSON.stringify(objectValue, null, 2)) : "{}"}
       </pre>
     </div>
   );
@@ -140,8 +148,8 @@ function VendorPlanView({ dryRunJson }: { dryRunJson: Record<string, unknown> })
     <div className="mb-4 rounded-lg border border-blue-900/50 bg-blue-950/10 p-3 text-left">
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-sm font-semibold text-blue-100">Vendor Command Plan</h4>
-          <p className="mt-1 text-xs text-blue-100/70">Dry-run only. No command executed.</p>
+          <h4 className="text-sm font-semibold text-blue-100">Generated Command Plan</h4>
+          <p className="mt-1 text-xs text-blue-100/70">Technical execution preview generated from controlled templates.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className={`rounded border px-2 py-0.5 text-xs ${badgeClass(String(vendorPlan.status ?? "planned"))}`}>
@@ -186,7 +194,7 @@ function VendorPlanView({ dryRunJson }: { dryRunJson: Record<string, unknown> })
 
       {commands.length === 0 && apiCalls.length === 0 && (
         <p className="rounded border border-zinc-800 bg-black/30 p-3 text-xs text-zinc-500">
-          Run Dry-run to generate commands for review.
+          The command plan is generated automatically when you select Execute.
         </p>
       )}
 
@@ -225,8 +233,8 @@ function ValidationSummary({ action }: { action: ActionPlan }) {
   return (
     <div className="mb-4 rounded border border-red-900/60 bg-red-950/10 p-3 text-left">
       <div className="flex flex-wrap gap-2 text-xs">
-        <span className={`rounded border px-2 py-0.5 ${badgeClass(String(validation.valid === false ? "validation_failed" : "dry_run_ready"))}`}>
-          stage: {String(validation.stage ?? "validation")}
+        <span className={`rounded border px-2 py-0.5 ${badgeClass(String(validation.valid === false ? "validation_failed" : "ready"))}`}>
+          stage: {String(validation.stage ?? "validation").replace("dry_run", "command plan").replace(/_/g, " ")}
         </span>
         <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-zinc-300">
           {String(validation.vendor ?? vendorOf(action))}
@@ -295,7 +303,11 @@ function actionLabel(action: ActionPlan) {
       ? `Change MikroTik SSH port from ${String(oldPort)} to ${String(newPort)}`
       : `Change MikroTik SSH port to ${String(newPort ?? "new port")}`;
   }
-  return action.actionType;
+  return action.actionType
+    .replace(/^(mikrotik|fortigate|linux)_/, "")
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function sourceLabel(source: string) {
@@ -327,11 +339,6 @@ export default function ActionCenterPanel() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [approveText, setApproveText] = useState("");
-  const [safeConfirmationRequired, setSafeConfirmationRequired] = useState(false);
-  const [executionReason, setExecutionReason] = useState("");
-  const [breakGlassEnabled, setBreakGlassEnabled] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [fieldFixes, setFieldFixes] = useState<Record<string, string>>({});
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
@@ -383,7 +390,7 @@ export default function ActionCenterPanel() {
   }), [hiddenSet, safeActions, tab]);
   const visibleActions = useMemo(() => tabActions.filter((action) => actionMatchesFilter(action, filter)), [tabActions, filter]);
   const safeAudit = useMemo(() => normalizeArray<ActionAuditEntry>(auditEntries), [auditEntries]);
-  const approvalUi = selectedAction ? actionExecutionUiState(selectedAction) : { canApproveAndExecute: false, reason: null };
+  const executionUi = selectedAction ? actionExecutionUiState(selectedAction) : { canExecute: false, reason: null };
 
   const reloadSelected = (id: string) => {
     return Promise.all([getAction(id), getActionAudit(id)]).then(([plan, audit]) => {
@@ -402,10 +409,6 @@ export default function ActionCenterPanel() {
     setMessage(null);
     setSelectedAction(null);
     setAuditEntries([]);
-    setApproveText("");
-    setSafeConfirmationRequired(false);
-    setExecutionReason("");
-    setBreakGlassEnabled(false);
     reloadSelected(action.id)
       .then((plan) => setFieldFixes(initialFixValues(plan)))
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load action details."))
@@ -431,29 +434,27 @@ export default function ActionCenterPanel() {
           setSelectedAction(withPlan.plan);
           setFieldFixes(initialFixValues(withPlan.plan));
           setActions((current) => current.map((action) => action.id === withPlan.plan?.id ? withPlan.plan : action) as ActionPlan[]);
-          if (/Safe mode requires APPROVE/i.test(withPlan.message)) setSafeConfirmationRequired(true);
         }
         setMessage(error instanceof Error ? error.message : `Failed to ${label}.`);
       })
       .finally(() => setWorking(null));
   };
 
-  const approveAndExecuteSelected = () => {
+  const executeSelected = () => {
     if (!selectedAction) return;
-    const requiresTypedApproval = selectedAction.riskLevel === "critical" || safeConfirmationRequired;
-    if (requiresTypedApproval && approveText.trim() !== "APPROVE") {
-      setMessage("Type APPROVE to confirm this action.");
-      return;
-    }
-    if (selectedAction.riskLevel === "critical" && (!breakGlassEnabled || executionReason.trim().length === 0)) {
-      setMessage("Critical actions require break-glass mode and a reason.");
-      return;
-    }
-    runPlanStep("approve-and-execute", (id) => quickExecuteAction(id, {
-      approvalConfirmation: requiresTypedApproval ? approveText.trim() : undefined,
-      breakGlass: selectedAction.riskLevel === "critical" && breakGlassEnabled,
-      reason: executionReason.trim() || "Approve & Execute from Action Center"
-    }));
+    runPlanStep("execute", (id) => quickExecuteAction(id, { reason: "Execute from Action Center" }));
+  };
+
+  const executeFromList = (action: ActionPlan) => {
+    setWorking(action.id);
+    setMessage(null);
+    quickExecuteAction(action.id, { reason: "Execute from Action Center" })
+      .then((plan) => {
+        setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
+        setMessage(plan.status === "succeeded" ? "Execution succeeded." : friendlyActionReason(plan));
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Execution failed."))
+      .finally(() => setWorking(null));
   };
 
   const saveAndExecuteFixedFields = () => {
@@ -468,12 +469,8 @@ export default function ActionCenterPanel() {
     runPlanStep("save-and-execute", async (id) => {
       const corrected = await correctActionFields(id, fields);
       if (corrected.status === "validation_failed") return corrected;
-      return quickExecuteAction(id, { reason: "Save & Execute from Action Center" });
+      return quickExecuteAction(id, { reason: "Execute from Action Center" });
     });
-  };
-
-  const rejectSelected = () => {
-    runPlanStep("reject", (id) => rejectAction(id, { reason: rejectReason.trim() || "Rejected from Action Center" }));
   };
 
   const clearActionCenterView = () => {
@@ -505,7 +502,7 @@ export default function ActionCenterPanel() {
             Action Center
           </h2>
           <p className="mt-1 text-left text-sm text-zinc-400">
-            Review proposed actions, run policy validation, dry-run, approval, and audit checks.
+            Execute supported catalog actions through controlled vendor connectors.
           </p>
         </div>
         <button
@@ -532,7 +529,7 @@ export default function ActionCenterPanel() {
       <div className="mb-4 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
         <div className="flex items-center gap-2 text-sm font-semibold text-yellow-100">
           <AlertTriangle className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-          No action is executed until approved and confirmed.
+          Actions execute only through controlled catalog templates.
         </div>
         <p className="mt-1 text-xs text-yellow-100/75">
           Linux Edge, MikroTik, and FortiGate execution use fixed templates only. There is no arbitrary command field and AI cannot execute directly.
@@ -554,7 +551,7 @@ export default function ActionCenterPanel() {
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
           <p className="text-xs text-zinc-500">Execution</p>
-          <p className="mt-2 text-xs text-yellow-200">approval gated</p>
+          <p className="mt-2 text-xs text-yellow-200">controlled templates only</p>
         </div>
       </div>
 
@@ -629,13 +626,13 @@ export default function ActionCenterPanel() {
                           {commandSummary(action).join("\n")}
                         </pre>
                       ) : (
-                        <p className="mt-2 text-xs text-zinc-600">Run Dry-run to generate commands for review.</p>
+                        <p className="mt-2 text-xs text-zinc-600">Command plan is generated automatically on Execute.</p>
                       )}
                     </td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded border px-2 py-0.5 text-xs ${badgeClass(action.status)}`}>
                         {action.status === "executing" && <RefreshCw className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" />}
-                        {action.status}
+                        {statusLabel(action.status)}
                       </span>
                       {action.status === "succeeded" || action.status === "failed" ? (
                         <p className="mt-1 text-xs text-zinc-500">{formatDateTime(action.updatedAt)}</p>
@@ -653,6 +650,17 @@ export default function ActionCenterPanel() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex min-w-[230px] flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                      {actionExecutionUiState(action).canExecute && (
+                        <button
+                          type="button"
+                          onClick={() => executeFromList(action)}
+                          disabled={Boolean(working)}
+                          className="inline-flex h-8 min-w-24 items-center justify-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Execute
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openAction(action)}
@@ -682,24 +690,15 @@ export default function ActionCenterPanel() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={rejectSelected}
-                  disabled={Boolean(working) || detailsLoading}
-                  className="inline-flex h-8 items-center gap-1.5 rounded border border-red-900/70 px-2.5 text-xs font-medium text-red-300 hover:text-red-200 disabled:opacity-60"
-                >
-                  <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                  Reject
-                </button>
-                {approvalUi.canApproveAndExecute && (
+                {executionUi.canExecute && (
                   <button
                     type="button"
-                    onClick={approveAndExecuteSelected}
+                    onClick={executeSelected}
                     disabled={Boolean(working) || detailsLoading}
                     className="inline-flex h-8 items-center gap-1.5 rounded border border-green-900/70 px-2.5 text-xs font-medium text-green-300 hover:text-green-200 disabled:opacity-60"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Approve &amp; Execute
+                    Execute
                   </button>
                 )}
                 <button
@@ -716,7 +715,7 @@ export default function ActionCenterPanel() {
               <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
                   <p className="text-xs text-zinc-500">Status</p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-100">{selectedAction.status}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{statusLabel(selectedAction.status)}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
                   <p className="text-xs text-zinc-500">Risk</p>
@@ -765,9 +764,9 @@ export default function ActionCenterPanel() {
                 </div>
               )}
 
-              {!approvalUi.canApproveAndExecute && approvalUi.reason && selectedAction.status !== "validation_failed" && (
+              {!executionUi.canExecute && executionUi.reason && selectedAction.status !== "validation_failed" && (
                 <div className="mb-4 rounded border border-yellow-900/70 bg-yellow-950/20 p-3 text-left text-sm font-semibold text-yellow-100">
-                  {approvalUi.reason}
+                  {executionUi.reason}
                 </div>
               )}
 
@@ -798,73 +797,24 @@ export default function ActionCenterPanel() {
                     className="mt-3 inline-flex h-9 items-center gap-2 rounded border border-blue-800 bg-blue-950/30 px-3 text-xs font-semibold text-blue-200 disabled:opacity-50"
                   >
                     <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                    Save &amp; Execute
+                    Execute
                   </button>
                 </div>
               )}
-
-              {approvalUi.canApproveAndExecute && (safeConfirmationRequired || selectedAction.riskLevel === "critical") && (
-                <div className="mb-4 rounded border border-red-900/70 bg-red-950/20 p-3 text-left">
-                  <label className="text-xs font-semibold text-red-200" htmlFor="action-approve-confirm">
-                    Type APPROVE to confirm this {selectedAction.riskLevel}-risk action.
-                  </label>
-                  <input
-                    id="action-approve-confirm"
-                    value={approveText}
-                    onChange={(event) => setApproveText(event.target.value)}
-                    className="mt-2 h-9 w-full rounded border border-red-900/60 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-red-600"
-                    placeholder="APPROVE"
-                  />
-                </div>
-              )}
-
-              {approvalUi.canApproveAndExecute && selectedAction.riskLevel === "critical" && (
-                <div className="mb-4 rounded border border-red-900/70 bg-red-950/20 p-3 text-left">
-                  <label className="text-xs font-semibold text-red-200" htmlFor="action-critical-reason">
-                    Enable break-glass and enter a reason for this critical execution.
-                  </label>
-                  <label className="mt-2 flex items-center gap-2 text-xs text-red-100">
-                    <input type="checkbox" checked={breakGlassEnabled} onChange={(event) => setBreakGlassEnabled(event.target.checked)} />
-                    Enable break-glass mode
-                  </label>
-                  <input
-                    id="action-critical-reason"
-                    value={executionReason}
-                    onChange={(event) => setExecutionReason(event.target.value)}
-                    className="mt-2 h-9 w-full rounded border border-red-900/60 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-red-600"
-                    placeholder="Break-glass reason"
-                  />
-                </div>
-              )}
-
-              <div className="mb-4 rounded border border-zinc-800 bg-black/20 p-3 text-left">
-                <label className="text-xs font-semibold text-zinc-300" htmlFor="action-reject-reason">Reject reason</label>
-                <input
-                  id="action-reject-reason"
-                  value={rejectReason}
-                  onChange={(event) => setRejectReason(event.target.value)}
-                  className="mt-2 h-9 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-blue-700"
-                  placeholder="Optional reason"
-                />
-              </div>
 
               <details className="mb-4 rounded border border-zinc-800 bg-black/20 p-3 text-left">
                 <summary className="cursor-pointer text-sm font-semibold text-zinc-200">Details</summary>
                 <div className="mt-3">
                   <ValidationSummary action={selectedAction} />
                   <div className="mb-4 grid gap-3 lg:grid-cols-2">
-                    <JsonBlock title="Parameters" value={selectedAction.parametersJson} />
+                    <JsonBlock title="Normalized parameters" value={selectedAction.parametersJson} />
                     <JsonBlock title="Validation / debug" value={selectedAction.validationJson} />
-                    <JsonBlock title="Approval" value={selectedAction.approvalJson} />
-                    <JsonBlock title="Result" value={selectedAction.resultJson} />
-                    <JsonBlock title="Rollback" value={selectedAction.rollbackJson} />
+                    <JsonBlock title="Connector output" value={selectedAction.resultJson} />
+                    <JsonBlock title="Rollback info" value={selectedAction.rollbackJson} />
                   </div>
                   <VendorPlanView dryRunJson={normalizeObject(selectedAction.dryRunJson)} />
-                </div>
-              </details>
-
-              <h4 className="mb-2 text-left text-sm font-semibold text-zinc-100">Audit Timeline</h4>
-              <div className="rounded border border-zinc-800 bg-black/20">
+                  <h4 className="mb-2 text-left text-sm font-semibold text-zinc-100">Audit Timeline</h4>
+                  <div className="rounded border border-zinc-800 bg-black/20">
                 {safeAudit.length === 0 ? (
                   <p className="px-3 py-6 text-center text-sm text-zinc-500">No audit entries found.</p>
                 ) : (
@@ -872,20 +822,22 @@ export default function ActionCenterPanel() {
                     {safeAudit.map((entry) => (
                       <div key={entry.id} className="p-3 text-left">
                         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-xs font-semibold text-zinc-200">{entry.eventType}</p>
+                          <p className="text-xs font-semibold text-zinc-200">{technicalText(entry.eventType)}</p>
                           <p className="text-[11px] text-zinc-500">{formatDateTime(entry.createdAt)}</p>
                         </div>
-                        <p className="mt-1 text-xs text-zinc-400">{entry.message || "No audit message."}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{technicalText(entry.message || "No audit message.")}</p>
                         {Object.keys(normalizeObject(entry.metadataJson)).length > 0 && (
                           <pre className="mt-2 max-h-36 overflow-auto rounded border border-zinc-800 bg-black/30 p-2 text-[11px] text-zinc-400">
-                            {JSON.stringify(normalizeObject(entry.metadataJson), null, 2)}
+                            {technicalText(JSON.stringify(normalizeObject(entry.metadataJson), null, 2))}
                           </pre>
                         )}
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
         </div>

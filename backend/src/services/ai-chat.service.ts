@@ -5,6 +5,9 @@ import { createAiActionIntent, parseAiIntent, type ParsedIntent } from "./ai-int
 import { getAiProviderStatus, runAiProvider, type StructuredAiIntent } from "./ai-provider.service.js";
 import { proposeActionPlan } from "./action-plan.service.js";
 import { normalizeIntentType, normalizeVendor } from "./ai-normalization.js";
+import { routeCatalogIntent } from "../actions/intent-router.js";
+import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
+import { getActionCatalogEntry } from "../actions/action-catalog.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -83,6 +86,10 @@ function shouldPreferDeterministic(providerIntent: StructuredAiIntent | null, de
   return deterministicKeys.length > providerKeys.length;
 }
 
+function isControlledCatalogAction(actionType: string) {
+  return Boolean(getActionCatalogEntry(actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === actionType);
+}
+
 function intentDebug(input: {
   intent: Awaited<ReturnType<typeof createAiActionIntent>> | undefined;
   structuredIntent: StructuredAiIntent | null;
@@ -153,8 +160,32 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   });
 
   const context = await buildSecurityContext();
-  const providerResponse = await runAiProvider({ message, context });
-  const deterministicParsed = parseAiIntent(message);
+  const catalogMatch = routeCatalogIntent(message);
+  const providerCandidate = catalogMatch.aiRequired
+    ? await runAiProvider({ message, context })
+    : {
+        assistantMessage: catalogMatch.status === "matched" && catalogMatch.catalogEntry
+          ? `${catalogMatch.catalogEntry.title} is ready as a controlled catalog action. Review it in Action Center and select Execute.`
+          : catalogMatch.message ?? "This action is not in the controlled catalog yet.",
+        shouldCreateIntent: catalogMatch.status === "matched",
+        intent: catalogMatch.parsedIntent ? structuredFromParsed(catalogMatch.parsedIntent) : null,
+        confidence: catalogMatch.confidence,
+        provider: "mock" as const,
+        model: "command-catalog",
+        keyConfigured: false,
+        fallbackUsed: false
+      };
+  const providerActionable = providerCandidate.intent && providerCandidate.intent.intentType !== AiIntentType.unknown && providerCandidate.intent.intentType !== AiIntentType.explain_security_status;
+  const providerResponse = providerActionable && !isControlledCatalogAction(providerCandidate.intent!.intentType)
+    ? {
+        ...providerCandidate,
+        assistantMessage: "This action is not in the controlled catalog yet.",
+        shouldCreateIntent: false,
+        intent: null
+      }
+    : providerCandidate;
+  const parsedCandidate = catalogMatch.status === "unsupported" ? null : catalogMatch.parsedIntent ?? parseAiIntent(message);
+  const deterministicParsed = parsedCandidate && isControlledCatalogAction(parsedCandidate.intentType) ? parsedCandidate : null;
   const deterministicWins = shouldPreferDeterministic(providerResponse.intent, deterministicParsed);
   const effectiveStructuredIntent = deterministicWins && deterministicParsed
     ? structuredFromParsed(deterministicParsed)
@@ -172,6 +203,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         intent: effectiveStructuredIntent,
         providerIntent: providerResponse.intent,
         deterministicParserUsed: deterministicWins,
+        catalogMatched: catalogMatch.status === "matched",
+        catalogActionId: catalogMatch.catalogEntry?.id ?? null,
+        aiProviderCalled: catalogMatch.aiRequired,
         confidence: providerResponse.confidence,
         provider: providerResponse.provider,
         model: providerResponse.model,

@@ -46,8 +46,38 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.close_port,
   ActionType.block_source_ip_temporary,
   ActionType.unblock_source_ip,
-  ActionType.linux_check_service_status
+  ActionType.linux_check_service_status,
+  ActionType.linux_read_hostname,
+  ActionType.linux_read_interfaces,
+  ActionType.linux_read_routes,
+  ActionType.linux_read_listening_ports,
+  ActionType.linux_read_firewall_status,
+  ActionType.linux_read_auth_logs,
+  ActionType.linux_read_users,
+  ActionType.linux_read_docker,
+  ActionType.linux_read_nginx
 ];
+
+const LINUX_READ_ACTIONS = new Set<ActionType>([
+  ActionType.linux_read_hostname, ActionType.linux_read_interfaces, ActionType.linux_read_routes,
+  ActionType.linux_read_listening_ports, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
+  ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx
+]);
+
+function linuxReadCommand(actionType: ActionType, sudo = "") {
+  const commands: Partial<Record<ActionType, { template: string; command: string }>> = {
+    [ActionType.linux_read_hostname]: { template: "hostname", command: "hostname" },
+    [ActionType.linux_read_interfaces]: { template: "ip -brief address", command: "ip -brief address" },
+    [ActionType.linux_read_routes]: { template: "ip route show", command: "ip route show" },
+    [ActionType.linux_read_listening_ports]: { template: "ss -lntup", command: "ss -lntup" },
+    [ActionType.linux_read_firewall_status]: { template: "ufw status verbose", command: `${sudo}ufw status verbose` },
+    [ActionType.linux_read_auth_logs]: { template: "journalctl SSH authentication events", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -n 200` },
+    [ActionType.linux_read_users]: { template: "getent passwd", command: "getent passwd" },
+    [ActionType.linux_read_docker]: { template: "docker ps", command: "docker ps --no-trunc" },
+    [ActionType.linux_read_nginx]: { template: "nginx -t", command: `${sudo}nginx -t` }
+  };
+  return commands[actionType];
+}
 
 const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 
@@ -439,12 +469,18 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     rollbackSteps = [`sudo -n ufw deny from ${srcIp}`];
     validationWarnings.push("Exact deny rule number will be discovered at execution time. No guessed deletion is allowed.");
   } else if (plan.actionType === ActionType.change_ssh_port) {
-    throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Changing SSH port is dry-run only and cannot be executed by this MVP connector.");
+    throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Changing SSH port has an execution preview but is not enabled in this connector.");
   } else if (plan.actionType === ActionType.linux_check_service_status) {
     const service = serviceParam(parameters.serviceName ?? parameters.service);
     affectedServices.push(service);
     plannedCommands = [`systemctl is-active ${service}`, `systemctl status ${service} --no-pager -l`];
     validationWarnings.push("Read-only service status check. No service restart or config change is planned.");
+  } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
+    const read = linuxReadCommand(plan.actionType);
+    if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);
+    plannedCommands = [read.template];
+    rollbackSteps = [];
+    validationWarnings.push("Read-only inventory command. No device state change is planned.");
   } else {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} is not supported by the Linux SSH connector.`);
   }
@@ -559,6 +595,11 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       commands.push({ template: `systemctl status ${service} --no-pager -l`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
       rollbackJson.readOnly = true;
       warnings.push(active.exitCode === 0 ? "SERVICE_ACTIVE" : "SERVICE_NOT_ACTIVE");
+    } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
+      const read = linuxReadCommand(plan.actionType, sudo);
+      if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);
+      await pushCommand(read.template, read.command);
+      rollbackJson.readOnly = true;
     }
 
     await audit?.("rollback_available", "Rollback metadata is available for this connector result.", rollbackJson);

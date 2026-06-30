@@ -30,7 +30,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "medium",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution; rollback is currently stored as metadata/instructions."],
-    notes: "Create, update, and managed-only delete are compiled from structured parameters. Execution requires dry-run and approval."
+    notes: "Create, update, and managed-only delete are compiled from structured parameters with automatic command planning."
   },
   {
     id: "address_groups",
@@ -40,7 +40,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "medium",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution."],
-    notes: "Create groups and add/remove members through catalog commands. Execution requires dry-run and approval."
+    notes: "Create groups and add/remove members through controlled catalog commands."
   },
   {
     id: "services",
@@ -50,7 +50,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "medium",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution."],
-    notes: "Custom TCP, UDP, and TCP/UDP services plus service groups are supported. Execution requires dry-run and approval."
+    notes: "Custom TCP, UDP, and TCP/UDP services plus service groups use controlled execution templates."
   },
   {
     id: "schedules",
@@ -60,7 +60,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "medium",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["One-time schedule actions are not in the current catalog.", "Automatic rollback execution."],
-    notes: "Recurring schedule create/update is supported. Execution requires dry-run and approval."
+    notes: "Recurring schedule create/update is supported through automatic command planning."
   },
   {
     id: "firewall_policies",
@@ -80,7 +80,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "high",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution.", "General-purpose raw NAT editing is intentionally unsupported."],
-    notes: "Controlled egress/SNAT and destination-NAT policy templates are available. Execution requires dry-run, approval, and backup where required."
+    notes: "Controlled egress/SNAT and destination-NAT policy templates are available with backup safeguards where required."
   },
   {
     id: "vip_port_forward",

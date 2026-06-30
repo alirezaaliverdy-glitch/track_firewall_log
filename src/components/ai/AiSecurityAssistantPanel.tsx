@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, RefreshCw, Send, ShieldAlert, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import {
   getAiProviderStatus,
   getSecuritySummary,
@@ -14,6 +14,10 @@ import {
   type AiProviderStatus,
   type SecuritySummary,
   type StructuredAiResponse,
+  createRecommendationActionPlan,
+  generateHardeningSuggestions,
+  runFullSecurityAnalysis,
+  type SecurityAssessment,
 } from "@/lib/ai";
 import { listDevices, type Device } from "@/lib/devices";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
@@ -293,6 +297,10 @@ export default function AiSecurityAssistantPanel() {
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
+  const [hardeningLoading, setHardeningLoading] = useState(false);
+  const [recommendationWorking, setRecommendationWorking] = useState<string | null>(null);
 
   const refreshSummary = () => {
     setSummaryLoading(true);
@@ -327,10 +335,60 @@ export default function AiSecurityAssistantPanel() {
   const safeMessages = useMemo(() => normalizeArray<AiMessage>(messages).map(normalizeAiMessage), [messages]);
   const topSourceIps = normalizeArray<{ srcIp: string | null; count: number }>(summary?.events.topSourceIps);
   const sensitivePorts = normalizeArray<{ dstPort: number | null; count: number }>(summary?.events.sensitivePorts);
+  const assessmentDetails = normalizeObject(assessment?.findingsJson);
+  const assessmentFindings = normalizeArray<Record<string, unknown>>(assessmentDetails.findings);
+
+  const runAssessment = () => {
+    setAssessmentLoading(true);
+    setError(null);
+    runFullSecurityAnalysis()
+      .then(setAssessment)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Full analysis failed."))
+      .finally(() => setAssessmentLoading(false));
+  };
+
+  const runHardening = () => {
+    setHardeningLoading(true);
+    setError(null);
+    const source = assessment ? Promise.resolve(assessment) : runFullSecurityAnalysis();
+    source
+      .then((current) => generateHardeningSuggestions(current.id))
+      .then(setAssessment)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Hardening suggestions failed."))
+      .finally(() => setHardeningLoading(false));
+  };
+
+  const createRecommendationPlan = (recommendationId: string) => {
+    setRecommendationWorking(recommendationId);
+    setError(null);
+    createRecommendationActionPlan(recommendationId)
+      .then((result) => {
+        publishActionPlanCreated(result.actionPlan.id);
+        setCreatedPlanId(result.actionPlan.id);
+        setAssessment((current) => current ? {
+          ...current,
+          recommendations: current.recommendations.map((item) => item.id === recommendationId ? { ...item, status: "action_plan_created", actionPlanId: result.actionPlan.id } : item)
+        } : current);
+        reviewInActionCenter();
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not create ActionPlan."))
+      .finally(() => setRecommendationWorking(null));
+  };
 
   const submit = (message: string) => {
     const trimmed = message.trim();
     if (!trimmed || loading) return;
+    const quickIntent = trimmed.toLowerCase();
+    if (["تحلیل کامل", "full analysis"].includes(quickIntent)) {
+      setInput("");
+      runAssessment();
+      return;
+    }
+    if (["پیشنهاد ایمن‌سازی", "پیشنهاد ایمن سازی", "hardening suggestions"].includes(quickIntent)) {
+      setInput("");
+      runHardening();
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -408,6 +466,108 @@ export default function AiSecurityAssistantPanel() {
           New Request
         </button>
       </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={runAssessment}
+          disabled={assessmentLoading || hardeningLoading}
+          className="rounded-lg border border-blue-800/70 bg-blue-950/20 p-4 text-left transition-colors hover:bg-blue-950/40 disabled:opacity-60"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-blue-100">
+            <ScanSearch className="h-5 w-5" aria-hidden="true" />
+            تحلیل کامل
+          </span>
+          <span className="mt-1 block text-xs text-zinc-400">Full Analysis across devices, events, incidents, actions, connector snapshots, and catalog coverage.</span>
+          <span className="mt-2 block text-xs font-medium text-blue-300">{assessmentLoading ? "Analyzing..." : "Run Full Analysis"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={runHardening}
+          disabled={assessmentLoading || hardeningLoading}
+          className="rounded-lg border border-green-800/70 bg-green-950/20 p-4 text-left transition-colors hover:bg-green-950/40 disabled:opacity-60"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-green-100">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+            پیشنهاد ایمن‌سازی
+          </span>
+          <span className="mt-1 block text-xs text-zinc-400">Prioritized recommendations mapped to controlled catalog actions whenever possible.</span>
+          <span className="mt-2 block text-xs font-medium text-green-300">{hardeningLoading ? "Generating..." : "Generate Hardening Suggestions"}</span>
+        </button>
+      </div>
+
+      {assessment && (
+        <div className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/80 p-4 text-left">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-zinc-100">Security Assessment</p>
+              <p className="mt-1 text-xs text-zinc-400">{assessment.summary}</p>
+            </div>
+            <span className={`rounded border px-3 py-1 text-sm font-bold ${assessment.riskScore >= 70 ? "border-red-700 text-red-200" : assessment.riskScore >= 40 ? "border-yellow-700 text-yellow-200" : "border-green-700 text-green-200"}`}>
+              Risk {assessment.riskScore}/100
+            </span>
+          </div>
+          {assessmentFindings.length > 0 && (
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {assessmentFindings.slice(0, 6).map((finding, index) => (
+                <div key={String(finding.id ?? index)} className="rounded border border-zinc-800 bg-black/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-zinc-200">{String(finding.title ?? "Finding")}</p>
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(String(finding.severity ?? "medium"))}`}>{String(finding.severity ?? "medium")}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-400">{String(finding.explanation ?? "")}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {assessment.recommendations.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-semibold text-zinc-100">Hardening Suggestions</h3>
+              <div className="mt-2 space-y-2">
+                {assessment.recommendations.map((recommendation) => (
+                  <div key={recommendation.id} className="rounded border border-zinc-800 bg-black/20 p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs font-semibold text-zinc-100">{recommendation.title}</p>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(recommendation.severity)}`}>{recommendation.severity}</span>
+                          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">{recommendation.vendor}</span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${recommendation.executable ? "border-green-800 text-green-300" : "border-zinc-700 text-zinc-500"}`}>
+                            {recommendation.executable ? "Executable" : "Manual"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-400">{recommendation.reason}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{recommendation.device?.name ?? "All devices"} · {recommendation.catalogActionId ?? "No catalog action"}</p>
+                      </div>
+                      {recommendation.executable && !recommendation.actionPlanId && (
+                        <button
+                          type="button"
+                          onClick={() => createRecommendationPlan(recommendation.id)}
+                          disabled={recommendationWorking === recommendation.id}
+                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          {recommendationWorking === recommendation.id ? "Creating..." : "Create ActionPlan"}
+                        </button>
+                      )}
+                      {recommendation.actionPlanId && <span className="text-xs font-medium text-green-300">Ready in Action Center</span>}
+                    </div>
+                    <details className="mt-2 text-xs text-zinc-400">
+                      <summary className="cursor-pointer">Evidence and recommendation</summary>
+                      <p className="mt-2">{recommendation.recommendation}</p>
+                      <pre className="mt-2 max-h-32 overflow-auto rounded bg-black/30 p-2">{JSON.stringify(recommendation.evidenceJson, null, 2)}</pre>
+                    </details>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <details className="mt-4 rounded border border-zinc-800 p-3">
+            <summary className="cursor-pointer text-xs font-semibold text-zinc-300">Assessment details</summary>
+            <pre className="mt-2 max-h-64 overflow-auto text-[11px] text-zinc-400">{JSON.stringify(assessment.findingsJson, null, 2)}</pre>
+          </details>
+        </div>
+      )}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">

@@ -14,6 +14,8 @@ import {
   rejectActionPlan,
   validateAndStoreActionPlan
 } from "../services/action-plan.service.js";
+import { commandCatalogForVendor, VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
+import { routeCatalogIntent } from "../actions/intent-router.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: Record<string, unknown> }>("/api/actions/propose", async (request, reply) => {
@@ -26,6 +28,19 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/api/actions", async () => listActionPlans());
+
+  app.get("/api/actions/catalog", async () => ({ actions: VENDOR_COMMAND_CATALOG }));
+
+  app.get<{ Params: { vendor: string } }>("/api/actions/catalog/:vendor", async (request) => ({
+    vendor: request.params.vendor,
+    actions: commandCatalogForVendor(request.params.vendor)
+  }));
+
+  app.post<{ Body: { prompt?: string; vendor?: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" } }>("/api/actions/match", async (request, reply) => {
+    const prompt = request.body?.prompt?.trim();
+    if (!prompt) return reply.code(400).send({ error: "prompt is required" });
+    return routeCatalogIntent(prompt, request.body.vendor ?? null);
+  });
 
   app.get<{ Params: { id: string } }>("/api/actions/:id", async (request, reply) => {
     const plan = await getActionPlan(request.params.id);

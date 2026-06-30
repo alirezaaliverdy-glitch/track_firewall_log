@@ -11,7 +11,7 @@ import {
 
 function modePresentation(mode: FortiGateCapabilityMode) {
   if (mode === "execution") return { label: "Ready", detail: "Execution", className: "border-emerald-800 bg-emerald-950/60 text-emerald-300", Icon: CheckCircle2 };
-  if (mode === "dry-run") return { label: "Dry-run only", detail: "No execution", className: "border-amber-800 bg-amber-950/60 text-amber-300", Icon: AlertTriangle };
+  if (mode === "dry-run") return { label: "Execution preview", detail: "Connector pending", className: "border-amber-800 bg-amber-950/60 text-amber-300", Icon: AlertTriangle };
   if (mode === "read-only") return { label: "Read-only", detail: "No changes", className: "border-amber-800 bg-amber-950/60 text-amber-300", Icon: AlertTriangle };
   return { label: "Not implemented", detail: "Unavailable", className: "border-red-900 bg-red-950/60 text-red-300", Icon: XCircle };
 }
@@ -82,7 +82,7 @@ export default function FortiGateCapabilityMatrixPanel() {
           <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
             {[
               ["Ready", data.summary.execution, "text-emerald-300"],
-              ["Dry-run only", data.summary.dryRunOnly, "text-amber-300"],
+              ["Execution preview", data.summary.dryRunOnly, "text-amber-300"],
               ["Read-only", data.summary.readOnly, "text-amber-300"],
               ["Not implemented", data.summary.notImplemented, "text-red-300"],
               ["High / critical risk", data.summary.dangerous, "text-orange-300"],
@@ -96,7 +96,7 @@ export default function FortiGateCapabilityMatrixPanel() {
 
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-900/70 bg-blue-950/30 px-4 py-3 text-sm text-blue-200">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Execution requires a validated dry-run and approval. High/critical actions may also require backup or break-glass confirmation.</span>
+            <span>Execute automatically validates and builds a controlled command plan. High-impact actions retain backup and rollback safeguards.</span>
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-slate-800">

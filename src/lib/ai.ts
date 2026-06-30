@@ -110,6 +110,39 @@ export type SecuritySummary = {
   eventBatches: Array<Record<string, unknown>>;
 };
 
+export type HardeningRecommendation = {
+  id: string;
+  assessmentId: string;
+  deviceId: string | null;
+  vendor: string;
+  title: string;
+  severity: string;
+  category: string;
+  reason: string;
+  evidenceJson: Record<string, unknown>;
+  recommendation: string;
+  catalogActionId: string | null;
+  actionType: string | null;
+  parametersJson: Record<string, unknown>;
+  executable: boolean;
+  status: string;
+  actionPlanId: string | null;
+  device: { id: string; name: string; vendor: string; type: string } | null;
+};
+
+export type SecurityAssessment = {
+  id: string;
+  scopeType: string;
+  scopeId: string | null;
+  status: string;
+  riskScore: number;
+  summary: string;
+  findingsJson: Record<string, unknown>;
+  recommendations: HardeningRecommendation[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 const safeNumber = (value: unknown): number => {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -201,6 +234,45 @@ export function normalizeAiIntent(value: unknown): AiActionIntent {
     createdAt: String(source.createdAt ?? ""),
     updatedAt: String(source.updatedAt ?? ""),
     device: source.device ? normalizeObject(source.device) as AiActionIntent["device"] : null,
+  };
+}
+
+function normalizeHardeningRecommendation(value: unknown): HardeningRecommendation {
+  const source = normalizeObject(value);
+  return {
+    id: String(source.id ?? ""),
+    assessmentId: String(source.assessmentId ?? ""),
+    deviceId: typeof source.deviceId === "string" ? source.deviceId : null,
+    vendor: String(source.vendor ?? "unknown"),
+    title: String(source.title ?? "Hardening recommendation"),
+    severity: String(source.severity ?? "medium"),
+    category: String(source.category ?? "hardening"),
+    reason: String(source.reason ?? ""),
+    evidenceJson: normalizeObject(source.evidenceJson),
+    recommendation: String(source.recommendation ?? ""),
+    catalogActionId: typeof source.catalogActionId === "string" ? source.catalogActionId : null,
+    actionType: typeof source.actionType === "string" ? source.actionType : null,
+    parametersJson: normalizeObject(source.parametersJson),
+    executable: Boolean(source.executable),
+    status: String(source.status ?? "proposed"),
+    actionPlanId: typeof source.actionPlanId === "string" ? source.actionPlanId : null,
+    device: source.device ? normalizeObject(source.device) as HardeningRecommendation["device"] : null,
+  };
+}
+
+function normalizeSecurityAssessment(value: unknown): SecurityAssessment {
+  const source = normalizeObject(value);
+  return {
+    id: String(source.id ?? ""),
+    scopeType: String(source.scopeType ?? "all"),
+    scopeId: typeof source.scopeId === "string" ? source.scopeId : null,
+    status: String(source.status ?? "completed"),
+    riskScore: safeNumber(source.riskScore),
+    summary: String(source.summary ?? ""),
+    findingsJson: normalizeObject(source.findingsJson),
+    recommendations: normalizeArray<unknown>(source.recommendations).map(normalizeHardeningRecommendation),
+    createdAt: String(source.createdAt ?? ""),
+    updatedAt: String(source.updatedAt ?? ""),
   };
 }
 
@@ -363,4 +435,25 @@ export async function completeAiActionRequest(id: string, fields: Record<string,
     intent: source.intent ? normalizeAiIntent(source.intent) : null,
     actionPlan: source.actionPlan ? normalizeObject(source.actionPlan) as CompleteActionRequestResponse["actionPlan"] : null,
   } satisfies CompleteActionRequestResponse;
+}
+
+export async function runFullSecurityAnalysis() {
+  return requestJson<unknown>("/assessments/full-analysis", {
+    method: "POST",
+    body: JSON.stringify({ scopeType: "all", collectConnectorData: true }),
+  }).then(normalizeSecurityAssessment);
+}
+
+export async function getSecurityAssessment(id: string) {
+  return requestJson<unknown>(`/assessments/${id}`).then(normalizeSecurityAssessment);
+}
+
+export async function generateHardeningSuggestions(id: string) {
+  return requestJson<unknown>(`/assessments/${id}/hardening-suggestions`, { method: "POST" }).then(normalizeSecurityAssessment);
+}
+
+export async function createRecommendationActionPlan(id: string) {
+  const payload = await requestJson<unknown>(`/recommendations/${id}/create-action-plan`, { method: "POST" });
+  const source = normalizeObject(payload);
+  return { recommendationId: String(source.recommendationId ?? id), actionPlan: normalizeObject(source.actionPlan) as { id: string; status: string; actionType: string } };
 }

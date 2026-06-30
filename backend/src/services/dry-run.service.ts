@@ -25,7 +25,7 @@ export async function buildDryRun(plan: ActionPlan) {
     ])) : vendorCommandPlan.warnings,
     rollbackSteps: connectorDryRun?.rollbackSteps ?? vendorCommandPlan.rollbackSteps,
     executable: Boolean(connectorDryRun),
-    connectorStatus: connectorDryRun ? "execution_available_after_approval" : "dry_run_only",
+    connectorStatus: connectorDryRun ? "controlled_execution_available" : "command_plan_only",
     generatedBy: "deterministic_vendor_planner",
     risk: plan.riskLevel,
     actionType: plan.actionType,
