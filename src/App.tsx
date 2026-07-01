@@ -27,22 +27,25 @@ import IncidentsPanel from "./components/incidents/IncidentsPanel";
 import AiSecurityAssistantPanel from "./components/ai/AiSecurityAssistantPanel";
 import ActionCenterPanel from "./components/actions/ActionCenterPanel";
 import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapabilityMatrixPanel";
+import AppBackground from "./components/background/AppBackground";
 
 function App() {
   const { user, logout } = useAuth();
   return (
     <Suspense fallback={<h1>loading logs ...</h1>}>
       <LogProvider>
-        <div className="App max-w-screen-2xl mx-auto px-4 pb-12 pt-4 sm:px-6">
-          <div className="mb-4 overflow-hidden rounded-xl border border-blue-900/50 bg-slate-950/70 shadow-[inset_0_1px_0_rgba(59,130,246,0.14)]">
-            <div className="h-1 bg-gradient-to-r from-blue-600 via-sky-400 to-blue-900" />
+        <div className="authenticated-app">
+          <AppBackground />
+          <main className="App relative z-10 mx-auto max-w-screen-2xl px-4 pb-12 pt-4 sm:px-6">
+          <div className="app-command-header mb-5 overflow-hidden rounded-2xl">
+            <div className="app-command-header__edge" />
             <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-left text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
-                  Firewall Log Analyzer
+                  Firewall Command Center
                 </h1>
                 <p className="mt-1 text-left text-sm text-slate-400">
-                  Backend-powered firewall import, findings, evidence, and export review.
+                  Security orchestration, evidence review, and controlled response operations.
                 </p>
               </div>
               <div className="flex items-center gap-2" dir="rtl">
@@ -122,6 +125,7 @@ function App() {
               </ErrorBoundary>
             </div>
           </details>
+          </main>
         </div>
       </LogProvider>
     </Suspense>

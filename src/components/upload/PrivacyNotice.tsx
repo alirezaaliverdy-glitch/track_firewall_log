@@ -1,16 +1,5 @@
 /**
- * PrivacyNotice — rendered near the CSV uploader.
- *
- * This component can only exist as long as the app genuinely keeps all
- * processing client-side. If a server upload is ever added this must be removed.
- *
- * Security checklist (verified in this codebase):
- *   ✓ FileReader.readAsText — reads locally, no XHR/fetch
- *   ✓ PapaParse with no `download` option — parses in-memory
- *   ✓ No localStorage / sessionStorage writes of log data
- *   ✓ No eval / Function constructor usage
- *   ✓ No dangerouslySetInnerHTML
- *   ✓ Blob + URL.createObjectURL for exports — no server round-trip
+ * PrivacyNotice - rendered near the CSV uploader.
  */
 export default function PrivacyNotice() {
   return (
@@ -28,7 +17,7 @@ export default function PrivacyNotice() {
           clipRule="evenodd"
         />
       </svg>
-      Logs are processed locally in your browser. No file is uploaded to any server.
+      Uploaded logs are processed by this Firewall Log Analyzer instance. AI analysis only receives selected security context, including event summaries, when AI features are used.
     </p>
   );
 }

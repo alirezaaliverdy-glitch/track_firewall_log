@@ -3,15 +3,41 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").repl
 export type ActionPlanSource = "ai" | "user" | "system" | "detection";
 export type ActionPlanStatus =
   | "proposed"
+  | "needs_input"
   | "validation_failed"
-  | "dry_run_ready"
   | "awaiting_approval"
-  | "approved"
-  | "rejected"
-  | "executing"
+  | "dry_run_ready"
+  | "running"
   | "succeeded"
   | "failed"
-  | "rolled_back";
+  | "blocked"
+  | "rollback_needed"
+  | "rolled_back"
+  // Backend legacy/persisted states kept for compatibility until the status lifecycle is refactored.
+  | "approved"
+  | "rejected"
+  | "executing";
+
+export const ACTION_PLAN_STATUS_LABELS: Record<string, string> = {
+  proposed: "proposed",
+  needs_input: "needs input",
+  validation_failed: "validation failed",
+  awaiting_approval: "awaiting approval",
+  dry_run_ready: "dry run ready",
+  running: "running",
+  executing: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+  blocked: "blocked",
+  rollback_needed: "rollback needed",
+  rolled_back: "rolled back",
+  approved: "approved",
+  rejected: "rejected"
+};
+
+export function actionPlanStatusLabel(status: string) {
+  return ACTION_PLAN_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+}
 
 export type ActionType =
   | "create_egress_policy"

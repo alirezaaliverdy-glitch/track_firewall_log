@@ -44,14 +44,14 @@
 
 :root {
   --radius: 0.625rem;
-  --soc-bg: #070b12;
-  --soc-surface: #0b1220;
-  --soc-surface-2: #111827;
-  --soc-elevated: #0f172a;
-  --soc-border: #263449;
-  --soc-border-strong: #315177;
-  --soc-text: #e5edf7;
-  --soc-muted: #94a3b8;
+  --soc-bg: #07111a;
+  --soc-surface: #0c1722;
+  --soc-surface-2: #101e2b;
+  --soc-elevated: rgba(18, 32, 46, .78);
+  --soc-border: rgba(120, 220, 255, .14);
+  --soc-border-strong: rgba(44, 230, 255, .32);
+  --soc-text: rgba(240, 248, 255, .92);
+  --soc-muted: rgba(210, 230, 245, .68);
   --soc-faint: #64748b;
   --soc-blue: #2563eb;
   --soc-blue-bright: #3b82f6;

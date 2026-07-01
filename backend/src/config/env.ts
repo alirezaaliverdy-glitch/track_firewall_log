@@ -29,6 +29,10 @@ const DEFAULT_OPENAI_FALLBACK_MODELS = [
   "openai/gpt-oss-20b:free",
   "google/gemma-4-31b-it:free"
 ];
+const MIN_SECRET_LENGTH = 32;
+const DEFAULT_AUTH_SESSION_SECRET = "development-only-change-this-secret";
+const DEFAULT_ADMIN_PASSWORDS = new Set(["", "admin", "password", "change-me", "change-me-please"]);
+const DEFAULT_SECRET_MARKERS = ["change-me", "replace-with", "development-only", "default", "secret"];
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -55,9 +59,24 @@ function parseCsv(value: string | undefined) {
 }
 
 export type ActionExecutionMode = "safe" | "lab_fast" | "direct_controlled" | "quick_controlled";
+export type AppProfile = "lab" | "staging" | "production";
 
-function parseActionExecutionMode(value: string | undefined): ActionExecutionMode {
-  return value === "lab_fast" || value === "direct_controlled" || value === "quick_controlled" ? value : "quick_controlled";
+function parseAppProfile(value: string | undefined, nodeEnv: string): AppProfile {
+  if (value === "lab" || value === "staging" || value === "production") return value;
+  return nodeEnv === "production" ? "production" : "lab";
+}
+
+function defaultActionExecutionMode(profile: AppProfile): ActionExecutionMode {
+  if (profile === "production") return "safe";
+  if (profile === "staging") return "direct_controlled";
+  return "quick_controlled";
+}
+
+function parseActionExecutionMode(value: string | undefined, profile: AppProfile): ActionExecutionMode {
+  if (parseBoolean(process.env.ACTION_FORCE_QUICK_EXECUTE, false)) return "quick_controlled";
+  return value === "safe" || value === "lab_fast" || value === "direct_controlled" || value === "quick_controlled"
+    ? value
+    : defaultActionExecutionMode(profile);
 }
 
 function parseBoolean(value: string | undefined, fallback: boolean) {
@@ -65,8 +84,41 @@ function parseBoolean(value: string | undefined, fallback: boolean) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+function firstEnv(...values: Array<string | undefined>) {
+  return values.find((value) => value !== undefined);
+}
+
+function isWeakSecret(value: string | undefined, defaultValue?: string) {
+  const normalized = (value ?? "").trim();
+  const lower = normalized.toLowerCase();
+  return normalized.length < MIN_SECRET_LENGTH ||
+    Boolean(defaultValue && normalized === defaultValue) ||
+    DEFAULT_SECRET_MARKERS.some((marker) => lower.includes(marker));
+}
+
+function hasDefaultPostgresCredentials(databaseUrl: string | undefined) {
+  if (!databaseUrl) return false;
+  try {
+    const parsed = new URL(databaseUrl);
+    return parsed.protocol.startsWith("postgres") && parsed.username === "postgres" && parsed.password === "postgres";
+  } catch {
+    return databaseUrl.includes("postgres:postgres@");
+  }
+}
+
+function isDefaultAdminPassword(value: string) {
+  const normalized = value.trim();
+  const lower = normalized.toLowerCase();
+  return DEFAULT_ADMIN_PASSWORDS.has(lower) ||
+    DEFAULT_SECRET_MARKERS.some((marker) => lower.includes(marker));
+}
+
+const nodeEnv = process.env.NODE_ENV ?? "development";
+const appProfile = parseAppProfile(process.env.APP_PROFILE, nodeEnv);
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV ?? "development",
+  nodeEnv,
+  appProfile,
   port: parsePositiveInteger(process.env.PORT, DEFAULT_PORT),
   corsOrigin: process.env.CORS_ORIGIN ?? DEFAULT_CORS_ORIGIN,
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
@@ -93,16 +145,40 @@ export const env = {
   sshConnectTimeoutMs: parsePositiveInteger(process.env.SSH_CONNECT_TIMEOUT_MS, DEFAULT_SSH_CONNECT_TIMEOUT_MS),
   sshHandshakeTimeoutMs: parsePositiveInteger(process.env.SSH_HANDSHAKE_TIMEOUT_MS, DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS),
   sshCommandTimeoutMs: parsePositiveInteger(process.env.SSH_COMMAND_TIMEOUT_MS, DEFAULT_SSH_COMMAND_TIMEOUT_MS),
-  actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE),
-  actionRequireManagementSource: parseBoolean(process.env.ACTION_REQUIRE_MANAGEMENT_SOURCE, false),
+  actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE, appProfile),
+  actionRequireManagementSource: parseBoolean(firstEnv(process.env.ACTION_REQUIRE_MANAGEMENT_SOURCE, process.env.ACTION_REQUIRE_MANAGED_SOURCE), false),
   actionDefaultTrustedSource: process.env.ACTION_DEFAULT_TRUSTED_SOURCE?.trim() || "auto",
-  actionAllowLabUnrestrictedManagement: parseBoolean(process.env.ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT, true),
+  actionAllowLabUnrestrictedManagement: parseBoolean(firstEnv(process.env.ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT, process.env.ACTION_ALLOW_UNRESTRICTED_MANAGEMENT), appProfile === "lab"),
   adminUsername: process.env.ADMIN_USERNAME?.trim() || "admin",
   adminPassword: process.env.ADMIN_PASSWORD || "",
   adminDisplayName: process.env.ADMIN_DISPLAY_NAME?.trim() || "Administrator",
-  authSessionSecret: process.env.AUTH_SESSION_SECRET || "development-only-change-this-secret",
+  authSessionSecret: process.env.AUTH_SESSION_SECRET || DEFAULT_AUTH_SESSION_SECRET,
   authSessionTtlHours: parsePositiveInteger(process.env.AUTH_SESSION_TTL_HOURS, 12)
 };
+
+function validateProductionEnv() {
+  if (env.nodeEnv !== "production") return;
+
+  const failures: string[] = [];
+  if (isWeakSecret(process.env.AUTH_SESSION_SECRET, DEFAULT_AUTH_SESSION_SECRET)) {
+    failures.push(`AUTH_SESSION_SECRET must be set to a non-default value with at least ${MIN_SECRET_LENGTH} characters`);
+  }
+  if (isWeakSecret(process.env.CREDENTIAL_ENCRYPTION_KEY)) {
+    failures.push(`CREDENTIAL_ENCRYPTION_KEY must be set to a non-default value with at least ${MIN_SECRET_LENGTH} characters`);
+  }
+  if (hasDefaultPostgresCredentials(env.databaseUrl)) {
+    failures.push("DATABASE_URL must not use the default postgres:postgres credentials in production");
+  }
+  if (isDefaultAdminPassword(env.adminPassword) || env.adminPassword.length < 8) {
+    failures.push("ADMIN_PASSWORD must be changed from the default and contain at least 8 characters in production");
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Production configuration is unsafe: ${failures.join("; ")}.`);
+  }
+}
+
+validateProductionEnv();
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;
 export const isProduction = env.nodeEnv === "production";

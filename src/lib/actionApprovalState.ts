@@ -10,7 +10,7 @@ function array(value: unknown): unknown[] {
 
 export function actionExecutionUiState(action: ActionPlan) {
   const validation = object(action.validationJson);
-  const blockedStatus = ["validation_failed", "missing_fields", "blocked", "rejected"].includes(action.status);
+  const blockedStatus = ["needs_input", "validation_failed", "missing_fields", "blocked", "rejected", "rollback_needed"].includes(action.status);
   if (blockedStatus || validation.valid === false || array(validation.errors).length > 0 || array(validation.missingFields).length > 0) {
     const missingFields = array(validation.missingFields).map(String);
     return {
@@ -24,7 +24,7 @@ export function actionExecutionUiState(action: ActionPlan) {
   if (action.status === "proposed" || action.status === "awaiting_approval") {
     return { state: "ready", canApproveAndExecute: true, canExecute: true, reason: null, missingField: null };
   }
-  if (["executing", "succeeded", "rolled_back"].includes(action.status)) {
+  if (["running", "executing", "succeeded", "rolled_back"].includes(action.status)) {
     return { state: "complete", canApproveAndExecute: false, canExecute: false, reason: null, missingField: null };
   }
   const commandPlan = object(action.dryRunJson);

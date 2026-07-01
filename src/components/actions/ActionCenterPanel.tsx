@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   CheckCircle2,
   Eye,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
+import { ActionEmptyState, InfoCallout, RiskChip, StatusChip } from "./ActionCenterUi";
 import {
   correctActionFields,
   actionExecutionUiState,
+  actionPlanStatusLabel,
   getAction,
   getActionAudit,
   getActions,
@@ -26,9 +27,9 @@ const safeNumber = (value: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const ACTIVE_STATUSES = new Set(["proposed", "validation_failed", "dry_run_ready", "awaiting_approval", "approved", "executing", "failed"]);
+const ACTIVE_STATUSES = new Set(["proposed", "needs_input", "validation_failed", "awaiting_approval", "dry_run_ready", "approved", "running", "executing", "failed", "blocked", "rollback_needed"]);
 const HISTORY_STATUSES = new Set(["succeeded", "rejected", "rolled_back", "cancelled", "expired"]);
-const FAILED_STATUSES = new Set(["failed", "validation_failed"]);
+const FAILED_STATUSES = new Set(["failed", "validation_failed", "blocked", "rollback_needed"]);
 type ActionTab = "active" | "succeeded" | "failed" | "history" | "all";
 
 const formatDateTime = (value: unknown): string => {
@@ -51,9 +52,7 @@ function badgeClass(value: string) {
 }
 
 function statusLabel(value: string) {
-  if (["dry_run_ready", "awaiting_approval", "approved", "proposed"].includes(value)) return "ready";
-  if (value === "validation_failed") return "needs input";
-  return value.replace(/_/g, " ");
+  return actionPlanStatusLabel(value);
 }
 
 function vendorOf(action: ActionPlan) {
@@ -494,23 +493,30 @@ export default function ActionCenterPanel() {
   };
 
   const totalOpen = safeActions.filter((action) => ACTIVE_STATUSES.has(action.status)).length;
+  const filtersActive = filter !== "all";
+  const emptyCopy = safeActions.length === 0
+    ? { title: "No action plans yet", description: "Create a request to generate the first controlled action." }
+    : filtersActive
+      ? { title: "No action plans match the current filters", description: "Adjust or clear filters to view available actions." }
+      : hiddenCompletedIds.length > 0 && tab !== "history"
+        ? { title: "No records for the selected scope", description: "New actions will appear here when generated." }
+        : { title: "No records for the selected scope", description: "New actions will appear here when generated." };
 
   return (
-    <section id="action-center" className="mb-4 scroll-mt-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <section id="action-center" className="action-center-panel mb-5 scroll-mt-4">
+      <div className="action-center-header">
         <div>
-          <h2 className="flex items-center gap-2 text-left text-lg font-semibold text-zinc-100">
-            <ShieldAlert className="h-5 w-5 text-yellow-300" aria-hidden="true" />
+          <span className="action-center-eyebrow"><ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" /> Response operations</span>
+          <h2 className="mt-2 text-left text-xl font-semibold tracking-tight text-slate-50">
             Action Center
           </h2>
-          <p className="mt-1 text-left text-sm text-zinc-400">
-            Execute supported catalog actions through controlled vendor connectors.
-          </p>
+          <p className="mt-1 text-left text-sm text-slate-400">Review and execute controlled security actions.</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={refreshActions}
-          className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
+          className="action-utility-button"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
           {loading ? "Refreshing..." : "Refresh"}
@@ -518,52 +524,47 @@ export default function ActionCenterPanel() {
         <button
           type="button"
           onClick={clearActionCenterView}
-          className="inline-flex h-9 w-fit items-center rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
+          className="action-utility-button"
         >
-          Clear Action Center View
+          Clear view
         </button>
+        </div>
       </div>
 
-      <p className="mb-4 text-left text-xs text-zinc-500">
+      <p className="mb-3 text-left text-[11px] text-slate-500">
         Last refreshed: {formatDateTime(lastRefreshedAt)}
       </p>
 
-      <div className="mb-4 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
-        <div className="flex items-center gap-2 text-sm font-semibold text-yellow-100">
-          <AlertTriangle className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-          Actions execute only through controlled catalog templates.
-        </div>
-        <p className="mt-1 text-xs text-yellow-100/75">
-          Linux Edge, MikroTik, and FortiGate execution use fixed templates only. There is no arbitrary command field and AI cannot execute directly.
-        </p>
-      </div>
+      <InfoCallout />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+      <div className="action-summary-strip">
+        <div>
           <p className="text-xs text-zinc-500">Action plans</p>
           <p className="mt-1 text-xl font-semibold text-blue-100">{safeNumber(safeActions.length).toLocaleString()}</p>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+        <div>
           <p className="text-xs text-zinc-500">Active review</p>
           <p className="mt-1 text-xl font-semibold text-yellow-100">{safeNumber(totalOpen).toLocaleString()}</p>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+        <div>
           <p className="text-xs text-zinc-500">Latest status</p>
-          <p className="mt-2 text-xs text-zinc-300">{safeActions[0]?.status ?? "none"}</p>
+          <div className="mt-2">{safeActions[0] ? <StatusChip status={safeActions[0].status} label={statusLabel(safeActions[0].status)} /> : <span className="text-xs text-slate-500">none</span>}</div>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-          <p className="text-xs text-zinc-500">Execution</p>
-          <p className="mt-2 text-xs text-yellow-200">controlled templates only</p>
+        <div>
+          <p className="text-xs text-zinc-500">Execution mode</p>
+          <p className="mt-2 text-xs font-medium text-cyan-200">Controlled templates</p>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="action-toolbar">
+      <div className="action-filter-group">
+        <span className="action-filter-label">Scope</span>
         {(["active", "succeeded", "failed", "history", "all"] as ActionTab[]).map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setTab(item)}
-            className={`h-9 rounded border px-3 text-xs font-semibold capitalize ${tab === item ? "border-yellow-600 bg-yellow-950/40 text-yellow-100" : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-blue-200"}`}
+            className={`action-filter-chip capitalize ${tab === item ? "is-active" : ""}`}
           >
             {item}
           </button>
@@ -579,20 +580,22 @@ export default function ActionCenterPanel() {
         )}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="action-filter-group">
+        <span className="action-filter-label">Topic</span>
         {["all", "fortigate", "mikrotik", "linux", "firewall", "nat", "management", "critical"].map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setFilter(item)}
-            className={`h-8 rounded border px-2.5 text-xs font-medium ${filter === item ? "border-blue-600 bg-blue-950/50 text-blue-100" : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-blue-200"}`}
+            className={`action-filter-chip ${filter === item ? "is-active" : ""}`}
           >
             {item}
           </button>
         ))}
       </div>
+      </div>
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+      <div className="action-table-shell">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-zinc-800 text-left text-sm">
             <thead className="bg-zinc-900/70 text-xs uppercase text-zinc-500">
@@ -612,13 +615,11 @@ export default function ActionCenterPanel() {
                 </tr>
               ) : visibleActions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-sm text-zinc-500">
-                    {hiddenCompletedIds.length > 0 && tab !== "history" ? "Action Center is clear. New actions will appear here." : loading ? "Refreshing..." : `No ${tab} action plans to review.`}
-                  </td>
+                  <td colSpan={6}><ActionEmptyState title={emptyCopy.title} description={emptyCopy.description} action={filtersActive ? <button type="button" className="action-clear-filter" onClick={() => setFilter("all")}>Clear filters</button> : undefined} /></td>
                 </tr>
               ) : (
                 visibleActions.map((action) => (
-                  <tr key={action.id} className="text-zinc-300">
+                  <tr key={action.id} className={`action-table-row text-zinc-300 ${selectedAction?.id === action.id ? "is-selected" : ""}`}>
                     <td className="min-w-72 px-3 py-2">
                       <p className="font-medium text-zinc-100">{actionLabel(action)}</p>
                       <PlanSummary plan={action} />
@@ -632,18 +633,13 @@ export default function ActionCenterPanel() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <span className={`inline-flex rounded border px-2 py-0.5 text-xs ${badgeClass(action.status)}`}>
-                        {action.status === "executing" && <RefreshCw className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" />}
-                        {statusLabel(action.status)}
-                      </span>
+                      <StatusChip status={action.status} label={statusLabel(action.status)} />
                       {action.status === "succeeded" || action.status === "failed" ? (
                         <p className="mt-1 text-xs text-zinc-500">{formatDateTime(action.updatedAt)}</p>
                       ) : null}
                     </td>
                     <td className="px-3 py-2">
-                      <span className={`inline-flex rounded border px-2 py-0.5 text-xs ${badgeClass(action.riskLevel)}`}>
-                        {action.riskLevel}
-                      </span>
+                      <RiskChip risk={action.riskLevel} />
                     </td>
                     <td className="px-3 py-2 text-xs text-zinc-400">{sourceLabel(action.source)}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">

@@ -9,9 +9,15 @@ lerna-debug.log*
 
 node_modules
 dist
+build
 dist-ssr
+coverage
 *.local
+*.db
+*.sqlite
 backend/storage/
+storage/uploads
+backend/storage/uploads
 
 # Editor directories and files
 .vscode/*
@@ -27,5 +33,6 @@ backend/storage/
 backend/.env
 
 .env
-
-.env.development
+.env.*
+!.env.example
+!backend/.env.example

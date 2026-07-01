@@ -918,6 +918,14 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
   }
 
   if (env.actionExecutionMode === "direct_controlled" || env.actionExecutionMode === "quick_controlled") {
+    if (env.appProfile === "staging" && env.actionExecutionMode === "direct_controlled") {
+      await audit(plan, "profile_audit_warning", "Staging profile allowed direct controlled execution without a separate approval step.", {
+        appProfile: env.appProfile,
+        executionMode: env.actionExecutionMode,
+        actionType: plan.actionType,
+        riskLevel: plan.riskLevel
+      });
+    }
     await audit(plan, "execution_confirmed", "User confirmed one-click controlled execution.", {
       actionType: plan.actionType,
       executionMode: env.actionExecutionMode
