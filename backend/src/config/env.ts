@@ -96,7 +96,12 @@ export const env = {
   actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE),
   actionRequireManagementSource: parseBoolean(process.env.ACTION_REQUIRE_MANAGEMENT_SOURCE, false),
   actionDefaultTrustedSource: process.env.ACTION_DEFAULT_TRUSTED_SOURCE?.trim() || "auto",
-  actionAllowLabUnrestrictedManagement: parseBoolean(process.env.ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT, true)
+  actionAllowLabUnrestrictedManagement: parseBoolean(process.env.ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT, true),
+  adminUsername: process.env.ADMIN_USERNAME?.trim() || "admin",
+  adminPassword: process.env.ADMIN_PASSWORD || "",
+  adminDisplayName: process.env.ADMIN_DISPLAY_NAME?.trim() || "Administrator",
+  authSessionSecret: process.env.AUTH_SESSION_SECRET || "development-only-change-this-secret",
+  authSessionTtlHours: parsePositiveInteger(process.env.AUTH_SESSION_TTL_HOURS, 12)
 };
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;

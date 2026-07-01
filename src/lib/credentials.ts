@@ -55,6 +55,7 @@ function apiErrorMessage(url: string, status: number, payload: unknown) {
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
   const response = await fetch(url, {
+    credentials: "include",
     headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
     ...init,
   });

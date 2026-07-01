@@ -1,6 +1,7 @@
 import "./App.css";
 import { Suspense } from "react";
-import { ShieldCheck } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { LogProvider } from "@/context/LogContext";
 import CsvUploader from "./components/csv-uploader";
 import FirewallTypeSelector from "./components/upload/FirewallTypeSelector";
@@ -28,6 +29,7 @@ import ActionCenterPanel from "./components/actions/ActionCenterPanel";
 import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapabilityMatrixPanel";
 
 function App() {
+  const { user, logout } = useAuth();
   return (
     <Suspense fallback={<h1>loading logs ...</h1>}>
       <LogProvider>
@@ -43,9 +45,14 @@ function App() {
                   Backend-powered firewall import, findings, evidence, and export review.
                 </p>
               </div>
-              <div className="inline-flex w-fit items-center gap-2 rounded-md border border-blue-800/70 bg-blue-950/40 px-3 py-1.5 text-xs font-medium text-blue-200">
-                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                Backend analysis
+              <div className="flex items-center gap-2" dir="rtl">
+                <div className="text-right leading-tight">
+                  <div className="text-sm font-medium text-slate-100">{user?.displayName || user?.username}</div>
+                  <div className="text-[11px] uppercase tracking-wider text-cyan-400">{user?.role}</div>
+                </div>
+                <button onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 transition hover:border-cyan-700 hover:text-white">
+                  <LogOut className="h-3.5 w-3.5" /> خروج
+                </button>
               </div>
             </div>
           </div>

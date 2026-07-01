@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyError } from "fastify";
@@ -19,8 +20,10 @@ import { incidentRoutes } from "./routes/incidents.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
 import { assessmentRoutes } from "./routes/assessments.js";
+import { authRoutes } from "./routes/auth.js";
+import { AUTH_COOKIE_NAME, bootstrapAdmin, getSessionUser } from "./services/auth.service.js";
 
-export async function buildApp() {
+export async function buildApp(options: { authRequired?: boolean } = {}) {
   const app = Fastify({
     logger: loggerConfig,
     bodyLimit: maxUploadBytes
@@ -29,8 +32,10 @@ export async function buildApp() {
   await app.register(helmet);
   await app.register(cors, {
     origin: env.corsOrigins,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true
   });
+  await app.register(cookie);
   await app.register(multipart, {
     limits: {
       fileSize: maxUploadBytes,
@@ -64,6 +69,21 @@ export async function buildApp() {
       error: message,
       ...(isProduction ? {} : { code: error.code })
     });
+  });
+
+  const authRequired = options.authRequired !== false;
+  if (authRequired) await bootstrapAdmin();
+  await app.register(authRoutes);
+
+  const publicPaths = new Set(["/health", "/api/health", "/api/auth/login", "/api/auth/logout", "/api/auth/me"]);
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?", 1)[0];
+    if (!authRequired || !path.startsWith("/api/") || publicPaths.has(path)) return;
+    const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
+    if (!user) {
+      return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
+    }
+    request.authUser = user;
   });
 
   await app.register(healthRoutes);

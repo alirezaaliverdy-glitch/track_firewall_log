@@ -168,7 +168,7 @@ const normalizeSummary = (value: unknown): EventsSummary => {
 };
 
 async function requestJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include" });
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -222,7 +222,7 @@ export function getCollectorStatus(deviceId: string) {
 }
 
 export function runCollectorOnce(deviceId: string) {
-  return fetch(`${API_BASE_URL}/collectors/${deviceId}/run-once`, { method: "POST" })
+  return fetch(`${API_BASE_URL}/collectors/${deviceId}/run-once`, { method: "POST", credentials: "include" })
     .then(async (response) => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -237,7 +237,7 @@ export function getRetentionStatus() {
 }
 
 export function runRetention() {
-  return fetch(`${API_BASE_URL}/events/retention/run`, { method: "POST" })
+  return fetch(`${API_BASE_URL}/events/retention/run`, { method: "POST", credentials: "include" })
     .then(async (response) => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
