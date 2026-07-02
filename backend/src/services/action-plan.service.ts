@@ -32,7 +32,7 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-type ActionVendor = "mikrotik" | "fortigate" | "linux_edge" | undefined;
+type ActionVendor = "mikrotik" | "fortigate" | "linux_edge" | "pfsense" | "cisco" | "generic" | "unknown" | undefined;
 
 function vendorFromActionType(actionType: ActionType | string): ActionVendor {
   if (String(actionType).startsWith("mikrotik_")) return "mikrotik";
@@ -51,6 +51,7 @@ function vendorFromDevice(device: Pick<Device, "type" | "vendor"> | null | undef
 
 function vendorFromInput(input: Record<string, unknown>, parameters: Record<string, unknown>): ActionVendor {
   const normalized = normalizeVendor(input.vendor ?? parameters.vendor ?? parameters.targetDeviceHint);
+  if (normalized === "linux") return "linux_edge";
   if (normalized) return normalized;
   return undefined;
 }
@@ -188,7 +189,7 @@ export function mergeCorrectedParameters(actionType: ActionType, current: Record
 }
 
 async function findOnlyCompatibleDevice(vendor: ActionVendor) {
-  if (!vendor) return undefined;
+  if (!vendor || !["mikrotik", "fortigate", "linux_edge"].includes(vendor)) return undefined;
   const where = vendor === "mikrotik"
     ? { protocol: DeviceProtocol.ssh, OR: [{ type: DeviceType.mikrotik }, { vendor: { contains: "mikrotik", mode: "insensitive" as const } }, { vendor: { contains: "routeros", mode: "insensitive" as const } }] }
     : vendor === "fortigate"
@@ -429,7 +430,8 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   actionType = normalizeActionTypeForVendor(actionType, vendor);
   deviceId = deviceId ?? await findOnlyCompatibleDevice(vendor);
   parameters = withPlanIdentity(actionType, normalizeParameters(actionType, parameters), deviceId, vendor);
-  const catalog = getActionCatalogEntry(actionType, vendor === "linux_edge" ? null : vendor);
+  const catalogVendor = vendor === "mikrotik" || vendor === "fortigate" ? vendor : null;
+  const catalog = getActionCatalogEntry(actionType, catalogVendor);
   if (catalog) riskLevel = catalog.riskLevel;
 
   if ((vendor === "mikrotik" || vendor === "fortigate") && !deviceId) {

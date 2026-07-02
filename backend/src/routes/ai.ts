@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { buildSecurityContext } from "../services/ai-context.service.js";
+import { buildSecurityOrchestratorContext } from "../ai/context/security-orchestrator-context.js";
 import { chatWithAssistant, clearAiChatSessionMessages, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
 import { completeAiActionRequest, getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
 import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
@@ -49,7 +49,7 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get("/api/ai/context/security-summary", async () => buildSecurityContext());
+  app.get("/api/ai/context/security-summary", async () => buildSecurityOrchestratorContext());
 
   app.get("/api/ai/provider/status", async () => getAiProviderStatus());
 

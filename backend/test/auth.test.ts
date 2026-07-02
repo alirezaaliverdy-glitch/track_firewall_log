@@ -2,21 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import bcrypt from "bcryptjs";
 
-process.env.ADMIN_USERNAME ||= "admin";
-process.env.ADMIN_PASSWORD ||= "change-me-please";
-process.env.ADMIN_DISPLAY_NAME ||= "Alireza";
-process.env.AUTH_SESSION_SECRET ||= "test-only-session-secret-that-is-long-enough";
+process.env.ADMIN_USERNAME = "codex-auth-test-admin";
+process.env.ADMIN_PASSWORD = "change-me-please";
+process.env.ADMIN_DISPLAY_NAME = "Auth Test Admin";
+process.env.AUTH_SESSION_SECRET = "test-only-session-secret-that-is-long-enough";
 
 const { buildApp } = await import("../src/app.js");
 const { prisma } = await import("../src/db/prisma.js");
 
 test("authentication lifecycle, bootstrap, and protected routes", async (t) => {
-  const usersBefore = await prisma.appUser.count();
+  await prisma.appUser.deleteMany({ where: { username: process.env.ADMIN_USERNAME } });
+  await prisma.appUser.create({
+    data: {
+      username: process.env.ADMIN_USERNAME!,
+      passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD!, 10),
+      displayName: process.env.ADMIN_DISPLAY_NAME!,
+      role: "admin"
+    }
+  });
   const app = await buildApp();
   t.after(async () => {
-    if (usersBefore === 0 || await bcrypt.compare(process.env.ADMIN_PASSWORD!, admin!.passwordHash)) {
-      await prisma.appUser.deleteMany({ where: { username: process.env.ADMIN_USERNAME } });
-    }
+    await prisma.appUser.deleteMany({ where: { username: process.env.ADMIN_USERNAME } });
     await app.close();
   });
 

@@ -1,6 +1,7 @@
 import { AiIntentType, AiRiskLevel } from "@prisma/client";
 import { env } from "../config/env.js";
-import type { buildSecurityContext } from "./ai-context.service.js";
+import type { buildSecurityOrchestratorContext } from "../ai/context/security-orchestrator-context.js";
+import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { runMockAiProvider } from "./providers/mock-ai.provider.js";
 import { AiProviderRequestError, runOpenAiCompatibleProvider } from "./providers/openai-compatible.provider.js";
 import { runOpenAiProvider } from "./providers/openai.provider.js";
@@ -10,11 +11,19 @@ export type AiProviderName = "mock" | "openai" | "openai_compatible";
 
 export type StructuredAiIntent = {
   intentType: string;
+  vendor: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "generic" | "unknown";
   riskLevel: "low" | "medium" | "high" | "critical";
   targetDeviceHint: string | null;
   parameters: Record<string, unknown>;
   missingFields: string[];
   clarificationQuestions: string[];
+  executionSupport: "catalog_executable" | "connector_supported" | "manual_or_not_implemented" | "unsupported_vendor" | "needs_parameters";
+  destructive: boolean;
+  requiresExplicitReview: boolean;
+  expectedImpact: string;
+  suggestedPrechecks: string[];
+  suggestedVerification: string[];
+  suggestedRollback: string[];
   explanation: string;
 };
 
@@ -27,7 +36,7 @@ export type StructuredAiResponse = {
 
 export type AiProviderInput = {
   message: string;
-  context: Awaited<ReturnType<typeof buildSecurityContext>>;
+  context: Awaited<ReturnType<typeof buildSecurityOrchestratorContext>>;
 };
 
 export type AiProviderResult = StructuredAiResponse & {
@@ -80,17 +89,27 @@ function normalizeResponse(value: unknown): StructuredAiResponse {
   const source = objectValue(value);
   const intentSource = source.intent === null ? null : objectValue(source.intent);
   const intentParameters = intentSource ? objectValue(intentSource.parameters) : {};
-  const vendor = normalizeVendor(intentSource?.targetDeviceHint) ?? normalizeVendor(intentParameters.vendor) ?? normalizeVendor(intentParameters.targetDeviceHint);
+  const vendor = normalizeVendor(intentSource?.vendor) ?? normalizeVendor(intentSource?.targetDeviceHint) ?? normalizeVendor(intentParameters.vendor) ?? normalizeVendor(intentParameters.targetDeviceHint);
   const intentType = normalizeIntentType(intentSource?.intentType, vendor);
   const rawDeviceHint = typeof intentSource?.targetDeviceHint === "string" ? intentSource.targetDeviceHint.trim() : "";
   const normalizedIntent = intentSource && Object.keys(intentSource).length > 0
     ? {
         intentType: intentType && INTENT_TYPES.has(intentType) ? intentType : "unknown",
+        vendor: (vendor ?? "unknown") as StructuredAiIntent["vendor"],
         riskLevel: RISK_LEVELS.has(String(intentSource.riskLevel) as AiRiskLevel) ? String(intentSource.riskLevel) as StructuredAiIntent["riskLevel"] : "medium",
         targetDeviceHint: vendor ?? (rawDeviceHint.length >= 2 ? rawDeviceHint : null),
         parameters: intentParameters,
         missingFields: stringArray(intentSource.missingFields),
         clarificationQuestions: stringArray(intentSource.clarificationQuestions),
+        executionSupport: ["catalog_executable", "connector_supported", "manual_or_not_implemented", "unsupported_vendor", "needs_parameters"].includes(String(intentSource.executionSupport))
+          ? String(intentSource.executionSupport) as StructuredAiIntent["executionSupport"]
+          : "manual_or_not_implemented",
+        destructive: Boolean(intentSource.destructive),
+        requiresExplicitReview: Boolean(intentSource.requiresExplicitReview),
+        expectedImpact: String(intentSource.expectedImpact ?? ""),
+        suggestedPrechecks: stringArray(intentSource.suggestedPrechecks),
+        suggestedVerification: stringArray(intentSource.suggestedVerification),
+        suggestedRollback: stringArray(intentSource.suggestedRollback),
         explanation: String(intentSource.explanation ?? "")
       }
     : null;
@@ -122,6 +141,12 @@ export function getAiProviderStatus(lastError?: string) {
     keyConfigured: Boolean(env.openaiApiKey),
     baseUrlConfigured: Boolean(env.openaiBaseUrl),
     timeoutMs: env.aiTimeoutMs,
+    appProfile: env.appProfile,
+    actionExecutionMode: env.actionExecutionMode,
+    actionCreationPolicy: "permissive",
+    executionPolicy: "controlled",
+    catalogActionCount: VENDOR_COMMAND_CATALOG.length,
+    customActionFallbackSupported: true,
     maxContextEvents: env.aiMaxContextEvents,
     maxContextIncidents: env.aiMaxContextIncidents,
     executionAllowed: false,

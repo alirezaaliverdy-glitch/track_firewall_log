@@ -1,6 +1,6 @@
 import { AiIntentType } from "@prisma/client";
 
-export type NormalizedVendor = "mikrotik" | "fortigate" | "linux_edge";
+export type NormalizedVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "generic" | "unknown";
 
 function normalizedToken(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/[\s_-]+/g, "") : "";
@@ -10,7 +10,11 @@ export function normalizeVendor(value: unknown): NormalizedVendor | null {
   const token = normalizedToken(value);
   if (["mikrotik", "routeros", "mt", "mkt"].includes(token)) return "mikrotik";
   if (["fortigate", "fortinet", "fortios", "forti"].includes(token)) return "fortigate";
-  if (["linux", "linuxedge", "ubuntu"].includes(token)) return "linux_edge";
+  if (["linux", "linuxedge", "ubuntu"].includes(token)) return "linux";
+  if (["pfsense", "pfs"].includes(token)) return "pfsense";
+  if (["cisco", "ios", "iosxe", "nxos"].includes(token)) return "cisco";
+  if (["generic", "genericssh"].includes(token)) return "generic";
+  if (token === "unknown") return "unknown";
   return null;
 }
 
@@ -40,7 +44,10 @@ function isVendorDevice(device: DeviceResolutionCandidate, vendor: NormalizedVen
   const deviceVendor = normalizeVendor(device.vendor);
   if (vendor === "mikrotik") return device.type === "mikrotik" || deviceVendor === "mikrotik";
   if (vendor === "fortigate") return device.type === "fortigate" || deviceVendor === "fortigate";
-  return device.type === "linux_edge" || deviceVendor === "linux_edge";
+  if (vendor === "linux") return device.type === "linux_edge" || deviceVendor === "linux";
+  if (vendor === "pfsense") return device.type === "pfsense" || deviceVendor === "pfsense";
+  if (vendor === "cisco") return deviceVendor === "cisco";
+  return device.type.startsWith("generic_") || deviceVendor === "generic" || vendor === "unknown";
 }
 
 export function resolveDeviceIdFromCandidates(

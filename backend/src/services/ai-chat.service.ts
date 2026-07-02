@@ -1,6 +1,6 @@
 import { AiChatRole, AiIntentType, AiRiskLevel, type Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
-import { buildSecurityContext } from "./ai-context.service.js";
+import { buildSecurityOrchestratorContext } from "../ai/context/security-orchestrator-context.js";
 import { createAiActionIntent, parseAiIntent, type ParsedIntent } from "./ai-intent.service.js";
 import { getAiProviderStatus, runAiProvider, type StructuredAiIntent } from "./ai-provider.service.js";
 import { proposeActionPlan } from "./action-plan.service.js";
@@ -46,6 +46,13 @@ function parsedIntentFromStructured(intent: StructuredAiIntent | null): ParsedIn
       ...(intent.targetDeviceHint && intent.targetDeviceHint.length >= 2 ? { targetDeviceHint: vendor ?? intent.targetDeviceHint } : {}),
       ...(intent.missingFields.length > 0 ? { missingFields: intent.missingFields } : {}),
       ...(intent.clarificationQuestions.length > 0 ? { clarificationQuestions: intent.clarificationQuestions } : {})
+      ,executionSupport: intent.executionSupport,
+      destructive: intent.destructive,
+      requiresExplicitReview: intent.requiresExplicitReview,
+      expectedImpact: intent.expectedImpact,
+      suggestedPrechecks: intent.suggestedPrechecks,
+      suggestedVerification: intent.suggestedVerification,
+      suggestedRollback: intent.suggestedRollback
     },
     explanation: intent.explanation
   };
@@ -57,11 +64,19 @@ function structuredFromParsed(parsed: ParsedIntent): StructuredAiIntent {
   const vendor = normalizeVendor(parsed.parameters.vendor) ?? normalizeVendor(parsed.parameters.targetDeviceHint) ?? (parsed.intentType.startsWith("mikrotik_") ? "mikrotik" : null);
   return {
     intentType: parsed.intentType,
+    vendor: (vendor ?? "unknown") as StructuredAiIntent["vendor"],
     riskLevel: parsed.riskLevel,
     targetDeviceHint: vendor ?? (typeof parsed.parameters.targetDeviceHint === "string" && parsed.parameters.targetDeviceHint.length >= 2 ? parsed.parameters.targetDeviceHint : null),
     parameters: parsed.parameters,
     missingFields,
     clarificationQuestions,
+    executionSupport: String(parsed.parameters.executionSupport ?? (isControlledCatalogAction(parsed.intentType) ? "catalog_executable" : "manual_or_not_implemented")) as StructuredAiIntent["executionSupport"],
+    destructive: Boolean(parsed.parameters.destructive),
+    requiresExplicitReview: Boolean(parsed.parameters.requiresExplicitReview),
+    expectedImpact: String(parsed.parameters.expectedImpact ?? ""),
+    suggestedPrechecks: Array.isArray(parsed.parameters.suggestedPrechecks) ? parsed.parameters.suggestedPrechecks.map(String) : [],
+    suggestedVerification: Array.isArray(parsed.parameters.suggestedVerification) ? parsed.parameters.suggestedVerification.map(String) : [],
+    suggestedRollback: Array.isArray(parsed.parameters.suggestedRollback) ? parsed.parameters.suggestedRollback.map(String) : [],
     explanation: parsed.explanation
   };
 }
@@ -90,6 +105,10 @@ function isControlledCatalogAction(actionType: string) {
   return Boolean(getActionCatalogEntry(actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === actionType);
 }
 
+function isCustomProposal(actionType: string) {
+  return actionType === AiIntentType.custom_vendor_action || actionType === AiIntentType.generic_security_action;
+}
+
 function intentDebug(input: {
   intent: Awaited<ReturnType<typeof createAiActionIntent>> | undefined;
   structuredIntent: StructuredAiIntent | null;
@@ -106,7 +125,7 @@ function intentDebug(input: {
     ...(
       input.structuredIntent?.missingFields.map(String) ?? []
     ),
-    ...(!input.intent?.deviceId && input.intent && input.intent.intentType !== "unknown" ? ["deviceId"] : [])
+    ...(!input.intent?.deviceId && input.intent && input.intent.intentType !== "unknown" && !isCustomProposal(input.intent.intentType) ? ["deviceId"] : [])
   ]));
 
   if (!input.intent) {
@@ -159,7 +178,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     }
   });
 
-  const context = await buildSecurityContext();
+  const context = await buildSecurityOrchestratorContext();
   const catalogMatch = routeCatalogIntent(message);
   const providerCandidate = catalogMatch.aiRequired
     ? await runAiProvider({ message, context })
@@ -167,25 +186,17 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         assistantMessage: catalogMatch.status === "matched" && catalogMatch.catalogEntry
           ? `${catalogMatch.catalogEntry.title} is ready as a controlled catalog action. Review it in Action Center and select Execute.`
           : catalogMatch.message ?? "This action is not in the controlled catalog yet.",
-        shouldCreateIntent: catalogMatch.status === "matched",
-        intent: catalogMatch.parsedIntent ? structuredFromParsed(catalogMatch.parsedIntent) : null,
+        shouldCreateIntent: catalogMatch.status === "matched" || catalogMatch.status === "unsupported",
+        intent: catalogMatch.parsedIntent ? structuredFromParsed(catalogMatch.parsedIntent) : structuredFromParsed(parseAiIntent(message)!),
         confidence: catalogMatch.confidence,
         provider: "mock" as const,
         model: "command-catalog",
         keyConfigured: false,
         fallbackUsed: false
       };
-  const providerActionable = providerCandidate.intent && providerCandidate.intent.intentType !== AiIntentType.unknown && providerCandidate.intent.intentType !== AiIntentType.explain_security_status;
-  const providerResponse = providerActionable && !isControlledCatalogAction(providerCandidate.intent!.intentType)
-    ? {
-        ...providerCandidate,
-        assistantMessage: "This action is not in the controlled catalog yet.",
-        shouldCreateIntent: false,
-        intent: null
-      }
-    : providerCandidate;
-  const parsedCandidate = catalogMatch.status === "unsupported" ? null : catalogMatch.parsedIntent ?? parseAiIntent(message);
-  const deterministicParsed = parsedCandidate && isControlledCatalogAction(parsedCandidate.intentType) ? parsedCandidate : null;
+  const providerResponse = providerCandidate;
+  const parsedCandidate = catalogMatch.parsedIntent ?? parseAiIntent(message);
+  const deterministicParsed = parsedCandidate;
   const deterministicWins = shouldPreferDeterministic(providerResponse.intent, deterministicParsed);
   const effectiveStructuredIntent = deterministicWins && deterministicParsed
     ? structuredFromParsed(deterministicParsed)

@@ -126,11 +126,12 @@ test("execution and approval are blocked before their required states", () => {
   assert.equal(requiresManualApprovalWorkflow(ActionType.mikrotik_change_service_port), true);
 });
 
-test("raw AI commands never become executable intents", () => {
+test("raw AI commands become non-executable custom proposals", () => {
   const intent = parseAiIntent('/ip service set [find name="ssh"] port=22022');
   assert.ok(intent);
-  assert.equal(intent.intentType, AiIntentType.unknown);
-  assert.equal(intent.parameters.rawCommandRejected, true);
+  assert.equal(intent.intentType, AiIntentType.custom_vendor_action);
+  assert.equal(intent.parameters.executionSupport, "manual_or_not_implemented");
+  assert.equal(intent.parameters.requiresExplicitReview, true);
 
   const validation = validate({
     service: "ssh",

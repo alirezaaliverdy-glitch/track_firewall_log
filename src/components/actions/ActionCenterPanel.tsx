@@ -56,6 +56,8 @@ function statusLabel(value: string) {
 }
 
 function vendorOf(action: ActionPlan) {
+  const parameterVendor = String(normalizeObject(action.parametersJson).vendor ?? "").toLowerCase();
+  if (parameterVendor) return parameterVendor === "linux_edge" ? "Linux" : parameterVendor;
   const deviceType = String(action.device?.type ?? "").toLowerCase();
   if (deviceType.includes("fortigate") || action.actionType.startsWith("fortigate_")) return "FortiGate";
   if (deviceType.includes("mikrotik") || action.actionType.startsWith("mikrotik_")) return "MikroTik";
@@ -291,12 +293,16 @@ function PlanSummary({ plan }: { plan: ActionPlan }) {
       {sshPortChange ? <span className="font-mono">new SSH port: {String(params.newPort ?? params.port ?? "missing")}</span> : null}
       {sshPortChange && params.oldPort ? <span className="font-mono">current SSH port: {String(params.oldPort)}</span> : null}
       {sshPortChange ? <span className="font-mono">trusted source: {String(params.trustedSource ?? params.trustedSourceIp ?? params.trustedSourceCidr ?? "missing")}</span> : null}
+      {params.executionSupport ? <span>support: {String(params.executionSupport).replace(/_/g, " ")}</span> : null}
     </div>
   );
 }
 
 function actionLabel(action: ActionPlan) {
   const params = normalizeObject(action.parametersJson);
+  if (action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action") {
+    return String(params.requestedOperation ?? "Proposed Action");
+  }
   if (action.actionType === "mikrotik_change_service_port" && params.service === "ssh") {
     const oldPort = params.oldPort ?? params.currentPort;
     const newPort = params.newPort ?? params.port;
@@ -309,6 +315,32 @@ function actionLabel(action: ActionPlan) {
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function ProposalDetails({ action }: { action: ActionPlan }) {
+  const params = normalizeObject(action.parametersJson);
+  if (action.actionType !== "custom_vendor_action" && action.actionType !== "generic_security_action") return null;
+  const rows = [
+    ["Execution support", params.executionSupport],
+    ["Expected impact", params.expectedImpact],
+    ["Missing fields", textArray(params.missingFields).join(", ")],
+    ["Suggested prechecks", textArray(params.suggestedPrechecks).join(" | ")],
+    ["Suggested verification", textArray(params.suggestedVerification).join(" | ")],
+    ["Suggested rollback", textArray(params.suggestedRollback).join(" | ")]
+  ].filter(([, value]) => String(value ?? "").trim());
+  return (
+    <div className="mb-4 rounded border border-yellow-900/70 bg-yellow-950/15 p-3 text-left">
+      <h4 className="text-sm font-semibold text-yellow-100">Proposed Action</h4>
+      <dl className="mt-2 grid gap-2 text-xs text-zinc-300 sm:grid-cols-2">
+        {rows.map(([label, value]) => (
+          <div key={String(label)}>
+            <dt className="font-semibold text-zinc-500">{String(label)}</dt>
+            <dd className="mt-0.5">{String(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 function sourceLabel(source: string) {
@@ -767,6 +799,8 @@ export default function ActionCenterPanel() {
                   {executionUi.reason}
                 </div>
               )}
+
+              <ProposalDetails action={selectedAction} />
 
               {fixableFields(selectedAction).length > 0 && !["executing", "succeeded", "rolled_back"].includes(selectedAction.status) && (
                 <div className="mb-4 rounded border border-blue-900/70 bg-blue-950/15 p-3 text-left">

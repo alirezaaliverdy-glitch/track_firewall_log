@@ -40,6 +40,8 @@ export function actionPlanStatusLabel(status: string) {
 }
 
 export type ActionType =
+  | "custom_vendor_action"
+  | "generic_security_action"
   | "create_egress_policy"
   | "update_policy_schedule"
   | "block_source_ip_temporary"

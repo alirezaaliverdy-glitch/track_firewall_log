@@ -69,11 +69,19 @@ export type CompleteActionRequestResponse = {
 
 export type StructuredAiIntent = {
   intentType: string;
+  vendor: string;
   riskLevel: string;
   targetDeviceHint: string | null;
   parameters: Record<string, unknown>;
   missingFields: string[];
   clarificationQuestions: string[];
+  executionSupport: string;
+  destructive: boolean;
+  requiresExplicitReview: boolean;
+  expectedImpact: string;
+  suggestedPrechecks: string[];
+  suggestedVerification: string[];
+  suggestedRollback: string[];
   explanation: string;
 };
 
@@ -91,6 +99,12 @@ export type AiProviderStatus = {
   keyConfigured: boolean;
   baseUrlConfigured: boolean;
   timeoutMs: number;
+  appProfile: string;
+  actionExecutionMode: string;
+  actionCreationPolicy: string;
+  executionPolicy: string;
+  catalogActionCount: number;
+  customActionFallbackSupported: boolean;
   maxContextEvents: number;
   maxContextIncidents: number;
   executionAllowed: boolean;
@@ -322,11 +336,19 @@ function normalizeStructuredIntent(value: unknown): StructuredAiIntent | null {
   if (Object.keys(source).length === 0) return null;
   return {
     intentType: String(source.intentType ?? "unknown"),
+    vendor: String(source.vendor ?? "unknown"),
     riskLevel: String(source.riskLevel ?? "medium"),
     targetDeviceHint: typeof source.targetDeviceHint === "string" ? source.targetDeviceHint : null,
     parameters: normalizeObject(source.parameters),
     missingFields: normalizeArray<unknown>(source.missingFields).map(String),
     clarificationQuestions: normalizeArray<unknown>(source.clarificationQuestions).map(String),
+    executionSupport: String(source.executionSupport ?? "manual_or_not_implemented"),
+    destructive: Boolean(source.destructive),
+    requiresExplicitReview: Boolean(source.requiresExplicitReview),
+    expectedImpact: String(source.expectedImpact ?? ""),
+    suggestedPrechecks: normalizeArray<unknown>(source.suggestedPrechecks).map(String),
+    suggestedVerification: normalizeArray<unknown>(source.suggestedVerification).map(String),
+    suggestedRollback: normalizeArray<unknown>(source.suggestedRollback).map(String),
     explanation: String(source.explanation ?? ""),
   };
 }
@@ -365,6 +387,12 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
     keyConfigured: Boolean(source.keyConfigured),
     baseUrlConfigured: Boolean(source.baseUrlConfigured),
     timeoutMs: safeNumber(source.timeoutMs),
+    appProfile: String(source.appProfile ?? "unknown"),
+    actionExecutionMode: String(source.actionExecutionMode ?? "unknown"),
+    actionCreationPolicy: String(source.actionCreationPolicy ?? "permissive"),
+    executionPolicy: String(source.executionPolicy ?? "controlled"),
+    catalogActionCount: safeNumber(source.catalogActionCount),
+    customActionFallbackSupported: Boolean(source.customActionFallbackSupported),
     maxContextEvents: safeNumber(source.maxContextEvents),
     maxContextIncidents: safeNumber(source.maxContextIncidents),
     executionAllowed: Boolean(source.executionAllowed),

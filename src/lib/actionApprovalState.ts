@@ -9,6 +9,21 @@ function array(value: unknown): unknown[] {
 }
 
 export function actionExecutionUiState(action: ActionPlan) {
+  const parameters = object(action.parametersJson);
+  const executionSupport = String(parameters.executionSupport ?? "");
+  if (action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action" || ["manual_or_not_implemented", "unsupported_vendor", "needs_parameters"].includes(executionSupport)) {
+    return {
+      state: executionSupport === "needs_parameters" ? "needs_value" : "blocked",
+      canApproveAndExecute: false,
+      canExecute: false,
+      reason: executionSupport === "needs_parameters"
+        ? "Required parameters must be completed before execution can be evaluated."
+        : executionSupport === "unsupported_vendor"
+          ? "The action is proposed for review, but this vendor has no execution connector yet."
+          : "The action is proposed for review as a manual action; controlled execution is not implemented yet.",
+      missingField: null
+    };
+  }
   const validation = object(action.validationJson);
   const blockedStatus = ["needs_input", "validation_failed", "missing_fields", "blocked", "rejected", "rollback_needed"].includes(action.status);
   if (blockedStatus || validation.valid === false || array(validation.errors).length > 0 || array(validation.missingFields).length > 0) {

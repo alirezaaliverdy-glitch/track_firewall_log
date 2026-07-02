@@ -82,7 +82,9 @@ test("direct controlled mode skips approval only for catalog actions", () => {
 test("raw commands do not become executable catalog actions", () => {
   const routed = routeCatalogIntent("MikroTik execute raw command /user add name=hacker");
   assert.notEqual(routed.status, "matched");
-  assert.equal(parseAiIntent("MikroTik execute raw command /user add name=hacker")?.intentType, "unknown");
+  const proposed = parseAiIntent("MikroTik execute raw command /user add name=hacker");
+  assert.equal(proposed?.intentType, "custom_vendor_action");
+  assert.equal(proposed?.parameters.executionSupport, "manual_or_not_implemented");
 });
 
 test("Action Center exposes Execute and hides manual preview/approval UX", () => {

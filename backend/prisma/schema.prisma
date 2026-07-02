@@ -697,6 +697,8 @@ enum AiRiskLevel {
 }
 
 enum AiIntentType {
+  custom_vendor_action
+  generic_security_action
   create_egress_policy
   update_policy_schedule
   block_source_ip_temporary
@@ -860,6 +862,8 @@ enum ActionPlanStatus {
 }
 
 enum ActionType {
+  custom_vendor_action
+  generic_security_action
   create_egress_policy
   update_policy_schedule
   block_source_ip_temporary
