@@ -149,6 +149,10 @@ export function getAiProviderStatus(lastError?: string) {
     customActionFallbackSupported: true,
     maxContextEvents: env.aiMaxContextEvents,
     maxContextIncidents: env.aiMaxContextIncidents,
+    maxContextFindings: env.aiMaxContextFindings,
+    maxActionPlans: env.aiMaxActionPlans,
+    maxEvidenceLines: env.aiMaxEvidenceLines,
+    includeRawLogs: env.aiIncludeRawLogs,
     executionAllowed: false,
     lastError: lastError ?? null
   };

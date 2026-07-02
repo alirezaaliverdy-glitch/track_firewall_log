@@ -5,6 +5,7 @@ import { prisma } from "../db/prisma.js";
 import { buildSecurityContext } from "./ai-context.service.js";
 import { proposeActionPlan } from "./action-plan.service.js";
 import { analyzeVendorDevice, buildCompactVendorAiContext, normalizeAnalysisVendor } from "../assessments/vendor-analysis-profiles.js";
+import { buildEvidencePack } from "../ai/context/evidence-pack.service.js";
 
 type SecurityContext = Awaited<ReturnType<typeof buildSecurityContext>>;
 type AssessmentFinding = {
@@ -224,12 +225,13 @@ export async function runFullAnalysis(input: { scopeType?: string; scopeId?: str
     buildSecurityContext({ recentMinutes: 1440 }),
     input.collectConnectorData === false ? Promise.resolve([]) : collectReadOnlySnapshots(input.scopeType === "device" ? input.scopeId : undefined)
   ]);
-  const [credentialLinks, capabilityRecords, storedSnapshots, auditLogs, latestSnapshots] = await Promise.all([
+  const [credentialLinks, capabilityRecords, storedSnapshots, auditLogs, latestSnapshots, evidencePack] = await Promise.all([
     prisma.device.count({ where: { OR: [{ credentialId: { not: null } }, { credentialRef: { not: null } }] } }),
     prisma.deviceCapability.count(),
     prisma.deviceSnapshot.count(),
     prisma.actionAuditLog.count(),
-    prisma.deviceSnapshot.findMany({ orderBy: { collectedAt: "desc" }, take: 100, select: { deviceId: true, snapshotType: true, dataJson: true } })
+    prisma.deviceSnapshot.findMany({ orderBy: { collectedAt: "desc" }, take: 100, select: { deviceId: true, snapshotType: true, dataJson: true } }),
+    buildEvidencePack({ selectedDeviceId: input.scopeType === "device" ? input.scopeId : undefined })
   ]);
   const scopedContext = input.scopeType === "device" && input.scopeId ? { ...context, devices: context.devices.filter((device) => device.id === input.scopeId) } : context;
   const relevantSnapshots = latestSnapshots.filter((snapshot) => scopedContext.devices.some((device) => device.id === snapshot.deviceId));
@@ -242,7 +244,7 @@ export async function runFullAnalysis(input: { scopeType?: string; scopeId?: str
       riskScore: draft.riskScore,
       summary: draft.summary,
       findingsJson: toJson(draft),
-      dataSourcesJson: toJson({ device: scopedContext.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, rawLogsSentToAi: false, compactVendorAiContext: draft.aiContext, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
+      dataSourcesJson: toJson({ device: scopedContext.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, rawLogsSentToAi: false, compactVendorAiContext: draft.aiContext, evidencePackMetadata: evidencePack.metadata, availableActionHints: evidencePack.availableActionHints, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
       language: "fa"
     },
     include: { recommendations: { include: { device: { select: { id: true, name: true, vendor: true, type: true } } } } }

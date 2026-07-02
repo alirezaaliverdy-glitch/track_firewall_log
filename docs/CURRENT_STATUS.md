@@ -30,6 +30,8 @@ MVP / prototype moving toward Mini-SOAR.
 - Linux telemetry device alias selection and configured SSH management-port handling
 - One-click Linux live monitoring with real-time findings and proposal-only fix actions
 - Multi-vendor Full Analysis and Hardening profiles for MikroTik, Linux, FortiGate, pfSense, Cisco, and generic devices
+- Compact, vendor-aware AI Evidence Packs with bounded events, findings, incidents, actions, secret filtering, and raw-log exclusion by default
+- Central Security Orchestrator prompt and structured analysis/action output contracts across in-app AI provider calls
 
 ## Protected Behavior
 
@@ -47,6 +49,7 @@ These must not be changed unless explicitly requested:
 - Vendor connector architecture exists
 - MikroTik support is strongest
 - Full Analysis is grouped by vendor/device and reports collected data, missing telemetry, findings, and proposed actions
+- AI Chat sends the provider a compact Evidence Pack instead of the full legacy security context and exposes lightweight context metadata
 - Vendor hardening findings can create review-only ActionPlans without automatic execution
 - UI is becoming premium and usable
 - Backend has meaningful security models

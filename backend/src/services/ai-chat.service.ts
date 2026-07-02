@@ -226,7 +226,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         executionAllowed: false,
         contextWindow: {
           generatedAt: context.generatedAt,
-          recentWindowMinutes: context.recentWindowMinutes
+          recentWindowMinutes: context.recentWindowMinutes,
+          evidence: context.evidencePack.metadata
         }
       })
     }
@@ -257,6 +258,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     actionPlan,
     actionDebug: debug,
     providerStatus: getAiProviderStatus(providerResponse.error),
+    evidenceMetadata: context.evidencePack.metadata,
     structured: {
       assistantMessage: providerResponse.assistantMessage,
       shouldCreateIntent: providerResponse.shouldCreateIntent,

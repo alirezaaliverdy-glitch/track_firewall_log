@@ -80,7 +80,7 @@ User request
 
 User message
 
--> security context
+-> compact vendor-aware Evidence Pack (bounded events/findings/incidents/actions; secrets and raw logs excluded by default)
 
 -> central system prompt
 

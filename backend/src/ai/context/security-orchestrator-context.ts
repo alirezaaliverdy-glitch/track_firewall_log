@@ -2,11 +2,13 @@ import { env } from "../../config/env.js";
 import { getConnectorCapabilities } from "../../connectors/connector-registry.service.js";
 import { VENDOR_COMMAND_CATALOG } from "../../actions/catalog/index.js";
 import { buildSecurityContext as buildLegacySecurityContext } from "../../services/ai-context.service.js";
+import { buildEvidencePack } from "./evidence-pack.service.js";
 
-export async function buildSecurityOrchestratorContext(input: { recentMinutes?: number } = {}) {
-  const security = await buildLegacySecurityContext(input);
+export async function buildSecurityOrchestratorContext(input: { recentMinutes?: number; selectedDeviceId?: string; vendor?: string } = {}) {
+  const [security, evidencePack] = await Promise.all([buildLegacySecurityContext(input), buildEvidencePack(input)]);
   return {
     ...security,
+    evidencePack,
     appProfile: env.appProfile,
     actionExecutionMode: env.actionExecutionMode,
     actionAllowLabUnrestrictedManagement: env.actionAllowLabUnrestrictedManagement,

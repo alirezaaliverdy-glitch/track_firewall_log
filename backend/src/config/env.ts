@@ -10,8 +10,12 @@ const DEFAULT_CORS_ORIGINS = [
 const DEFAULT_UPLOAD_DIR = "./storage/uploads";
 const DEFAULT_MAX_UPLOAD_MB = 25;
 const DEFAULT_AI_TIMEOUT_MS = 30000;
-const DEFAULT_AI_MAX_CONTEXT_EVENTS = 25;
-const DEFAULT_AI_MAX_CONTEXT_INCIDENTS = 10;
+const DEFAULT_AI_MAX_CONTEXT_EVENTS = 50;
+const DEFAULT_AI_MAX_CONTEXT_INCIDENTS = 20;
+const DEFAULT_AI_MAX_CONTEXT_FINDINGS = 20;
+const DEFAULT_AI_MAX_ACTION_PLANS = 15;
+const DEFAULT_AI_MAX_EVIDENCE_LINES = 30;
+const DEFAULT_AI_MAX_RAW_MESSAGE_CHARS = 300;
 const DEFAULT_EVENT_RETENTION_LOW_DAYS = 7;
 const DEFAULT_EVENT_RETENTION_MEDIUM_DAYS = 30;
 const DEFAULT_EVENT_RETENTION_HIGH_DAYS = 90;
@@ -134,6 +138,11 @@ export const env = {
   aiTimeoutMs: parsePositiveInteger(process.env.AI_TIMEOUT_MS, DEFAULT_AI_TIMEOUT_MS),
   aiMaxContextEvents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_EVENTS, DEFAULT_AI_MAX_CONTEXT_EVENTS),
   aiMaxContextIncidents: parsePositiveInteger(process.env.AI_MAX_CONTEXT_INCIDENTS, DEFAULT_AI_MAX_CONTEXT_INCIDENTS),
+  aiMaxContextFindings: parsePositiveInteger(process.env.AI_MAX_CONTEXT_FINDINGS, DEFAULT_AI_MAX_CONTEXT_FINDINGS),
+  aiMaxActionPlans: parsePositiveInteger(process.env.AI_MAX_ACTION_PLANS, DEFAULT_AI_MAX_ACTION_PLANS),
+  aiMaxEvidenceLines: parsePositiveInteger(process.env.AI_MAX_EVIDENCE_LINES, DEFAULT_AI_MAX_EVIDENCE_LINES),
+  aiMaxRawMessageChars: parsePositiveInteger(process.env.AI_MAX_RAW_MESSAGE_CHARS, DEFAULT_AI_MAX_RAW_MESSAGE_CHARS),
+  aiIncludeRawLogs: parseBoolean(process.env.AI_INCLUDE_RAW_LOGS, false),
   eventRetentionLowDays: parsePositiveInteger(process.env.EVENT_RETENTION_LOW_DAYS, DEFAULT_EVENT_RETENTION_LOW_DAYS),
   eventRetentionMediumDays: parsePositiveInteger(process.env.EVENT_RETENTION_MEDIUM_DAYS, DEFAULT_EVENT_RETENTION_MEDIUM_DAYS),
   eventRetentionHighDays: parsePositiveInteger(process.env.EVENT_RETENTION_HIGH_DAYS, DEFAULT_EVENT_RETENTION_HIGH_DAYS),

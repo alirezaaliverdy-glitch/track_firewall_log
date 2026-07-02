@@ -88,7 +88,8 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput, model 
             role: "user",
             content: JSON.stringify({
               userMessage: input.message,
-              securityContext: input.context
+              evidencePack: input.context.evidencePack,
+              availableActionHints: input.context.evidencePack.availableActionHints
             })
           }
         ]

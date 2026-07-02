@@ -38,6 +38,8 @@ AI must not silently execute anything.
 Execution must stay behind backend-controlled flow:
 ActionPlan -> PolicyGuard -> Connector -> Audit.
 
+The in-app AI must use compact Evidence Packs and a central Security Orchestrator prompt; action creation is permissive, execution is controlled.
+
 # Protected Lab Behavior
 
 Do not break current lab execution behavior.

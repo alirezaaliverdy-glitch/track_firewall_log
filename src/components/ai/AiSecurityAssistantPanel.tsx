@@ -14,6 +14,7 @@ import {
   type AiProviderStatus,
   type SecuritySummary,
   type StructuredAiResponse,
+  type EvidencePackMetadata,
   createRecommendationActionPlan,
   clearAiSessionMessages,
   generateHardeningSuggestions,
@@ -299,6 +300,7 @@ export default function AiSecurityAssistantPanel() {
   const [actionDebug, setActionDebug] = useState<AiActionDebug | null>(null);
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
+  const [evidenceMetadata, setEvidenceMetadata] = useState<EvidencePackMetadata | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
@@ -459,6 +461,7 @@ export default function AiSecurityAssistantPanel() {
         setActionDebug(response.actionDebug);
         setProviderStatus(response.providerStatus ?? providerStatus);
         setStructuredResponse(response.structured);
+        setEvidenceMetadata(response.evidenceMetadata);
         setCreatedPlanId(response.actionPlan?.id ?? null);
         if (response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);
@@ -716,6 +719,13 @@ export default function AiSecurityAssistantPanel() {
               <p><span className="text-zinc-500">key configured:</span> {providerStatus?.keyConfigured ? "true" : "false"}</p>
               <p><span className="text-zinc-500">execution:</span> disabled</p>
             </div>
+            {evidenceMetadata && (
+              <div className="mt-2 border-t border-zinc-800 pt-2 text-xs text-zinc-400">
+                <p className="font-medium text-blue-300">compact evidence mode</p>
+                <p>events {evidenceMetadata.includedEventsCount} · findings {evidenceMetadata.includedFindingsCount} · incidents {evidenceMetadata.includedIncidentsCount}</p>
+                <p>context truncated: {String(evidenceMetadata.contextTruncated)}</p>
+              </div>
+            )}
             {providerStatus?.lastError && (
               <p className="mt-2 text-xs text-red-300">{providerStatus.lastError}</p>
             )}

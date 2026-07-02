@@ -197,6 +197,45 @@ Commit message:
 
 ## Future Task Entry Template
 
+## Task 12.5: AI Evidence Pack + Strong Security Orchestrator Prompt
+
+Date:
+
+2026-07-02
+
+Goal:
+
+Reduce in-app AI context cost and improve security-orchestration behavior with a central prompt and compact vendor-aware Evidence Packs.
+
+Files changed:
+
+- Added the Evidence Pack builder, configurable context budgets, vendor field allowlists, secret filtering, raw-log controls, and regression tests.
+- Strengthened the central Security Orchestrator mission and structured output contracts.
+- Updated provider, chat, Full Analysis/Hardening metadata, and the lightweight AI context debug display.
+- Updated project instructions, environment example, and architecture/status documentation.
+
+Behavior changed:
+
+- OpenAI-compatible calls now receive the central prompt, compact Evidence Pack, user request, and bounded action hints instead of the full legacy context.
+- Raw logs remain excluded by default; credential-shaped fields are removed recursively.
+- Operational requests remain proposal-oriented, including critical/destructive and unsupported operations.
+
+Protected behavior preserved:
+
+- Action Center execution, PolicyGuard, connectors, and audit flow are unchanged.
+- `ACTION_EXECUTION_MODE=quick_controlled` remains supported.
+- `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` remains supported.
+
+Build/test result:
+
+- Backend TypeScript build passed.
+- Backend tests passed: 83/83.
+- Frontend TypeScript/Vite production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Add compact AI evidence packs and orchestrator prompt
+
 Use this template after every future task:
 
 ### Task X: Task Name

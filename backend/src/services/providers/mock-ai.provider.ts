@@ -3,7 +3,8 @@ import type { StructuredAiResponse, AiProviderInput } from "../ai-provider.servi
 import { parseAiIntent } from "../ai-intent.service.js";
 
 function topSourceIp(input: AiProviderInput) {
-  return input.context.events.topSourceIps[0]?.srcIp ?? null;
+  const events = input.context.evidencePack.recentHighCriticalEvents;
+  return Array.isArray(events) ? String((events[0] as Record<string, unknown> | undefined)?.srcIp ?? "") || null : null;
 }
 
 function openIncidentCount(input: AiProviderInput) {

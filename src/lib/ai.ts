@@ -45,6 +45,16 @@ export type AiChatResponse = {
   actionDebug: AiActionDebug | null;
   providerStatus: AiProviderStatus | null;
   structured: StructuredAiResponse | null;
+  evidenceMetadata: EvidencePackMetadata | null;
+};
+
+export type EvidencePackMetadata = {
+  contextTruncated: boolean;
+  rawLogsIncluded: boolean;
+  includedEventsCount: number;
+  includedFindingsCount: number;
+  includedIncidentsCount: number;
+  includedActionPlansCount: number;
 };
 
 export type AiActionDebug = {
@@ -414,6 +424,7 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
     body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), message }),
   });
   const source = normalizeObject(payload);
+  const evidence = normalizeObject(source.evidenceMetadata);
   return {
     sessionId: String(source.sessionId ?? sessionId ?? ""),
     message: source.message ? normalizeAiMessage(source.message) : null,
@@ -423,6 +434,14 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
     actionDebug: source.actionDebug ? normalizeActionDebug(source.actionDebug) : null,
     providerStatus: source.providerStatus ? normalizeProviderStatus(source.providerStatus) : null,
     structured: source.structured ? normalizeStructured(source.structured) : null,
+    evidenceMetadata: source.evidenceMetadata ? {
+      contextTruncated: Boolean(evidence.contextTruncated),
+      rawLogsIncluded: Boolean(evidence.rawLogsIncluded),
+      includedEventsCount: safeNumber(evidence.includedEventsCount),
+      includedFindingsCount: safeNumber(evidence.includedFindingsCount),
+      includedIncidentsCount: safeNumber(evidence.includedIncidentsCount),
+      includedActionPlansCount: safeNumber(evidence.includedActionPlansCount),
+    } : null,
   } satisfies AiChatResponse;
 }
 
