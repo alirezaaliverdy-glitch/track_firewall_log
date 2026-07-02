@@ -21,6 +21,7 @@ import LogTable from "./components/log-table";
 import ExportButtons from "./components/export/ExportButtons";
 import WorkflowGuide from "./components/layout/WorkflowGuide";
 import DeviceRegistryPanel from "./components/devices/DeviceRegistryPanel";
+import LinuxTelemetryPanel from "./components/telemetry/LinuxTelemetryPanel";
 import SecurityEventsPanel from "./components/events/SecurityEventsPanel";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import IncidentsPanel from "./components/incidents/IncidentsPanel";
@@ -71,6 +72,14 @@ function App() {
             <div className="mt-4">
               <ErrorBoundary title="Device Registry unavailable">
                 <DeviceRegistryPanel />
+              </ErrorBoundary>
+            </div>
+          </details>
+          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Device Telemetry</summary>
+            <div className="mt-4">
+              <ErrorBoundary title="Linux Telemetry unavailable">
+                <LinuxTelemetryPanel />
               </ErrorBoundary>
             </div>
           </details>

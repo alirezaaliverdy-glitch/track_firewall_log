@@ -25,6 +25,10 @@ MVP / prototype moving toward Mini-SOAR.
 - ActionPlan / PolicyGuard / Audit foundation
 - MikroTik controlled execution foundation
 - Project config and production safety cleanup
+- Central AI brain with permissive universal action planning
+- Linux read-only security snapshot and live telemetry foundation
+- Linux telemetry device alias selection and configured SSH management-port handling
+- One-click Linux live monitoring with real-time findings and proposal-only fix actions
 
 ## Protected Behavior
 
@@ -46,17 +50,16 @@ These must not be changed unless explicitly requested:
 
 ## Current Weaknesses
 
-- AI needs central product-aware brain
 - Event Intelligence Core is not yet mature
 - Detection Engine needs correlation/rule DSL
 - Verification and rollback are incomplete
-- FortiGate/Linux support needs deeper real-world testing
+- Linux telemetry needs broader distro and production-host testing
+- FortiGate support needs deeper real-world testing
 - Reporting is not complete
 
 ## Next Planned Tasks
 
-- Task 11: Central AI Brain with Universal Action Planning
-- Task 12: Event Intelligence Core
+- Event Intelligence Core
 - Task 13: Detection Engine 2.0
 - Task 14: Action Verification and Rollback
 - Task 15: Report Generator

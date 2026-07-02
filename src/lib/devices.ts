@@ -1,6 +1,7 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 
 export type DeviceType =
+  | "linux"
   | "linux_edge"
   | "mikrotik"
   | "fortigate"
@@ -218,7 +219,7 @@ export function normalizeDevice(value: unknown): Device {
     vendor: String(source.vendor ?? source.type ?? "generic_firewall"),
     type: String(source.type ?? "generic_firewall") as DeviceType,
     host: String(source.host ?? ""),
-    managementPort: Number(source.managementPort ?? 0),
+    managementPort: Number(source.managementPort ?? source.port ?? 22),
     protocol: String(source.protocol ?? "ssh") as DeviceProtocol,
     credentialId: typeof source.credentialId === "string" ? source.credentialId : null,
     credentialRef: typeof source.credentialRef === "string" ? source.credentialRef : null,

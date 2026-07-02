@@ -21,6 +21,7 @@ type SshCredential = {
   privateKeyPath?: string;
   passphrase?: string;
   sudo?: boolean;
+  port?: number;
 };
 
 type ExecResult = {
@@ -28,6 +29,33 @@ type ExecResult = {
   stderr: string;
   exitCode: number | null;
 };
+
+export type LinuxTelemetryCommandId = keyof typeof LINUX_TELEMETRY_COMMANDS;
+
+export const LINUX_TELEMETRY_COMMANDS = Object.freeze({
+  identity: { command: "hostname; hostnamectl 2>/dev/null; uname -a; uptime; timedatectl 2>/dev/null", privileged: false },
+  network: { command: "ip addr; ip route; (ss -tulpen 2>/dev/null || ss -tunap 2>/dev/null)", privileged: false },
+  sshConfig: { command: "sshd -T 2>/dev/null", privileged: true },
+  sshLogs: { command: "journalctl -u ssh -u sshd -n 300 --no-pager 2>/dev/null || tail -n 300 /var/log/auth.log 2>/dev/null || tail -n 300 /var/log/secure 2>/dev/null", privileged: true },
+  users: { command: "getent passwd; getent group sudo; getent group wheel; last -n 50 2>/dev/null", privileged: false },
+  failedLogins: { command: "lastb -n 50 2>/dev/null", privileged: true },
+  firewall: { command: "ufw status verbose 2>/dev/null; iptables -S 2>/dev/null; nft list ruleset 2>/dev/null; firewall-cmd --state 2>/dev/null; firewall-cmd --list-all 2>/dev/null", privileged: true },
+  securityTools: { command: "fail2ban-client status 2>/dev/null; for s in fail2ban auditd ssh sshd ufw firewalld; do printf '%s=' \"$s\"; systemctl is-active \"$s\" 2>/dev/null || true; done; command -v unattended-upgrade 2>/dev/null", privileged: true },
+  containers: { command: "docker ps --format '{{json .}}' 2>/dev/null || docker ps 2>/dev/null; docker network ls 2>/dev/null; docker compose ls 2>/dev/null", privileged: false },
+  web: { command: "systemctl is-active nginx apache2 httpd 2>/dev/null; find /etc/nginx/sites-enabled /etc/apache2/sites-enabled -maxdepth 1 -type l -printf '%f\\n' 2>/dev/null", privileged: false },
+  warnings: { command: "journalctl -p warning..alert -n 300 --no-pager 2>/dev/null; dmesg --level=err,warn 2>/dev/null", privileged: true }
+} as const);
+
+export const LINUX_STREAM_COMMANDS = Object.freeze({
+  auth: "journalctl -f -n 0 -u ssh -u sshd -o short-iso --since now --no-pager 2>/dev/null || tail -n 0 -F /var/log/auth.log /var/log/secure 2>/dev/null",
+  system: "journalctl -f -n 0 -o short-iso --since now --no-pager 2>/dev/null || tail -n 0 -F /var/log/syslog /var/log/messages 2>/dev/null",
+  kernel: "journalctl -f -n 0 -k -o short-iso --since now --no-pager 2>/dev/null",
+  firewall: "tail -n 0 -F /var/log/ufw.log 2>/dev/null || journalctl -f -n 0 -k -o short-iso --since now --no-pager 2>/dev/null",
+  nginx: "tail -n 0 -F /var/log/nginx/access.log /var/log/nginx/error.log 2>/dev/null",
+  docker: "journalctl -f -n 0 -u docker -o short-iso --since now --no-pager 2>/dev/null"
+} as const);
+
+export type LinuxStreamSource = keyof typeof LINUX_STREAM_COMMANDS;
 
 export class ConnectorError extends Error {
   code: string;
@@ -177,10 +205,32 @@ async function getCredential(device: Device) {
   throw new ConnectorError("SSH_CREDENTIAL_MISSING", "No SSH credential is configured for this device.", 400);
 }
 
+function validPort(value: unknown) {
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : undefined;
+}
+
+export function isLinuxSshCapable(device: Pick<Device, "type" | "vendor" | "protocol" | "capabilities"> | null | undefined) {
+  if (!device) return false;
+  const vendor = String(device.vendor ?? "").trim().toLowerCase();
+  const type = String(device.type ?? "").trim().toLowerCase();
+  const capabilities = device.capabilities && typeof device.capabilities === "object" ? JSON.stringify(device.capabilities).toLowerCase() : "";
+  const linux = type === "linux_edge" || type === "linux" || vendor === "linux" || vendor.includes("ubuntu") || vendor.includes("linux") || capabilities.includes("linux");
+  const ssh = String(device.protocol ?? "").toLowerCase() === "ssh" || capabilities.includes("ssh");
+  return linux && ssh;
+}
+
+export function resolveLinuxConnectionPort(device: Device | (Partial<Device> & Record<string, unknown>), credential?: SshCredential) {
+  const source = device as Record<string, unknown>;
+  const capabilities = source.capabilities && typeof source.capabilities === "object" ? source.capabilities as Record<string, unknown> : {};
+  const connection = capabilities.connection && typeof capabilities.connection === "object" ? capabilities.connection as Record<string, unknown> : {};
+  return validPort(source.managementPort) ?? validPort(source.port) ?? validPort(credential?.port) ?? validPort(connection.port) ?? 22;
+}
+
 function connectConfig(device: Device, credential: SshCredential): ConnectConfig {
   const config: ConnectConfig = {
     host: device.host,
-    port: device.managementPort,
+    port: resolveLinuxConnectionPort(device, credential),
     username: credential.username,
     readyTimeout: env.sshHandshakeTimeoutMs
   };
@@ -284,6 +334,99 @@ function sudoPrefix(credential: SshCredential) {
   return credential.username === "root" ? "" : "sudo -n ";
 }
 
+function telemetryCommand(command: string, privileged: boolean, privilegeLevel: "root" | "sudo" | "limited") {
+  if (!privileged || privilegeLevel === "root") return command;
+  if (privilegeLevel === "sudo") return `sudo -n sh -c ${JSON.stringify(command)}`;
+  return null;
+}
+
+export function detectLinuxPrivilege(username: string, uidOutput: string, sudoExitCode: number | null): "root" | "sudo" | "limited" {
+  return uidOutput.trim() === "0" || username === "root" ? "root" : sudoExitCode === 0 ? "sudo" : "limited";
+}
+
+export async function runLinuxTelemetryCommands(device: Device, commandIds: LinuxTelemetryCommandId[]) {
+  if (!isLinuxSshCapable(device)) {
+    throw new ConnectorError("LINUX_SSH_REQUIRED", "Selected device is not Linux/SSH capable.", 404);
+  }
+  if (commandIds.some((id) => !(id in LINUX_TELEMETRY_COMMANDS))) {
+    throw new ConnectorError("TELEMETRY_COMMAND_NOT_ALLOWED", "Telemetry command is not allowlisted.", 400);
+  }
+  return withSsh(device, async (client, credential) => {
+    const uid = await exec(client, "id -u");
+    const root = uid.stdout.trim() === "0" || credential.username === "root";
+    const sudoCheck = root ? null : await exec(client, "sudo -n true");
+    const privilegeLevel = detectLinuxPrivilege(credential.username, uid.stdout, sudoCheck?.exitCode ?? null);
+    const results: Record<string, ExecResult & { skipped?: boolean }> = {};
+    for (const id of commandIds) {
+      const definition = LINUX_TELEMETRY_COMMANDS[id];
+      const command = telemetryCommand(definition.command, definition.privileged, privilegeLevel);
+      if (!command) {
+        results[id] = { stdout: "", stderr: "Privileged read unavailable.", exitCode: null, skipped: true };
+        continue;
+      }
+      try {
+        results[id] = await exec(client, command, Math.max(env.sshCommandTimeoutMs, 20000));
+      } catch (error) {
+        results[id] = { stdout: "", stderr: error instanceof Error ? error.message : "Read failed.", exitCode: null };
+      }
+    }
+    return { privilegeLevel, sudoAvailable: privilegeLevel === "root" || privilegeLevel === "sudo", connectionPort: resolveLinuxConnectionPort(device, credential), results };
+  });
+}
+
+export async function openLinuxTelemetryStream(
+  device: Device,
+  source: LinuxStreamSource,
+  onLine: (line: string) => void,
+  onWarning: (message: string) => void
+) {
+  if (!(source in LINUX_STREAM_COMMANDS)) throw new ConnectorError("STREAM_SOURCE_NOT_ALLOWED", "Stream source is not allowlisted.", 400);
+  const credential = await getCredential(device);
+  const client = new Client();
+  let closed = false;
+  let channel: { close: () => void } | null = null;
+  const ready = new Promise<void>((resolve, reject) => {
+    client.once("ready", async () => {
+      try {
+        const uid = await exec(client, "id -u");
+        const root = uid.stdout.trim() === "0" || credential.username === "root";
+        const sudoCheck = root ? null : await exec(client, "sudo -n true");
+        const privileged = root || sudoCheck?.exitCode === 0;
+        const command = privileged && !root
+          ? `sudo -n sh -c ${JSON.stringify(LINUX_STREAM_COMMANDS[source])}`
+          : LINUX_STREAM_COMMANDS[source];
+        client.exec(command, (error, stream) => {
+          if (error) return reject(error);
+          channel = stream;
+          let buffer = "";
+          const consume = (chunk: Buffer) => {
+            buffer += chunk.toString("utf8");
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() ?? "";
+            lines.filter(Boolean).forEach(onLine);
+          };
+          stream.on("data", consume);
+          stream.stderr.on("data", (chunk: Buffer) => onWarning(chunk.toString("utf8").trim()));
+          stream.on("close", () => { if (!closed) onWarning(`${source} stream closed.`); });
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+    client.once("error", reject);
+    client.connect(connectConfig(device, credential));
+  });
+  await ready;
+  return {
+    close() {
+      closed = true;
+      channel?.close();
+      client.end();
+    }
+  };
+}
+
 async function execChecked(client: Client, command: string) {
   const result = await exec(client, command);
   if (result.exitCode !== 0) {
@@ -309,7 +452,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
   const base = {
     deviceId: device.id,
     host: device.host,
-    port: device.managementPort,
+    port: resolveLinuxConnectionPort(device),
     stages,
     warnings
   };
@@ -332,7 +475,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
   }
 
   try {
-    await tcpConnect(device.host, device.managementPort);
+    await tcpConnect(device.host, resolveLinuxConnectionPort(device, credential));
     stages.push({ name: "tcp_connect", status: "ok" });
   } catch (error) {
     const connectorError = error instanceof ConnectorError ? error : new ConnectorError("SSH_TCP_CONNECT_FAILED", "TCP connection failed.");
@@ -619,11 +762,7 @@ export const linuxSshConnector: DeviceConnector = {
   name: "linux_edge",
   supportedActions: SUPPORTED_ACTIONS,
   supports(device) {
-    return Boolean(device && device.protocol === DeviceProtocol.ssh && (
-      device.type === DeviceType.linux_edge ||
-      String(device.vendor ?? "").toLowerCase().includes("ubuntu") ||
-      String(device.vendor ?? "").toLowerCase().includes("linux")
-    ));
+    return isLinuxSshCapable(device);
   },
   async testConnection(device) {
     try {
@@ -634,7 +773,7 @@ export const linuxSshConnector: DeviceConnector = {
         connected: false,
         deviceId: device.id,
         host: device.host,
-        port: device.managementPort,
+        port: resolveLinuxConnectionPort(device),
         credentialResolved: false,
         stages: [
           { name: "resolve_device", status: "ok" },

@@ -35,6 +35,8 @@ User / Upload / Device Context
 - Device services/routes: device registry and credentials
 - Incident/event services/routes: detection and security event storage
 - Assessment/hardening services: security analysis and recommendations
+- `backend/src/telemetry/linux`: read-only Linux snapshots, posture analysis, bounded stream sessions, and live signal parsing
+- `backend/src/routes/linux-telemetry.ts`: authenticated snapshot, options, analysis, stream control, and SSE APIs
 
 ## Frontend Main Areas
 
@@ -45,6 +47,7 @@ User / Upload / Device Context
 - AI Security Assistant
 - Device management
 - Security events/incidents
+- Linux device telemetry
 - UI components and animated background
 
 ## Core Product Rule
@@ -102,3 +105,25 @@ Device credential reference
 -> connector execution
 
 -> verification, rollback metadata, and audit result
+
+## Linux Telemetry Flow
+
+Linux SSH device and existing credential reference
+
+-> fixed read-only command allowlist
+
+-> root / non-interactive sudo / limited privilege detection
+
+-> partial structured `DeviceSnapshot`
+
+-> Linux posture analyzer
+
+-> compact AI context summary
+
+Live selected source
+
+-> bounded SSH stream
+
+-> lightweight suspicious signal parser
+
+-> SSE viewer and suspicious `SecurityEvent` persistence

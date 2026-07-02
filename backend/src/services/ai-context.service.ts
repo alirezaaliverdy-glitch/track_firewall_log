@@ -30,7 +30,8 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
     devices,
     batches,
     actionPlans,
-    pendingApprovals
+    pendingApprovals,
+    linuxTelemetrySnapshots
   ] = await Promise.all([
     safeContextQuery(prisma.incident.findMany({
       orderBy: { lastSeenAt: "desc" },
@@ -114,7 +115,13 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
     }), []),
     safeContextQuery(prisma.actionPlan.count({
       where: { status: { in: ["awaiting_approval", "dry_run_ready", "approved"] } }
-    }), 0)
+    }), 0),
+    safeContextQuery(prisma.deviceSnapshot.findMany({
+      where: { vendor: "linux", snapshotType: "linux_security" },
+      orderBy: { collectedAt: "desc" },
+      take: 10,
+      select: { deviceId: true, collectedAt: true, dataJson: true }
+    }), [])
   ]);
 
   return {
@@ -178,6 +185,17 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
     actionPlans: {
       recent: actionPlans,
       pendingApprovalCount: pendingApprovals
-    }
+    },
+    linuxTelemetry: linuxTelemetrySnapshots.map((record) => {
+      const snapshot = record.dataJson && typeof record.dataJson === "object" && !Array.isArray(record.dataJson) ? record.dataJson as Record<string, unknown> : {};
+      const host = snapshot.host && typeof snapshot.host === "object" ? snapshot.host as Record<string, unknown> : {};
+      const risk = snapshot.riskSummary && typeof snapshot.riskSummary === "object" ? snapshot.riskSummary as Record<string, unknown> : {};
+      const network = snapshot.network && typeof snapshot.network === "object" ? snapshot.network as Record<string, unknown> : {};
+      const firewall = snapshot.firewall && typeof snapshot.firewall === "object" ? snapshot.firewall as Record<string, unknown> : {};
+      const tools = snapshot.securityTools && typeof snapshot.securityTools === "object" ? snapshot.securityTools as Record<string, unknown> : {};
+      const ssh = snapshot.ssh && typeof snapshot.ssh === "object" ? snapshot.ssh as Record<string, unknown> : {};
+      const findings = Array.isArray(snapshot.findings) ? snapshot.findings.slice(0, 5).map((item) => item && typeof item === "object" ? { id: (item as Record<string, unknown>).id, title: (item as Record<string, unknown>).title, severity: (item as Record<string, unknown>).severity } : {}) : [];
+      return { deviceId: record.deviceId, collectedAt: record.collectedAt, hostname: host.hostname, privilegeLevel: snapshot.privilegeLevel, riskScore: risk.score, riskSeverity: risk.severity, topFindings: findings, exposedManagementPorts: network.exposedPorts, recentSuspiciousSignals: ssh.recentFailures, topSuspiciousIps: ssh.failureIps, firewallStatus: firewall.effectiveStatus, fail2banStatus: tools.fail2ban };
+    })
   };
 }

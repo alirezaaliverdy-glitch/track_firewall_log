@@ -21,6 +21,8 @@ import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
 import { assessmentRoutes } from "./routes/assessments.js";
 import { authRoutes } from "./routes/auth.js";
+import { linuxTelemetryRoutes } from "./routes/linux-telemetry.js";
+import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
 import { AUTH_COOKIE_NAME, bootstrapAdmin, getSessionUser } from "./services/auth.service.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
@@ -97,11 +99,13 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(analysisRoutes);
   await app.register(aiRoutes);
   await app.register(deviceRoutes);
+  await app.register(linuxTelemetryRoutes);
   await app.register(eventRoutes);
   await app.register(detectionRoutes);
   await app.register(incidentRoutes);
 
   app.addHook("onClose", async () => {
+    stopAllLinuxLogStreams();
     await prisma.$disconnect();
   });
 
