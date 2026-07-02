@@ -29,6 +29,7 @@ MVP / prototype moving toward Mini-SOAR.
 - Linux read-only security snapshot and live telemetry foundation
 - Linux telemetry device alias selection and configured SSH management-port handling
 - One-click Linux live monitoring with real-time findings and proposal-only fix actions
+- Multi-vendor Full Analysis and Hardening profiles for MikroTik, Linux, FortiGate, pfSense, Cisco, and generic devices
 
 ## Protected Behavior
 
@@ -45,6 +46,8 @@ These must not be changed unless explicitly requested:
 - ActionPlan architecture exists
 - Vendor connector architecture exists
 - MikroTik support is strongest
+- Full Analysis is grouped by vendor/device and reports collected data, missing telemetry, findings, and proposed actions
+- Vendor hardening findings can create review-only ActionPlans without automatic execution
 - UI is becoming premium and usable
 - Backend has meaningful security models
 

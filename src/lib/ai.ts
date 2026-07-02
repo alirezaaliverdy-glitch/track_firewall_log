@@ -139,6 +139,10 @@ export type HardeningRecommendation = {
   actionType: string | null;
   parametersJson: Record<string, unknown>;
   executable: boolean;
+  createActionSupported: boolean;
+  actionHint: string | null;
+  impact: string;
+  recommendedFix: string;
   status: string;
   actionPlanId: string | null;
   device: { id: string; name: string; vendor: string; type: string } | null;
@@ -271,6 +275,10 @@ function normalizeHardeningRecommendation(value: unknown): HardeningRecommendati
     actionType: typeof source.actionType === "string" ? source.actionType : null,
     parametersJson: normalizeObject(source.parametersJson),
     executable: Boolean(source.executable),
+    createActionSupported: Boolean(source.createActionSupported ?? source.executable),
+    actionHint: typeof source.actionHint === "string" ? source.actionHint : (typeof source.catalogActionId === "string" ? source.catalogActionId : null),
+    impact: String(source.impact ?? source.reason ?? ""),
+    recommendedFix: String(source.recommendedFix ?? source.recommendation ?? ""),
     status: String(source.status ?? "proposed"),
     actionPlanId: typeof source.actionPlanId === "string" ? source.actionPlanId : null,
     device: source.device ? normalizeObject(source.device) as HardeningRecommendation["device"] : null,

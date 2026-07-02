@@ -303,6 +303,7 @@ export default function AiSecurityAssistantPanel() {
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
   const [hardeningLoading, setHardeningLoading] = useState(false);
+  const [activeAnalysisDevice, setActiveAnalysisDevice] = useState<string | null>(null);
   const [recommendationWorking, setRecommendationWorking] = useState<string | null>(null);
 
   const refreshSummary = () => {
@@ -357,6 +358,8 @@ export default function AiSecurityAssistantPanel() {
   const assessmentDetails = normalizeObject(assessment?.findingsJson);
   const assessmentFindings = normalizeArray<Record<string, unknown>>(assessmentDetails.findings);
   const assessmentSections = normalizeObject(assessmentDetails.sections);
+  const vendorAnalyses = normalizeArray<Record<string, unknown>>(assessmentDetails.vendorAnalyses);
+  const visibleVendorAnalyses = activeAnalysisDevice ? vendorAnalyses.filter((item) => String(item.deviceId) === activeAnalysisDevice) : vendorAnalyses.slice(0, 1);
   const severityFa = (value: string) => ({ low: "کم", medium: "متوسط", high: "زیاد", critical: "بحرانی" }[value.toLowerCase()] ?? value);
   const evidenceText = (value: unknown): string => {
     if (value === null || value === undefined || value === "") return "نامشخص";
@@ -550,8 +553,25 @@ export default function AiSecurityAssistantPanel() {
             <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">پوشش دستگاه</p><p className="mt-1 text-sm text-blue-200">{evidenceText(normalizeObject(assessmentSections.assetsAndVendors).connected)} دستگاه متصل</p></div>
             <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">پیشرفت ایمن‌سازی</p><p className="mt-1 text-sm text-green-200">{assessment.recommendations.filter((item) => item.status === "action_plan_created").length} اقدام برنامه‌ریزی‌شده</p></div>
           </div>
+          {vendorAnalyses.length > 0 && <div className="mt-4">
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Vendor and device analysis">
+              {vendorAnalyses.map((item) => <button key={String(item.deviceId)} type="button" role="tab" aria-selected={(activeAnalysisDevice ?? String(vendorAnalyses[0]?.deviceId)) === String(item.deviceId)} onClick={() => setActiveAnalysisDevice(String(item.deviceId))} className={`rounded border px-3 py-1.5 text-xs ${(activeAnalysisDevice ?? String(vendorAnalyses[0]?.deviceId)) === String(item.deviceId) ? "border-blue-600 bg-blue-950/50 text-blue-100" : "border-zinc-700 text-zinc-400"}`}>{String(item.device)} · {String(item.vendorLabel ?? item.vendor)}</button>)}
+            </div>
+            {visibleVendorAnalyses.map((item) => {
+              const collected = normalizeArray<string>(item.collectedData);
+              const missing = normalizeArray<string>(item.missingData);
+              const findings = normalizeArray<Record<string, unknown>>(item.findings);
+              const actions = normalizeArray<string>(item.recommendedActions);
+              return <div key={String(item.deviceId)} className="mt-3 grid gap-2 md:grid-cols-2">
+                <div className="rounded border border-green-900/60 bg-green-950/10 p-3"><h4 className="text-xs font-semibold text-green-200">Collected data</h4><p className="mt-2 text-xs text-zinc-400">{collected.length ? collected.join(" · ") : "No vendor telemetry collected"}</p></div>
+                <div className="rounded border border-amber-900/60 bg-amber-950/10 p-3"><h4 className="text-xs font-semibold text-amber-200">Missing data</h4><p className="mt-2 text-xs text-zinc-400">{missing.length ? missing.join(" · ") : "None identified"}</p></div>
+                <div className="rounded border border-red-900/60 bg-red-950/10 p-3"><h4 className="text-xs font-semibold text-red-200">Findings</h4><div className="mt-2 space-y-2 text-xs text-zinc-400">{findings.length ? findings.map((finding) => <p key={String(finding.id)}><span className="text-zinc-200">{String(finding.title)}</span>: {String(finding.evidence)}</p>) : <p>No confirmed vendor-specific findings.</p>}</div></div>
+                <div className="rounded border border-blue-900/60 bg-blue-950/10 p-3"><h4 className="text-xs font-semibold text-blue-200">Recommended actions</h4><p className="mt-2 text-xs text-zinc-400">{actions.length ? actions.join(" · ") : "Collect missing telemetry, then reassess."}</p></div>
+              </div>;
+            })}
+          </div>}
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {Object.values(assessmentSections).filter((section) => section && typeof section === "object" && !Array.isArray(section)).map((section, index) => {
+            {Object.entries(assessmentSections).filter(([key, section]) => key !== "vendorSpecificChecks" && section && typeof section === "object" && !Array.isArray(section)).map(([, section], index) => {
               const item = normalizeObject(section);
               if (item.title === "یافته‌ها") return null;
               return <div key={index} className="rounded border border-zinc-800 bg-black/20 p-3"><h4 className="text-xs font-semibold text-blue-100">{String(item.title ?? "بخش گزارش")}</h4><p className="mt-2 text-xs leading-6 text-zinc-400">{evidenceText(Object.fromEntries(Object.entries(item).filter(([key]) => key !== "title")))}</p></div>;
@@ -585,7 +605,7 @@ export default function AiSecurityAssistantPanel() {
                           <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(recommendation.severity)}`}>{severityFa(recommendation.severity)}</span>
                           <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">{recommendation.vendor}</span>
                           <span className={`rounded border px-1.5 py-0.5 text-[10px] ${recommendation.executable ? "border-green-800 text-green-300" : "border-zinc-700 text-zinc-500"}`}>
-                            {recommendation.executable ? "قابل اجرا" : "نیاز به بررسی دستی"}
+                          {recommendation.createActionSupported ? "ActionPlan supported" : "نیاز به بررسی دستی"}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-zinc-400">{recommendation.reason}</p>
@@ -593,7 +613,7 @@ export default function AiSecurityAssistantPanel() {
                         <p className="mt-1 text-xs text-zinc-500">شواهد: {evidenceText(recommendation.evidenceJson)}</p>
                         <p className="mt-1 text-xs text-green-300">اقدام پیشنهادی: {recommendation.recommendation}</p>
                       </div>
-                      {recommendation.executable && !recommendation.actionPlanId && (
+                      {recommendation.createActionSupported && !recommendation.actionPlanId && (
                         <button
                           type="button"
                           onClick={() => createRecommendationPlan(recommendation.id)}
@@ -601,7 +621,7 @@ export default function AiSecurityAssistantPanel() {
                           className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {recommendationWorking === recommendation.id ? "در حال ساخت..." : "ساخت اکشن"}
+                          {recommendationWorking === recommendation.id ? "در حال ساخت..." : "Create Fix Action · ساخت اکشن"}
                         </button>
                       )}
                       {recommendation.actionPlanId && <span className="text-xs font-medium text-green-300">در مرکز اکشن آماده است</span>}

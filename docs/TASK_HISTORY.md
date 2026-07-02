@@ -153,6 +153,48 @@ Commit message:
 
 - Add actionable real-time Linux security monitoring
 
+## Task 12.4: Multi-Vendor Full Analysis and Hardening Engine
+
+Date:
+
+2026-07-02
+
+Goal:
+
+Make Full Analysis and Hardening Suggestions vendor-aware across MikroTik, Linux, FortiGate, pfSense, Cisco, and generic/unknown devices.
+
+Files changed:
+
+- Added vendor analysis profiles, deterministic snapshot checks, missing-telemetry reporting, and compact AI context summaries.
+- Extended assessment persistence and hardening generation with vendor/device results and generic proposal-only fix actions.
+- Added vendor/device tabs and Collected data, Missing data, Findings, and Recommended actions UI groups.
+- Added multi-vendor regression tests and registered them in the backend test command.
+
+Behavior changed:
+
+- Full Analysis selects the correct profile per device and no longer displays MikroTik-only fields for other vendors.
+- Missing snapshots are explicitly reported as `data not collected` with vendor-specific collection guidance.
+- Hardening recommendations expose vendor, device, severity, evidence, impact, recommended fix, ActionPlan support, and action hints.
+- Create Fix Action creates a proposed ActionPlan only; it does not execute a connector action.
+- AI assessment context contains compact vendor summaries and does not include raw logs by default.
+
+Protected behavior preserved:
+
+- Existing MikroTik analysis and catalog-backed actions remain available.
+- Action execution, PolicyGuard, connectors, and audit flow are unchanged.
+- `ACTION_EXECUTION_MODE=quick_controlled` remains supported.
+- `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` remains supported.
+
+Build/test result:
+
+- Backend TypeScript build passed.
+- Backend tests passed: 79/79.
+- Frontend TypeScript/Vite production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Add multi-vendor analysis and hardening engine
+
 ## Future Task Entry Template
 
 Use this template after every future task:
