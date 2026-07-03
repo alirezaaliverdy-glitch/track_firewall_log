@@ -45,6 +45,8 @@ device -> curated Command Catalog -> validated ActionPlan -> user review/confirm
 
 AI is a fallback only when the curated catalog has no suitable command. AI fallback may create a reviewed draft or proposed ActionPlan, but must never execute automatically. Add product commands in `backend/src/commands/catalog/`; keep internal identifiers in English and user-facing copy Persian-first.
 
+Every product catalog item must declare `implemented`, `manualOnly`, `planned`, or `unsupported`. Only `implemented` items with a registered planner and connector handler may be presented as executable. `manualOnly` creates non-executable review plans; `planned` and `unsupported` must never create ActionPlans. Run `npm run validate:command-catalog` after catalog changes.
+
 The in-app AI must use compact Evidence Packs and a central Security Orchestrator prompt; action creation is permissive, execution is controlled.
 
 # Protected Lab Behavior

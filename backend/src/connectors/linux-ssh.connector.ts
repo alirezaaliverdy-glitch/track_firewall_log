@@ -75,6 +75,10 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.block_source_ip_temporary,
   ActionType.unblock_source_ip,
   ActionType.linux_check_service_status,
+  ActionType.linux_check_ssh_status,
+  ActionType.linux_check_failed_logins,
+  ActionType.linux_check_sudo_users,
+  ActionType.linux_check_fail2ban_status,
   ActionType.linux_read_hostname,
   ActionType.linux_read_interfaces,
   ActionType.linux_read_routes,
@@ -87,6 +91,8 @@ const SUPPORTED_ACTIONS: ActionType[] = [
 ];
 
 const LINUX_READ_ACTIONS = new Set<ActionType>([
+  ActionType.linux_check_ssh_status, ActionType.linux_check_failed_logins,
+  ActionType.linux_check_sudo_users, ActionType.linux_check_fail2ban_status,
   ActionType.linux_read_hostname, ActionType.linux_read_interfaces, ActionType.linux_read_routes,
   ActionType.linux_read_listening_ports, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
   ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx
@@ -94,6 +100,10 @@ const LINUX_READ_ACTIONS = new Set<ActionType>([
 
 function linuxReadCommand(actionType: ActionType, sudo = "") {
   const commands: Partial<Record<ActionType, { template: string; command: string }>> = {
+    [ActionType.linux_check_ssh_status]: { template: "SSH service and listener status", command: "systemctl is-active ssh || systemctl is-active sshd; ss -lntp | grep -E 'sshd|:22' || true" },
+    [ActionType.linux_check_failed_logins]: { template: "failed SSH logins in last 24 hours", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager | grep -Ei 'failed|invalid user|authentication failure' | tail -n 200 || true` },
+    [ActionType.linux_check_sudo_users]: { template: "sudo and wheel group members", command: "getent group sudo; getent group wheel" },
+    [ActionType.linux_check_fail2ban_status]: { template: "fail2ban service status", command: `systemctl is-active fail2ban; ${sudo}fail2ban-client status` },
     [ActionType.linux_read_hostname]: { template: "hostname", command: "hostname" },
     [ActionType.linux_read_interfaces]: { template: "ip -brief address", command: "ip -brief address" },
     [ActionType.linux_read_routes]: { template: "ip route show", command: "ip route show" },

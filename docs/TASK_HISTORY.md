@@ -197,6 +197,41 @@ Commit message:
 
 ## Future Task Entry Template
 
+## Task 14.1: Make All Prepared Commands Real, Validated, and Vendor-Executable
+
+Date:
+
+2026-07-04
+
+Goal:
+
+Eliminate decorative executable commands by enforcing a strict catalog contract backed by real vendor planners/connectors and validating all inputs before ActionPlan persistence.
+
+Files changed:
+
+- Added four implementation states, execution support metadata, Persian parameter help, defaults/candidates, capability requirements, validation rules, and explicit rollback contracts.
+- Added startup/CLI catalog validation and a real execution-template registry cross-checked against connector and planner supported actions.
+- Added dedicated Linux SSH, failed-login, sudo-user, and fail2ban read actions plus Prisma enum migration and connector templates.
+- Added device-aware search, pre-persistence `needsInput`, planned/unsupported rejection, state-aware Persian UI, Action Center Persian repair labels, and exhaustive catalog tests.
+
+Behavior changed:
+
+- Fourteen prepared commands are connector-backed (eight Linux, six MikroTik); all others are clearly manual-only or planned.
+- Missing/invalid parameters return Persian `422 NEEDS_INPUT` without creating an ActionPlan. Planned/unsupported commands cannot create plans.
+- Manual-only commands create non-executable generic review plans. AI fallback remains proposal-only.
+
+Protected behavior preserved:
+
+- `quick_controlled`, unrestricted lab management, authentication, Device Registry, Action Center, existing connectors, PolicyGuard, auditing, and confirmation boundaries are unchanged.
+
+Build/test result:
+
+- Catalog validation and backend/frontend builds passed; backend regression suite passed 93/93 before final documentation-only changes.
+
+Commit message:
+
+- Enforce real validated vendor command catalog
+
 ## Task 14: Persian Product Pivot — Backend-First Command Catalog Architecture
 
 Date:

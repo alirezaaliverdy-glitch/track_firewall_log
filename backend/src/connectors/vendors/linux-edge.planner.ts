@@ -100,6 +100,10 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.unblock_source_ip,
     ActionType.change_ssh_port,
     ActionType.linux_check_service_status,
+    ActionType.linux_check_ssh_status,
+    ActionType.linux_check_failed_logins,
+    ActionType.linux_check_sudo_users,
+    ActionType.linux_check_fail2ban_status,
     ...READ_ACTIONS.keys()
   ],
   supports(device) {
@@ -119,13 +123,39 @@ export const linuxEdgePlanner: VendorPlanner = {
       return plan;
     }
     if (input.actionType === ActionType.linux_check_service_status) {
-      const service = str(input.parameters.serviceName) ?? str(input.parameters.service) ?? "nginx";
+      const service = str(input.parameters.serviceName) ?? str(input.parameters.service);
+      if (!service) return needs(input, ["serviceName"], ["نام سرویس موردنظر چیست؟"]);
       const plan = base(input);
       plan.commands = [
         `systemctl is-active ${service}`,
         `systemctl status ${service} --no-pager -l`
       ];
       plan.warnings.push("Read-only service status check. No service restart or config change is planned.");
+      return plan;
+    }
+    if (input.actionType === ActionType.linux_check_ssh_status) {
+      const plan = base(input);
+      plan.commands = ["systemctl is-active ssh || systemctl is-active sshd", "ss -lntp | grep -E 'sshd|:22'"];
+      plan.requiresApproval = false;
+      plan.warnings.push("بررسی فقط‌خواندنی سرویس SSH؛ هیچ تغییری اعمال نمی‌شود.");
+      return plan;
+    }
+    if (input.actionType === ActionType.linux_check_failed_logins) {
+      const plan = base(input);
+      plan.commands = ["journalctl -u ssh -u sshd --since '24 hours ago' --no-pager | grep -Ei 'failed|invalid user|authentication failure' | tail -n 200"];
+      plan.requiresApproval = false;
+      return plan;
+    }
+    if (input.actionType === ActionType.linux_check_sudo_users) {
+      const plan = base(input);
+      plan.commands = ["getent group sudo; getent group wheel"];
+      plan.requiresApproval = false;
+      return plan;
+    }
+    if (input.actionType === ActionType.linux_check_fail2ban_status) {
+      const plan = base(input);
+      plan.commands = ["systemctl is-active fail2ban", "fail2ban-client status"];
+      plan.requiresApproval = false;
       return plan;
     }
     const readCommand = READ_ACTIONS.get(input.actionType);

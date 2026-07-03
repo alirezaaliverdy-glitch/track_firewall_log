@@ -24,10 +24,13 @@ import { authRoutes } from "./routes/auth.js";
 import { linuxTelemetryRoutes } from "./routes/linux-telemetry.js";
 import { telemetryFindingRoutes } from "./routes/telemetry-findings.js";
 import { commandCatalogRoutes } from "./routes/command-catalog.js";
+import { COMMAND_CATALOG } from "./commands/catalog/index.js";
+import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
 import { AUTH_COOKIE_NAME, bootstrapAdmin, getSessionUser } from "./services/auth.service.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
+  validateCommandCatalog(COMMAND_CATALOG);
   const app = Fastify({
     logger: loggerConfig,
     bodyLimit: maxUploadBytes

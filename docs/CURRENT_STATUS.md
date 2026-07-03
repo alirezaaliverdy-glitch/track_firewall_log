@@ -35,6 +35,7 @@ MVP / prototype moving toward Mini-SOAR.
 - Vendor-aware telemetry profile registry for 12 platforms and a normalized persisted Finding engine
 - Shared snapshot/live aggregation, noise suppression, stable fingerprints, live finding SSE, and proposal-only finding remediation
 - Persian-first backend Command Catalog foundation with six vendors, Persian search/filter UI, ActionPlan handoff, and proposal-only AI fallback
+- Strict command-catalog lifecycle with startup validation, real execution-template registry, pre-creation parameter validation, device/vendor filtering, and explicit implemented/manual/planned/unsupported states
 
 ## Protected Behavior
 
@@ -51,6 +52,7 @@ These must not be changed unless explicitly requested:
 - ActionPlan architecture exists
 - Vendor connector architecture exists
 - MikroTik support is strongest
+- The product catalog currently exposes 14 connector-backed commands: 8 Linux and 6 MikroTik; other prepared operations are explicit manual-only or planned items
 - Full Analysis is grouped by vendor/device and reports collected data, missing telemetry, findings, and proposed actions
 - AI Chat sends the provider a compact Evidence Pack instead of the full legacy security context and exposes lightweight context metadata
 - Vendor hardening findings can create review-only ActionPlans without automatic execution
@@ -74,7 +76,7 @@ These must not be changed unless explicitly requested:
 - Task 14: Action Verification and Rollback
 - Task 15: Report Generator
 
-The next product-catalog iteration should deepen connector-backed commands and complete Persian localization of legacy panels without changing controlled execution.
+The next product-catalog iteration should promote manual/planned items only after real connector handlers and verification paths exist, and continue Persian localization without changing controlled execution.
 
 ## Last Updated
 

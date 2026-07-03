@@ -13,9 +13,24 @@
 - قرارداد: `backend/src/commands/catalog/types.ts`
 - داده‌های curated و جست‌وجو: `backend/src/commands/catalog/index.ts`
 - API: `backend/src/routes/command-catalog.ts`
+- اعتبارسنج قرارداد: `backend/src/commands/catalog/command-catalog-validator.ts`
+- registry اجرای واقعی: `backend/src/commands/execution/execution-template-registry.ts`
 - UI: `src/components/commands/CommandCatalogPanel.tsx`
 
 `CommandCatalogItem` شامل شناسه، vendor، عنوان فارسی/انگلیسی، شرح فارسی، دسته، intent، ریسک، سطح دسترسی، read-only/mutating، نیاز به تأیید، پارامترها، کلیدواژه‌های فارسی، connectorها، precheck، template ref، verification، rollback، evidence و راهنمای UI است.
+
+## وضعیت‌های پیاده‌سازی
+
+- `implemented`: action type، planner، connector و template واقعی دارد و پس از تکمیل ورودی می‌تواند ActionPlan بسازد.
+- `manualOnly`: فقط یک `generic_security_action` برای بازبینی دستی می‌سازد؛ اجرای connector ندارد.
+- `planned`: در جست‌وجوی عادی پنهان است و endpoint اجازه ساخت ActionPlan نمی‌دهد.
+- `unsupported`: برای دستگاه/vendor مربوط پنهان یا غیرفعال است و ActionPlan نمی‌سازد.
+
+قاعده محصول: هیچ کارت نمایشی حق ندارد badge یا دکمه اجراپذیر داشته باشد. startup برنامه و `npm run validate:command-catalog` تطابق action type، template، planner و connector را بررسی می‌کنند.
+
+## ورودی و دستگاه
+
+defaultها قبل از اعتبارسنجی اعمال می‌شوند. فیلدهای ناقص یا نامعتبر با `422 NEEDS_INPUT` و label/help فارسی برمی‌گردند و هیچ رکورد ActionPlan ساخته نمی‌شود. جست‌وجو با `deviceId` vendor و transport دستگاه را اعمال می‌کند؛ planned/unsupported فقط با حالت debug قابل مشاهده‌اند.
 
 ## API
 
@@ -31,9 +46,21 @@
 
 1. vendor را در `CommandVendor` ثبت کنید.
 2. آیتم را با شناسه پایدار انگلیسی، متن فارسی، intent و پارامترهای صریح اضافه کنید.
-3. فقط وقتی connector واقعی وجود دارد `executionTemplateRef` و `uiHints.executable=true` قرار دهید.
+3. فقط وقتی action type در Prisma، execution registry، planner و connector واقعی وجود دارد state را `implemented` و `executionTemplateRef` را تنظیم کنید.
 4. precheck، verification و rollback را متناسب با ریسک بنویسید.
 5. تست جست‌وجوی فارسی، فیلتر vendor و ساخت ActionPlan را اضافه کنید.
+6. `npm run validate:command-catalog`، build و کل test suite را اجرا کنید.
+
+## ماتریس پشتیبانی فعلی
+
+| Vendor | اجراپذیر واقعی | دستی/برنامه‌ریزی‌شده |
+| --- | --- | --- |
+| Linux | پورت‌های باز، SSH، ورود ناموفق، sudo، firewall، fail2ban، block IP، وضعیت سرویس | محدودسازی SSH و فعال‌سازی fail2ban دستی |
+| MikroTik | سرویس‌های مدیریتی، filter، NAT، لاگ ورود، block IP، backup | محدودسازی مدیریت دستی؛ تغییر پورت SSH planned |
+| FortiGate | — در کاتالوگ محصول این فاز | بررسی‌ها و تغییرات manualOnly |
+| Cisco | — | manualOnly |
+| pfSense | — | manualOnly |
+| Generic | — | بررسی دستی |
 
 ## اصول تجربه فارسی
 

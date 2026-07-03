@@ -864,6 +864,10 @@ enum AiIntentType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_check_ssh_status
+  linux_check_failed_logins
+  linux_check_sudo_users
+  linux_check_fail2ban_status
   linux_read_hostname
   linux_read_interfaces
   linux_read_routes
@@ -1029,6 +1033,10 @@ enum ActionType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_check_ssh_status
+  linux_check_failed_logins
+  linux_check_sudo_users
+  linux_check_fail2ban_status
   linux_read_hostname
   linux_read_interfaces
   linux_read_routes

@@ -1,0 +1,21 @@
+export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh"; handler: string };
+
+const templates: ExecutionTemplate[] = [
+  { id: "linux_list_open_ports", actionType: "linux_read_listening_ports", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_check_ssh_status", actionType: "linux_check_ssh_status", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_check_failed_logins", actionType: "linux_check_failed_logins", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_check_sudo_users", actionType: "linux_check_sudo_users", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_check_firewall_status", actionType: "linux_read_firewall_status", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_check_fail2ban_status", actionType: "linux_check_fail2ban_status", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_block_ip", actionType: "block_source_ip_temporary", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_check_service_status", actionType: "linux_check_service_status", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "mikrotik_list_management_services", actionType: "mikrotik_list_ip_services", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
+  { id: "mikrotik_check_firewall_filter", actionType: "mikrotik_list_filter_rules", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
+  { id: "mikrotik_check_nat_exposure", actionType: "mikrotik_list_nat_rules", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
+  { id: "mikrotik_check_failed_logins", actionType: "mikrotik_show_logs", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
+  { id: "mikrotik_block_ip", actionType: "mikrotik_block_ip_temporary", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
+  { id: "mikrotik_backup_config", actionType: "mikrotik_create_backup", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+];
+
+export const EXECUTION_TEMPLATE_REGISTRY = Object.freeze(Object.fromEntries(templates.map((template) => [template.id, template])) as Record<string, ExecutionTemplate>);
+export function getExecutionTemplate(id: string | null) { return id ? EXECUTION_TEMPLATE_REGISTRY[id] : undefined; }

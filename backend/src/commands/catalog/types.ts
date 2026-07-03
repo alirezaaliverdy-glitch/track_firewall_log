@@ -1,12 +1,16 @@
 export type CommandVendor = "linux" | "mikrotik" | "fortigate" | "cisco" | "pfsense" | "generic";
 export type CommandRiskLevel = "low" | "medium" | "high" | "critical";
+export type ImplementationState = "implemented" | "manualOnly" | "planned" | "unsupported";
+export type ExecutionSupport = "connector" | "manual" | "ai_proposed" | "not_implemented";
 
 export type CommandParam = {
   key: string;
   labelFa: string;
+  helpFa: string;
   type: "string" | "number" | "ip" | "cidr" | "boolean";
   placeholderFa?: string;
 };
+export type RollbackContract = { available: true; steps: string[] } | { available: false; notAvailableReasonFa: string };
 
 export type CommandCatalogItem = {
   id: string;
@@ -15,7 +19,10 @@ export type CommandCatalogItem = {
   titleEn: string;
   descriptionFa: string;
   category: string;
-  intent: string;
+  implementationState: ImplementationState;
+  executionSupport: ExecutionSupport;
+  actionType: string;
+  connectorType: string | null;
   riskLevel: CommandRiskLevel;
   privilegeLevel: "read" | "operator" | "admin";
   readOnly: boolean;
@@ -23,13 +30,21 @@ export type CommandCatalogItem = {
   requiresConfirmation: boolean;
   requiredParams: CommandParam[];
   optionalParams: CommandParam[];
+  defaultParams: Record<string, unknown>;
+  paramCandidates: Record<string, Array<string | number>>;
+  autoResolveParams: string[];
+  paramLabelsFa: Record<string, string>;
+  paramHelpFa: Record<string, string>;
   tagsFa: string[];
   searchKeywordsFa: string[];
   supportedConnectors: string[];
   prechecks: string[];
+  validationRules: Record<string, string[]>;
   executionTemplateRef: string | null;
   verification: string[];
-  rollback: string[];
+  rollback: RollbackContract;
   evidenceOutput: string[];
-  uiHints: { executable: boolean; badgeFa?: string };
+  supportedDeviceCapabilities: string[];
+  disabledReasonFa: string | null;
+  uiHints: { executable: boolean; badgeFa: string };
 };

@@ -120,9 +120,20 @@ function initialFixValues(action: ActionPlan) {
 }
 
 function fieldLabel(field: string) {
-  if (field === "trustedSourceCidr" || field === "trustedSource") return "Allowed source";
-  if (field === "sourceIp" || field === "sourceCidr") return "IP address or subnet";
+  if (field === "trustedSourceCidr" || field === "trustedSource" || field === "allowedSource") return "شبکه مجاز مدیریتی";
+  if (field === "sourceIp" || field === "sourceCidr" || field === "srcIp" || field === "ipAddress") return "آدرس IP یا شبکه";
+  if (field === "serviceName" || field === "service") return "نام سرویس";
+  if (field === "newPort" || field === "toPort") return "پورت جدید";
+  if (field === "port") return "پورت";
   return field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (value) => value.toUpperCase());
+}
+
+function fieldExample(field: string) {
+  if (["sourceIp", "srcIp", "ipAddress"].includes(field)) return "مثال: 203.0.113.10";
+  if (["sourceCidr", "trustedSourceCidr", "trustedSource", "allowedSource"].includes(field)) return "مثال: 192.0.2.0/24";
+  if (field === "serviceName" || field === "service") return "مثال: nginx یا sshd";
+  if (["port", "newPort", "toPort"].includes(field)) return "مثال: 2222";
+  return field;
 }
 
 function friendlyActionReason(action: ActionPlan) {
@@ -815,9 +826,9 @@ export default function ActionCenterPanel() {
                             value={fieldFixes[field] ?? ""}
                             onChange={(event) => setFieldFixes((current) => ({ ...current, [field]: event.target.value }))}
                             className="mt-1 h-9 w-full rounded border border-blue-900/60 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-blue-600"
-                            placeholder={issue?.expectedFormat ?? field}
+                            placeholder={fieldExample(field)}
                           />
-                          {issue && <span className="mt-1 block text-zinc-500">Expected: {issue.expectedFormat}</span>}
+                          {issue && <span className="mt-1 block text-zinc-500">فرمت مورد انتظار: {issue.expectedFormat} — {fieldExample(field)}</span>}
                         </label>
                       );
                     })}

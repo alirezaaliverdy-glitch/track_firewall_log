@@ -1,8 +1,8 @@
 import type { ActionPlan } from "./actions";
 
 const API = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
-export type CatalogParam = { key: string; labelFa: string; type: string; placeholderFa?: string };
-export type CatalogItem = { id: string; vendor: string; titleFa: string; titleEn: string; descriptionFa: string; category: string; intent: string; riskLevel: string; readOnly: boolean; requiredParams: CatalogParam[]; optionalParams: CatalogParam[]; tagsFa: string[]; uiHints: { executable: boolean; badgeFa?: string } };
+export type CatalogParam = { key: string; labelFa: string; helpFa: string; type: string; placeholderFa?: string };
+export type CatalogItem = { id: string; vendor: string; titleFa: string; titleEn: string; descriptionFa: string; category: string; actionType: string; riskLevel: string; readOnly: boolean; implementationState: "implemented" | "manualOnly" | "planned" | "unsupported"; executionSupport: string; requiredParams: CatalogParam[]; optionalParams: CatalogParam[]; defaultParams: Record<string, unknown>; tagsFa: string[]; disabledReasonFa: string | null; uiHints: { executable: boolean; badgeFa: string } };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, { credentials: "include", headers: init?.body ? { "Content-Type": "application/json" } : undefined, ...init });
