@@ -34,6 +34,7 @@ MVP / prototype moving toward Mini-SOAR.
 - Central Security Orchestrator prompt and structured analysis/action output contracts across in-app AI provider calls
 - Vendor-aware telemetry profile registry for 12 platforms and a normalized persisted Finding engine
 - Shared snapshot/live aggregation, noise suppression, stable fingerprints, live finding SSE, and proposal-only finding remediation
+- Persian-first backend Command Catalog foundation with six vendors, Persian search/filter UI, ActionPlan handoff, and proposal-only AI fallback
 
 ## Protected Behavior
 
@@ -73,6 +74,8 @@ These must not be changed unless explicitly requested:
 - Task 14: Action Verification and Rollback
 - Task 15: Report Generator
 
+The next product-catalog iteration should deepen connector-backed commands and complete Persian localization of legacy panels without changing controlled execution.
+
 ## Last Updated
 
-2026-07-03
+2026-07-04

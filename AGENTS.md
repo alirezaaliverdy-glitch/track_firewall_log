@@ -38,6 +38,13 @@ AI must not silently execute anything.
 Execution must stay behind backend-controlled flow:
 ActionPlan -> PolicyGuard -> Connector -> Audit.
 
+# Persian Command Catalog Product Mode
+
+When `PRODUCT_MODE=persian_command_catalog`, the primary product path is Persian-first and backend-first:
+device -> curated Command Catalog -> validated ActionPlan -> user review/confirmation -> PolicyGuard -> Connector -> verification/audit.
+
+AI is a fallback only when the curated catalog has no suitable command. AI fallback may create a reviewed draft or proposed ActionPlan, but must never execute automatically. Add product commands in `backend/src/commands/catalog/`; keep internal identifiers in English and user-facing copy Persian-first.
+
 The in-app AI must use compact Evidence Packs and a central Security Orchestrator prompt; action creation is permissive, execution is controlled.
 
 # Protected Lab Behavior

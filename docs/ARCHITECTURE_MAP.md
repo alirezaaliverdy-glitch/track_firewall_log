@@ -22,6 +22,10 @@ User / Upload / Device Context
 
 -> AuditLog
 
+## Persian Command Catalog Flow
+
+Selected device -> Persian catalog search/filter -> backend parameter validation -> proposed ActionPlan with `catalogCommandId` metadata -> existing Action Center -> confirmation -> PolicyGuard/Connector -> verification/audit. When no curated result exists, `/api/commands/ai-propose` creates only a custom draft/proposal.
+
 ## Backend Main Areas
 
 - `backend/src/config/env.ts`: runtime configuration and safety validation
@@ -30,6 +34,7 @@ User / Upload / Device Context
 - `backend/src/ai/context`: AI context builder
 - `backend/src/ai/prompts`: centralized prompt location
 - `backend/src/actions` and action-plan services: action planning and lifecycle
+- `backend/src/commands/catalog` and `routes/command-catalog.ts`: Persian-first curated product catalog, search, validation, and proposal-only AI fallback
 - PolicyGuard services: execution safety checks
 - `backend/src/connectors`: vendor execution/read connectors
 - Device services/routes: device registry and credentials

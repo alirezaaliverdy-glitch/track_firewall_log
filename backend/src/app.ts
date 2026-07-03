@@ -23,6 +23,7 @@ import { assessmentRoutes } from "./routes/assessments.js";
 import { authRoutes } from "./routes/auth.js";
 import { linuxTelemetryRoutes } from "./routes/linux-telemetry.js";
 import { telemetryFindingRoutes } from "./routes/telemetry-findings.js";
+import { commandCatalogRoutes } from "./routes/command-catalog.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
 import { AUTH_COOKIE_NAME, bootstrapAdmin, getSessionUser } from "./services/auth.service.js";
 
@@ -102,6 +103,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(deviceRoutes);
   await app.register(linuxTelemetryRoutes);
   await app.register(telemetryFindingRoutes);
+  await app.register(commandCatalogRoutes);
   await app.register(eventRoutes);
   await app.register(detectionRoutes);
   await app.register(incidentRoutes);

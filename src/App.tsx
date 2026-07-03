@@ -29,6 +29,7 @@ import AiSecurityAssistantPanel from "./components/ai/AiSecurityAssistantPanel";
 import ActionCenterPanel from "./components/actions/ActionCenterPanel";
 import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapabilityMatrixPanel";
 import AppBackground from "./components/background/AppBackground";
+import CommandCatalogPanel from "./components/commands/CommandCatalogPanel";
 
 function App() {
   const { user, logout } = useAuth();
@@ -43,10 +44,10 @@ function App() {
             <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h1 className="text-left text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
-                  Firewall Command Center
+                  مرکز فرمان شبکه و امنیت
                 </h1>
                 <p className="mt-1 text-left text-sm text-slate-400">
-                  Security orchestration, evidence review, and controlled response operations.
+                  عملیات ساده، فارسی و کنترل‌شده برای دستگاه‌های شبکه و امنیت
                 </p>
               </div>
               <div className="flex items-center gap-2" dir="rtl">
@@ -61,6 +62,10 @@ function App() {
             </div>
           </div>
 
+          <ErrorBoundary title="کاتالوگ دستورات در دسترس نیست">
+            <CommandCatalogPanel />
+          </ErrorBoundary>
+
           <ErrorBoundary title="AI Security Assistant unavailable">
             <AiSecurityAssistantPanel />
           </ErrorBoundary>
@@ -68,7 +73,7 @@ function App() {
             <ActionCenterPanel />
           </ErrorBoundary>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Manage Devices</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100" dir="rtl">افزودن و مدیریت دستگاه</summary>
             <div className="mt-4">
               <ErrorBoundary title="Device Registry unavailable">
                 <DeviceRegistryPanel />
@@ -76,7 +81,7 @@ function App() {
             </div>
           </details>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Device Telemetry</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100" dir="rtl">پایش دستگاه</summary>
             <div className="mt-4">
               <ErrorBoundary title="Linux Telemetry unavailable">
                 <LinuxTelemetryPanel />
@@ -84,7 +89,7 @@ function App() {
             </div>
           </details>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Events / Incidents / Logs</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100" dir="rtl">رویدادها، رخدادها و لاگ‌ها</summary>
             <div className="mt-4">
               <ErrorBoundary title="Upload panel unavailable">
                 <div id="log-upload" className="scroll-mt-4">

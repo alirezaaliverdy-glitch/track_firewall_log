@@ -197,6 +197,39 @@ Commit message:
 
 ## Future Task Entry Template
 
+## Task 14: Persian Product Pivot — Backend-First Command Catalog Architecture
+
+Date:
+
+2026-07-04
+
+Goal:
+
+Establish a Persian-first curated command workflow where AI is fallback and every operation enters the existing controlled ActionPlan lifecycle.
+
+Files changed:
+
+- Added product mode configuration, typed six-vendor command catalog, Persian search/filter/detail/action-plan APIs, and proposal-only AI fallback.
+- Added the Persian command catalog UI and prepared prominent product/device workflow labels for Persian operation.
+- Added catalog regression tests and product/architecture documentation.
+
+Behavior changed:
+
+- Users can select a device, search Persian ready-made commands, validate required inputs, and create a proposed ActionPlan in Action Center.
+- Unsupported connector operations remain reviewable proposals; AI fallback produces a draft or proposed ActionPlan and never executes.
+
+Protected behavior preserved:
+
+- Authentication, Device Registry, Action Center, existing connectors, PolicyGuard, audit, `quick_controlled`, and unrestricted lab management remain intact.
+
+Build/test result:
+
+- Backend build passed; backend tests passed 90/90; frontend production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Add Persian backend-first command catalog foundation
+
 ## Task 13: Vendor-Aware Telemetry & Findings Engine
 
 Date:

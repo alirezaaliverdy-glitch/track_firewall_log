@@ -64,6 +64,7 @@ function parseCsv(value: string | undefined) {
 
 export type ActionExecutionMode = "safe" | "lab_fast" | "direct_controlled" | "quick_controlled";
 export type AppProfile = "lab" | "staging" | "production";
+export type ProductMode = "classic" | "persian_command_catalog";
 
 function parseAppProfile(value: string | undefined, nodeEnv: string): AppProfile {
   if (value === "lab" || value === "staging" || value === "production") return value;
@@ -123,6 +124,7 @@ const appProfile = parseAppProfile(process.env.APP_PROFILE, nodeEnv);
 export const env = {
   nodeEnv,
   appProfile,
+  productMode: process.env.PRODUCT_MODE === "persian_command_catalog" ? "persian_command_catalog" as ProductMode : "classic" as ProductMode,
   port: parsePositiveInteger(process.env.PORT, DEFAULT_PORT),
   corsOrigin: process.env.CORS_ORIGIN ?? DEFAULT_CORS_ORIGIN,
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
