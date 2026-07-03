@@ -197,6 +197,43 @@ Commit message:
 
 ## Future Task Entry Template
 
+## Task 13: Vendor-Aware Telemetry & Findings Engine
+
+Date:
+
+2026-07-03
+
+Goal:
+
+Turn vendor telemetry into stable, high-value findings while keeping raw events separate and remediation proposal-only.
+
+Files changed:
+
+- Added the 12-vendor telemetry registry, normalized Finding schema/migration, shared finding engine, APIs, SSE integration, AI Evidence Pack context, vendor-aware Device Telemetry UI, and regression tests.
+- Updated the central orchestrator prompt and living project documentation.
+
+Behavior changed:
+
+- Linux live events and snapshots now use the same vendor engine; duplicate signals aggregate by stable fingerprint and low-value noise is suppressed.
+- Persisted findings remain visible after stream disconnect and expose evidence, risk explanation, recommended intent, and Create ActionPlan.
+- Proposed remediation uses the existing ActionPlan flow and never auto-executes.
+- Linux, MikroTik, FortiGate, and pfSense rules are implemented; eight additional vendor/platform profiles contain at least five core scaffold rules each.
+
+Protected behavior preserved:
+
+- Existing Action Center, PolicyGuard, connector, audit, authentication, and quick-controlled lab execution paths are unchanged.
+- `ACTION_EXECUTION_MODE=quick_controlled` and `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` remain supported.
+
+Build/test result:
+
+- Backend TypeScript build passed.
+- Backend tests passed: 88/88.
+- Frontend production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Add vendor-aware telemetry findings engine
+
 ## Task 12.5: AI Evidence Pack + Strong Security Orchestrator Prompt
 
 Date:

@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { analyzeLinuxTelemetry, collectLinuxSecuritySnapshot, getLatestLinuxSecuritySnapshot, getLinuxTelemetryOptions, LinuxTelemetryError } from "../telemetry/linux/linux-telemetry.service.js";
-import { getLinuxLogStream, getLinuxTelemetryStatus, startLinuxLogStream, stopLinuxLogStream, subscribeLinuxLogStream, subscribeLinuxLogWarnings } from "../telemetry/linux/linux-log-stream.service.js";
+import { getLinuxLogStream, getLinuxTelemetryStatus, startLinuxLogStream, stopLinuxLogStream, subscribeLinuxFindings, subscribeLinuxLogStream, subscribeLinuxLogWarnings } from "../telemetry/linux/linux-log-stream.service.js";
 
 export const linuxTelemetryRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { deviceId: string } }>("/api/devices/:deviceId/telemetry/linux/snapshot", async (request, reply) => {
@@ -20,7 +20,8 @@ export const linuxTelemetryRoutes: FastifyPluginAsync = async (app) => {
     reply.raw.write(`event: ready\ndata: ${JSON.stringify({ streamId })}\n\n`);
     const unsubscribe = subscribeLinuxLogStream(streamId, (event) => reply.raw.write(`event: telemetry\ndata: ${JSON.stringify(event)}\n\n`));
     const unsubscribeWarnings = subscribeLinuxLogWarnings(streamId, (warning) => reply.raw.write(`event: warning\ndata: ${JSON.stringify(warning)}\n\n`));
+    const unsubscribeFindings = subscribeLinuxFindings(streamId, (finding) => reply.raw.write(`event: finding\ndata: ${JSON.stringify(finding)}\n\n`));
     const heartbeat = setInterval(() => reply.raw.write(": keepalive\n\n"), 15000);
-    request.raw.on("close", () => { clearInterval(heartbeat); unsubscribe?.(); unsubscribeWarnings?.(); });
+    request.raw.on("close", () => { clearInterval(heartbeat); unsubscribe?.(); unsubscribeWarnings?.(); unsubscribeFindings?.(); });
   });
 };

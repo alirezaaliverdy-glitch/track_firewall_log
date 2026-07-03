@@ -128,12 +128,48 @@ model Device {
   actionAuditLogs          ActionAuditLog[]
   hardeningRecommendations HardeningRecommendation[]
   deviceSnapshots          DeviceSnapshot[]
+  findings                 Finding[]
 
   @@index([type])
   @@index([host])
   @@index([credentialId])
   @@index([credentialRef])
   @@index([status])
+}
+
+model Finding {
+  id                 String   @id @default(cuid())
+  deviceId           String
+  device             Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  vendor             String
+  title              String
+  severity           String
+  category           String
+  status             String   @default("active")
+  confidence         Float
+  summary            String
+  evidenceJson       Json
+  source             String
+  rawRefsJson        Json
+  firstSeen          DateTime
+  lastSeen           DateTime
+  count              Int      @default(1)
+  mitreTags          String[]  @default([])
+  affectedObject     String?
+  actor              String?
+  srcIp              String?
+  dstIp              String?
+  dstPort            Int?
+  recommendedActions Json
+  suppressionReason  String?
+  fingerprint        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([deviceId, fingerprint])
+  @@index([deviceId, status])
+  @@index([vendor, severity])
+  @@index([lastSeen])
 }
 
 model DeviceCredential {

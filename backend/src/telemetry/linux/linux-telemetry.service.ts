@@ -3,6 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { ConnectorError, isLinuxSshCapable, LINUX_TELEMETRY_COMMANDS, resolveLinuxConnectionPort, runLinuxTelemetryCommands } from "../../connectors/linux-ssh.connector.js";
 import { analyzeLinuxSecuritySnapshot } from "./linux-security-analyzer.service.js";
 import type { LinuxSecuritySnapshot } from "./linux-telemetry.types.js";
+import { processVendorTelemetry } from "../vendor-finding-engine.js";
 
 const SECRET_PATTERNS = [
   /(password|passwd|token|api[_-]?key|secret|authorization)\s*[:=]\s*[^\s,;]+/gi,
@@ -127,6 +128,7 @@ export async function collectLinuxSecuritySnapshot(deviceId: string) {
   snapshot.findings = analysis.findings;
   snapshot.riskSummary = analysis.riskSummary;
   await prisma.deviceSnapshot.create({ data: { deviceId, vendor: "linux", snapshotType: "linux_security", dataJson: JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue } });
+  await processVendorTelemetry({ device, snapshot });
   return snapshot;
 }
 

@@ -32,6 +32,8 @@ MVP / prototype moving toward Mini-SOAR.
 - Multi-vendor Full Analysis and Hardening profiles for MikroTik, Linux, FortiGate, pfSense, Cisco, and generic devices
 - Compact, vendor-aware AI Evidence Packs with bounded events, findings, incidents, actions, secret filtering, and raw-log exclusion by default
 - Central Security Orchestrator prompt and structured analysis/action output contracts across in-app AI provider calls
+- Vendor-aware telemetry profile registry for 12 platforms and a normalized persisted Finding engine
+- Shared snapshot/live aggregation, noise suppression, stable fingerprints, live finding SSE, and proposal-only finding remediation
 
 ## Protected Behavior
 
@@ -57,6 +59,7 @@ These must not be changed unless explicitly requested:
 ## Current Weaknesses
 
 - Event Intelligence Core is not yet mature
+- Non-Linux vendor collectors/parsers still need to feed their scaffolded profiles into the shared Finding Engine
 - Detection Engine needs correlation/rule DSL
 - Verification and rollback are incomplete
 - Linux telemetry needs broader distro and production-host testing
@@ -72,4 +75,4 @@ These must not be changed unless explicitly requested:
 
 ## Last Updated
 
-2026-07-02
+2026-07-03

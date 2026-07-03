@@ -63,6 +63,20 @@ Current/target vendors:
 MikroTik is currently the strongest execution path.
 Linux and FortiGate need deeper support later.
 
+# Vendor-Aware Telemetry Architecture
+
+The normalized telemetry pipeline is:
+raw live events or snapshots -> vendor profile -> Vendor Finding Engine -> persisted Finding -> proposed ActionPlan -> existing PolicyGuard/Connector/Audit flow.
+
+- Vendor profile registry: `backend/src/telemetry/vendor-telemetry-profiles.ts`
+- Finding engine: `backend/src/telemetry/vendor-finding-engine.ts`
+- Finding APIs: `backend/src/routes/telemetry-findings.ts`
+- Normalized persisted schema: Prisma `Finding` with device/vendor, severity/category/status/confidence, evidence/raw references, first/last seen, count, MITRE tags, network/actor fields, remediation intents, suppression reason, and stable per-device fingerprint.
+- Profiles: Linux, MikroTik, FortiGate, pfSense are implemented; Cisco, Palo Alto, Juniper, Windows, Docker, Kubernetes, AWS, and Azure have core-rule scaffolds ready for connector/parser integration.
+- Linux snapshots and live streams currently feed the shared engine. Future vendor collectors must call `processVendorTelemetry` rather than create a parallel finding type.
+
+To add a vendor or rule, edit the central registry only: add/extend its profile, sources, suppression patterns, rule metadata, MITRE tags, and recommended intent. Feed normalized events/snapshots into `processVendorTelemetry`; do not scan or fork the whole analysis/action stack. Action creation remains permissive and execution remains controlled.
+
 # Build Commands
 
 Backend:

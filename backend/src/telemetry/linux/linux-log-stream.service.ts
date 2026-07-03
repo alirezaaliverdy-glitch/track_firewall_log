@@ -5,6 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { isLinuxSshCapable, openLinuxTelemetryStream, resolveLinuxConnectionPort, type LinuxStreamSource } from "../../connectors/linux-ssh.connector.js";
 import { redactLinuxTelemetry } from "./linux-telemetry.service.js";
 import type { LinuxLiveLogEvent, LinuxTelemetrySeverity } from "./linux-telemetry.types.js";
+import { processVendorTelemetry, type NormalizedFinding } from "../vendor-finding-engine.js";
 
 const MAX_BUFFER = 500;
 const MAX_RUNTIME_MS = 30 * 60 * 1000;
@@ -84,6 +85,7 @@ export async function startLinuxLogStream(deviceId: string, requestedSources: st
         if (session.events.length > MAX_BUFFER) session.events.shift();
         session.emitter.emit("event", event);
         void storeSignal(event);
+        void processVendorTelemetry({ device, events: [{ id: crypto.randomUUID(), timestamp: event.timestamp, source: event.source, raw: event.raw, summary: event.summary, srcIp: typeof event.parsed.sourceIp === "string" ? event.parsed.sourceIp : undefined, dstPort: typeof event.parsed.port === "number" ? event.parsed.port : undefined }] }).then(result => result.findings.forEach(finding => session.emitter.emit("finding", finding))).catch(() => undefined);
       }, (warning) => { if (warning) { const safe = redactLinuxTelemetry(warning).slice(0, 300); session.warnings.push(safe); session.emitter.emit("warning", { streamId: id, deviceId, source, warning: safe, timestamp: new Date().toISOString() }); } });
       session.handles.push(handle);
     } catch (error) {
@@ -104,5 +106,6 @@ export function getLinuxTelemetryStatus(deviceId: string) { const session = Arra
 export function getLinuxLogStream(streamId: string) { return sessions.get(streamId) ?? null; }
 export function subscribeLinuxLogStream(streamId: string, listener: (event: LinuxLiveLogEvent) => void) { const session = sessions.get(streamId); if (!session) return null; session.emitter.on("event", listener); return () => session.emitter.off("event", listener); }
 export function subscribeLinuxLogWarnings(streamId: string, listener: (warning: Record<string, unknown>) => void) { const session = sessions.get(streamId); if (!session) return null; session.emitter.on("warning", listener); return () => session.emitter.off("warning", listener); }
+export function subscribeLinuxFindings(streamId: string, listener: (finding: NormalizedFinding) => void) { const session = sessions.get(streamId); if (!session) return null; session.emitter.on("finding", listener); return () => session.emitter.off("finding", listener); }
 export function stopLinuxLogStream(streamId: string) { const session = sessions.get(streamId); if (!session) return null; session.handles.forEach((handle) => handle.close()); session.handles = []; session.status = "stopped"; clearTimeout(session.timer); session.emitter.emit("stopped"); return streamStatus(session); }
 export function stopAllLinuxLogStreams() { for (const session of sessions.values()) if (session.status !== "stopped") stopLinuxLogStream(session.id); }
