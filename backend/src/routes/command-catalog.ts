@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
-import { COMMAND_CATALOG, findCatalogItem, searchCatalog } from "../commands/catalog/index.js";
+import { COMMAND_CATALOG, COMMAND_CATALOG_VERSION, findCatalogItem, searchCatalog } from "../commands/catalog/index.js";
+import { getExecutionTemplate } from "../commands/execution/execution-template-registry.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
@@ -35,6 +36,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     const item = findCatalogItem(request.params.id);
     if (!item) return reply.code(404).send({ error: "COMMAND_NOT_FOUND", messageFa: "دستور آماده پیدا نشد." });
     if (item.implementationState === "planned" || item.implementationState === "unsupported") return reply.code(409).send({ error: "COMMAND_NOT_AVAILABLE", messageFa: item.disabledReasonFa, implementationState: item.implementationState });
+    if (item.implementationState === "implemented" && (!item.executionTemplateRef || !getExecutionTemplate(item.executionTemplateRef))) return reply.code(409).send({ error: "COMMAND_NOT_EXECUTABLE", messageFa: "این دستور هنوز برای اجرای خودکار پشتیبانی نمی‌شود." });
     const params = { ...item.defaultParams, ...(request.body?.params ?? {}) };
     const fields = item.requiredParams.filter((field) => params[field.key] === undefined || params[field.key] === "" || invalidValue(field.type, params[field.key]));
     if (fields.length) return reply.code(422).send({ error: "NEEDS_INPUT", needsInput: true, messageFa: "اطلاعات لازم را کامل کنید؛ هنوز برنامه‌ای ساخته نشده است.", fields, missingFields: fields.map((field) => field.key) });
@@ -44,7 +46,8 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (deviceVendor(device) !== item.vendor && item.vendor !== "generic") return reply.code(409).send({ error: "VENDOR_MISMATCH", messageFa: "این دستور برای وندور دستگاه انتخاب‌شده قابل استفاده نیست." });
     const normalizedParams = { ...params, ...(params.ipAddress ? { srcIp: params.ipAddress, sourceIp: params.ipAddress } : {}), ...(params.allowedSource ? { trustedSourceCidr: params.allowedSource } : {}) };
     const manualOnly = item.implementationState === "manualOnly";
-    const plan = await proposeActionPlan({ source: "user", requestedBy: request.body.requestedBy, deviceId: device.id, vendor: item.vendor, actionType: manualOnly ? "generic_security_action" : item.actionType, riskLevel: item.riskLevel, parametersJson: { ...normalizedParams, vendor: item.vendor, executionSupport: manualOnly ? "manual_or_not_implemented" : "catalog_executable", requiresExplicitReview: true, expectedImpact: item.descriptionFa, suggestedPrechecks: item.prechecks, suggestedVerification: item.verification, suggestedRollback: item.rollback.available ? item.rollback.steps : [item.rollback.notAvailableReasonFa], metadata: { catalogCommandId: item.id, catalogTitleFa: item.titleFa, implementationState: item.implementationState, executionTemplateRef: item.executionTemplateRef } } });
+    const executionSupport = item.executionSupport;
+    const plan = await proposeActionPlan({ source: "user", requestedBy: request.body.requestedBy, deviceId: device.id, vendor: item.vendor, actionType: item.actionType, riskLevel: item.riskLevel, parametersJson: { ...normalizedParams, vendor: item.vendor, executionSupport: manualOnly ? "manual_or_not_implemented" : executionSupport, requiresExplicitReview: true, expectedImpact: item.descriptionFa, suggestedPrechecks: item.prechecks, suggestedVerification: item.verification, suggestedRollback: item.rollback.available ? item.rollback.steps : [item.rollback.notAvailableReasonFa], metadata: { catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, executionSupport, implementationState: item.implementationState, executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType, source: "command_catalog", normalizedParams, requiredParamsSatisfied: true } } });
     return reply.code(201).send(plan);
   });
   app.post<{ Body: { request?: string; vendor?: string; deviceId?: string; createActionPlan?: boolean } }>("/api/commands/ai-propose", async (request, reply) => {

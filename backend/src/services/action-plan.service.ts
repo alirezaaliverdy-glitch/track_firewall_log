@@ -23,6 +23,7 @@ import { normalizeVendor } from "./ai-normalization.js";
 import { env, type ActionExecutionMode } from "../config/env.js";
 import { preflightActionPlan } from "./action-preflight.service.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
+import { resolveCatalogAction } from "../commands/catalog/catalog-action-resolver.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -285,6 +286,18 @@ export class ActionExecutionError extends Error {
     this.code = code;
     this.statusCode = statusCode;
   }
+}
+
+async function ensureControlledCatalogAction(plan: ActionPlan) {
+  const device = plan.deviceId ? await prisma.device.findUnique({ where: { id: plan.deviceId } }) : null;
+  const productCatalog = resolveCatalogAction(plan, device);
+  if (productCatalog.matched) {
+    if (!productCatalog.valid) throw new ActionExecutionError(productCatalog.code, productCatalog.messageFa, 409);
+    return { controlled: true, catalogCommandId: productCatalog.item.id, source: "command_catalog" };
+  }
+  const legacyControlled = Boolean(getActionCatalogEntry(plan.actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
+  if (!legacyControlled) throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "این عملیات در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.", 409);
+  return { controlled: true, catalogCommandId: null, source: "legacy_catalog" };
 }
 
 export class QuickExecuteConfirmationRequiredError extends ActionExecutionError {
@@ -738,11 +751,9 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   if (!plan) return null;
   plan = await prepareActionPlan(plan);
 
-  const catalogActionType = plan.actionType;
-  const catalogControlled = Boolean(getActionCatalogEntry(catalogActionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === catalogActionType);
-  if (!catalogControlled) {
-    await audit(plan, "controlled_execution_blocked", "Execution refused because the action is not in the controlled catalog.", { actionType: plan.actionType });
-    throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "This action is not supported in the command catalog yet.", 409);
+  try { await ensureControlledCatalogAction(plan); } catch (error) {
+    await audit(plan, "controlled_execution_blocked", "Execution refused by catalog resolution.", { actionType: plan.actionType, code: error instanceof ActionExecutionError ? error.code : "CATALOG_RESOLUTION_FAILED" });
+    throw error;
   }
 
   if (env.actionExecutionMode === "direct_controlled" && !plan.dryRunJson) {
@@ -900,6 +911,13 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
 }
 
 export async function quickExecuteActionPlan(id: string, input: Record<string, unknown> = {}) {
+  const initial = await prisma.actionPlan.findUnique({ where: { id } });
+  if (!initial) return null;
+  let catalogResolution: Awaited<ReturnType<typeof ensureControlledCatalogAction>>;
+  try { catalogResolution = await ensureControlledCatalogAction(initial); } catch (error) {
+    await audit(initial, "quick_execute_blocked", "Quick Execute refused by catalog resolution.", { code: error instanceof ActionExecutionError ? error.code : "CATALOG_RESOLUTION_FAILED" });
+    throw error;
+  }
   let plan = await dryRunActionPlan(id);
   if (!plan) return null;
 
@@ -910,13 +928,6 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
       dryRunJson: plan.dryRunJson
     });
     return plan;
-  }
-
-  const catalogActionType = plan.actionType;
-  const catalogControlled = Boolean(getActionCatalogEntry(catalogActionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === catalogActionType);
-  if (!catalogControlled) {
-    await audit(plan, "controlled_execution_blocked", "Execution refused because the action is not in the controlled catalog.", { actionType: plan.actionType });
-    throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "This action is not supported in the command catalog yet.", 409);
   }
 
   if (env.actionExecutionMode === "direct_controlled" || env.actionExecutionMode === "quick_controlled") {
@@ -934,7 +945,9 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
     });
     await audit(plan, "direct_controlled_execution_requested", "One-click controlled execution requested; command planning was automatic.", {
       actionType: plan.actionType,
-      catalogControlled: true
+      catalogControlled: catalogResolution.controlled,
+      catalogCommandId: catalogResolution.catalogCommandId,
+      catalogSource: catalogResolution.source
     });
     try {
       return await executeActionPlan(id, input);

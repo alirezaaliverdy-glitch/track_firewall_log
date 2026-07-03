@@ -36,6 +36,7 @@ MVP / prototype moving toward Mini-SOAR.
 - Shared snapshot/live aggregation, noise suppression, stable fingerprints, live finding SSE, and proposal-only finding remediation
 - Persian-first backend Command Catalog foundation with six vendors, Persian search/filter UI, ActionPlan handoff, and proposal-only AI fallback
 - Strict command-catalog lifecycle with startup validation, real execution-template registry, pre-creation parameter validation, device/vendor filtering, and explicit implemented/manual/planned/unsupported states
+- End-to-end catalog handoff: complete ActionPlan catalog metadata, product-aware quick-execute resolution, automatic Action Center selection/navigation, and state-aware execution buttons
 
 ## Protected Behavior
 
@@ -53,6 +54,7 @@ These must not be changed unless explicitly requested:
 - Vendor connector architecture exists
 - MikroTik support is strongest
 - The product catalog currently exposes 14 connector-backed commands: 8 Linux and 6 MikroTik; other prepared operations are explicit manual-only or planned items
+- Catalog-created implemented actions resolve through their catalog ID/template before dry-run, while safe unique action-type fallback preserves older valid plans
 - Full Analysis is grouped by vendor/device and reports collected data, missing telemetry, findings, and proposed actions
 - AI Chat sends the provider a compact Evidence Pack instead of the full legacy security context and exposes lightweight context metadata
 - Vendor hardening findings can create review-only ActionPlans without automatic execution

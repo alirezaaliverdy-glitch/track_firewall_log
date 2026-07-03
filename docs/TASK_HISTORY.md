@@ -197,6 +197,41 @@ Commit message:
 
 ## Future Task Entry Template
 
+## Task 14.1B: Fix Command Catalog Action Creation, Navigation, and Quick Execute
+
+Date:
+
+2026-07-04
+
+Goal:
+
+Connect the Persian product catalog to the existing controlled execution path so newly created plans open immediately in Action Center and resolve their real template during quick execution.
+
+Files changed:
+
+- Added complete, versioned command-catalog metadata to created ActionPlans and a central product catalog action resolver with safe legacy fallback.
+- Updated execute and quick-execute guards to validate catalog state, template, exact action type, required params, device vendor, and connector support before PolicyGuard/connector execution.
+- Added URL/query and event handoff from the Persian catalog to Action Center, automatic plan selection/detail opening, Persian execute labels, and frontend blocking for manual/non-implemented metadata.
+- Added backend/frontend integration coverage for metadata, needsInput, manual rejection, quick-execute resolution, and navigation handoff.
+
+Behavior changed:
+
+- Successful catalog plan creation navigates to `?selected=<id>#action-center`, refreshes the list, and opens the new plan.
+- Implemented product commands no longer fail the legacy `ACTION_NOT_IN_CATALOG` guard. Manual/planned/unsupported commands remain non-executable with explicit Persian reasons.
+- Existing metadata-less actions retain the legacy catalog path or a unique safe implemented-action fallback.
+
+Protected behavior preserved:
+
+- No creation-time auto-execution was added. `quick_controlled`, confirmation, PolicyGuard, connector support checks, audit logging, Device Registry, and existing Linux/MikroTik behavior remain intact.
+
+Build/test result:
+
+- Catalog validation passed (36 items); backend tests passed 97/97; backend and frontend builds passed.
+
+Commit message:
+
+- Fix catalog Action Center quick-execute flow
+
 ## Task 14.1: Make All Prepared Commands Real, Validated, and Vendor-Executable
 
 Date:

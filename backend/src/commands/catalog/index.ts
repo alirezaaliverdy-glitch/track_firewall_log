@@ -84,6 +84,8 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("generic", "security-review", "بررسی امنیت عمومی دستگاه", "Generic security review", "assessment", "generic_security_action", manual({ mutates: false }))
 ]);
 
+export const COMMAND_CATALOG_VERSION = "2026.07.04.1";
+
 export function findCatalogItem(id: string) { return COMMAND_CATALOG.find((entry) => entry.id === id); }
 export function searchCatalog(filters: { q?: string; vendor?: string; category?: string; riskLevel?: string; readOnly?: boolean; executable?: boolean; includePlanned?: boolean }) {
   const q = filters.q?.trim().toLocaleLowerCase("fa") ?? "";

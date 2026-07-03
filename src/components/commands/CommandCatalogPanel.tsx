@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bot, Search, ShieldCheck } from "lucide-react";
 import { listDevices, type Device } from "@/lib/devices";
 import { createCatalogAction, proposeWithAi, searchCommands, type CatalogItem } from "@/lib/commandCatalog";
+import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 
 const vendorOf = (device?: Device) => device?.type === "linux_edge" ? "linux" : device?.type === "generic_firewall" || device?.type === "generic_syslog_source" ? "generic" : device?.type ?? "";
 const complete = (item: CatalogItem, values: Record<string, string>) => item.requiredParams.every((field) => String(values[field.key] ?? item.defaultParams[field.key] ?? "").trim());
@@ -23,7 +24,7 @@ export default function CommandCatalogPanel() {
   const create = async (item: CatalogItem) => {
     if (!deviceId) return setMessage("ابتدا دستگاه هدف را انتخاب کنید.");
     if (!complete(item, params[item.id] ?? {})) return setMessage("اطلاعات الزامی این دستور را کامل کنید.");
-    try { await createCatalogAction(item.id, deviceId, params[item.id] ?? {}); setMessage(item.implementationState === "manualOnly" ? "برنامه بررسی دستی ساخته شد و امکان اجرای خودکار ندارد." : "برنامه اجرا ساخته شد؛ برای اعتبارسنجی و تأیید به مرکز عملیات بروید."); }
+    try { const plan = await createCatalogAction(item.id, deviceId, params[item.id] ?? {}); setMessage(item.implementationState === "manualOnly" ? "برنامه بررسی دستی ساخته شد و امکان اجرای خودکار ندارد." : "برنامه اجرا ساخته شد؛ مرکز عملیات برای بازبینی باز می‌شود."); const url = new URL(window.location.href); url.searchParams.set("selected", plan.id); url.hash = "action-center"; window.history.pushState({}, "", url); publishActionPlanCreated(plan.id); window.setTimeout(reviewInActionCenter, 50); }
     catch (error) { setMessage(error instanceof Error ? error.message : "ساخت برنامه ناموفق بود."); }
   };
   const askAi = async () => { if (!aiText.trim()) return; try { await proposeWithAi(aiText, vendor || "generic", deviceId || undefined); setMessage("پیشنهاد هوش مصنوعی فقط به‌صورت برنامه پیشنهادی ساخته شد و اجرا نشده است."); } catch (error) { setMessage(error instanceof Error ? error.message : "ساخت پیشنهاد ناموفق بود."); } };

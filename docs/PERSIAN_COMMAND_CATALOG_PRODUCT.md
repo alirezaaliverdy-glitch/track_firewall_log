@@ -42,6 +42,28 @@ defaultها قبل از اعتبارسنجی اعمال می‌شوند. فیل�
 
 شناسه دستور در `parametersJson.metadata.catalogCommandId` ذخیره می‌شود. آیتم فاقد اجرای connector نیز ActionPlan پیشنهادی می‌سازد و `executionSupport=manual_or_not_implemented` دارد.
 
+## قرارداد metadata در ActionPlan
+
+هر plan ساخته‌شده از کاتالوگ در `parametersJson.metadata` این فیلدها را نگه می‌دارد: `catalogCommandId`، `catalogVersion`، `vendor`، `actionType`، `executionSupport`، `implementationState`، `executionTemplateRef`، `connectorType`، `source=command_catalog`، `normalizedParams` و `requiredParamsSatisfied`.
+
+`actionType` دقیقاً action type آیتم است. نبود template، ورودی ناقص، vendor ناسازگار یا state غیرقابل اجرا قبل از ساخت/اجرا متوقف می‌شود.
+
+## مسیر ساخت تا اجرا
+
+`کارت دستور -> POST create-action-plan -> پیام موفقیت -> ?selected=<planId>#action-center -> refresh/select جزئیات -> تأیید کاربر -> quick-execute -> catalog resolver -> PolicyGuard -> dry-run -> connector -> audit`
+
+ساخت plan هیچ اجرایی انجام نمی‌دهد. Action Center شناسه query یا event داخلی را می‌خواند و plan جدید را خودکار باز می‌کند.
+
+## resolution در quick-execute
+
+1. ابتدا `metadata.catalogCommandId` بررسی می‌شود.
+2. برای plan قدیمی فقط نگاشت یکتای امن `actionType` به implemented item مجاز است.
+3. state باید `implemented`، support باید `connector` و template باید در registry باشد.
+4. action type، vendor، device connector و required params دوباره بررسی می‌شوند.
+5. سپس PolicyGuard، dry-run، confirmation، connector و audit موجود اجرا می‌شوند.
+
+manualOnly/planned/unsupported دکمه اجرای خودکار ندارند و backend نیز اجرای مستقیم آن‌ها را با دلیل فارسی رد می‌کند.
+
 ## افزودن دستور یا vendor
 
 1. vendor را در `CommandVendor` ثبت کنید.
@@ -50,6 +72,7 @@ defaultها قبل از اعتبارسنجی اعمال می‌شوند. فیل�
 4. precheck، verification و rollback را متناسب با ریسک بنویسید.
 5. تست جست‌وجوی فارسی، فیلتر vendor و ساخت ActionPlan را اضافه کنید.
 6. `npm run validate:command-catalog`، build و کل test suite را اجرا کنید.
+7. integration test بسازید که create metadata، quick-execute resolution، device compatibility و Action Center handoff را پوشش دهد؛ هیچ executable item نباید `ACTION_NOT_IN_CATALOG` بگیرد.
 
 ## ماتریس پشتیبانی فعلی
 

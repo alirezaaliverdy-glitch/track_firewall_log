@@ -47,6 +47,8 @@ AI is a fallback only when the curated catalog has no suitable command. AI fallb
 
 Every product catalog item must declare `implemented`, `manualOnly`, `planned`, or `unsupported`. Only `implemented` items with a registered planner and connector handler may be presented as executable. `manualOnly` creates non-executable review plans; `planned` and `unsupported` must never create ActionPlans. Run `npm run validate:command-catalog` after catalog changes.
 
+Catalog-created ActionPlans must retain `parametersJson.metadata.source=command_catalog`, catalog ID/version, exact action type, template/connector, implementation state, execution support, normalized parameters, and required-parameter satisfaction. Quick execution must resolve this metadata before using the legacy action catalogs; do not bypass PolicyGuard, confirmation, connector checks, or audit.
+
 The in-app AI must use compact Evidence Packs and a central Security Orchestrator prompt; action creation is permissive, execution is controlled.
 
 # Protected Lab Behavior
