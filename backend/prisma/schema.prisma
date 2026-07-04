@@ -868,6 +868,11 @@ enum AiIntentType {
   linux_check_failed_logins
   linux_check_sudo_users
   linux_check_fail2ban_status
+  linux_remove_user_from_sudo
+  linux_add_user_to_sudo
+  linux_check_user_groups
+  linux_lock_user
+  linux_unlock_user
   linux_read_hostname
   linux_read_interfaces
   linux_read_routes
@@ -1037,6 +1042,11 @@ enum ActionType {
   linux_check_failed_logins
   linux_check_sudo_users
   linux_check_fail2ban_status
+  linux_remove_user_from_sudo
+  linux_add_user_to_sudo
+  linux_check_user_groups
+  linux_lock_user
+  linux_unlock_user
   linux_read_hostname
   linux_read_interfaces
   linux_read_routes

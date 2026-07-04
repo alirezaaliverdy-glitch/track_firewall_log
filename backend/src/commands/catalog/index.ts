@@ -3,6 +3,7 @@ import type { CommandCatalogItem, CommandParam, CommandRiskLevel, CommandVendor,
 const param = (key: string, labelFa: string, helpFa: string, type: CommandParam["type"], placeholderFa?: string): CommandParam => ({ key, labelFa, helpFa, type, placeholderFa });
 const ipAddress = param("ipAddress", "آدرس IP", "یک آدرس IPv4 یا IPv6 معتبر برای مسدودسازی وارد کنید.", "ip", "192.0.2.10");
 const serviceName = param("serviceName", "نام سرویس", "نام واحد systemd مانند nginx یا sshd را وارد کنید.", "string", "nginx");
+const username = param("username", "نام کاربر", "نام حساب لینوکس را بدون فاصله وارد کنید؛ مانند tavakoli.", "string", "tavakoli");
 const allowedSource = param("allowedSource", "شبکه مجاز", "آدرس یا CIDR مدیریتی مجاز را وارد کنید؛ مانند 192.0.2.0/24.", "cidr", "192.0.2.0/24");
 
 type Options = Partial<CommandCatalogItem> & { state?: ImplementationState; template?: string; required?: CommandParam[]; mutates?: boolean };
@@ -52,6 +53,11 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("linux", "fail2ban-status", "بررسی fail2ban", "Check fail2ban", "hardening", "linux_check_fail2ban_status", implemented("linux_check_fail2ban_status")),
   item("linux", "block-ip", "بلاک کردن IP مشکوک", "Block suspicious IP", "firewall", "block_source_ip_temporary", implemented("linux_block_ip", { mutates: true, required: [ipAddress], defaultParams: { durationMinutes: 30 }, optionalParams: [param("durationMinutes", "مدت مسدودی", "مدت مسدودی بر حسب دقیقه.", "number", "30")], rollback: { available: true, steps: ["حذف قانون deny مدیریت‌شده برای IP"] } })),
   item("linux", "service-status", "بررسی وضعیت سرویس", "Check service status", "services", "linux_check_service_status", implemented("linux_check_service_status", { required: [serviceName] })),
+  item("linux", "remove-user-sudo", "حذف کاربر از sudo", "Remove user from sudo", "identity", "linux_remove_user_from_sudo", implemented("linux_remove_user_from_sudo", { mutates: true, required: [username], rollback: { available: true, steps: ["افزودن دوباره کاربر به گروه sudo"] } })),
+  item("linux", "add-user-sudo", "افزودن کاربر به sudo", "Add user to sudo", "identity", "linux_add_user_to_sudo", implemented("linux_add_user_to_sudo", { mutates: true, required: [username], rollback: { available: true, steps: ["حذف کاربر از گروه sudo"] } })),
+  item("linux", "user-groups", "بررسی گروه‌های کاربر", "Check user groups", "identity", "linux_check_user_groups", implemented("linux_check_user_groups", { required: [username] })),
+  item("linux", "lock-user", "قفل کردن کاربر", "Lock user", "identity", "linux_lock_user", implemented("linux_lock_user", { mutates: true, required: [username], rollback: { available: true, steps: ["باز کردن قفل کاربر"] } })),
+  item("linux", "unlock-user", "باز کردن قفل کاربر", "Unlock user", "identity", "linux_unlock_user", implemented("linux_unlock_user", { mutates: true, required: [username], rollback: { available: true, steps: ["قفل کردن دوباره کاربر در صورت نیاز"] } })),
   item("linux", "restrict-ssh", "محدود کردن SSH", "Restrict SSH", "ssh", "generic_security_action", manual({ required: [allowedSource], riskLevel: "high" })),
   item("linux", "enable-fail2ban", "فعال‌سازی fail2ban", "Enable fail2ban", "hardening", "generic_security_action", manual({ riskLevel: "medium" })),
 
@@ -84,7 +90,7 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("generic", "security-review", "بررسی امنیت عمومی دستگاه", "Generic security review", "assessment", "generic_security_action", manual({ mutates: false }))
 ]);
 
-export const COMMAND_CATALOG_VERSION = "2026.07.04.1";
+export const COMMAND_CATALOG_VERSION = "2026.07.04.2";
 
 export function findCatalogItem(id: string) { return COMMAND_CATALOG.find((entry) => entry.id === id); }
 export function searchCatalog(filters: { q?: string; vendor?: string; category?: string; riskLevel?: string; readOnly?: boolean; executable?: boolean; includePlanned?: boolean }) {

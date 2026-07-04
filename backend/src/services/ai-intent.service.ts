@@ -180,6 +180,18 @@ export function parseAiIntent(message: string): ParsedIntent | null {
   const ip = ipAddress(text);
   const nums = numbers(ip ? text.replace(ip, " ") : text);
   const fortigate = containsAny(text, ["fortigate", "fortinet", "fortios"]);
+  const username = text.match(/(?:user|یوزر|کاربر)\s+([a-z_][a-z0-9_.-]{0,31})\b/i)?.[1];
+
+  const linuxUserIntent = (intentType: AiIntentType, riskLevel: AiRiskLevel, explanation: string): ParsedIntent => ({
+    intentType, riskLevel,
+    parameters: { vendor: "linux", targetDeviceHint: "linux", username, executionSupport: "connector", missingFields: username ? [] : ["username"], clarificationQuestions: username ? [] : ["نام کاربر لینوکس چیست؟"] },
+    explanation
+  });
+  if (containsAny(text, ["sudo", "wheel"]) && containsAny(text, ["خارج", "حذف", "remove"])) return linuxUserIntent(AiIntentType.linux_remove_user_from_sudo, AiRiskLevel.high, "کاربر از گروه sudo با template کنترل‌شده حذف می‌شود.");
+  if (containsAny(text, ["sudo", "wheel"]) && containsAny(text, ["اضافه", "add"])) return linuxUserIntent(AiIntentType.linux_add_user_to_sudo, AiRiskLevel.high, "کاربر با template کنترل‌شده به گروه sudo افزوده می‌شود.");
+  if (containsAny(text, ["گروه", "groups"]) && containsAny(text, ["چک", "بررسی", "check"])) return linuxUserIntent(AiIntentType.linux_check_user_groups, AiRiskLevel.low, "گروه‌های کاربر با template فقط‌خواندنی بررسی می‌شوند.");
+  if ((text.includes("قفل") || /\bunlock\b/.test(text)) && containsAny(text, ["باز", "unlock"])) return linuxUserIntent(AiIntentType.linux_unlock_user, AiRiskLevel.high, "قفل کاربر با template کنترل‌شده باز می‌شود.");
+  if (text.includes("قفل") || /\block\b/.test(text)) return linuxUserIntent(AiIntentType.linux_lock_user, AiRiskLevel.high, "کاربر با template کنترل‌شده قفل می‌شود.");
 
   if (text.trim().startsWith("/") || containsAny(text, ["raw cli", "raw command", "execute command", "run command"])) {
     const vendor = containsAny(text, ["mikrotik", "routeros", "/ip ", "/system "]) ? "mikrotik"

@@ -1,5 +1,38 @@
 # Task History
 
+## Task 14.1E: Lab-Unrestricted Real Execution for AI and Catalog Actions
+
+Date: 2026-07-04
+
+Goal: Route supported AI and prepared actions through one real connector path after a single lab confirmation without downgrading them to manual proposals.
+
+Files changed:
+
+- Added five Prisma action/intent types, migration, product/legacy catalog entries, execution templates, planners, and Linux SSH handlers for sudo membership, group checks, lock, and unlock.
+- Added Persian username/operation extraction, exact missing-field questions, AI ActionPlan catalog metadata enrichment, and executable command-catalog AI fallback mapping.
+- Relaxed only risk/break-glass/rollback policy blockers in lab unrestricted mode while retaining device, credential, parameter, template, connector, audit, and real-result checks.
+- Added explicit execute-intent enforcement, duration/result persistence, lab policy/template logs, and real fake-connector AI execution tests.
+
+Behavior changed:
+
+- «یوزر tavakoli رو از گروه sudo خارج کن» maps to `linux_remove_user_from_sudo` with `username=tavakoli`, `executionSupport=connector`, and a registered SSH template.
+- Supported high-risk actions execute after the existing confirmation click in unrestricted lab mode; they are never marked succeeded without connector invocation.
+- Missing usernames return only «نام کاربر لینوکس چیست؟» and do not create broken plans.
+
+Protected behavior preserved:
+
+- `quick_controlled`, preview, confirmation, PolicyGuard, connector allowlists, audit, result display, and MikroTik behavior remain enabled. Raw AI shell commands remain non-executable.
+
+Build/test result:
+
+- Command catalog validation passed: 41 items.
+- Backend TypeScript build passed; backend tests passed: 105/105.
+- Frontend TypeScript/Vite production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Enable lab execution for supported AI actions
+
 ## Task 14.1D: Fix Preview-vs-Execution Bug in Prepared Command Flow
 
 Date: 2026-07-04

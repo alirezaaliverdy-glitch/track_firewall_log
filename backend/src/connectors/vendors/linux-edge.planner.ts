@@ -104,6 +104,11 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.linux_check_failed_logins,
     ActionType.linux_check_sudo_users,
     ActionType.linux_check_fail2ban_status,
+    ActionType.linux_remove_user_from_sudo,
+    ActionType.linux_add_user_to_sudo,
+    ActionType.linux_check_user_groups,
+    ActionType.linux_lock_user,
+    ActionType.linux_unlock_user,
     ...READ_ACTIONS.keys()
   ],
   supports(device) {
@@ -156,6 +161,17 @@ export const linuxEdgePlanner: VendorPlanner = {
       const plan = base(input);
       plan.commands = ["systemctl is-active fail2ban", "fail2ban-client status"];
       plan.requiresApproval = false;
+      return plan;
+    }
+    if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(input.actionType)) {
+      const username = str(input.parameters.username);
+      if (!username || !/^[a-z_][a-z0-9_.-]{0,31}$/i.test(username)) return needs(input, ["username"], ["نام کاربر لینوکس چیست؟"]);
+      const plan = base(input);
+      if (input.actionType === ActionType.linux_remove_user_from_sudo) { plan.commands = [`sudo -n gpasswd -d ${username} sudo || sudo -n deluser ${username} sudo`, `groups ${username} || id ${username}`]; plan.rollbackSteps = [`sudo -n usermod -aG sudo ${username}`]; }
+      if (input.actionType === ActionType.linux_add_user_to_sudo) { plan.commands = [`sudo -n usermod -aG sudo ${username}`, `groups ${username} || id ${username}`]; plan.rollbackSteps = [`sudo -n gpasswd -d ${username} sudo`]; }
+      if (input.actionType === ActionType.linux_check_user_groups) { plan.commands = [`id ${username}; groups ${username}`]; plan.requiresApproval = false; }
+      if (input.actionType === ActionType.linux_lock_user) { plan.commands = [`sudo -n usermod -L ${username}`, `id ${username}`]; plan.rollbackSteps = [`sudo -n usermod -U ${username}`]; }
+      if (input.actionType === ActionType.linux_unlock_user) { plan.commands = [`sudo -n usermod -U ${username}`, `id ${username}`]; plan.rollbackSteps = [`sudo -n usermod -L ${username}`]; }
       return plan;
     }
     const readCommand = READ_ACTIONS.get(input.actionType);

@@ -65,6 +65,8 @@ These must remain supported:
 
 Do not add strict production blocking to lab flow unless explicitly requested.
 
+Permanent lab-unrestricted rule: when `ACTION_EXECUTION_MODE=quick_controlled` and `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true`, one user confirmation is sufficient for any supported, registered Linux/MikroTik connector template. Do not add repeated approval, break-glass, risk-level, destructive-action, or missing-rollback blockers; do not downgrade a supported template to `manualOnly` or `manual_or_not_implemented`. Still require a selected device, complete validated parameters, a registered template/connector, `intent=execute`, real connector invocation, audit logs, and a real result before success. AI may create executable ActionPlans only by mapping to validated registered templates; never execute raw AI shell text.
+
 # Vendor Direction
 
 Current/target vendors:

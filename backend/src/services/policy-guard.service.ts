@@ -8,6 +8,7 @@ import { getActionCatalogEntry, validateCatalogParameters } from "../actions/act
 import { EXPECTED_FORMATS, validateCanonicalFieldShapes, validationError, type StructuredValidationError } from "../actions/action-validators.js";
 import { normalizeIntent } from "../actions/intent-normalizer.js";
 import { resolveTrustedManagementSource } from "./action-preflight.service.js";
+import { env } from "../config/env.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
@@ -182,16 +183,20 @@ function inferFieldError(message: string, parameters: Record<string, unknown>, a
 }
 
 function finish(input: Omit<ValidationResult, "valid" | "missingFields" | "policyGuardError" | "exactReason" | "fieldErrors"> & { errors: string[]; fieldErrors?: StructuredValidationError[]; parameters?: Record<string, unknown>; actionType?: ActionType }): ValidationResult {
-  const inferred = input.errors.map((message) => inferFieldError(message, input.parameters ?? {}, input.actionType ?? ActionType.create_egress_policy));
+  const errors = env.actionAllowLabUnrestrictedManagement
+    ? input.errors.filter((message) => !/blocked by policy|protected port|explicitOverride|managementOverride|break.?glass|backup.*required|rollback.*required/i.test(message))
+    : input.errors;
+  const inferred = errors.map((message) => inferFieldError(message, input.parameters ?? {}, input.actionType ?? ActionType.create_egress_policy));
   const fieldErrors = [...(input.fieldErrors ?? []), ...inferred].filter((issue, index, all) => all.findIndex((candidate) => candidate.field === issue.field && candidate.message === issue.message) === index);
   const { parameters: _parameters, actionType: _actionType, ...result } = input;
   return {
     ...result,
-    valid: input.errors.length === 0,
+    errors,
+    valid: errors.length === 0,
     fieldErrors,
-    missingFields: Array.from(new Set([...missingFieldsFromErrors(input.errors), ...fieldErrors.filter((issue) => issue.currentValue === null || issue.currentValue === "").map((issue) => issue.field)])),
-    policyGuardError: input.errors.length > 0 ? input.errors.join(" ") : null,
-    exactReason: exactReasonFrom(input.errors)
+    missingFields: Array.from(new Set([...missingFieldsFromErrors(errors), ...fieldErrors.filter((issue) => issue.currentValue === null || issue.currentValue === "").map((issue) => issue.field)])),
+    policyGuardError: errors.length > 0 ? errors.join(" ") : null,
+    exactReason: exactReasonFrom(errors)
   };
 }
 
@@ -333,6 +338,11 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
       const service = textParam(parameters, "serviceName") ?? textParam(parameters, "service");
       if (!service) errors.push("linux_check_service_status requires serviceName.");
       else if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) errors.push("linux_check_service_status serviceName is invalid.");
+    }
+    if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
+      const username = textParam(parameters, "username");
+      if (!username) errors.push(`${plan.actionType} requires username.`);
+      else if (!/^[a-z_][a-z0-9_.-]{0,31}$/i.test(username)) errors.push(`${plan.actionType} username is invalid.`);
     }
   }
 

@@ -5,6 +5,7 @@ import { proposeActionPlan } from "../services/action-plan.service.js";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import net from "node:net";
+import { parseAiIntent } from "../services/ai-intent.service.js";
 
 const bool = (value: unknown) => value === "true" ? true : value === "false" ? false : undefined;
 const deviceVendor = (device: { type: string; vendor: string }) => device.type === "linux_edge" ? "linux" : device.type === "generic_firewall" || device.type === "generic_syslog_source" ? "generic" : device.type;
@@ -53,8 +54,17 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { request?: string; vendor?: string; deviceId?: string; createActionPlan?: boolean } }>("/api/commands/ai-propose", async (request, reply) => {
     const userRequest = request.body?.request?.trim();
     if (!userRequest) return reply.code(400).send({ error: "REQUEST_REQUIRED", messageFa: "درخواست خود را وارد کنید." });
-    const draft = { titleFa: "پیشنهاد سفارشی هوش مصنوعی", status: "draft", vendor: request.body.vendor ?? "generic", intent: "generic_security_action", userRequest, availableCatalogCategories: [...new Set(searchCatalog({ vendor: request.body.vendor }).map((x) => x.category))], deviceId: request.body.deviceId ?? null, executionSupport: "manual_or_not_implemented", requiresReview: true, autoExecuted: false };
+    const parsed = parseAiIntent(userRequest);
+    const executableItem = parsed ? COMMAND_CATALOG.find((item) => item.implementationState === "implemented" && item.executionSupport === "connector" && item.actionType === parsed.intentType) : undefined;
+    const parsedMissing = Array.isArray(parsed?.parameters.missingFields) ? parsed.parameters.missingFields.map(String) : [];
+    const draft = { titleFa: executableItem?.titleFa ?? "پیشنهاد سفارشی هوش مصنوعی", status: "draft", vendor: executableItem?.vendor ?? request.body.vendor ?? "generic", intent: executableItem?.actionType ?? "generic_security_action", userRequest, availableCatalogCategories: [...new Set(searchCatalog({ vendor: request.body.vendor }).map((x) => x.category))], deviceId: request.body.deviceId ?? null, executionSupport: executableItem ? "connector" : "manual_or_not_implemented", requiresReview: true, autoExecuted: false };
     if (request.body.createActionPlan === false) return reply.code(201).send({ draft, actionPlan: null });
+    if (executableItem) {
+      if (parsedMissing.length) return reply.code(422).send({ error: "NEEDS_INPUT", needsInput: true, messageFa: parsedMissing.length === 1 && parsedMissing[0] === "username" ? "نام کاربر لینوکس چیست؟" : "پارامترهای لازم را کامل کنید.", missingFields: parsedMissing });
+      if (!request.body.deviceId) return reply.code(400).send({ error: "DEVICE_REQUIRED", messageFa: "ابتدا دستگاه هدف را انتخاب کنید." });
+      const actionPlan = await proposeActionPlan({ source: "ai", deviceId: request.body.deviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...parsed!.parameters, executionSupport: "connector" } });
+      return reply.code(201).send({ draft, actionPlan });
+    }
     const actionPlan = await proposeActionPlan({ source: "ai", deviceId: request.body.deviceId, vendor: request.body.vendor ?? "generic", actionType: "generic_security_action", riskLevel: "medium", parametersJson: { request: userRequest, vendor: request.body.vendor ?? "generic", executionSupport: "manual_or_not_implemented", requiresExplicitReview: true, metadata: { origin: "command_catalog_ai_fallback", draft } } });
     return reply.code(201).send({ draft, actionPlan });
   });

@@ -26,7 +26,7 @@ test("quick execute resolves product catalog metadata and never returns ACTION_N
   const device = await prisma.device.create({ data: { name: "Task 14.1B quick", vendor: "Linux", type: "linux_edge", host: "192.0.2.152", managementPort: 22, protocol: "ssh", environment: "lab" } });
   t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } }); await prisma.device.delete({ where: { id: device.id } }); await app.close(); });
   const created = await app.inject({ method: "POST", url: "/api/commands/catalog/linux.ssh-status/create-action-plan", payload: { deviceId: device.id, params: {} } });
-  const quick = await app.inject({ method: "POST", url: `/api/actions/${created.json().id}/quick-execute`, payload: { reason: "integration test" } });
+  const quick = await app.inject({ method: "POST", url: `/api/actions/${created.json().id}/quick-execute`, payload: { intent: "execute", reason: "integration test" } });
   assert.notEqual(quick.json().error, "ACTION_NOT_IN_CATALOG");
   assert.ok([200, 409].includes(quick.statusCode));
 });
@@ -40,7 +40,7 @@ test("manualOnly cannot quick execute and missing params do not create plans", a
   assert.equal(missing.statusCode, 422); assert.equal(missing.json().needsInput, true); assert.equal(await prisma.actionPlan.count({ where: { deviceId: device.id } }), before);
   const manual = await app.inject({ method: "POST", url: "/api/commands/catalog/linux.enable-fail2ban/create-action-plan", payload: { deviceId: device.id, params: {} } });
   assert.equal(manual.statusCode, 201);
-  const quick = await app.inject({ method: "POST", url: `/api/actions/${manual.json().id}/quick-execute`, payload: {} });
+  const quick = await app.inject({ method: "POST", url: `/api/actions/${manual.json().id}/quick-execute`, payload: { intent: "execute" } });
   assert.equal(quick.statusCode, 409); assert.equal(quick.json().error, "CATALOG_COMMAND_NOT_EXECUTABLE"); assert.equal(quick.json().detail, "این دستور هنوز اجرای خودکار ندارد");
 });
 

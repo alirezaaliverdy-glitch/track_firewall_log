@@ -24,6 +24,7 @@ import { env, type ActionExecutionMode } from "../config/env.js";
 import { preflightActionPlan } from "./action-preflight.service.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { resolveCatalogAction } from "../commands/catalog/catalog-action-resolver.js";
+import { COMMAND_CATALOG, COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -485,6 +486,23 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   const catalogVendor = vendor === "mikrotik" || vendor === "fortigate" ? vendor : null;
   const catalog = getActionCatalogEntry(actionType, catalogVendor);
   if (catalog) riskLevel = catalog.riskLevel;
+  const productMatches = COMMAND_CATALOG.filter((item) => item.implementationState === "implemented" && item.executionSupport === "connector" && item.actionType === actionType);
+  if (productMatches.length === 1 && asObject(parameters.metadata).source !== "command_catalog") {
+    const item = productMatches[0];
+    const normalizedParams = Object.fromEntries(Object.entries(parameters).filter(([key]) => !["metadata", "actionType", "deviceId", "vendor", "executionSupport", "missingFields", "clarificationQuestions"].includes(key)));
+    parameters = {
+      ...parameters,
+      executionSupport: "connector",
+      metadata: {
+        ...asObject(parameters.metadata), source: "command_catalog", catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION,
+        catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, implementationState: "implemented",
+        executionSupport: "connector", executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType,
+        normalizedParams, requiredParamsSatisfied: item.requiredParams.every((field) => normalizedParams[field.key] !== undefined && normalizedParams[field.key] !== ""),
+        previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started"
+      }
+    };
+    riskLevel = item.riskLevel as AiRiskLevel;
+  }
 
   if ((vendor === "mikrotik" || vendor === "fortigate") && !deviceId) {
     const compatibleCount = await prisma.device.count({
@@ -840,7 +858,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(plan, "execution_failed", "Execution refused because the command plan is stale.", { code: "COMMAND_PLAN_STALE" });
     throw new ActionExecutionError("COMMAND_PLAN_STALE", "The command plan is stale because the ActionPlan parameters changed.");
   }
-  if (plan.riskLevel === AiRiskLevel.critical && env.actionExecutionMode !== "direct_controlled") {
+  if (plan.riskLevel === AiRiskLevel.critical && env.actionExecutionMode !== "direct_controlled" && !env.actionAllowLabUnrestrictedManagement) {
     const reason = typeof executionInput.reason === "string" ? executionInput.reason.trim() : "";
     if (executionInput.breakGlass !== true || !reason) {
       throw new ActionExecutionError("BREAK_GLASS_REQUIRED", "Critical execution requires break-glass mode and a reason.", 428);
@@ -883,6 +901,10 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   }
   await audit(plan, "policy_guard_passed", "PolicyGuard allowed controlled execution.", { actionType: plan.actionType });
   dependencies.trace?.("action_policy_guard_passed", {});
+  if (env.actionAllowLabUnrestrictedManagement) {
+    await audit(plan, "policy_allowed_lab_unrestricted", "Lab unrestricted mode allowed the validated template after user confirmation.", { actionType: plan.actionType });
+    dependencies.trace?.("action_policy_allowed_lab_unrestricted", {});
+  }
   await audit(plan, "connector_resolved", "Device connector resolved for execution.", { connector: connector.name });
   dependencies.trace?.("action_connector_resolved", { connectorType: connector.name });
 
@@ -938,13 +960,15 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       }
     }
     const completedAt = new Date().toISOString();
+    const startedAt = String(asObject(asObject(executing.parametersJson).metadata).executionStartedAt ?? completedAt);
     const exitCodes = result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
     const executionSucceeded = result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0);
     const resultPayload = {
       ...result,
       executed: executionSucceeded,
-      executionStartedAt: asObject(executing.parametersJson).metadata && asObject(asObject(executing.parametersJson).metadata).executionStartedAt,
+      executionStartedAt: startedAt,
       executionCompletedAt: completedAt,
+      durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),
       exitCode: exitCodes.length ? Math.max(...exitCodes) : null,
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
@@ -1009,7 +1033,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
 export async function quickExecuteActionPlan(id: string, input: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {
   const initial = await prisma.actionPlan.findUnique({ where: { id } });
   if (!initial) return null;
-  const intent = input.intent === "preview" ? "preview" : "execute";
+  if (input.intent !== "execute" && input.intent !== "preview") throw new ActionExecutionError("EXECUTION_INTENT_REQUIRED", "برای اجرا، intent=execute الزامی است.", 400);
+  const intent = input.intent;
   const traceBase = (extra: Record<string, unknown> = {}) => ({
     actionPlanId: initial.id, actionType: initial.actionType, deviceId: initial.deviceId,
     catalogCommandId: asObject(asObject(initial.parametersJson).metadata).catalogCommandId ?? null,
@@ -1028,6 +1053,7 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
     throw error;
   }
   trace("action_catalog_resolved", { catalogCommandId: catalogResolution.catalogCommandId, executionTemplateRef: catalogResolution.executionTemplateRef, connectorType: catalogResolution.connectorType, vendor: catalogResolution.vendor });
+  trace("action_template_resolved", { executionTemplateRef: catalogResolution.executionTemplateRef, connectorType: catalogResolution.connectorType });
   const initialMetadata = asObject(asObject(initial.parametersJson).metadata);
   const currentInitialFingerprint = actionExecutionFingerprint(initial);
   const storedInitialFingerprint = typeof initialMetadata.previewFingerprint === "string" ? initialMetadata.previewFingerprint : null;

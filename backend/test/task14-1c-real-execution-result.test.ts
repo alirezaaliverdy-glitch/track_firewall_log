@@ -8,6 +8,8 @@ import { prisma } from "../src/db/prisma.js";
 import { actionExecutionFingerprint, dryRunActionPlan, quickExecuteActionPlan } from "../src/services/action-plan.service.js";
 import type { DeviceConnector } from "../src/connectors/types.js";
 import { createCredential } from "../src/services/credential.service.js";
+import { createAiActionIntent, parseAiIntent } from "../src/services/ai-intent.service.js";
+import { proposeActionPlan } from "../src/services/action-plan.service.js";
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
 
@@ -64,4 +66,26 @@ test("explicit execute invokes a fake Linux connector exactly once and persists 
   assert.equal((executed?.parametersJson as Record<string, { connectorInvoked?: boolean }>).metadata.connectorInvoked, true);
   assert.match(String((executed?.resultJson as Record<string, unknown>).stdout), /sudo:x:27:alice/);
   for (const stage of ["action_execute_requested", "action_catalog_resolved", "action_preview_checked", "action_policy_guard_passed", "action_connector_resolved", "action_connector_invoked", "action_remote_command_started", "action_remote_command_completed", "action_execution_result_saved", "action_execution_succeeded"]) assert.ok(traceStages.includes(stage), `missing trace stage ${stage}`);
+});
+
+test("Persian AI sudo removal extracts tavakoli and missing input asks only for username", () => {
+  const parsed = parseAiIntent("یوزر tavakoli رو از گروه sudo خارج کن");
+  assert.equal(parsed?.intentType, ActionType.linux_remove_user_from_sudo); assert.equal(parsed?.parameters.username, "tavakoli"); assert.equal(parsed?.parameters.executionSupport, "connector");
+  const missing = parseAiIntent("یک کاربر را از گروه sudo خارج کن");
+  assert.deepEqual(missing?.parameters.missingFields, ["username"]); assert.deepEqual(missing?.parameters.clarificationQuestions, ["نام کاربر لینوکس چیست؟"]);
+});
+
+test("AI-created destructive Linux action stays connector-executable and runs once in unrestricted lab", async (t) => {
+  const credential = await createCredential({ name: `task-14-1e-${Date.now()}`, type: "password", username: "tester", password: "test-only-not-used", sudo: true });
+  const device = await prisma.device.create({ data: { name: "Task 14.1E AI Linux", vendor: "Linux", type: "linux_edge", host: "192.0.2.202", managementPort: 22, protocol: "ssh", environment: "lab", credentialId: credential.id } });
+  const session = await prisma.aiChatSession.create({ data: { title: "Task 14.1E" } });
+  t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } }); await prisma.aiActionIntent.deleteMany({ where: { sessionId: session.id } }); await prisma.aiChatSession.delete({ where: { id: session.id } }); await prisma.device.delete({ where: { id: device.id } }); await prisma.deviceCredential.delete({ where: { id: credential.id } }); });
+  const parsed = parseAiIntent("یوزر tavakoli رو از گروه sudo خارج کن"); assert.ok(parsed);
+  const intent = await createAiActionIntent({ sessionId: session.id, deviceId: device.id, parsedIntent: parsed });
+  const plan = await proposeActionPlan({ aiIntentId: intent.id }); const metadata = (plan.parametersJson as Record<string, Record<string, unknown>>).metadata;
+  assert.equal(plan.actionType, ActionType.linux_remove_user_from_sudo); assert.equal((plan.parametersJson as Record<string, unknown>).executionSupport, "connector"); assert.equal(metadata.implementationState, "implemented"); assert.equal(metadata.executionTemplateRef, "linux_remove_user_from_sudo");
+  let calls = 0;
+  const fake = { name: "linux_edge", supportedActions: [ActionType.linux_remove_user_from_sudo], supports: () => true, testConnection: async () => { throw new Error("unused"); }, getCapabilities: async () => { throw new Error("unused"); }, collectStatus: async () => { throw new Error("unused"); }, dryRun: async () => { throw new Error("unused"); }, rollback: async () => { throw new Error("unused"); }, execute: async () => { calls += 1; return { executed: true, actionType: ActionType.linux_remove_user_from_sudo, deviceId: device.id, commands: [{ template: "remove user from sudo", stdout: "Removing user tavakoli from group sudo\ntavakoli : tavakoli", stderr: "", exitCode: 0 }], warnings: [] }; } } as unknown as DeviceConnector;
+  const result = await quickExecuteActionPlan(plan.id, { intent: "execute" }, { selectConnector: () => fake });
+  assert.equal(calls, 1); assert.equal(result?.status, ActionPlanStatus.succeeded); assert.equal((result?.parametersJson as Record<string, Record<string, unknown>>).metadata.connectorInvoked, true);
 });

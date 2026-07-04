@@ -64,6 +64,12 @@ quick-execute برای preview موجود و تازه دوباره planner را 
 
 trace ساخت‌یافته backend مراحل `action_execute_requested` تا `action_execution_succeeded/failed` را با شناسه plan/catalog/template/device، intent، connector، فرمان امن و کوتاه‌شده، exit code و طول stdout/stderr ثبت می‌کند؛ secretها در remote-command preview حذف می‌شوند.
 
+## حالت آزمایشگاه unrestricted
+
+با `quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` همان یک کلیک «تأیید و اجرا» برای template ثبت‌شده کافی است. ریسک بالا، destructive بودن یا rollback دستی باعث تبدیل action پشتیبانی‌شده به manual نمی‌شود. device، credential، پارامتر معتبر، template، connector، audit و نتیجه واقعی همچنان الزامی‌اند و متن shell آزاد AI هرگز اجرا نمی‌شود.
+
+AI ابتدا intent را به catalog نگاشت می‌کند. عملیات Linux برای حذف/افزودن کاربر sudo، بررسی گروه‌ها، قفل و بازکردن قفل با username معتبر connector-backed هستند. ActionPlan حاصل metadata کامل catalog دارد و از همان preview → quick-execute → connector → result مسیر دستور آماده استفاده می‌کند.
+
 ساخت plan هیچ اجرایی انجام نمی‌دهد. Action Center شناسه query یا event داخلی را می‌خواند و plan جدید را خودکار باز می‌کند.
 
 ## resolution در quick-execute

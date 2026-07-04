@@ -79,6 +79,11 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.linux_check_failed_logins,
   ActionType.linux_check_sudo_users,
   ActionType.linux_check_fail2ban_status,
+  ActionType.linux_remove_user_from_sudo,
+  ActionType.linux_add_user_to_sudo,
+  ActionType.linux_check_user_groups,
+  ActionType.linux_lock_user,
+  ActionType.linux_unlock_user,
   ActionType.linux_read_hostname,
   ActionType.linux_read_interfaces,
   ActionType.linux_read_routes,
@@ -157,6 +162,12 @@ function serviceParam(value: unknown) {
     throw new ConnectorError("INVALID_SERVICE", "Service name must contain only letters, numbers, dot, underscore, dash, or @.");
   }
   return service;
+}
+
+function usernameParam(value: unknown) {
+  const username = text(value);
+  if (!username || !/^[a-z_][a-z0-9_.-]{0,31}$/i.test(username)) throw new ConnectorError("INVALID_USERNAME", "A valid Linux username is required.");
+  return username;
 }
 
 function isPrivateOrLocalIp(ip: string) {
@@ -628,6 +639,14 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     affectedServices.push(service);
     plannedCommands = [`systemctl status ${service} --no-pager || service ${service} status`];
     validationWarnings.push("Read-only service status check. No service restart or config change is planned.");
+  } else if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
+    const username = usernameParam(parameters.username);
+    affectedServices.push("local-accounts");
+    if (plan.actionType === ActionType.linux_remove_user_from_sudo) { plannedCommands = [`sudo -n gpasswd -d ${username} sudo || sudo -n deluser ${username} sudo`, `groups ${username} || id ${username}`]; rollbackSteps = [`sudo -n usermod -aG sudo ${username}`]; }
+    if (plan.actionType === ActionType.linux_add_user_to_sudo) { plannedCommands = [`sudo -n usermod -aG sudo ${username}`, `groups ${username} || id ${username}`]; rollbackSteps = [`sudo -n gpasswd -d ${username} sudo || sudo -n deluser ${username} sudo`]; }
+    if (plan.actionType === ActionType.linux_check_user_groups) { plannedCommands = [`id ${username}; groups ${username}`]; rollbackSteps = []; }
+    if (plan.actionType === ActionType.linux_lock_user) { plannedCommands = [`sudo -n usermod -L ${username}`, `passwd -S ${username} || true`]; rollbackSteps = [`sudo -n usermod -U ${username}`]; }
+    if (plan.actionType === ActionType.linux_unlock_user) { plannedCommands = [`sudo -n usermod -U ${username}`, `passwd -S ${username} || true`]; rollbackSteps = [`sudo -n usermod -L ${username}`]; }
   } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
     const read = linuxReadCommand(plan.actionType);
     if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);
@@ -746,6 +765,14 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       commands.push({ template: `service status ${service}`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
       rollbackJson.readOnly = true;
       warnings.push(status.exitCode === 0 ? "SERVICE_AVAILABLE" : "SERVICE_NOT_AVAILABLE");
+    } else if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
+      const username = usernameParam(parameters.username);
+      if (plan.actionType === ActionType.linux_remove_user_from_sudo) { await pushCommand("remove user from sudo", `${sudo}gpasswd -d ${username} sudo || ${sudo}deluser ${username} sudo`); rollbackJson.steps = [`${sudo}usermod -aG sudo ${username}`]; }
+      if (plan.actionType === ActionType.linux_add_user_to_sudo) { await pushCommand("add user to sudo", `${sudo}usermod -aG sudo ${username}`); rollbackJson.steps = [`${sudo}gpasswd -d ${username} sudo || ${sudo}deluser ${username} sudo`]; }
+      if (plan.actionType === ActionType.linux_check_user_groups) rollbackJson.readOnly = true;
+      if (plan.actionType === ActionType.linux_lock_user) { await pushCommand("lock Linux user", `${sudo}usermod -L ${username}`); rollbackJson.steps = [`${sudo}usermod -U ${username}`]; }
+      if (plan.actionType === ActionType.linux_unlock_user) { await pushCommand("unlock Linux user", `${sudo}usermod -U ${username}`); rollbackJson.steps = [`${sudo}usermod -L ${username}`]; }
+      await pushCommand("verify Linux user groups", `id ${username}; groups ${username}`);
     } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
       const read = linuxReadCommand(plan.actionType, sudo);
       if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);

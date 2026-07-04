@@ -39,6 +39,7 @@ MVP / prototype moving toward Mini-SOAR.
 - End-to-end catalog handoff: complete ActionPlan catalog metadata, product-aware quick-execute resolution, automatic Action Center selection/navigation, and state-aware execution buttons
 - Real prepared-command execution lifecycle with connector-confirmed success, persisted output/exit metadata, Persian preview separation, and a dedicated command result view
 - Deterministic preview fingerprints, explicit execute intent, connector-invocation proof, structured quick-execute traces, and hard fake-connector regression coverage
+- Lab-unrestricted shared execution for catalog and AI actions, including controlled Linux user/sudo/group lock operations with Persian parameter extraction
 
 ## Protected Behavior
 
@@ -55,7 +56,7 @@ These must not be changed unless explicitly requested:
 - ActionPlan architecture exists
 - Vendor connector architecture exists
 - MikroTik support is strongest
-- The product catalog currently exposes 14 connector-backed commands: 8 Linux and 6 MikroTik; other prepared operations are explicit manual-only or planned items
+- The product catalog currently exposes 19 connector-backed commands: 13 Linux and 6 MikroTik; other prepared operations are explicit manual-only or planned items
 - Catalog-created implemented actions resolve through their catalog ID/template before dry-run, while safe unique action-type fallback preserves older valid plans
 - Full Analysis is grouped by vendor/device and reports collected data, missing telemetry, findings, and proposed actions
 - AI Chat sends the provider a compact Evidence Pack instead of the full legacy security context and exposes lightweight context metadata
@@ -84,7 +85,7 @@ The next product-catalog iteration should promote manual/planned items only afte
 
 ## Latest Task
 
-Task 14.1D fixed the preview-vs-execution regression: product-catalog actions are recognized by the quick-controlled approval guard, generated metadata cannot stale its own preview, explicit execute cannot return a preview as HTTP success, and connector invocation/output are proven and traced.
+Task 14.1E unified AI and prepared-command execution in lab unrestricted mode. Supported AI intents now receive real catalog metadata and execute after one confirmation; Linux sudo membership, group inspection, lock, and unlock operations have validated SSH templates.
 
 ## Last Updated
 

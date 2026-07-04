@@ -92,7 +92,7 @@ function textArray(value: unknown): string[] {
   return value.map((item) => String(item)).filter(Boolean);
 }
 
-const EDITABLE_FIX_FIELDS = new Set(["sourceIp", "sourceCidr", "destinationIp", "destinationCidr", "trustedSource", "trustedSourceCidr", "srcInterface", "dstInterface", "srcZone", "dstZone", "serviceName", "services", "port", "newPort", "protocol", "schedule", "nat", "logTraffic", "comment"]);
+const EDITABLE_FIX_FIELDS = new Set(["sourceIp", "sourceCidr", "destinationIp", "destinationCidr", "trustedSource", "trustedSourceCidr", "srcInterface", "dstInterface", "srcZone", "dstZone", "serviceName", "services", "username", "port", "newPort", "protocol", "schedule", "nat", "logTraffic", "comment"]);
 
 function structuredFieldErrors(action: ActionPlan): StructuredValidationError[] {
   return normalizeArray<Record<string, unknown>>(normalizeObject(action.validationJson).fieldErrors)
@@ -123,6 +123,7 @@ function fieldLabel(field: string) {
   if (field === "trustedSourceCidr" || field === "trustedSource" || field === "allowedSource") return "شبکه مجاز مدیریتی";
   if (field === "sourceIp" || field === "sourceCidr" || field === "srcIp" || field === "ipAddress") return "آدرس IP یا شبکه";
   if (field === "serviceName" || field === "service") return "نام سرویس";
+  if (field === "username") return "نام کاربر";
   if (field === "newPort" || field === "toPort") return "پورت جدید";
   if (field === "port") return "پورت";
   return field.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (value) => value.toUpperCase());
@@ -132,6 +133,7 @@ function fieldExample(field: string) {
   if (["sourceIp", "srcIp", "ipAddress"].includes(field)) return "مثال: 203.0.113.10";
   if (["sourceCidr", "trustedSourceCidr", "trustedSource", "allowedSource"].includes(field)) return "مثال: 192.0.2.0/24";
   if (field === "serviceName" || field === "service") return "مثال: nginx یا sshd";
+  if (field === "username") return "مثال: tavakoli";
   if (["port", "newPort", "toPort"].includes(field)) return "مثال: 2222";
   return field;
 }
