@@ -3,6 +3,11 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { ActionPlanStatus, ActionType } from "@prisma/client";
 import { actionExecutionUiState } from "../../src/lib/actionApprovalState.js";
+import { buildApp } from "../src/app.js";
+import { prisma } from "../src/db/prisma.js";
+import { actionExecutionFingerprint, dryRunActionPlan, quickExecuteActionPlan } from "../src/services/action-plan.service.js";
+import type { DeviceConnector } from "../src/connectors/types.js";
+import { createCredential } from "../src/services/credential.service.js";
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), "utf8");
 
@@ -32,4 +37,31 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
 test("backend stores actual connector result before succeeded", () => {
   const service = read("../src/services/action-plan.service.ts");
   assert.match(service, /executionSucceeded = result\.executed && result\.commands\.length > 0/); assert.match(service, /status: executionSucceeded \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/); assert.match(service, /stdout: result\.commands\.map/); assert.match(service, /executor: connector\.name/);
+});
+
+test("generated preview metadata never changes the stable execution fingerprint", () => {
+  const base = { actionType: ActionType.linux_check_sudo_users, deviceId: "device-1", parametersJson: { vendor: "linux", metadata: { catalogCommandId: "linux.sudo-users", executionTemplateRef: "linux_check_sudo_users", vendor: "linux", normalizedParams: {} } } };
+  const generated = { ...base, parametersJson: { ...base.parametersJson, metadata: { ...base.parametersJson.metadata, previewGenerated: true, executed: false, lastExecutionStatus: "preview_ready", previewStale: false, executionStartedAt: new Date().toISOString() } } };
+  assert.equal(actionExecutionFingerprint(base as never), actionExecutionFingerprint(generated as never));
+});
+
+test("explicit execute invokes a fake Linux connector exactly once and persists its stdout", async (t) => {
+  const app = await buildApp({ authRequired: false }); let executeCalls = 0; const traceStages: string[] = [];
+  const credential = await createCredential({ name: `task-14-1d-${Date.now()}`, type: "password", username: "tester", password: "test-only-not-used", sudo: false });
+  const device = await prisma.device.create({ data: { name: "Task 14.1D fake Linux", vendor: "Linux", type: "linux_edge", host: "192.0.2.201", managementPort: 22, protocol: "ssh", environment: "lab", credentialId: credential.id } });
+  t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } }); await prisma.device.delete({ where: { id: device.id } }); await prisma.deviceCredential.delete({ where: { id: credential.id } }); await app.close(); });
+  const created = await app.inject({ method: "POST", url: "/api/commands/catalog/linux.sudo-users/create-action-plan", payload: { deviceId: device.id, params: {} } });
+  assert.equal(created.statusCode, 201); assert.equal(executeCalls, 0);
+  const preview = await dryRunActionPlan(created.json().id); assert.equal(preview?.status, ActionPlanStatus.dry_run_ready); assert.equal(executeCalls, 0);
+  const fakeConnector = {
+    name: "linux_edge", supportedActions: [ActionType.linux_check_sudo_users], supports: () => true,
+    testConnection: async () => { throw new Error("not used"); }, getCapabilities: async () => { throw new Error("not used"); }, collectStatus: async () => { throw new Error("not used"); },
+    dryRun: async () => { throw new Error("not used"); }, rollback: async () => { throw new Error("not used"); },
+    execute: async () => { executeCalls += 1; return { executed: true, actionType: ActionType.linux_check_sudo_users, deviceId: device.id, commands: [{ template: "sudo users", stdout: "sudo:x:27:alice\nwheel:x:10:bob\nroot", stderr: "", exitCode: 0 }], warnings: [] }; }
+  } as unknown as DeviceConnector;
+  const executed = await quickExecuteActionPlan(created.json().id, { intent: "execute" }, { selectConnector: () => fakeConnector, trace: (stage) => traceStages.push(stage) });
+  assert.equal(executeCalls, 1); assert.equal(executed?.status, ActionPlanStatus.succeeded);
+  assert.equal((executed?.parametersJson as Record<string, { connectorInvoked?: boolean }>).metadata.connectorInvoked, true);
+  assert.match(String((executed?.resultJson as Record<string, unknown>).stdout), /sudo:x:27:alice/);
+  for (const stage of ["action_execute_requested", "action_catalog_resolved", "action_preview_checked", "action_policy_guard_passed", "action_connector_resolved", "action_connector_invoked", "action_remote_command_started", "action_remote_command_completed", "action_execution_result_saved", "action_execution_succeeded"]) assert.ok(traceStages.includes(stage), `missing trace stage ${stage}`);
 });

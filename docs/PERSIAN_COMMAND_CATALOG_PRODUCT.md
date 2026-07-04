@@ -56,6 +56,14 @@ defaultها قبل از اعتبارسنجی اعمال می‌شوند. فیل�
 
 صفحه نتیجه نام دستور، دستگاه، vendor، وضعیت و زمان، خلاصه، خروجی قالب‌بندی‌شده و خروجی خام جمع‌شونده را نشان می‌دهد. خروجی `linux_list_open_ports` به جدول پروتکل، آدرس محلی، پورت و process/service تبدیل می‌شود.
 
+## قرارداد قطعی preview و execute
+
+درخواست دکمه «تأیید و اجرا» همیشه `intent=execute` دارد. fingerprint پیش‌نمایش فقط از `actionType`، vendor، deviceId، پارامترهای نرمال‌شده کاربر، `catalogCommandId` و `executionTemplateRef` ساخته می‌شود؛ status، زمان‌ها، audit، validation/debug و metadata تولیدی در آن نیستند. بنابراین ساخت preview آن را stale نمی‌کند.
+
+quick-execute برای preview موجود و تازه دوباره planner را اجرا نمی‌کند. preview مفقود را یک بار می‌سازد و سپس در همان درخواست صریح به PolicyGuard و connector می‌رود. موفقیت نیازمند `connectorInvoked=true`، نتیجه واقعی connector و خروج موفق فرمان است؛ در غیر این صورت پاسخ خطای روشن می‌دهد.
+
+trace ساخت‌یافته backend مراحل `action_execute_requested` تا `action_execution_succeeded/failed` را با شناسه plan/catalog/template/device، intent، connector، فرمان امن و کوتاه‌شده، exit code و طول stdout/stderr ثبت می‌کند؛ secretها در remote-command preview حذف می‌شوند.
+
 ساخت plan هیچ اجرایی انجام نمی‌دهد. Action Center شناسه query یا event داخلی را می‌خواند و plan جدید را خودکار باز می‌کند.
 
 ## resolution در quick-execute

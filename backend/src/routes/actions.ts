@@ -109,7 +109,9 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/quick-execute", async (request, reply) => {
     try {
-      const plan = await quickExecuteActionPlan(request.params.id, request.body ?? {});
+      const plan = await quickExecuteActionPlan(request.params.id, request.body ?? {}, {
+        trace: (stage, payload) => request.log.info({ ...payload, stage }, stage)
+      });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
     } catch (error) {

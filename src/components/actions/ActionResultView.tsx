@@ -13,7 +13,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
   const ports = useMemo(() => action?.actionType === "linux_read_listening_ports" ? parseOpenPorts(raw) : [], [action?.actionType, raw]);
   if (error) return <main className="mx-auto max-w-5xl p-6 text-red-200" dir="rtl">{error}</main>;
   if (!action) return <main className="mx-auto max-w-5xl p-6 text-slate-300" dir="rtl">در حال بارگذاری نتیجه…</main>;
-  const result = normalizeObject(action.resultJson); const metadata = metadataOf(action); const succeeded = action.status === "succeeded" && result.executed === true;
+  const result = normalizeObject(action.resultJson); const metadata = metadataOf(action); const succeeded = action.status === "succeeded" && result.executed === true && metadata.connectorInvoked === true;
   return <main className="mx-auto max-w-5xl p-4 sm:p-8" dir="rtl">
     <section className="rounded-2xl border border-slate-700 bg-slate-950/90 p-5 text-right text-slate-100 shadow-2xl">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
@@ -28,6 +28,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
       </dl>
       <section className="mt-5 rounded-lg border border-slate-800 p-4"><h2 className="font-semibold">خلاصه خروجی</h2><p className="mt-2 text-sm text-slate-300">{succeeded ? `${Array.isArray(result.commands) ? result.commands.length : 0} فرمان کنترل‌شده اجرا شد؛ کد خروج ${String(result.exitCode ?? 0)}.` : String(result.message ?? result.stderr ?? "اجرای connector کامل نشد.")}</p></section>
       {ports.length > 0 && <section className="mt-5 overflow-hidden rounded-lg border border-slate-800"><h2 className="p-4 font-semibold">پورت‌های در حال شنود</h2><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-900 text-slate-400"><tr><th className="p-2">پروتکل</th><th className="p-2">آدرس محلی</th><th className="p-2">پورت</th><th className="p-2">سرویس / پردازش</th></tr></thead><tbody>{ports.map((row, index) => <tr key={`${row.localAddress}:${row.port}:${index}`} className="border-t border-slate-800"><td className="p-2">{row.protocol}</td><td className="p-2" dir="ltr">{row.localAddress}</td><td className="p-2">{row.port}</td><td className="p-2" dir="ltr">{row.process}</td></tr>)}</tbody></table></div></section>}
+      {Boolean(result.stderr || result.message || result.error) && <section className="mt-5 rounded-lg border border-red-900/70 bg-red-950/15 p-4"><h2 className="font-semibold text-red-200">خطاها</h2><pre className="mt-2 whitespace-pre-wrap text-left text-xs text-red-100" dir="ltr">{String(result.stderr || result.message || result.error)}</pre></section>}
       <details className="mt-5 rounded-lg border border-slate-800 p-4"><summary className="cursor-pointer font-semibold">خروجی خام دستور</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-black/40 p-3 text-left text-xs" dir="ltr">{raw || "خروجی متنی ثبت نشده است."}</pre></details>
       <section className="mt-5 rounded-lg border border-cyan-900/60 bg-cyan-950/15 p-4"><h2 className="font-semibold">پیشنهادهای بعدی</h2><p className="mt-2 text-sm text-slate-300">خروجی را بررسی کنید؛ در صورت نیاز یک ActionPlan جداگانه برای اصلاح بسازید.</p></section>
     </section>

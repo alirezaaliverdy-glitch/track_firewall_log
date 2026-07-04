@@ -51,6 +51,8 @@ Catalog-created ActionPlans must retain `parametersJson.metadata.source=command_
 
 Prepared-command previews are never execution results. Keep `metadata.executed=false` through planning; only set it true and mark the ActionPlan `succeeded` after the registered connector/template actually runs successfully. Store executor, timestamps, exit code, and output in the result, and route successful confirmations to the command result view.
 
+Prepared-command preview freshness must use only stable execution inputs (action type, vendor, device, normalized user parameters, catalog command ID, and template reference). Never include generated metadata, status, timestamps, audit/debug data, or command-plan output. Confirm requests send `intent=execute`; a preview-only response must be treated as an error, never success.
+
 The in-app AI must use compact Evidence Packs and a central Security Orchestrator prompt; action creation is permissive, execution is controlled.
 
 # Protected Lab Behavior

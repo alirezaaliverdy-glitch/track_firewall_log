@@ -239,9 +239,9 @@ function storedNormalizedParameters(plan: ActionPlan, normalized: Record<string,
   );
 }
 
-const EXECUTION_ONLY_FIELDS = new Set(["breakGlass", "executeConfirmation", "deviceNameConfirmation", "reason"]);
+const EXECUTION_ONLY_FIELDS = new Set(["breakGlass", "executeConfirmation", "deviceNameConfirmation", "reason", "intent"]);
 
-function controlledParameterJson(value: unknown) {
+function stableJson(value: unknown) {
   const stable = (item: unknown): unknown => {
     if (Array.isArray(item)) return item.map(stable);
     if (!item || typeof item !== "object") return item;
@@ -250,8 +250,29 @@ function controlledParameterJson(value: unknown) {
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([key, nested]) => [key, stable(nested)]));
   };
-  return JSON.stringify(stable(asObject(value)));
+  return JSON.stringify(stable(value));
 }
+
+export function actionExecutionFingerprint(plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson">) {
+  const parameters = asObject(plan.parametersJson);
+  const metadata = asObject(parameters.metadata);
+  const normalizedParams = asObject(metadata.normalizedParams);
+  const fallbackParams = Object.fromEntries(Object.entries(parameters).filter(([key]) => ![
+    "metadata", "actionType", "deviceId", "vendor", "executionSupport", "requiresExplicitReview",
+    "expectedImpact", "suggestedPrechecks", "suggestedVerification", "suggestedRollback"
+  ].includes(key) && !EXECUTION_ONLY_FIELDS.has(key)));
+  return stableJson({
+    actionType: plan.actionType,
+    vendor: metadata.vendor ?? parameters.vendor ?? null,
+    deviceId: plan.deviceId,
+    params: Object.keys(normalizedParams).length > 0 ? normalizedParams : fallbackParams,
+    catalogCommandId: metadata.catalogCommandId ?? null,
+    executionTemplateRef: metadata.executionTemplateRef ?? null
+  });
+}
+
+type ExecutionTrace = (stage: string, payload: Record<string, unknown>) => void;
+type ExecutionDependencies = { selectConnector?: typeof selectDeviceConnector; trace?: ExecutionTrace; intent?: "execute" | "preview" };
 
 function connectorErrorLike(error: unknown) {
   return error && typeof error === "object" && "code" in error && "statusCode" in error && "message" in error
@@ -281,6 +302,17 @@ function withExecutionMetadata(parametersJson: unknown, patch: Record<string, un
   return { ...parameters, metadata: { ...asObject(parameters.metadata), ...patch } };
 }
 
+function parseExecutionResult(actionType: ActionType, stdout: string) {
+  if (actionType !== ActionType.linux_read_listening_ports) return null;
+  return {
+    listeningPorts: stdout.split(/\r?\n/).slice(1).map((line) => line.trim()).filter(Boolean).slice(0, 500).map((line) => {
+      const fields = line.split(/\s+/); const protocol = fields[0] ?? "unknown";
+      const endpointIndex = fields[1] === "LISTEN" ? 4 : 3; const endpoint = fields[endpointIndex] ?? ""; const match = endpoint.match(/^(.+):([^:]+)$/);
+      return { protocol, localAddress: match?.[1] ?? endpoint, port: match?.[2] ?? null, process: fields.slice(endpointIndex + 2).join(" ") || null };
+    })
+  };
+}
+
 export class ActionExecutionError extends Error {
   code: string;
   statusCode: number;
@@ -298,11 +330,11 @@ async function ensureControlledCatalogAction(plan: ActionPlan) {
   const productCatalog = resolveCatalogAction(plan, device);
   if (productCatalog.matched) {
     if (!productCatalog.valid) throw new ActionExecutionError(productCatalog.code, productCatalog.messageFa, 409);
-    return { controlled: true, catalogCommandId: productCatalog.item.id, source: "command_catalog" };
+    return { controlled: true, catalogCommandId: productCatalog.item.id, source: "command_catalog", executionTemplateRef: productCatalog.item.executionTemplateRef, connectorType: productCatalog.item.connectorType, vendor: productCatalog.item.vendor };
   }
   const legacyControlled = Boolean(getActionCatalogEntry(plan.actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if (!legacyControlled) throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "این عملیات در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.", 409);
-  return { controlled: true, catalogCommandId: null, source: "legacy_catalog" };
+  return { controlled: true, catalogCommandId: null, source: "legacy_catalog", executionTemplateRef: null, connectorType: null, vendor: vendorFromActionType(plan.actionType) ?? "unknown" };
 }
 
 export class QuickExecuteConfirmationRequiredError extends ActionExecutionError {
@@ -322,9 +354,11 @@ export function approvalPreconditionError(plan: Pick<ActionPlan, "actionType" | 
   return null;
 }
 
-export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status">, mode: ActionExecutionMode = env.actionExecutionMode) {
+export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status"> & { parametersJson?: unknown }, mode: ActionExecutionMode = env.actionExecutionMode) {
   const catalog = getActionCatalogEntry(plan.actionType);
-  const controlled = Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
+  const metadata = asObject(asObject(plan.parametersJson).metadata);
+  const productCatalogControlled = metadata.source === "command_catalog" && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
+  const controlled = productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
   if (plan.status !== ActionPlanStatus.approved && !(readOnly && plan.status === ActionPlanStatus.dry_run_ready)) {
@@ -676,7 +710,8 @@ export async function dryRunActionPlan(id: string) {
       parametersJson: toJson(withExecutionMetadata(storedNormalizedParameters(plan, validation.normalizedParameters), {
         previewGenerated: true,
         executed: false,
-        lastExecutionStatus: "preview_ready"
+        lastExecutionStatus: "preview_ready",
+        previewFingerprint: actionExecutionFingerprint({ ...plan, parametersJson: storedNormalizedParameters(plan, validation.normalizedParameters) })
       })),
       rollbackJson: toJson(validation.rollbackJson)
     },
@@ -755,7 +790,7 @@ export async function rejectActionPlan(id: string, input: Record<string, unknown
   return updated;
 }
 
-export async function executeActionPlan(id: string, executionInput: Record<string, unknown> = {}) {
+export async function executeActionPlan(id: string, executionInput: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {
   let plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
   plan = await prepareActionPlan(plan);
@@ -797,8 +832,11 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(plan, "execution_failed", "Execution refused because the command plan is missing.", { code: "COMMAND_PLAN_REQUIRED" });
     throw new ActionExecutionError("COMMAND_PLAN_REQUIRED", "An internal command plan is required before execution.");
   }
-  const dryRunParameters = asObject(asObject(plan.dryRunJson).parameters);
-  if (Object.keys(dryRunParameters).length > 0 && controlledParameterJson(dryRunParameters) !== controlledParameterJson(plan.parametersJson)) {
+  const metadata = asObject(asObject(plan.parametersJson).metadata);
+  const currentFingerprint = actionExecutionFingerprint(plan);
+  const previewFingerprint = typeof metadata.previewFingerprint === "string" ? metadata.previewFingerprint : currentFingerprint;
+  if (previewFingerprint !== currentFingerprint) {
+    await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { previewStale: true, staleReason: "user_controlled_inputs_changed" })) } });
     await audit(plan, "execution_failed", "Execution refused because the command plan is stale.", { code: "COMMAND_PLAN_STALE" });
     throw new ActionExecutionError("COMMAND_PLAN_STALE", "The command plan is stale because the ActionPlan parameters changed.");
   }
@@ -827,7 +865,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     throw new ActionExecutionError("DEVICE_REQUIRED", "Target device was not found.", 404);
   }
 
-  const connector = selectDeviceConnector(device);
+  const connector = (dependencies.selectConnector ?? selectDeviceConnector)(device);
   if (!connector) {
     await audit(plan, "execution_failed", "Execution refused because no connector matched the target device.", { code: "CONNECTOR_NOT_FOUND", deviceType: device.type, protocol: device.protocol });
     throw new ActionExecutionError("CONNECTOR_NOT_FOUND", "No connector found for this device.");
@@ -843,6 +881,10 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(plan, "execution_failed", "Execution refused by immediate PolicyGuard re-check.", { code: "VALIDATION_BLOCKED", validation });
     throw new ActionExecutionError("VALIDATION_BLOCKED", "PolicyGuard blocked execution.");
   }
+  await audit(plan, "policy_guard_passed", "PolicyGuard allowed controlled execution.", { actionType: plan.actionType });
+  dependencies.trace?.("action_policy_guard_passed", {});
+  await audit(plan, "connector_resolved", "Device connector resolved for execution.", { connector: connector.name });
+  dependencies.trace?.("action_connector_resolved", { connectorType: connector.name });
 
   const executing = await prisma.actionPlan.update({
     where: { id },
@@ -850,6 +892,9 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       status: ActionPlanStatus.executing,
       parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
         executed: false,
+        connectorInvoked: false,
+        previewStale: false,
+        staleReason: null,
         executionStartedAt: new Date().toISOString(),
         lastExecutionStatus: "executing"
       }))
@@ -871,7 +916,12 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       approved: true,
       dryRunPresent: true
     });
+    const invoked = await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(executing.parametersJson, { connectorInvoked: true })) } });
+    await audit(invoked, "connector_invoked", "Resolved connector was invoked for real execution.", { connector: connector.name });
+    dependencies.trace?.("action_connector_invoked", { connectorInvoked: true, connectorType: connector.name });
+    dependencies.trace?.("action_remote_command_started", { connectorInvoked: true, connectorType: connector.name });
     const result = await connector.execute(plan, device, (eventType, message, metadata) => audit(executing, eventType, message, metadata));
+    await audit(executing, "connector_result_received", "Connector returned a real execution result.", { executed: result.executed, commandCount: result.commands.length });
     if (result.executed && plan.actionType === ActionType.mikrotik_change_service_port) {
       const parameters = asObject(plan.parametersJson);
       const newPort = Number(parameters.newPort ?? parameters.port);
@@ -898,14 +948,17 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       exitCode: exitCodes.length ? Math.max(...exitCodes) : null,
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
-      executor: connector.name
+      executor: connector.name,
+      parsedResult: parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"))
     };
+    dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
     const updated = await prisma.actionPlan.update({
       where: { id },
       data: {
         status: executionSucceeded ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
         parametersJson: toJson(withExecutionMetadata(executing.parametersJson, {
           executed: executionSucceeded,
+          connectorInvoked: true,
           executionCompletedAt: completedAt,
           exitCode: resultPayload.exitCode,
           executor: connector.name,
@@ -918,6 +971,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     });
 
     await audit(updated, "connection_success", "Connector execution connection succeeded.", { connector: connector.name });
+    dependencies.trace?.("action_execution_result_saved", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
     await audit(updated, executionSucceeded ? "execution_succeeded" : "execution_failed", executionSucceeded ? "Connector execution succeeded." : "Connector execution did not complete successfully.", resultPayload);
     return updated;
   } catch (error) {
@@ -933,6 +987,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
         status: ActionPlanStatus.failed,
         parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
           executed: false,
+          connectorInvoked: true,
           executionCompletedAt: new Date().toISOString(),
           lastExecutionStatus: "failed"
         })),
@@ -951,16 +1006,47 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   }
 }
 
-export async function quickExecuteActionPlan(id: string, input: Record<string, unknown> = {}) {
+export async function quickExecuteActionPlan(id: string, input: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {
   const initial = await prisma.actionPlan.findUnique({ where: { id } });
   if (!initial) return null;
+  const intent = input.intent === "preview" ? "preview" : "execute";
+  const traceBase = (extra: Record<string, unknown> = {}) => ({
+    actionPlanId: initial.id, actionType: initial.actionType, deviceId: initial.deviceId,
+    catalogCommandId: asObject(asObject(initial.parametersJson).metadata).catalogCommandId ?? null,
+    executionTemplateRef: asObject(asObject(initial.parametersJson).metadata).executionTemplateRef ?? null,
+    vendor: asObject(asObject(initial.parametersJson).metadata).vendor ?? asObject(initial.parametersJson).vendor ?? null,
+    connectorType: asObject(asObject(initial.parametersJson).metadata).connectorType ?? null,
+    intent, connectorInvoked: false, remoteCommand: null, exitCode: null, stdoutLength: 0, stderrLength: 0,
+    ...extra
+  });
+  const trace = (stage: string, extra: Record<string, unknown> = {}) => dependencies.trace?.(stage, traceBase(extra));
+  trace("action_execute_requested");
+  await audit(initial, "execution_requested", "Explicit quick execution request received.", traceBase());
   let catalogResolution: Awaited<ReturnType<typeof ensureControlledCatalogAction>>;
   try { catalogResolution = await ensureControlledCatalogAction(initial); } catch (error) {
     await audit(initial, "quick_execute_blocked", "Quick Execute refused by catalog resolution.", { code: error instanceof ActionExecutionError ? error.code : "CATALOG_RESOLUTION_FAILED" });
     throw error;
   }
-  let plan = await dryRunActionPlan(id);
+  trace("action_catalog_resolved", { catalogCommandId: catalogResolution.catalogCommandId, executionTemplateRef: catalogResolution.executionTemplateRef, connectorType: catalogResolution.connectorType, vendor: catalogResolution.vendor });
+  const initialMetadata = asObject(asObject(initial.parametersJson).metadata);
+  const currentInitialFingerprint = actionExecutionFingerprint(initial);
+  const storedInitialFingerprint = typeof initialMetadata.previewFingerprint === "string" ? initialMetadata.previewFingerprint : null;
+  if (initial.dryRunJson && storedInitialFingerprint && storedInitialFingerprint !== currentInitialFingerprint) {
+    await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(initial.parametersJson, { previewStale: true, staleReason: "user_controlled_inputs_changed" })) } });
+    trace("action_preview_checked", { previewStale: true, staleReason: "user_controlled_inputs_changed" });
+    trace("action_execution_failed", { connectorInvoked: false, error: "COMMAND_PLAN_STALE" });
+    throw new ActionExecutionError("COMMAND_PLAN_STALE", "The command plan is stale because the ActionPlan inputs changed.");
+  }
+  let plan = initial.dryRunJson && storedInitialFingerprint === currentInitialFingerprint ? initial : await dryRunActionPlan(id);
   if (!plan) return null;
+  const planMetadata = asObject(asObject(plan.parametersJson).metadata);
+  const previewStale = typeof planMetadata.previewFingerprint === "string" && planMetadata.previewFingerprint !== actionExecutionFingerprint(plan);
+  const plannedCommands = [...(Array.isArray(asObject(plan.dryRunJson).plannedCommands) ? asObject(plan.dryRunJson).plannedCommands as unknown[] : []), ...(Array.isArray(asObject(plan.dryRunJson).commands) ? asObject(plan.dryRunJson).commands as unknown[] : [])];
+  const safeRemoteCommand = plannedCommands.slice(0, 2).map(String).join(" ; ").replace(/(password|passphrase|private[-_ ]?key)\s*[=:]\s*\S+/gi, "$1=[REDACTED]").slice(0, 500) || String(catalogResolution.executionTemplateRef ?? plan.actionType);
+  trace("action_preview_checked", { previewStale, staleReason: previewStale ? "user_controlled_inputs_changed" : null, remoteCommand: safeRemoteCommand });
+  await audit(plan, "preview_checked", "Prepared command preview fingerprint checked.", { previewStale, staleReason: previewStale ? "user_controlled_inputs_changed" : null });
+
+  if (intent === "preview") return plan;
 
   if (plan.status === ActionPlanStatus.validation_failed || plan.status === ActionPlanStatus.proposed) {
     await audit(plan, "quick_execute_blocked", "Quick Execute stopped before approval/execution.", {
@@ -968,7 +1054,8 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
       validationJson: plan.validationJson,
       dryRunJson: plan.dryRunJson
     });
-    return plan;
+    trace("action_execution_failed", { connectorInvoked: false, error: "PREVIEW_BLOCKED", status: plan.status });
+    throw new ActionExecutionError("PREVIEW_BLOCKED", "پیش‌نمایش آماده اجرا نیست؛ خطاهای اعتبارسنجی یا پارامترهای ناقص را بررسی کنید.");
   }
 
   if (env.actionExecutionMode === "direct_controlled" || env.actionExecutionMode === "quick_controlled") {
@@ -990,11 +1077,16 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
       catalogCommandId: catalogResolution.catalogCommandId,
       catalogSource: catalogResolution.source
     });
+    let connectorInvokedDuringExecution = false;
     try {
-      return await executeActionPlan(id, input);
+      const resultPlan = await executeActionPlan(id, input, { ...dependencies, intent, trace: (stage, payload) => { if (stage === "action_connector_invoked") connectorInvokedDuringExecution = true; trace(stage, { remoteCommand: safeRemoteCommand, ...payload }); } });
+      if (!resultPlan) return null;
+      const result = asObject(resultPlan.resultJson); const connectorInvoked = asObject(asObject(resultPlan.parametersJson).metadata).connectorInvoked === true;
+      if (!connectorInvoked || resultPlan.status === ActionPlanStatus.dry_run_ready) throw new ActionExecutionError("PREVIEW_ONLY", "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است.");
+      trace(resultPlan.status === ActionPlanStatus.succeeded ? "action_execution_succeeded" : "action_execution_failed", { connectorInvoked, remoteCommand: safeRemoteCommand, exitCode: result.exitCode ?? null, stdoutLength: String(result.stdout ?? "").length, stderrLength: String(result.stderr ?? "").length });
+      return resultPlan;
     } catch (error) {
-      const latest = await getActionPlan(id);
-      if (latest) return latest;
+      trace("action_execution_failed", { connectorInvoked: connectorInvokedDuringExecution, remoteCommand: safeRemoteCommand, error: error instanceof Error ? error.message : "execution failed" });
       throw error;
     }
   }
@@ -1026,19 +1118,10 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
   });
   if (!plan) return null;
 
-  try {
-    return await executeActionPlan(id, {
-      ...input,
-      breakGlass: plan.riskLevel === AiRiskLevel.critical
-    });
-  } catch (error) {
-    const latest = await getActionPlan(id);
-    await audit(plan, "quick_execute_failed", "Quick Execute finished with execution failure.", {
-      error: error instanceof Error ? error.message : "Execution failed"
-    });
-    if (latest) return latest;
-    throw error;
-  }
+  return executeActionPlan(id, {
+    ...input,
+    breakGlass: plan.riskLevel === AiRiskLevel.critical
+  }, { ...dependencies, intent, trace: (stage, payload) => trace(stage, { remoteCommand: safeRemoteCommand, ...payload }) });
 }
 
 export async function getActionAudit(id: string) {

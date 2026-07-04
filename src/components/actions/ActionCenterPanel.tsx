@@ -497,22 +497,26 @@ export default function ActionCenterPanel() {
   const executeSelected = () => {
     if (!selectedAction) return;
     setWorking("execute"); setMessage(null);
-    quickExecuteAction(selectedAction.id, { reason: "Execute from Action Center" }).then((plan) => {
-      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
-      else { setSelectedAction(plan); setMessage(String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد.")); }
-    }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود.")).finally(() => setWorking(null));
+    setSelectedAction((current) => current ? { ...current, status: "executing" } : current);
+    quickExecuteAction(selectedAction.id, { intent: "execute", reason: "Execute from Action Center" }).then((plan) => {
+      const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
+      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
+      else { setSelectedAction(plan); setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد.")); }
+    }).catch((error: unknown) => { void reloadSelected(selectedAction.id); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); }).finally(() => setWorking(null));
   };
 
   const executeFromList = (action: ActionPlan) => {
     setWorking(action.id);
     setMessage(null);
-    quickExecuteAction(action.id, { reason: "Execute from Action Center" })
+    setActions((current) => current.map((item) => item.id === action.id ? { ...item, status: "executing" } : item));
+    quickExecuteAction(action.id, { intent: "execute", reason: "Execute from Action Center" })
       .then((plan) => {
         setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
-        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
-        else setMessage(String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد."));
+        const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
+        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
+        else setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد."));
       })
-      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Execution failed."))
+      .catch((error: unknown) => { void getAction(action.id).then((plan) => setActions((current) => current.map((item) => item.id === plan.id ? plan : item))); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); })
       .finally(() => setWorking(null));
   };
 
@@ -528,7 +532,7 @@ export default function ActionCenterPanel() {
     runPlanStep("save-and-execute", async (id) => {
       const corrected = await correctActionFields(id, fields);
       if (corrected.status === "validation_failed") return corrected;
-      return quickExecuteAction(id, { reason: "Execute from Action Center" });
+      return quickExecuteAction(id, { intent: "execute", reason: "Execute from Action Center" });
     });
   };
 
@@ -916,6 +920,6 @@ export default function ActionCenterPanel() {
 function CatalogExecutionDebug({ action }: { action: ActionPlan }) {
   const metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
   if (metadata.source !== "command_catalog") return null;
-  const fields = ["catalogCommandId", "actionType", "executionTemplateRef", "executionSupport", "connectorType", "executed", "lastExecutionStatus"];
+  const fields = ["catalogCommandId", "actionType", "executionTemplateRef", "executionSupport", "connectorType", "executed", "connectorInvoked", "lastExecutionStatus", "previewStale", "staleReason"];
   return <div className="mb-4 rounded border border-cyan-950 bg-cyan-950/10 p-3"><h4 className="text-xs font-semibold text-cyan-200">Catalog execution debug</h4><dl className="mt-2 grid gap-2 sm:grid-cols-2">{fields.map((field) => <div key={field}><dt className="text-[11px] text-zinc-500">{field}</dt><dd className="text-xs text-zinc-300">{String(metadata[field] ?? "-")}</dd></div>)}</dl></div>;
 }

@@ -38,6 +38,7 @@ MVP / prototype moving toward Mini-SOAR.
 - Strict command-catalog lifecycle with startup validation, real execution-template registry, pre-creation parameter validation, device/vendor filtering, and explicit implemented/manual/planned/unsupported states
 - End-to-end catalog handoff: complete ActionPlan catalog metadata, product-aware quick-execute resolution, automatic Action Center selection/navigation, and state-aware execution buttons
 - Real prepared-command execution lifecycle with connector-confirmed success, persisted output/exit metadata, Persian preview separation, and a dedicated command result view
+- Deterministic preview fingerprints, explicit execute intent, connector-invocation proof, structured quick-execute traces, and hard fake-connector regression coverage
 
 ## Protected Behavior
 
@@ -83,7 +84,7 @@ The next product-catalog iteration should promote manual/planned items only afte
 
 ## Latest Task
 
-Task 14.1C fixed prepared-command confirmation so implemented catalog items execute their registered Linux/MikroTik connector template, while manual/planned items remain non-executable. Success now requires a real connector result and opens `/actions/:id/result`.
+Task 14.1D fixed the preview-vs-execution regression: product-catalog actions are recognized by the quick-controlled approval guard, generated metadata cannot stale its own preview, explicit execute cannot return a preview as HTTP success, and connector invocation/output are proven and traced.
 
 ## Last Updated
 

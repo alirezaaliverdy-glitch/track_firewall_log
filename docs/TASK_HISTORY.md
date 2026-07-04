@@ -1,5 +1,38 @@
 # Task History
 
+## Task 14.1D: Fix Preview-vs-Execution Bug in Prepared Command Flow
+
+Date: 2026-07-04
+
+Goal: Ensure Confirm & Execute leaves preview mode, invokes the real connector exactly once, persists output, and never reports preview-only work as success.
+
+Files changed:
+
+- Replaced whole-parameters stale comparison with a stable execution-input fingerprint.
+- Fixed quick-controlled approval recognition for product command-catalog metadata and removed the catch that returned failed previews as HTTP 200.
+- Added explicit preview/execute intent, connector invocation metadata, complete structured execution traces/audits, and Persian preview-only errors.
+- Added fake Linux connector tests proving planning calls zero executions and explicit execution calls exactly once with reloadable stdout.
+
+Behavior changed:
+
+- Existing fresh previews are reused; missing previews are generated once; user-input changes produce a real stale error.
+- `succeeded` requires connector invocation and a real successful result. UI navigation additionally checks `connectorInvoked=true`.
+- Backend logs cover request, catalog, preview, policy, connector, remote command, result persistence, and final outcome with safe bounded output metadata.
+
+Protected behavior preserved:
+
+- `quick_controlled`, PolicyGuard, confirmation, audit, and existing Linux/MikroTik connector implementations remain intact.
+
+Build/test result:
+
+- Command catalog validation passed: 36 items.
+- Backend TypeScript build passed; backend tests passed: 103/103.
+- Frontend TypeScript/Vite production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Fix prepared command preview execution transition
+
 ## Task 14.1C: Fix Prepared Command Real Execution, Lifecycle, and Result Display
 
 Date: 2026-07-04
