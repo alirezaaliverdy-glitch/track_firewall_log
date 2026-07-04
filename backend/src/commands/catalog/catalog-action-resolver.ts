@@ -12,15 +12,15 @@ export function resolveCatalogAction(plan: Pick<ActionPlan, "actionType" | "para
   const commandId = typeof metadata.catalogCommandId === "string" ? metadata.catalogCommandId : null;
   const fallback = COMMAND_CATALOG.filter((item) => item.implementationState === "implemented" && item.actionType === plan.actionType);
   const item = commandId ? findCatalogItem(commandId) : fallback.length === 1 ? fallback[0] : undefined;
-  if (!item) return commandId ? { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_FOUND", messageFa: "دستور کاتالوگ پیدا نشد یا نسخه آن معتبر نیست." } : { matched: false };
-  if (item.implementationState !== "implemented" || item.executionSupport !== "connector") return { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_EXECUTABLE", messageFa: "این دستور هنوز برای اجرای خودکار پشتیبانی نمی‌شود." };
-  if (plan.actionType !== item.actionType) return { matched: true, valid: false, code: "CATALOG_ACTION_TYPE_MISMATCH", messageFa: "نوع عملیات با دستور کاتالوگ سازگار نیست." };
+  if (!item) return commandId ? { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_FOUND", messageFa: "این دستور هنوز اجرای خودکار ندارد" } : { matched: false };
+  if (item.implementationState !== "implemented" || item.executionSupport !== "connector") return { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_EXECUTABLE", messageFa: "این دستور هنوز اجرای خودکار ندارد" };
+  if (plan.actionType !== item.actionType) return { matched: true, valid: false, code: "CATALOG_ACTION_TYPE_MISMATCH", messageFa: "این دستور هنوز اجرای خودکار ندارد" };
   const template = getExecutionTemplate(item.executionTemplateRef);
-  if (!template || template.actionType !== plan.actionType || template.connectorType !== item.connectorType) return { matched: true, valid: false, code: "CATALOG_TEMPLATE_MISSING", messageFa: "این دستور هنوز برای اجرای خودکار پشتیبانی نمی‌شود." };
+  if (!template || template.actionType !== plan.actionType || template.connectorType !== item.connectorType) return { matched: true, valid: false, code: "CATALOG_TEMPLATE_MISSING", messageFa: "قالب اجرای این دستور پیدا نشد" };
   const missing = item.requiredParams.filter((field) => parameters[field.key] === undefined || parameters[field.key] === null || parameters[field.key] === "");
-  if (missing.length) return { matched: true, valid: false, code: "CATALOG_PARAMS_INCOMPLETE", messageFa: "پارامترهای لازم ناقص است." };
-  if (!device || (item.vendor !== "generic" && vendorOf(device) !== item.vendor)) return { matched: true, valid: false, code: "CATALOG_DEVICE_UNSUPPORTED", messageFa: "این دستور برای این نوع دستگاه قابل اجرا نیست." };
+  if (missing.length) return { matched: true, valid: false, code: "CATALOG_PARAMS_INCOMPLETE", messageFa: "پارامترهای دستور ناقص است" };
+  if (!device || (item.vendor !== "generic" && vendorOf(device) !== item.vendor)) return { matched: true, valid: false, code: "CATALOG_DEVICE_UNSUPPORTED", messageFa: "اتصال دستگاه آماده نیست" };
   const connector = selectDeviceConnector(device);
-  if (!connector || !connector.supportedActions.includes(plan.actionType)) return { matched: true, valid: false, code: "CATALOG_DEVICE_UNSUPPORTED", messageFa: "این دستور برای این نوع دستگاه قابل اجرا نیست." };
+  if (!connector || !connector.supportedActions.includes(plan.actionType)) return { matched: true, valid: false, code: "CATALOG_DEVICE_UNSUPPORTED", messageFa: "اتصال دستگاه آماده نیست" };
   return { matched: true, valid: true, item };
 }

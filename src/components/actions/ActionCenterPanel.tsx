@@ -163,7 +163,7 @@ function VendorPlanView({ dryRunJson }: { dryRunJson: Record<string, unknown> })
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h4 className="text-sm font-semibold text-blue-100">Generated Command Plan</h4>
-          <p className="mt-1 text-xs text-blue-100/70">Technical execution preview generated from controlled templates.</p>
+          <p className="mt-1 text-xs text-blue-100/70" dir="rtl">این فقط پیش‌نمایش اجرای دستور است. هنوز روی دستگاه اجرا نشده.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className={`rounded border px-2 py-0.5 text-xs ${badgeClass(String(vendorPlan.status ?? "planned"))}`}>
@@ -354,7 +354,8 @@ function ProposalDetails({ action }: { action: ActionPlan }) {
   );
 }
 
-function sourceLabel(source: string) {
+function sourceLabel(source: string, action?: ActionPlan) {
+  if (normalizeObject(normalizeObject(action?.parametersJson).metadata).source === "command_catalog") return "کاتالوگ دستور";
   if (source === "ai") return "AI Assistant";
   if (source === "detection") return "Detection";
   if (source === "user") return "Manual";
@@ -495,7 +496,11 @@ export default function ActionCenterPanel() {
 
   const executeSelected = () => {
     if (!selectedAction) return;
-    runPlanStep("execute", (id) => quickExecuteAction(id, { reason: "Execute from Action Center" }));
+    setWorking("execute"); setMessage(null);
+    quickExecuteAction(selectedAction.id, { reason: "Execute from Action Center" }).then((plan) => {
+      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
+      else { setSelectedAction(plan); setMessage(String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد.")); }
+    }).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود.")).finally(() => setWorking(null));
   };
 
   const executeFromList = (action: ActionPlan) => {
@@ -504,7 +509,8 @@ export default function ActionCenterPanel() {
     quickExecuteAction(action.id, { reason: "Execute from Action Center" })
       .then((plan) => {
         setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
-        setMessage(plan.status === "succeeded" ? "Execution succeeded." : friendlyActionReason(plan));
+        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
+        else setMessage(String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد."));
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Execution failed."))
       .finally(() => setWorking(null));
@@ -693,7 +699,7 @@ export default function ActionCenterPanel() {
                     <td className="px-3 py-2">
                       <RiskChip risk={action.riskLevel} />
                     </td>
-                    <td className="px-3 py-2 text-xs text-zinc-400">{sourceLabel(action.source)}</td>
+                    <td className="px-3 py-2 text-xs text-zinc-400">{sourceLabel(action.source, action)}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">
                       <p>{formatDateTime(action.createdAt)}</p>
                       <p className="mt-1 text-zinc-600">updated {formatDateTime(action.updatedAt)}</p>
@@ -787,7 +793,7 @@ export default function ActionCenterPanel() {
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
                   <p className="text-xs text-zinc-500">Source</p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-100">{sourceLabel(selectedAction.source)}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{sourceLabel(selectedAction.source, selectedAction)}</p>
                 </div>
               </div>
 
@@ -859,6 +865,7 @@ export default function ActionCenterPanel() {
               <details className="mb-4 rounded border border-zinc-800 bg-black/20 p-3 text-left">
                 <summary className="cursor-pointer text-sm font-semibold text-zinc-200">Details</summary>
                 <div className="mt-3">
+                  <CatalogExecutionDebug action={selectedAction} />
                   <ValidationSummary action={selectedAction} />
                   <div className="mb-4 grid gap-3 lg:grid-cols-2">
                     <JsonBlock title="Normalized parameters" value={selectedAction.parametersJson} />
@@ -904,4 +911,11 @@ export default function ActionCenterPanel() {
       )}
     </section>
   );
+}
+
+function CatalogExecutionDebug({ action }: { action: ActionPlan }) {
+  const metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
+  if (metadata.source !== "command_catalog") return null;
+  const fields = ["catalogCommandId", "actionType", "executionTemplateRef", "executionSupport", "connectorType", "executed", "lastExecutionStatus"];
+  return <div className="mb-4 rounded border border-cyan-950 bg-cyan-950/10 p-3"><h4 className="text-xs font-semibold text-cyan-200">Catalog execution debug</h4><dl className="mt-2 grid gap-2 sm:grid-cols-2">{fields.map((field) => <div key={field}><dt className="text-[11px] text-zinc-500">{field}</dt><dd className="text-xs text-zinc-300">{String(metadata[field] ?? "-")}</dd></div>)}</dl></div>;
 }

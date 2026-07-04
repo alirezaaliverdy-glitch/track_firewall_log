@@ -100,15 +100,15 @@ const LINUX_READ_ACTIONS = new Set<ActionType>([
 
 function linuxReadCommand(actionType: ActionType, sudo = "") {
   const commands: Partial<Record<ActionType, { template: string; command: string }>> = {
-    [ActionType.linux_check_ssh_status]: { template: "SSH service and listener status", command: "systemctl is-active ssh || systemctl is-active sshd; ss -lntp | grep -E 'sshd|:22' || true" },
-    [ActionType.linux_check_failed_logins]: { template: "failed SSH logins in last 24 hours", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager | grep -Ei 'failed|invalid user|authentication failure' | tail -n 200 || true` },
-    [ActionType.linux_check_sudo_users]: { template: "sudo and wheel group members", command: "getent group sudo; getent group wheel" },
-    [ActionType.linux_check_fail2ban_status]: { template: "fail2ban service status", command: `systemctl is-active fail2ban; ${sudo}fail2ban-client status` },
+    [ActionType.linux_check_ssh_status]: { template: "SSH service status", command: "systemctl is-active ssh || systemctl is-active sshd || service ssh status || service sshd status" },
+    [ActionType.linux_check_failed_logins]: { template: "failed SSH logins in last 24 hours", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null || ${sudo}tail -n 300 /var/log/auth.log 2>/dev/null || ${sudo}tail -n 300 /var/log/secure 2>/dev/null` },
+    [ActionType.linux_check_sudo_users]: { template: "sudo, wheel, and UID 0 users", command: "getent group sudo; getent group wheel; awk -F: '$3==0 {print $1}' /etc/passwd" },
+    [ActionType.linux_check_fail2ban_status]: { template: "fail2ban service status", command: `systemctl is-active fail2ban; command -v fail2ban-client >/dev/null 2>&1 && ${sudo}fail2ban-client status || true` },
     [ActionType.linux_read_hostname]: { template: "hostname", command: "hostname" },
     [ActionType.linux_read_interfaces]: { template: "ip -brief address", command: "ip -brief address" },
     [ActionType.linux_read_routes]: { template: "ip route show", command: "ip route show" },
-    [ActionType.linux_read_listening_ports]: { template: "ss -lntup", command: "ss -lntup" },
-    [ActionType.linux_read_firewall_status]: { template: "ufw status verbose", command: `${sudo}ufw status verbose` },
+    [ActionType.linux_read_listening_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
+    [ActionType.linux_read_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
     [ActionType.linux_read_auth_logs]: { template: "journalctl SSH authentication events", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -n 200` },
     [ActionType.linux_read_users]: { template: "getent passwd", command: "getent passwd" },
     [ActionType.linux_read_docker]: { template: "docker ps", command: "docker ps --no-trunc" },
@@ -626,7 +626,7 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   } else if (plan.actionType === ActionType.linux_check_service_status) {
     const service = serviceParam(parameters.serviceName ?? parameters.service);
     affectedServices.push(service);
-    plannedCommands = [`systemctl is-active ${service}`, `systemctl status ${service} --no-pager -l`];
+    plannedCommands = [`systemctl status ${service} --no-pager || service ${service} status`];
     validationWarnings.push("Read-only service status check. No service restart or config change is planned.");
   } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
     const read = linuxReadCommand(plan.actionType);
@@ -742,12 +742,10 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.steps = [`${sudo}ufw deny from ${srcIp}`];
     } else if (plan.actionType === ActionType.linux_check_service_status) {
       const service = serviceParam(parameters.serviceName ?? parameters.service);
-      const active = await exec(client, `systemctl is-active ${service}`);
-      commands.push({ template: `systemctl is-active ${service}`, stdout: active.stdout, stderr: active.stderr, exitCode: active.exitCode });
-      const status = await exec(client, `systemctl status ${service} --no-pager -l`);
-      commands.push({ template: `systemctl status ${service} --no-pager -l`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
+      const status = await exec(client, `systemctl status ${service} --no-pager || service ${service} status`);
+      commands.push({ template: `service status ${service}`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
       rollbackJson.readOnly = true;
-      warnings.push(active.exitCode === 0 ? "SERVICE_ACTIVE" : "SERVICE_NOT_ACTIVE");
+      warnings.push(status.exitCode === 0 ? "SERVICE_AVAILABLE" : "SERVICE_NOT_AVAILABLE");
     } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
       const read = linuxReadCommand(plan.actionType, sudo);
       if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);

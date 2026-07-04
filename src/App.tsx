@@ -30,9 +30,12 @@ import ActionCenterPanel from "./components/actions/ActionCenterPanel";
 import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapabilityMatrixPanel";
 import AppBackground from "./components/background/AppBackground";
 import CommandCatalogPanel from "./components/commands/CommandCatalogPanel";
+import ActionResultView from "./components/actions/ActionResultView";
 
 function App() {
   const { user, logout } = useAuth();
+  const resultMatch = window.location.pathname.match(/^\/actions\/([^/]+)\/result\/?$/);
+  if (resultMatch) return <div className="authenticated-app"><AppBackground /><ActionResultView actionPlanId={decodeURIComponent(resultMatch[1])} /></div>;
   return (
     <Suspense fallback={<h1>loading logs ...</h1>}>
       <LogProvider>

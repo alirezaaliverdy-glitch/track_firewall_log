@@ -1,5 +1,37 @@
 # Task History
 
+## Task 14.1C: Fix Prepared Command Real Execution, Lifecycle, and Result Display
+
+Date: 2026-07-04
+
+Goal: Make confirmation execute the registered connector/template, persist an honest execution result, and open a clean Persian result view.
+
+Files changed:
+
+- Tightened catalog resolution, execution metadata, connector-result success gating, and Linux command fallbacks.
+- Added Persian preview/result UX, catalog execution debug fields, parsed listening-port results, and raw-output fallback.
+- Added lifecycle/template/UI regression coverage and updated product documentation.
+
+Behavior changed:
+
+- Planning remains non-executing; `executed` stays false until a real connector command succeeds.
+- Successful quick execution stores timestamps, exit code, stdout/stderr, executor, and navigates to `/actions/:id/result`.
+- Manual-only and unsupported operations cannot display or use automatic execution.
+
+Protected behavior preserved:
+
+- `quick_controlled`, PolicyGuard, explicit confirmation, connector checks, audit logging, and existing Linux/MikroTik connector architecture remain in place.
+
+Build/test result:
+
+- Command catalog validation passed: 36 items.
+- Backend TypeScript build passed; backend tests passed: 101/101.
+- Frontend TypeScript/Vite production build passed (existing bundle-size warning only).
+
+Commit message:
+
+- Fix prepared command execution lifecycle and results
+
 ## Task 10: Project Integrity and Production Safety
 
 Summary:

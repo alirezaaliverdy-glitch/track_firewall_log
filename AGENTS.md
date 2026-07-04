@@ -49,6 +49,8 @@ Every product catalog item must declare `implemented`, `manualOnly`, `planned`, 
 
 Catalog-created ActionPlans must retain `parametersJson.metadata.source=command_catalog`, catalog ID/version, exact action type, template/connector, implementation state, execution support, normalized parameters, and required-parameter satisfaction. Quick execution must resolve this metadata before using the legacy action catalogs; do not bypass PolicyGuard, confirmation, connector checks, or audit.
 
+Prepared-command previews are never execution results. Keep `metadata.executed=false` through planning; only set it true and mark the ActionPlan `succeeded` after the registered connector/template actually runs successfully. Store executor, timestamps, exit code, and output in the result, and route successful confirmations to the command result view.
+
 The in-app AI must use compact Evidence Packs and a central Security Orchestrator prompt; action creation is permissive, execution is controlled.
 
 # Protected Lab Behavior

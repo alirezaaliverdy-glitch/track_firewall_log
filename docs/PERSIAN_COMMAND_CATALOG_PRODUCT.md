@@ -52,6 +52,10 @@ defaultها قبل از اعتبارسنجی اعمال می‌شوند. فیل�
 
 `کارت دستور -> POST create-action-plan -> پیام موفقیت -> ?selected=<planId>#action-center -> refresh/select جزئیات -> تأیید کاربر -> quick-execute -> catalog resolver -> PolicyGuard -> dry-run -> connector -> audit`
 
+پیش‌نمایش با متن «این فقط پیش‌نمایش اجرای دستور است. هنوز روی دستگاه اجرا نشده.» از نتیجه جدا است. metadata در این مرحله `previewGenerated=true` و `executed=false` دارد. پس از تأیید، فقط اجرای موفق واقعی connector/template می‌تواند status را `succeeded` و `executed=true` کند؛ زمان شروع/پایان، exitCode، stdout/stderr و executor ذخیره می‌شوند و UI به `/actions/:actionPlanId/result` می‌رود.
+
+صفحه نتیجه نام دستور، دستگاه، vendor، وضعیت و زمان، خلاصه، خروجی قالب‌بندی‌شده و خروجی خام جمع‌شونده را نشان می‌دهد. خروجی `linux_list_open_ports` به جدول پروتکل، آدرس محلی، پورت و process/service تبدیل می‌شود.
+
 ساخت plan هیچ اجرایی انجام نمی‌دهد. Action Center شناسه query یا event داخلی را می‌خواند و plan جدید را خودکار باز می‌کند.
 
 ## resolution در quick-execute

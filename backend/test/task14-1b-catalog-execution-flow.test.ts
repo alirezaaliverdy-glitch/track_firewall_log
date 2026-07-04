@@ -41,7 +41,7 @@ test("manualOnly cannot quick execute and missing params do not create plans", a
   const manual = await app.inject({ method: "POST", url: "/api/commands/catalog/linux.enable-fail2ban/create-action-plan", payload: { deviceId: device.id, params: {} } });
   assert.equal(manual.statusCode, 201);
   const quick = await app.inject({ method: "POST", url: `/api/actions/${manual.json().id}/quick-execute`, payload: {} });
-  assert.equal(quick.statusCode, 409); assert.equal(quick.json().error, "CATALOG_COMMAND_NOT_EXECUTABLE"); assert.match(quick.json().detail, /پشتیبانی نمی‌شود/);
+  assert.equal(quick.statusCode, 409); assert.equal(quick.json().error, "CATALOG_COMMAND_NOT_EXECUTABLE"); assert.equal(quick.json().detail, "این دستور هنوز اجرای خودکار ندارد");
 });
 
 test("frontend publishes selection, updates URL, and Action Center opens selected plan", () => {

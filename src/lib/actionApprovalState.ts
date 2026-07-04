@@ -10,7 +10,7 @@ function array(value: unknown): unknown[] {
 
 export function actionExecutionUiState(action: ActionPlan) {
   const parameters = object(action.parametersJson);
-  const executionSupport = String(parameters.executionSupport ?? "");
+  const executionSupport = String(metadataValue(parameters, "executionSupport") ?? "");
   const metadata = object(parameters.metadata);
   const catalogState = String(metadata.implementationState ?? "");
   if (metadata.source === "command_catalog" && (catalogState !== "implemented" || executionSupport !== "connector" || !metadata.executionTemplateRef)) {
@@ -62,4 +62,9 @@ export function actionExecutionUiState(action: ActionPlan) {
     return { state: "blocked", canApproveAndExecute: false, canExecute: false, reason: "The action changed after its preview. Select Execute again to rebuild the command plan.", missingField: null };
   }
   return { state: "ready", canApproveAndExecute: true, canExecute: true, reason: null, missingField: null };
+}
+
+function metadataValue(parameters: Record<string, unknown>, key: string) {
+  const metadata = object(parameters.metadata);
+  return metadata[key] ?? parameters[key];
 }

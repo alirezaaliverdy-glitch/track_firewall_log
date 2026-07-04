@@ -37,6 +37,7 @@ MVP / prototype moving toward Mini-SOAR.
 - Persian-first backend Command Catalog foundation with six vendors, Persian search/filter UI, ActionPlan handoff, and proposal-only AI fallback
 - Strict command-catalog lifecycle with startup validation, real execution-template registry, pre-creation parameter validation, device/vendor filtering, and explicit implemented/manual/planned/unsupported states
 - End-to-end catalog handoff: complete ActionPlan catalog metadata, product-aware quick-execute resolution, automatic Action Center selection/navigation, and state-aware execution buttons
+- Real prepared-command execution lifecycle with connector-confirmed success, persisted output/exit metadata, Persian preview separation, and a dedicated command result view
 
 ## Protected Behavior
 
@@ -79,6 +80,10 @@ These must not be changed unless explicitly requested:
 - Task 15: Report Generator
 
 The next product-catalog iteration should promote manual/planned items only after real connector handlers and verification paths exist, and continue Persian localization without changing controlled execution.
+
+## Latest Task
+
+Task 14.1C fixed prepared-command confirmation so implemented catalog items execute their registered Linux/MikroTik connector template, while manual/planned items remain non-executable. Success now requires a real connector result and opens `/actions/:id/result`.
 
 ## Last Updated
 

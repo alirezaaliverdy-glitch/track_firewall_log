@@ -276,6 +276,11 @@ async function audit(plan: Pick<ActionPlan, "id" | "deviceId">, eventType: strin
   });
 }
 
+function withExecutionMetadata(parametersJson: unknown, patch: Record<string, unknown>) {
+  const parameters = asObject(parametersJson);
+  return { ...parameters, metadata: { ...asObject(parameters.metadata), ...patch } };
+}
+
 export class ActionExecutionError extends Error {
   code: string;
   statusCode: number;
@@ -659,7 +664,6 @@ export async function dryRunActionPlan(id: string) {
     data: {
       status: planStatus,
       riskLevel: validation.riskLevel,
-      parametersJson: toJson(storedNormalizedParameters(plan, validation.normalizedParameters)),
       validationJson: toJson({
         ...validationDetails({ plan, validation, stage: "command_plan" }),
         plannerStatus: dryRunObject.status,
@@ -669,6 +673,11 @@ export async function dryRunActionPlan(id: string) {
         unsupportedReason: dryRunObject.unsupportedReason
       }),
       dryRunJson: toJson(dryRun),
+      parametersJson: toJson(withExecutionMetadata(storedNormalizedParameters(plan, validation.normalizedParameters), {
+        previewGenerated: true,
+        executed: false,
+        lastExecutionStatus: "preview_ready"
+      })),
       rollbackJson: toJson(validation.rollbackJson)
     },
     include: includeRelations()
@@ -837,7 +846,14 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
 
   const executing = await prisma.actionPlan.update({
     where: { id },
-    data: { status: ActionPlanStatus.executing },
+    data: {
+      status: ActionPlanStatus.executing,
+      parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
+        executed: false,
+        executionStartedAt: new Date().toISOString(),
+        lastExecutionStatus: "executing"
+      }))
+    },
     include: includeRelations()
   });
 
@@ -871,18 +887,38 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
         });
       }
     }
+    const completedAt = new Date().toISOString();
+    const exitCodes = result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
+    const executionSucceeded = result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0);
+    const resultPayload = {
+      ...result,
+      executed: executionSucceeded,
+      executionStartedAt: asObject(executing.parametersJson).metadata && asObject(asObject(executing.parametersJson).metadata).executionStartedAt,
+      executionCompletedAt: completedAt,
+      exitCode: exitCodes.length ? Math.max(...exitCodes) : null,
+      stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
+      stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
+      executor: connector.name
+    };
     const updated = await prisma.actionPlan.update({
       where: { id },
       data: {
-        status: result.executed ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
-        resultJson: toJson(result),
+        status: executionSucceeded ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
+        parametersJson: toJson(withExecutionMetadata(executing.parametersJson, {
+          executed: executionSucceeded,
+          executionCompletedAt: completedAt,
+          exitCode: resultPayload.exitCode,
+          executor: connector.name,
+          lastExecutionStatus: executionSucceeded ? "succeeded" : "failed"
+        })),
+        resultJson: toJson(resultPayload),
         rollbackJson: toJson(result.rollbackJson ?? plan.rollbackJson)
       },
       include: includeRelations()
     });
 
     await audit(updated, "connection_success", "Connector execution connection succeeded.", { connector: connector.name });
-    await audit(updated, result.executed ? "execution_succeeded" : "execution_failed", result.executed ? "Connector execution succeeded." : "Connector execution did not complete automatically.", result);
+    await audit(updated, executionSucceeded ? "execution_succeeded" : "execution_failed", executionSucceeded ? "Connector execution succeeded." : "Connector execution did not complete successfully.", resultPayload);
     return updated;
   } catch (error) {
     const structural = connectorErrorLike(error);
@@ -895,6 +931,11 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       where: { id },
       data: {
         status: ActionPlanStatus.failed,
+        parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
+          executed: false,
+          executionCompletedAt: new Date().toISOString(),
+          lastExecutionStatus: "failed"
+        })),
         resultJson: toJson({
           executed: false,
           error: connectorError.code,
