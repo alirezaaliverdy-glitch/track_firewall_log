@@ -89,4 +89,10 @@ Task 14.1E unified AI and prepared-command execution in lab unrestricted mode. S
 
 ## Last Updated
 
-2026-07-04
+2026-07-05
+
+## Task 15.1 Update
+
+- Vendor-aware Daily Check profiles now cover Linux, MikroTik, FortiGate, Cisco, pfSense, Juniper, Palo Alto, Windows, Docker, and Kubernetes.
+- Linux and MikroTik use real read-only connector templates; other vendors are clearly manual-only.
+- Global aliases, executable AI fallback metadata, one-time stale-preview rebuild, grouped Persian results, and new-tab result navigation are implemented.

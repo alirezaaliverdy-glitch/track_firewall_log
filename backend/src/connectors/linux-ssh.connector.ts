@@ -71,6 +71,7 @@ export class ConnectorError extends Error {
 
 const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.open_port,
+  ActionType.linux_open_port,
   ActionType.close_port,
   ActionType.block_source_ip_temporary,
   ActionType.unblock_source_ip,
@@ -93,6 +94,7 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.linux_read_users,
   ActionType.linux_read_docker,
   ActionType.linux_read_nginx
+  ,ActionType.linux_daily_check
 ];
 
 const LINUX_READ_ACTIONS = new Set<ActionType>([
@@ -605,7 +607,7 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   let plannedCommands: string[] = [];
   let rollbackSteps: string[] = [];
 
-  if (plan.actionType === ActionType.open_port) {
+  if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
     const port = portParam(parameters.port);
     affectedPorts.push(port);
     plannedCommands = [`sudo -n ufw allow ${port}/${protocol} comment 'firewall-log-analyzer action ${plan.id}'`, "sudo -n ufw status numbered"];
@@ -634,6 +636,9 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     validationWarnings.push("Exact deny rule number will be discovered at execution time. No guessed deletion is allowed.");
   } else if (plan.actionType === ActionType.change_ssh_port) {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Changing SSH port has an execution preview but is not enabled in this connector.");
+  } else if (plan.actionType === ActionType.linux_daily_check) {
+    plannedCommands = ["controlled Linux daily-check bundle (read-only)"];
+    rollbackSteps = [];
   } else if (plan.actionType === ActionType.linux_check_service_status) {
     const service = serviceParam(parameters.serviceName ?? parameters.service);
     affectedServices.push(service);
@@ -704,7 +709,18 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       return result;
     };
 
-    if (plan.actionType === ActionType.open_port) {
+    if (plan.actionType === ActionType.linux_daily_check) {
+      const daily = [
+        "printf '===SYSTEM===\\n'; uptime; free -m; swapon --show 2>/dev/null || true; df -h; df -i",
+        "printf '===SERVICES===\\n'; systemctl --failed --no-pager 2>/dev/null || true; systemctl is-active ssh sshd nginx apache2 httpd docker fail2ban 2>/dev/null || true",
+        "printf '===NETWORK===\\n'; ip -brief address; ip route; ss -lntup 2>/dev/null || ss -lntp 2>/dev/null || true",
+        `${sudo}sh -c \"printf '===FIREWALL===\\n'; ufw status verbose 2>/dev/null || nft list ruleset 2>/dev/null || iptables -S 2>/dev/null || true\"`,
+        `${sudo}sh -c \"printf '===LOGS===\\n'; journalctl -p err..alert --since '24 hours ago' -n 150 --no-pager 2>/dev/null || true; journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null | grep -Ei 'failed|invalid user|authentication failure' | tail -n 100 || true\"`,
+        "printf '===UPDATES===\\n'; (apt list --upgradable 2>/dev/null || dnf check-update 2>/dev/null || yum check-update 2>/dev/null || true) | head -n 100"
+      ];
+      for (const command of daily) await pushCommand("linux daily check", command);
+      rollbackJson.readOnly = true;
+    } else if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
       const port = portParam(parameters.port);
       const template = `ufw allow ${port}/${protocol}`;
       await pushCommand(template, `${sudo}ufw allow ${port}/${protocol} comment 'firewall-log-analyzer action ${plan.id}'`);

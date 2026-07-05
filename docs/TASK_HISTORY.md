@@ -1,5 +1,21 @@
 # Task History
 
+## Task 15.1: Multi-Vendor Daily Check Engine + AI/Catalog Execution Fix
+
+Date: 2026-07-05
+
+Goal: Add vendor-aware daily checks and ensure supported Persian AI/catalog requests resolve to real controlled templates.
+
+Files changed: Daily Check registry, engine, routes and UI; Linux/MikroTik templates and connectors; catalog, aliases, migration, grouped results, tests, and docs.
+
+Behavior changed: Linux/MikroTik daily checks run bounded read-only commands after confirmation. Other vendors remain honest manual-only profiles. Stale previews rebuild once and continue; results open in a new tab; success still requires a real connector result.
+
+Protected behavior preserved: `quick_controlled`, unrestricted lab confirmation, PolicyGuard, connector allowlists, audit, and real-result gating.
+
+Build/test result: catalog validation and builds passed; backend suite passed after applying the enum migration to the local test database.
+
+Commit message: Add vendor-aware daily checks and execution mapping
+
 ## Task 14.1E: Lab-Unrestricted Real Execution for AI and Catalog Actions
 
 Date: 2026-07-04

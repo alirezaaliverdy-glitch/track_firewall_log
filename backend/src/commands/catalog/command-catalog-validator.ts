@@ -3,7 +3,7 @@ import { getExecutionTemplate } from "../execution/execution-template-registry.j
 import type { CommandCatalogItem, CommandVendor } from "./types.js";
 import { getDeviceConnectors, getVendorPlanners } from "../../connectors/connector-registry.service.js";
 
-const vendors = new Set<CommandVendor>(["linux", "mikrotik", "fortigate", "cisco", "pfsense", "generic"]);
+const vendors = new Set<CommandVendor>(["linux", "mikrotik", "fortigate", "cisco", "pfsense", "juniper", "paloalto", "windows", "generic"]);
 export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
   const errors: string[] = []; const ids = new Set<string>(); const actionTypes = new Set<string>(Object.values(ActionType));
   for (const item of items) {

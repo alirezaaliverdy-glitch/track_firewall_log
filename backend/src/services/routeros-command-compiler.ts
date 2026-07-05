@@ -131,6 +131,10 @@ export function compileRouterOsAction(input: {
   const actionType = input.actionType;
 
   switch (actionType) {
+    case ActionType.mikrotik_daily_check: {
+      const commands = ["/system resource print", "/system package print", "/interface print stats", "/ip service print", "/ip firewall filter print stats", "/ip firewall nat print", "/ip firewall address-list print", "/ip route print", "/ip dhcp-server lease print", "/interface wireguard print", "/ip ipsec active-peers print", "/log print where topics~\"account|system|firewall|ipsec|route|warning|error\""];
+      return result({ category: "daily-check", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: "mikrotik daily check", command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+    }
     case ActionType.mikrotik_list_filter_rules:
     case ActionType.mikrotik_search_filter_rules:
       return result({ category: "firewall", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip firewall filter print terse", command: "/ip firewall filter print terse", write: false, target: {}, rollbackSteps: [], warnings: [] })] });

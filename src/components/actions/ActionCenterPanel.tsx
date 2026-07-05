@@ -502,7 +502,7 @@ export default function ActionCenterPanel() {
     setSelectedAction((current) => current ? { ...current, status: "executing" } : current);
     quickExecuteAction(selectedAction.id, { intent: "execute", reason: "Execute from Action Center" }).then((plan) => {
       const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
-      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
+      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.open(`/actions/${encodeURIComponent(plan.id)}/result`, "_blank", "noopener,noreferrer");
       else { setSelectedAction(plan); setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد.")); }
     }).catch((error: unknown) => { void reloadSelected(selectedAction.id); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); }).finally(() => setWorking(null));
   };
@@ -515,7 +515,7 @@ export default function ActionCenterPanel() {
       .then((plan) => {
         setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
         const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
-        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.location.assign(`/actions/${encodeURIComponent(plan.id)}/result`);
+        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.open(`/actions/${encodeURIComponent(plan.id)}/result`, "_blank", "noopener,noreferrer");
         else setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد."));
       })
       .catch((error: unknown) => { void getAction(action.id).then((plan) => setActions((current) => current.map((item) => item.id === plan.id ? plan : item))); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); })

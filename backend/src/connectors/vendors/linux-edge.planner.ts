@@ -95,6 +95,7 @@ export const linuxEdgePlanner: VendorPlanner = {
   vendor: "linux_edge",
   supportedActions: [
     ActionType.open_port,
+    ActionType.linux_open_port,
     ActionType.close_port,
     ActionType.block_source_ip_temporary,
     ActionType.unblock_source_ip,
@@ -109,13 +110,20 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.linux_check_user_groups,
     ActionType.linux_lock_user,
     ActionType.linux_unlock_user,
+    ActionType.linux_daily_check,
     ...READ_ACTIONS.keys()
   ],
   supports(device) {
     return device?.type === DeviceType.linux_edge || String(device?.vendor ?? "").toLowerCase().includes("linux");
   },
   plan(input) {
-    if (input.actionType === ActionType.open_port) return portPlan(input, "allow");
+    if (input.actionType === ActionType.linux_daily_check) {
+      const plan = base(input);
+      plan.commands = ["controlled Linux daily-check bundle (read-only)"];
+      plan.requiresApproval = false;
+      return plan;
+    }
+    if (input.actionType === ActionType.open_port || input.actionType === ActionType.linux_open_port) return portPlan(input, "allow");
     if (input.actionType === ActionType.close_port) return portPlan(input, "deny");
     if (input.actionType === ActionType.block_source_ip_temporary) return blockTemporary(input);
     if (input.actionType === ActionType.change_ssh_port) return changeSshPort(input);

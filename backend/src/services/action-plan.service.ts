@@ -25,6 +25,7 @@ import { preflightActionPlan } from "./action-preflight.service.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { resolveCatalogAction } from "../commands/catalog/catalog-action-resolver.js";
 import { COMMAND_CATALOG, COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
+import { buildDailyCheckResult } from "../daily-check/daily-check-engine.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -34,7 +35,7 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-type ActionVendor = "mikrotik" | "fortigate" | "linux_edge" | "pfsense" | "cisco" | "generic" | "unknown" | undefined;
+type ActionVendor = "mikrotik" | "fortigate" | "linux_edge" | "pfsense" | "cisco" | "juniper" | "paloalto" | "windows" | "docker" | "kubernetes" | "generic" | "unknown" | undefined;
 
 function vendorFromActionType(actionType: ActionType | string): ActionVendor {
   if (String(actionType).startsWith("mikrotik_")) return "mikrotik";
@@ -64,6 +65,7 @@ export function normalizeActionTypeForVendor(actionType: ActionType, vendor: Act
     if (actionType === ActionType.change_ssh_port) return ActionType.mikrotik_change_service_port;
     if (String(actionType) === "add_address_list_entry") return ActionType.mikrotik_add_address_list_entry;
   }
+  if (vendor === "linux_edge" && actionType === ActionType.open_port) return ActionType.linux_open_port;
   return actionType;
 }
 
@@ -963,6 +965,9 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const startedAt = String(asObject(asObject(executing.parametersJson).metadata).executionStartedAt ?? completedAt);
     const exitCodes = result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
     const executionSucceeded = result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0);
+    const dailyCheck = plan.actionType === ActionType.linux_daily_check || plan.actionType === ActionType.mikrotik_daily_check
+      ? buildDailyCheckResult({ deviceId: device.id, vendor: plan.actionType === ActionType.linux_daily_check ? "linux" : "mikrotik", outputs: result.commands })
+      : null;
     const resultPayload = {
       ...result,
       executed: executionSucceeded,
@@ -973,7 +978,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
-      parsedResult: parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"))
+      parsedResult: dailyCheck ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n")),
+      resultUrl: `/actions/${id}/result`
     };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
     const updated = await prisma.actionPlan.update({
@@ -1060,8 +1066,7 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
   if (initial.dryRunJson && storedInitialFingerprint && storedInitialFingerprint !== currentInitialFingerprint) {
     await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(initial.parametersJson, { previewStale: true, staleReason: "user_controlled_inputs_changed" })) } });
     trace("action_preview_checked", { previewStale: true, staleReason: "user_controlled_inputs_changed" });
-    trace("action_execution_failed", { connectorInvoked: false, error: "COMMAND_PLAN_STALE" });
-    throw new ActionExecutionError("COMMAND_PLAN_STALE", "The command plan is stale because the ActionPlan inputs changed.");
+    await audit(initial, "preview_rebuild_requested", "Stale preview will be rebuilt once before explicit execution.", { staleReason: "stable_execution_inputs_changed" });
   }
   let plan = initial.dryRunJson && storedInitialFingerprint === currentInitialFingerprint ? initial : await dryRunActionPlan(id);
   if (!plan) return null;

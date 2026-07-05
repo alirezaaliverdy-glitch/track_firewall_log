@@ -31,6 +31,7 @@ import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapa
 import AppBackground from "./components/background/AppBackground";
 import CommandCatalogPanel from "./components/commands/CommandCatalogPanel";
 import ActionResultView from "./components/actions/ActionResultView";
+import DailyCheckPanel from "./components/daily-check/DailyCheckPanel";
 
 function App() {
   const { user, logout } = useAuth();
@@ -69,6 +70,9 @@ function App() {
             <CommandCatalogPanel />
           </ErrorBoundary>
 
+          <ErrorBoundary title="AI Security Assistant unavailable">
+            <DailyCheckPanel />
+          </ErrorBoundary>
           <ErrorBoundary title="AI Security Assistant unavailable">
             <AiSecurityAssistantPanel />
           </ErrorBoundary>

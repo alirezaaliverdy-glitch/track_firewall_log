@@ -864,6 +864,9 @@ enum AiIntentType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_open_port
+  linux_daily_check
+  mikrotik_daily_check
   linux_check_ssh_status
   linux_check_failed_logins
   linux_check_sudo_users
@@ -1038,6 +1041,7 @@ enum ActionType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_open_port
   linux_check_ssh_status
   linux_check_failed_logins
   linux_check_sudo_users
@@ -1056,6 +1060,8 @@ enum ActionType {
   linux_read_users
   linux_read_docker
   linux_read_nginx
+  linux_daily_check
+  mikrotik_daily_check
 }
 
 enum ApprovalDecision {

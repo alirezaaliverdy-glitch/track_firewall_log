@@ -1,5 +1,11 @@
 # محصول کاتالوگ دستورات فارسی
 
+## چک روزانه چندوندوری
+
+فرمان «چک روزانه» برای Linux و MikroTik با template ثبت‌شده و connector واقعی اجرا می‌شود و خروجی را گروه‌بندی می‌کند. FortiGate، Cisco، pfSense، Juniper، Palo Alto و Windows تا زمان وجود connector واقعی `manualOnly` هستند؛ Docker و Kubernetes نیز پروفایل غیر اجرایی دارند. نتیجه فقط پس از `connectorInvoked=true` موفق است و در تب جدید `/actions/:id/result` باز می‌شود.
+
+اگر preview بر اساس ورودی‌های پایدار stale باشد، quick-execute آن را یک بار بازسازی می‌کند و در همان درخواست `intent=execute` ادامه می‌دهد. fingerprint فقط device، vendor، action type، catalog ID، template ref و پارامترهای نرمال‌شده را استفاده می‌کند.
+
 ## جهت محصول
 
 در حالت `PRODUCT_MODE=persian_command_catalog` مسیر اصلی محصول از دستگاه و دستور آماده آغاز می‌شود. هوش مصنوعی دستیار جایگزین است، نه نقطه شروع عملیات.

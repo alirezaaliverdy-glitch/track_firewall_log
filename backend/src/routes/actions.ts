@@ -113,7 +113,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
         trace: (stage, payload) => request.log.info({ ...payload, stage }, stage)
       });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
-      return plan;
+      return { ...plan, resultUrl: `/actions/${plan.id}/result` };
     } catch (error) {
       if (error instanceof QuickExecuteConfirmationRequiredError) {
         return reply.code(error.statusCode).send({

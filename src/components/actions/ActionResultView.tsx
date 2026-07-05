@@ -14,6 +14,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
   if (error) return <main className="mx-auto max-w-5xl p-6 text-red-200" dir="rtl">{error}</main>;
   if (!action) return <main className="mx-auto max-w-5xl p-6 text-slate-300" dir="rtl">در حال بارگذاری نتیجه…</main>;
   const result = normalizeObject(action.resultJson); const metadata = metadataOf(action); const succeeded = action.status === "succeeded" && result.executed === true && metadata.connectorInvoked === true;
+  const parsed = normalizeObject(result.parsedResult); const dailySections = Array.isArray(parsed.sections) ? parsed.sections.map(normalizeObject) : [];
   return <main className="mx-auto max-w-5xl p-4 sm:p-8" dir="rtl">
     <section className="rounded-2xl border border-slate-700 bg-slate-950/90 p-5 text-right text-slate-100 shadow-2xl">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
@@ -23,6 +24,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
       <div className={`mt-4 rounded-lg border p-4 ${succeeded ? "border-green-800 bg-green-950/25" : "border-red-800 bg-red-950/25"}`}>
         <div className="flex items-center gap-2">{succeeded ? <CheckCircle2 className="text-green-400"/> : <CircleX className="text-red-400"/>}<strong>{succeeded ? "دستور روی دستگاه اجرا شد." : "اجرای دستور ناموفق بود."}</strong></div>
       </div>
+      {dailySections.length > 0 && <section className="mt-4 grid gap-3 md:grid-cols-2">{dailySections.map((entry) => <article key={String(entry.key)} className="rounded-lg border border-slate-700 p-4"><h2 className="font-semibold">{String(entry.titleFa)}</h2><p className="mt-1 text-xs text-slate-400">وضعیت: {String(entry.severity)}</p><ul className="mt-2 list-inside list-disc text-xs text-slate-300">{(Array.isArray(entry.items) ? entry.items : []).map((item) => <li key={String(item)}>{String(item)}</li>)}</ul></article>)}</section>}
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Info label="نام دستور" value={String(metadata.catalogTitleFa ?? action.actionType)}/><Info label="دستگاه" value={action.device?.name ?? action.deviceId ?? "-"}/><Info label="وندور" value={String(metadata.vendor ?? action.device?.vendor ?? "-")}/><Info label="وضعیت" value={action.status}/><Info label="زمان اجرا" value={new Date(String(result.executionCompletedAt ?? action.updatedAt)).toLocaleString("fa-IR")}/><Info label="اجراکننده" value={String(result.executor ?? metadata.executionTemplateRef ?? "-")}/>
       </dl>

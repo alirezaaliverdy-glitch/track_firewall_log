@@ -1,4 +1,4 @@
-export type CommandVendor = "linux" | "mikrotik" | "fortigate" | "cisco" | "pfsense" | "generic";
+export type CommandVendor = "linux" | "mikrotik" | "fortigate" | "cisco" | "pfsense" | "juniper" | "paloalto" | "windows" | "generic";
 export type CommandRiskLevel = "low" | "medium" | "high" | "critical";
 export type ImplementationState = "implemented" | "manualOnly" | "planned" | "unsupported";
 export type ExecutionSupport = "connector" | "manual" | "ai_proposed" | "not_implemented";

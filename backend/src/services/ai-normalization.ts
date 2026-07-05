@@ -1,6 +1,6 @@
 import { AiIntentType } from "@prisma/client";
 
-export type NormalizedVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "generic" | "unknown";
+export type NormalizedVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "juniper" | "paloalto" | "windows" | "docker" | "kubernetes" | "generic" | "unknown";
 
 function normalizedToken(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/[\s_-]+/g, "") : "";
@@ -10,9 +10,14 @@ export function normalizeVendor(value: unknown): NormalizedVendor | null {
   const token = normalizedToken(value);
   if (["mikrotik", "routeros", "mt", "mkt"].includes(token)) return "mikrotik";
   if (["fortigate", "fortinet", "fortios", "forti"].includes(token)) return "fortigate";
-  if (["linux", "linuxedge", "ubuntu"].includes(token)) return "linux";
+  if (["linux", "linuxedge", "linuxserver", "ubuntu"].includes(token)) return "linux";
   if (["pfsense", "pfs"].includes(token)) return "pfsense";
   if (["cisco", "ios", "iosxe", "nxos"].includes(token)) return "cisco";
+  if (["juniper", "junos"].includes(token)) return "juniper";
+  if (["paloalto", "panos"].includes(token)) return "paloalto";
+  if (["windows", "windowsserver"].includes(token)) return "windows";
+  if (token === "docker") return "docker";
+  if (["kubernetes", "k8s"].includes(token)) return "kubernetes";
   if (["generic", "genericssh"].includes(token)) return "generic";
   if (token === "unknown") return "unknown";
   return null;

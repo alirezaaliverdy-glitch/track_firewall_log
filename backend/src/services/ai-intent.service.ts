@@ -179,6 +179,14 @@ export function parseAiIntent(message: string): ParsedIntent | null {
   const text = normalizeUnicodePersian(normalizeText(message));
   const ip = ipAddress(text);
   const nums = numbers(ip ? text.replace(ip, " ") : text);
+  const commonService = ["nginx", "apache2", "apache", "docker", "ssh", "sshd", "fail2ban"].find((service) => text.includes(service));
+  if (commonService && containsAny(text, ["وضعیت", "status", "چک", "بررسی", "ببین"])) {
+    return { intentType: AiIntentType.linux_check_service_status, riskLevel: AiRiskLevel.low, parameters: { serviceName: commonService === "apache" ? "apache2" : commonService }, explanation: "Checks the selected Linux service through a controlled read-only template." };
+  }
+  if (containsAny(text, ["چک روزانه", "daily check", "daily-check"])) {
+    const vendor = targetHint(text, nums);
+    return { intentType: vendor === "mikrotik" ? AiIntentType.mikrotik_daily_check : AiIntentType.linux_daily_check, riskLevel: AiRiskLevel.low, parameters: vendor ? { targetDeviceHint: vendor } : {}, explanation: "Vendor daily check uses a controlled read-only connector template." };
+  }
   const fortigate = containsAny(text, ["fortigate", "fortinet", "fortios"]);
   const username = text.match(/(?:user|یوزر|کاربر)\s+([a-z_][a-z0-9_.-]{0,31})\b/i)?.[1];
 

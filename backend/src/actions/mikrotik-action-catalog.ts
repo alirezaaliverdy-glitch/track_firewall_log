@@ -80,6 +80,7 @@ const MIKROTIK_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_schedule_reboot,
   ActionType.mikrotik_disable_rule_by_id,
   ActionType.mikrotik_remove_rule_by_id
+  ,ActionType.mikrotik_daily_check
 ]);
 
 const TASK27_ACTIONS = new Set<ActionType>([

@@ -32,7 +32,7 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
   const state = actionExecutionUiState({ id: "manual", source: "user", requestedBy: null, deviceId: "device", aiIntentId: null, actionType: ActionType.generic_security_action, status: ActionPlanStatus.proposed, riskLevel: "medium", parametersJson: { executionSupport: "manual_or_not_implemented", metadata: { source: "command_catalog", implementationState: "manualOnly", executed: false } }, validationJson: {}, dryRunJson: {}, approvalJson: {}, resultJson: {}, rollbackJson: {}, createdAt: "", updatedAt: "" });
   assert.equal(state.canExecute, false);
   const center = read("../../src/components/actions/ActionCenterPanel.tsx"); const result = read("../../src/components/actions/ActionResultView.tsx");
-  assert.match(center, /window\.location\.assign\(`\/actions\/\$\{encodeURIComponent\(plan\.id\)\}\/result`\)/); assert.match(center, /disabled=\{Boolean\(working\)/);
+  assert.match(center, /window\.open\(`\/actions\/\$\{encodeURIComponent\(plan\.id\)\}\/result`, "_blank"/); assert.match(center, /disabled=\{Boolean\(working\)/);
   assert.match(result, /نتیجه اجرای دستور/); assert.match(result, /خروجی خام دستور/); assert.match(result, /parseOpenPorts/);
 });
 

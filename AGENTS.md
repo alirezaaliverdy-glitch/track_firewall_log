@@ -158,3 +158,7 @@ Never commit:
 - Do not remove PolicyGuard.
 - Do not remove Audit logging.
 - Do not change action execution behavior during documentation/refactor tasks.
+
+# Vendor Daily Check Architecture
+
+Daily Check uses `backend/src/daily-check/vendor-daily-check-profiles.ts` and `daily-check-engine.ts`. Linux and MikroTik are connector-backed read-only templates; other profiles remain explicit manual/planned until a registered connector exists. The flow is ActionPlan -> confirmation -> PolicyGuard -> Connector -> grouped result/audit, and success requires `connectorInvoked=true`.

@@ -45,6 +45,8 @@ const manual = (extra: Options = {}): Options => ({ ...extra, state: "manualOnly
 const planned = (extra: Options = {}): Options => ({ ...extra, state: "planned" });
 
 export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
+  item("linux", "daily-check", "چک روزانه", "Daily check", "daily-check", "linux_daily_check", implemented("linux_daily_check", { searchKeywordsFa: ["چک روزانه سرور", "بررسی روزانه"] })),
+  item("linux", "open-port", "باز کردن پورت", "Open port", "firewall", "linux_open_port", implemented("linux_open_port", { mutates: true, required: [param("port", "شماره پورت", "شماره پورت TCP/UDP معتبر را وارد کنید.", "number", "55000")], defaultParams: { protocol: "tcp" } })),
   item("linux", "open-ports", "نمایش پورت‌های باز", "Show open ports", "network", "linux_read_listening_ports", implemented("linux_list_open_ports")),
   item("linux", "ssh-status", "بررسی وضعیت SSH", "Check SSH status", "ssh", "linux_check_ssh_status", implemented("linux_check_ssh_status")),
   item("linux", "failed-logins", "بررسی لاگ‌های ورود ناموفق", "Review failed logins", "authentication", "linux_check_failed_logins", implemented("linux_check_failed_logins", { searchKeywordsFa: ["ورود ناموفق", "لاگ احراز هویت"] })),
@@ -61,6 +63,7 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("linux", "restrict-ssh", "محدود کردن SSH", "Restrict SSH", "ssh", "generic_security_action", manual({ required: [allowedSource], riskLevel: "high" })),
   item("linux", "enable-fail2ban", "فعال‌سازی fail2ban", "Enable fail2ban", "hardening", "generic_security_action", manual({ riskLevel: "medium" })),
 
+  item("mikrotik", "daily-check", "چک روزانه", "Daily check", "daily-check", "mikrotik_daily_check", implemented("mikrotik_daily_check", { searchKeywordsFa: ["چک روزانه روتر", "بررسی روزانه"] })),
   item("mikrotik", "management-services", "نمایش سرویس‌های مدیریتی", "Show management services", "management", "mikrotik_list_ip_services", implemented("mikrotik_list_management_services")),
   item("mikrotik", "firewall-filter", "بررسی firewall filter", "Review firewall filter", "firewall", "mikrotik_list_filter_rules", implemented("mikrotik_check_firewall_filter")),
   item("mikrotik", "dangerous-nat", "بررسی NATهای خطرناک", "Review dangerous NAT", "nat", "mikrotik_list_nat_rules", implemented("mikrotik_check_nat_exposure")),
@@ -70,6 +73,12 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("mikrotik", "restrict-management", "محدود کردن دسترسی WinBox/SSH", "Restrict WinBox/SSH", "management", "generic_security_action", manual({ required: [allowedSource], riskLevel: "high" })),
   item("mikrotik", "change-ssh-port", "تغییر پورت SSH", "Change SSH port", "management", "mikrotik_change_service_port", planned({ mutates: true, riskLevel: "high" })),
 
+  item("fortigate", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
+  item("cisco", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
+  item("pfsense", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
+  item("juniper", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
+  item("paloalto", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
+  item("windows", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("fortigate", "admin-failures", "بررسی خطاهای ورود مدیر", "Review admin login failures", "authentication", "generic_security_action", manual({ mutates: false })),
   item("fortigate", "risky-policies", "بررسی policyهای خطرناک", "Review risky policies", "firewall", "generic_security_action", manual({ mutates: false })),
   item("fortigate", "vip-exposure", "بررسی VIP/NAT exposure", "Review VIP exposure", "nat", "generic_security_action", manual({ mutates: false })),
@@ -90,7 +99,7 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("generic", "security-review", "بررسی امنیت عمومی دستگاه", "Generic security review", "assessment", "generic_security_action", manual({ mutates: false }))
 ]);
 
-export const COMMAND_CATALOG_VERSION = "2026.07.04.2";
+export const COMMAND_CATALOG_VERSION = "2026.07.05.1";
 
 export function findCatalogItem(id: string) { return COMMAND_CATALOG.find((entry) => entry.id === id); }
 export function searchCatalog(filters: { q?: string; vendor?: string; category?: string; riskLevel?: string; readOnly?: boolean; executable?: boolean; includePlanned?: boolean }) {
