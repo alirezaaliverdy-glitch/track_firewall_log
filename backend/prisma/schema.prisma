@@ -867,9 +867,15 @@ enum AiIntentType {
   linux_list_running_services
   linux_list_failed_services
   linux_check_important_services
+  linux_list_open_ports
+  linux_check_firewall_status
+  linux_block_ip
   linux_open_port
   linux_daily_check
   mikrotik_daily_check
+  mikrotik_list_management_services
+  mikrotik_check_login_logs
+  mikrotik_block_ip
   linux_check_ssh_status
   linux_check_failed_logins
   linux_check_sudo_users
@@ -1047,6 +1053,9 @@ enum ActionType {
   linux_list_running_services
   linux_list_failed_services
   linux_check_important_services
+  linux_list_open_ports
+  linux_check_firewall_status
+  linux_block_ip
   linux_open_port
   linux_check_ssh_status
   linux_check_failed_logins
@@ -1068,6 +1077,9 @@ enum ActionType {
   linux_read_nginx
   linux_daily_check
   mikrotik_daily_check
+  mikrotik_list_management_services
+  mikrotik_check_login_logs
+  mikrotik_block_ip
 }
 
 enum ApprovalDecision {

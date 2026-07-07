@@ -143,6 +143,7 @@ export function compileRouterOsAction(input: {
     case ActionType.mikrotik_list_address_list:
       return result({ category: "address-list", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip firewall address-list print terse", command: "/ip firewall address-list print terse", write: false, target: {}, rollbackSteps: [], warnings: [] })] });
     case ActionType.mikrotik_list_ip_services:
+    case ActionType.mikrotik_list_management_services:
       return result({ category: "management", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip service print terse", command: "/ip service print terse", write: false, target: {}, rollbackSteps: [], warnings: [] })] });
     case ActionType.mikrotik_list_interfaces:
     case ActionType.mikrotik_detect_wan_lan_candidates:
@@ -158,6 +159,7 @@ export function compileRouterOsAction(input: {
     case ActionType.mikrotik_show_clock:
       return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/system clock print", command: "/system clock print", write: false, target: {}, rollbackSteps: [], warnings: [] })] });
     case ActionType.mikrotik_show_logs:
+    case ActionType.mikrotik_check_login_logs:
       return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/log print without-paging", command: "/log print without-paging", write: false, target: {}, rollbackSteps: [], warnings: [] })] });
     case ActionType.mikrotik_show_resources:
       return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: p, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/system resource print", command: "/system resource print", write: false, target: {}, rollbackSteps: [], warnings: [] })] });

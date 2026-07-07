@@ -1,5 +1,6 @@
 import { COMMAND_CATALOG, type CommandCatalogItem } from "../commands/catalog/index.js";
 import { getExecutionTemplate } from "../commands/execution/execution-template-registry.js";
+import { routePersianIntent } from "./persian-intent-router.js";
 import { parseAiIntent } from "../services/ai-intent.service.js";
 
 export type AiResolverDevice = {
@@ -56,7 +57,7 @@ const VENDOR_ALIASES: Record<string, string> = {
 };
 
 const MISSING_FIELD_LABELS: Record<string, string> = {
-  deviceId: "اول دستگاه را انتخاب کنید تا برنامه قابل اجرا ساخته شود.",
+  deviceId: "اول دستگاه را انتخاب کنید.",
   port: "شماره پورت را وارد کنید.",
   serviceName: "نام سرویس لینوکس را وارد کنید.",
   username: "نام کاربر لینوکس را وارد کنید.",
@@ -109,10 +110,6 @@ function normalizeParams(parameters: Record<string, unknown>) {
   delete next.clarificationQuestions;
 
   if (typeof next.service === "string" && !next.serviceName) next.serviceName = next.service;
-  if (typeof next.ipAddress === "string") {
-    if (!next.srcIp) next.srcIp = next.ipAddress;
-    if (!next.sourceIp) next.sourceIp = next.ipAddress;
-  }
   if (next.port !== undefined) {
     const port = Number(next.port);
     if (Number.isInteger(port) && port > 0) next.port = port;
@@ -135,9 +132,9 @@ function resolveActionAlias(userText: string, rawActionType: string, canonicalVe
 
   if (canonicalVendor === "linux" && includesAny(text, [
     "وضعیت پورت", "وضعیت پورت ها", "وضعیت پورت‌ها", "پورت های باز", "پورت‌های باز", "لیست پورت", "پورت های فعال", "پورت‌های فعال", "چه پورت هایی بازه", "چه پورت‌هایی بازه", "open ports", "list ports", "listening ports",
-  ])) return "linux_read_listening_ports";
+  ])) return "linux_list_open_ports";
 
-  if (canonicalVendor === "linux" && includesAny(text, ["وضعیت فایروال", "فایروال رو ببین", "ufw", "firewall status"])) return "linux_read_firewall_status";
+  if (canonicalVendor === "linux" && includesAny(text, ["وضعیت فایروال", "فایروال رو ببین", "ufw", "firewall status"])) return "linux_check_firewall_status";
 
   if (canonicalVendor === "linux" && includesAny(text, ["کاربران sudo", "یوزرهای sudo", "چه کسانی sudo دارن", "sudo users"])) return "linux_check_sudo_users";
 
@@ -147,13 +144,13 @@ function resolveActionAlias(userText: string, rawActionType: string, canonicalVe
     return "vendor_daily_check";
   }
 
-  if (canonicalVendor === "mikrotik" && includesAny(text, ["لاگ لاگین میکروتیک", "ورودهای ناموفق میکروتیک", "login logs", "failed login"])) return "mikrotik_show_logs";
+  if (canonicalVendor === "mikrotik" && includesAny(text, ["لاگ لاگین میکروتیک", "ورودهای ناموفق میکروتیک", "login logs", "failed login"])) return "mikrotik_check_login_logs";
 
   if (canonicalVendor === "linux" && includesAny(text, ["وضعیت", "چک", "بررسی", "ببین", "status", "check"]) && extractServiceName(text)) return "linux_check_service_status";
 
   if (/وضعیت.*سرویس|service.*status|service.*check/i.test(text) && canonicalVendor === "linux") return "linux_check_service_status";
 
-  if (/لاگ.*(ورود|لاگین)|login.*log/i.test(text) && canonicalVendor === "mikrotik") return "mikrotik_show_logs";
+  if (/لاگ.*(ورود|لاگین)|login.*log/i.test(text) && canonicalVendor === "mikrotik") return "mikrotik_check_login_logs";
 
   if (rawActionType === "open_port" && canonicalVendor === "linux") return "linux_open_port";
 
@@ -188,6 +185,39 @@ export function resolveAiTemplate(input: {
   aiIntent?: { intentType?: unknown; parameters?: Record<string, unknown> } | null;
   params?: Record<string, unknown>;
 }): AiTemplateResolution {
+  const selectedVendor =
+    normalizeAiVendor(input.selectedDevice?.type)
+    ?? normalizeAiVendor(input.selectedDevice?.vendor)
+    ?? normalizeAiVendor(input.currentVendor)
+    ?? normalizeAiVendor(input.detectedVendor);
+  const routed = routePersianIntent({
+    text: input.userText,
+    selectedDeviceId: input.selectedDevice?.id ?? null,
+    selectedVendor,
+  });
+  if (routed.matched && routed.actionType && routed.executionTemplateRef) {
+    const item = findCatalogItemByIntent(selectedVendor ?? "generic", routed.actionType);
+    const template = getExecutionTemplate(routed.executionTemplateRef);
+    const mergedParams = { ...(item?.defaultParams ?? {}), ...routed.normalizedParams };
+    const missingFields = Array.from(new Set([...routed.missingFields, ...missingFieldsForItem(item, mergedParams)]));
+    if (item?.implementationState === "implemented" && template) {
+      return {
+        canonicalVendor: item.vendor,
+        canonicalActionType: item.actionType,
+        catalogCommandId: item.id,
+        executionTemplateRef: routed.executionTemplateRef,
+        connectorType: routed.connectorType,
+        implementationState: "implemented",
+        executionSupport: "connector",
+        normalizedParams: mergedParams,
+        missingFields,
+        confidence: routed.confidence,
+        reasonFa: missingFields.length ? missingFieldsMessageFa(missingFields) : routed.reasonFa,
+        catalogItem: item,
+      };
+    }
+  }
+
   const parsed = parseAiIntent(input.userText);
   const rawActionType = String(input.aiIntent?.intentType ?? parsed?.intentType ?? "generic_security_action");
   const normalizedText = normalizeUserText(input.userText);

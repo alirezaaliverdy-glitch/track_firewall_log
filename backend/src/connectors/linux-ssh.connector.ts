@@ -73,6 +73,7 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.open_port,
   ActionType.linux_open_port,
   ActionType.close_port,
+  ActionType.linux_block_ip,
   ActionType.block_source_ip_temporary,
   ActionType.unblock_source_ip,
   ActionType.linux_check_service_status,
@@ -88,7 +89,9 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.linux_read_hostname,
   ActionType.linux_read_interfaces,
   ActionType.linux_read_routes,
+  ActionType.linux_list_open_ports,
   ActionType.linux_read_listening_ports,
+  ActionType.linux_check_firewall_status,
   ActionType.linux_read_firewall_status,
   ActionType.linux_read_auth_logs,
   ActionType.linux_read_users,
@@ -104,7 +107,7 @@ const LINUX_READ_ACTIONS = new Set<ActionType>([
   ActionType.linux_check_ssh_status, ActionType.linux_check_failed_logins,
   ActionType.linux_check_sudo_users, ActionType.linux_check_fail2ban_status,
   ActionType.linux_read_hostname, ActionType.linux_read_interfaces, ActionType.linux_read_routes,
-  ActionType.linux_read_listening_ports, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
+  ActionType.linux_list_open_ports, ActionType.linux_read_listening_ports, ActionType.linux_check_firewall_status, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
   ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx,
   "linux_list_running_services" as ActionType, "linux_list_failed_services" as ActionType, "linux_check_important_services" as ActionType
 ]);
@@ -118,7 +121,9 @@ function linuxReadCommand(actionType: ActionType, sudo = "") {
     [ActionType.linux_read_hostname]: { template: "hostname", command: "hostname" },
     [ActionType.linux_read_interfaces]: { template: "ip -brief address", command: "ip -brief address" },
     [ActionType.linux_read_routes]: { template: "ip route show", command: "ip route show" },
+    [ActionType.linux_list_open_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
     [ActionType.linux_read_listening_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
+    [ActionType.linux_check_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
     [ActionType.linux_read_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
     [ActionType.linux_read_auth_logs]: { template: "journalctl SSH authentication events", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -n 200` },
     [ActionType.linux_read_users]: { template: "getent passwd", command: "getent passwd" },
@@ -627,8 +632,8 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     }
     plannedCommands = [`sudo -n ufw delete allow ${port}/${protocol}`, "sudo -n ufw status numbered"];
     rollbackSteps = [`sudo -n ufw allow ${port}/${protocol}`];
-  } else if (plan.actionType === ActionType.block_source_ip_temporary) {
-    const srcIp = ipParam(parameters.srcIp);
+  } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
+    const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
     const durationMinutes = Number(parameters.durationMinutes ?? 30);
     if (isPrivateOrLocalIp(srcIp)) {
       throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Blocking private, local, or management IPs is blocked by Linux connector policy.");
@@ -748,8 +753,8 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       }
       await pushCommand("ufw status numbered", `${sudo}ufw status numbered`);
       rollbackJson.steps = [`${sudo}ufw allow ${port}/${protocol}`];
-    } else if (plan.actionType === ActionType.block_source_ip_temporary) {
-      const srcIp = ipParam(parameters.srcIp);
+    } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
+      const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
       const durationMinutes = Number(parameters.durationMinutes ?? 30);
       if (isPrivateOrLocalIp(srcIp)) {
         throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Blocking private, local, or management IPs is blocked by Linux connector policy.");

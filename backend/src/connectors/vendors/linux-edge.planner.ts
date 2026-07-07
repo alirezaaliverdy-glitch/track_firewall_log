@@ -6,7 +6,9 @@ const READ_ACTIONS = new Map<ActionType, string>([
   [ActionType.linux_read_hostname, "hostname"],
   [ActionType.linux_read_interfaces, "ip -brief address"],
   [ActionType.linux_read_routes, "ip route show"],
+  [ActionType.linux_list_open_ports, "ss -lntup"],
   [ActionType.linux_read_listening_ports, "ss -lntup"],
+  [ActionType.linux_check_firewall_status, "ufw status verbose"],
   [ActionType.linux_read_firewall_status, "ufw status verbose"],
   [ActionType.linux_read_auth_logs, "journalctl SSH authentication events for the last 24 hours"],
   [ActionType.linux_read_users, "getent passwd"],
@@ -59,7 +61,7 @@ function portPlan(input: PlannerInput, verb: "allow" | "deny"): VendorCommandPla
 }
 
 function blockTemporary(input: PlannerInput): VendorCommandPlan {
-  const srcIp = str(input.parameters.srcIp);
+  const srcIp = str(input.parameters.srcIp) ?? str(input.parameters.ipAddress);
   const duration = num(input.parameters.durationMinutes) ?? 30;
   if (!srcIp) return needs(input, ["srcIp"], ["Which source IP should be blocked temporarily?"]);
   const plan = base(input);
@@ -101,6 +103,7 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.open_port,
     ActionType.linux_open_port,
     ActionType.close_port,
+    ActionType.linux_block_ip,
     ActionType.block_source_ip_temporary,
     ActionType.unblock_source_ip,
     ActionType.change_ssh_port,
@@ -132,7 +135,7 @@ export const linuxEdgePlanner: VendorPlanner = {
     }
     if (input.actionType === ActionType.open_port || input.actionType === ActionType.linux_open_port) return portPlan(input, "allow");
     if (input.actionType === ActionType.close_port) return portPlan(input, "deny");
-    if (input.actionType === ActionType.block_source_ip_temporary) return blockTemporary(input);
+    if (input.actionType === ActionType.block_source_ip_temporary || input.actionType === ActionType.linux_block_ip) return blockTemporary(input);
     if (input.actionType === ActionType.change_ssh_port) return changeSshPort(input);
     if (input.actionType === ActionType.unblock_source_ip) {
       const srcIp = str(input.parameters.srcIp);

@@ -112,14 +112,17 @@ function timeoutFromDuration(value: unknown) {
 export function normalizeParameters(actionType: ActionType, parameters: Record<string, unknown>) {
   const canonical = normalizeIntent({ ...parameters, actionType });
   delete canonical.actionType;
+  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
+    delete canonical.sourceIp;
+  }
   const normalized = { ...parameters, ...canonical };
-  if (actionType === ActionType.mikrotik_block_ip_temporary || actionType === ActionType.mikrotik_add_address_list_entry) {
-    const address = firstText(normalized, ["address", "srcIP", "srcIp", "sourceIp", "sourceIP", "ip"]);
+  if (actionType === ActionType.mikrotik_block_ip_temporary || actionType === ActionType.mikrotik_block_ip || actionType === ActionType.mikrotik_add_address_list_entry) {
+    const address = firstText(normalized, ["address", "srcIP", "srcIp", "sourceIp", "sourceIP", "ipAddress", "ip"]);
     if (address) normalized.address = address;
     if (typeof normalized.listName !== "string" || !normalized.listName.trim()) normalized.listName = "ai_blocklist";
     const timeout = firstText(normalized, ["timeout"]) ?? timeoutFromDuration(normalized.durationMinutes) ?? timeoutFromDuration(normalized.duration);
     if (timeout) normalized.timeout = timeout;
-    if (actionType === ActionType.mikrotik_block_ip_temporary && (typeof normalized.timeout !== "string" || !normalized.timeout.trim())) normalized.timeout = "10m";
+    if ((actionType === ActionType.mikrotik_block_ip_temporary || actionType === ActionType.mikrotik_block_ip) && (typeof normalized.timeout !== "string" || !normalized.timeout.trim())) normalized.timeout = "10m";
     if (typeof normalized.comment !== "string" || !normalized.comment.trim()) normalized.comment = "created-by-firewall-log-analyzer";
   }
   if (actionType === ActionType.mikrotik_update_address_list_entry) {
@@ -144,7 +147,7 @@ export function normalizeParameters(actionType: ActionType, parameters: Record<s
     const trustedSource = normalized.trustedSourceCidr ?? normalized.trustedSourceIp ?? normalized.trustedSource;
     if (typeof trustedSource === "string" && trustedSource.trim()) normalized.trustedSource = trustedSource.trim();
   }
-  if (new Set<ActionType>([ActionType.mikrotik_add_address_list_entry, ActionType.mikrotik_remove_address_list_entry, ActionType.mikrotik_block_ip_temporary, ActionType.mikrotik_update_address_list_entry]).has(actionType)) {
+  if (new Set<ActionType>([ActionType.mikrotik_add_address_list_entry, ActionType.mikrotik_remove_address_list_entry, ActionType.mikrotik_block_ip_temporary, ActionType.mikrotik_block_ip, ActionType.mikrotik_update_address_list_entry]).has(actionType)) {
     const address = normalized.sourceIp ?? normalized.sourceCidr ?? normalized.address;
     if (typeof address === "string" && address.trim()) normalized.address = address.trim();
   }
@@ -306,7 +309,7 @@ function withExecutionMetadata(parametersJson: unknown, patch: Record<string, un
 }
 
 function parseExecutionResult(actionType: ActionType, stdout: string) {
-  if (actionType !== ActionType.linux_read_listening_ports) return null;
+  if (actionType !== ActionType.linux_read_listening_ports && actionType !== ActionType.linux_list_open_ports) return null;
   return {
     listeningPorts: stdout.split(/\r?\n/).slice(1).map((line) => line.trim()).filter(Boolean).slice(0, 500).map((line) => {
       const fields = line.split(/\s+/); const protocol = fields[0] ?? "unknown";
@@ -360,7 +363,7 @@ export function approvalPreconditionError(plan: Pick<ActionPlan, "actionType" | 
 export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status"> & { parametersJson?: unknown }, mode: ActionExecutionMode = env.actionExecutionMode) {
   const catalog = getActionCatalogEntry(plan.actionType);
   const metadata = asObject(asObject(plan.parametersJson).metadata);
-  const productCatalogControlled = ["command_catalog", "command_search_ai_fallback"].includes(String(metadata.source)) && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
+  const productCatalogControlled = ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(String(metadata.source)) && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
   const controlled = productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
@@ -492,11 +495,13 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   if (productMatches.length === 1 && asObject(parameters.metadata).source !== "command_catalog") {
     const item = productMatches[0];
     const normalizedParams = Object.fromEntries(Object.entries(parameters).filter(([key]) => !["metadata", "actionType", "deviceId", "vendor", "executionSupport", "missingFields", "clarificationQuestions"].includes(key)));
+    const existingSource = String(asObject(parameters.metadata).source ?? parameters.source ?? "");
+    const mappedSource = ["command_search_ai_fallback", "ai_mapped_template"].includes(existingSource) ? existingSource : "command_catalog";
     parameters = {
       ...parameters,
       executionSupport: "connector",
       metadata: {
-        ...asObject(parameters.metadata), source: asObject(parameters.metadata).source === "command_search_ai_fallback" ? "command_search_ai_fallback" : "command_catalog", catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION,
+        ...asObject(parameters.metadata), source: mappedSource, catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION,
         catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, implementationState: "implemented",
         executionSupport: "connector", executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType,
         normalizedParams, requiredParamsSatisfied: item.requiredParams.every((field) => normalizedParams[field.key] !== undefined && normalizedParams[field.key] !== ""),

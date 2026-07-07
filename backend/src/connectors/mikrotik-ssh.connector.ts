@@ -582,7 +582,7 @@ export const mikrotikSshConnector: DeviceConnector = {
       throw new MikroTikConnectorError("MIKROTIK_BREAK_GLASS_REQUIRED", "Critical MikroTik action requires breakGlass=true, matching deviceNameConfirmation, and a reason.", 409);
     }
 
-    const idempotentAddressList = actionPlan.actionType === ActionType.mikrotik_block_ip_temporary;
+    const idempotentAddressList = actionPlan.actionType === ActionType.mikrotik_block_ip_temporary || actionPlan.actionType === ActionType.mikrotik_block_ip;
     const updateAddressList = actionPlan.actionType === ActionType.mikrotik_update_address_list_entry;
     const addressListPlan = idempotentAddressList || updateAddressList ? addressListCommands(validation.normalizedParameters) : null;
     const allowedCommands = new Set([

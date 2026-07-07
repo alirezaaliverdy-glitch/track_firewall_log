@@ -174,6 +174,12 @@ export type ActionType =
   | "mikrotik_show_logs"
   | "mikrotik_list_ip_services"
   | "linux_open_port"
+  | "linux_list_open_ports"
+  | "linux_check_firewall_status"
+  | "linux_block_ip"
+  | "linux_read_listening_ports"
+  | "linux_read_firewall_status"
+  | "linux_check_sudo_users"
   | "close_port";
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";

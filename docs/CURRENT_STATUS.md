@@ -22,10 +22,15 @@ Task 16 is functionally complete for:
 
 Task 16.2 is complete for Command Catalog AI fallback: no-result `Ask AI` requests now use the central AI template resolver first and create executable ActionPlans when a registered template exists.
 
+Task 16.3 is complete for deterministic Persian intent routing across AI chat and Command Search AI fallback. Simple Persian admin requests now map to executable template-backed ActionPlans before generic AI/manual fallback.
+
 ## What Works
 
 - AI-supported Persian requests that map to registered templates create executable ActionPlans instead of vague manual proposals.
-- Command Catalog AI fallback maps Persian Linux port-status phrases such as `وضعیت پورت های رو میخوام ببینم` to `linux_read_listening_ports` with `executionTemplateRef=linux_list_open_ports` and `connectorType=linux-ssh`.
+- Command Catalog AI fallback maps Persian Linux port-status phrases such as `وضعیت پورت های رو میخوام ببینم` to `linux_list_open_ports` with `executionTemplateRef=linux_list_open_ports` and `connectorType=linux-ssh`.
+- Persian deterministic intent routing maps `وضعیت پورت های باز رو نشون بده` to executable `linux_list_open_ports` with empty params, `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, and metadata source `ai_mapped_template`.
+- Linux mapped requests for firewall status, service status, sudo users, block IP, and open port now validate only the resolved template params. Open-port listing no longer requires `sourceIp`, `ipAddress`, or `port`.
+- MikroTik mapped requests for management services, login logs, and block IP now use executable alias action types backed by registered RouterOS templates.
 - Command Catalog AI fallback now returns honest modes: `executable_action_plan`, `needs_input`, `manual_proposal`.
 - Daily Check now uses vendor-aware profiles across Linux, MikroTik, FortiGate, Cisco, pfSense, Juniper, Palo Alto, Windows, Docker, and Kubernetes.
 - Linux and MikroTik Daily Check remain the real connector-backed execution paths.
@@ -47,6 +52,7 @@ Task 16.2 is complete for Command Catalog AI fallback: no-result `Ask AI` reques
 - Several legacy screens still mix older English text with Persian-first UI conventions.
 - Success semantics must stay evidence-based; preview-only states must never be shown as successful execution.
 - `command_search_ai_fallback` metadata is now treated as controlled catalog metadata only when it is implemented, connector-backed, and has a registered execution template.
+- `ai_mapped_template` metadata is controlled only when it is implemented, connector-backed, has a registered execution template, and still passes PolicyGuard/connector checks.
 
 ## Vendor Status
 
@@ -75,6 +81,7 @@ Task 16.2 is complete for Command Catalog AI fallback: no-result `Ask AI` reques
 - `cd backend && npm run validate:command-catalog`
 - `cd backend && npm run build`
 - `cd backend && npm test`
+- `cd backend && npx prisma db execute --file prisma/migrations/20260707183000_task16_3_persian_intent_aliases/migration.sql`
 - `cd backend && npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql`
 - `pnpm build` or equivalent root build command when pnpm is unavailable
 

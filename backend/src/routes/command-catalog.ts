@@ -59,7 +59,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(200).send({
         mode: "needs_input",
         missingFields: ["deviceId"],
-        messageFa: "اول دستگاه را انتخاب کنید تا برنامه قابل اجرا ساخته شود.",
+        messageFa: "اول دستگاه را انتخاب کنید.",
       });
     }
 
@@ -96,7 +96,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const normalizedParams = resolution.normalizedParams;
-      const actionPlan = await proposeActionPlan({ source: "ai", deviceId: selectedDeviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, source: "command_search_ai_fallback", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, source: "command_search_ai_fallback", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
+      const actionPlan = await proposeActionPlan({ source: "ai", deviceId: selectedDeviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
       return reply.code(201).send({
         mode: "executable_action_plan",
         actionPlanId: actionPlan.id,

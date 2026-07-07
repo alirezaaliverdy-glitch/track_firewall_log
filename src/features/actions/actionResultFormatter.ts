@@ -151,7 +151,7 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
     };
   }
 
-  if (action.actionType === "linux_read_listening_ports") {
+  if (action.actionType === "linux_list_open_ports" || action.actionType === "linux_read_listening_ports") {
     const ports = parseOpenPorts(rawOutput).slice(0, 30);
     return {
       summaryFa: "پورت‌های شنونده جمع‌آوری شد.",

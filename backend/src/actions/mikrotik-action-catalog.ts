@@ -24,6 +24,7 @@ export type MikroTikValidation = {
 const MIKROTIK_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_add_address_list_entry,
   ActionType.mikrotik_remove_address_list_entry,
+  ActionType.mikrotik_block_ip,
   ActionType.mikrotik_block_ip_temporary,
   ActionType.mikrotik_update_address_list_entry,
   ActionType.mikrotik_create_managed_drop_rule,
@@ -49,6 +50,7 @@ const MIKROTIK_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_unblock_ip,
   ActionType.mikrotik_list_address_list,
   ActionType.mikrotik_create_managed_blocklist_rule,
+  ActionType.mikrotik_list_management_services,
   ActionType.mikrotik_list_ip_services,
   ActionType.mikrotik_disable_unused_service,
   ActionType.mikrotik_restrict_service_by_address,
@@ -74,6 +76,7 @@ const MIKROTIK_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_create_export_sanitized,
   ActionType.mikrotik_set_identity,
   ActionType.mikrotik_show_clock,
+  ActionType.mikrotik_check_login_logs,
   ActionType.mikrotik_show_logs,
   ActionType.mikrotik_show_resources,
   ActionType.mikrotik_reboot,
@@ -86,6 +89,7 @@ const MIKROTIK_ACTIONS = new Set<ActionType>([
 const TASK27_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_add_address_list_entry,
   ActionType.mikrotik_remove_address_list_entry,
+  ActionType.mikrotik_block_ip,
   ActionType.mikrotik_block_ip_temporary,
   ActionType.mikrotik_update_address_list_entry,
   ActionType.mikrotik_create_managed_drop_rule,
@@ -244,10 +248,10 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
     }
   }
 
-  if (plan.actionType === ActionType.mikrotik_add_address_list_entry || plan.actionType === ActionType.mikrotik_block_ip_temporary || plan.actionType === ActionType.mikrotik_update_address_list_entry) {
-    const address = text(parameters, "address") ?? text(parameters, "srcIp");
+  if (plan.actionType === ActionType.mikrotik_add_address_list_entry || plan.actionType === ActionType.mikrotik_block_ip_temporary || plan.actionType === ActionType.mikrotik_block_ip || plan.actionType === ActionType.mikrotik_update_address_list_entry) {
+    const address = text(parameters, "address") ?? text(parameters, "srcIp") ?? text(parameters, "ipAddress");
     const listName = text(parameters, "listName") ?? "ai_blocklist";
-    const timeout = text(parameters, "timeout") ?? (plan.actionType === ActionType.mikrotik_block_ip_temporary ? "10m" : undefined);
+    const timeout = text(parameters, "timeout") ?? (plan.actionType === ActionType.mikrotik_block_ip_temporary || plan.actionType === ActionType.mikrotik_block_ip ? "10m" : undefined);
     const comment = safeComment(text(parameters, "comment"), "created-by-firewall-log-analyzer");
 
     if (!validIpv4OrCidr(address)) errors.push("address must be a valid IPv4 address or CIDR.");
@@ -263,7 +267,7 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
     const blockCommand = `/ip firewall address-list add list=${quote(listName)} address=${quote(address ?? "")}${timeoutPart} comment=${quote(comment)}`;
     const addCommand = `/ip firewall address-list add list=${quote(listName)} address=${quote(address ?? "")} comment=${quote(comment)}${timeoutPart}`;
     const updateCommand = updateAddressEntryCommand(listName, address ?? "", timeout, comment);
-    if (plan.actionType === ActionType.mikrotik_block_ip_temporary) {
+    if (plan.actionType === ActionType.mikrotik_block_ip_temporary || plan.actionType === ActionType.mikrotik_block_ip) {
       commandSpecs.push(
         commandSpec({
           template: "check exact address-list entry by list/address",

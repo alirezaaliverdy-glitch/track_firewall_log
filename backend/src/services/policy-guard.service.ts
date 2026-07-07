@@ -393,7 +393,7 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     if (port && WARNING_PORTS.has(port)) warnings.push(`Port ${port} is operationally sensitive.`);
   }
 
-  if (plan.actionType === ActionType.open_port) {
+  if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
     const port = numberParam(parameters, "port");
     if (!validPort(port)) errors.push("open_port requires a valid port between 1 and 65535.");
     if (!validProtocol(parameters.protocol)) errors.push("open_port protocol must be tcp or udp.");
@@ -408,10 +408,10 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     if (fromPort && toPort && fromPort === toPort) errors.push("toPort must be different from fromPort.");
   }
 
-  if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.unblock_source_ip) {
-    const srcIp = typeof parameters.srcIp === "string" ? parameters.srcIp : undefined;
-    if (!srcIp) errors.push(`${plan.actionType} requires srcIp.`);
-    if (plan.actionType === ActionType.block_source_ip_temporary && srcIp && isPrivateOrLocalIp(srcIp)) {
+  if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip || plan.actionType === ActionType.unblock_source_ip) {
+    const srcIp = typeof parameters.srcIp === "string" ? parameters.srcIp : typeof parameters.ipAddress === "string" ? parameters.ipAddress : undefined;
+    if (!srcIp) errors.push(`${plan.actionType} requires ${plan.actionType === ActionType.linux_block_ip ? "ipAddress" : "srcIp"}.`);
+    if ((plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) && srcIp && isPrivateOrLocalIp(srcIp)) {
       errors.push("Blocking private, local, or management IPs is blocked by policy.");
     }
     if (srcIp && currentManagementIp() && srcIp === currentManagementIp() && parameters.managementOverride !== true) {
@@ -459,7 +459,7 @@ export function rollbackFor(actionType: ActionType, parameters: Record<string, u
     };
   }
 
-  if (actionType === ActionType.open_port) {
+  if (actionType === ActionType.open_port || actionType === ActionType.linux_open_port) {
     return {
       type: "close_opened_port",
       port: parameters.port,
@@ -467,10 +467,10 @@ export function rollbackFor(actionType: ActionType, parameters: Record<string, u
     };
   }
 
-  if (actionType === ActionType.block_source_ip_temporary) {
+  if (actionType === ActionType.block_source_ip_temporary || actionType === ActionType.linux_block_ip) {
     return {
       type: "remove_temporary_block",
-      srcIp: parameters.srcIp,
+      srcIp: parameters.srcIp ?? parameters.ipAddress,
       expiresAfterMinutes: parameters.durationMinutes ?? 30
     };
   }
