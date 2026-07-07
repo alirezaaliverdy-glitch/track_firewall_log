@@ -14,6 +14,10 @@ const READ_ACTIONS = new Map<ActionType, string>([
   [ActionType.linux_read_nginx, "nginx -t"]
 ]);
 
+const LINUX_LIST_RUNNING_SERVICES = "systemctl list-units --type=service --state=running --no-pager --plain";
+const LINUX_LIST_FAILED_SERVICES = "systemctl --failed --type=service --no-pager --plain";
+const LINUX_CHECK_IMPORTANT_SERVICES = "for s in ssh sshd nginx apache2 httpd docker fail2ban postgresql mysql mariadb redis; do if systemctl list-unit-files --type=service 2>/dev/null | grep -q \"^${s}\\.service\"; then printf '=== %s ===\\n' \"$s\"; systemctl is-active \"$s\" 2>/dev/null || true; systemctl status \"$s\" --no-pager --lines=5 2>/dev/null || true; fi; done";
+
 function str(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -101,6 +105,9 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.unblock_source_ip,
     ActionType.change_ssh_port,
     ActionType.linux_check_service_status,
+    "linux_list_running_services" as ActionType,
+    "linux_list_failed_services" as ActionType,
+    "linux_check_important_services" as ActionType,
     ActionType.linux_check_ssh_status,
     ActionType.linux_check_failed_logins,
     ActionType.linux_check_sudo_users,
@@ -144,6 +151,27 @@ export const linuxEdgePlanner: VendorPlanner = {
         `systemctl status ${service} --no-pager -l`
       ];
       plan.warnings.push("Read-only service status check. No service restart or config change is planned.");
+      return plan;
+    }
+    if (input.actionType === ("linux_list_running_services" as ActionType)) {
+      const plan = base(input);
+      plan.commands = [LINUX_LIST_RUNNING_SERVICES];
+      plan.requiresApproval = false;
+      plan.warnings.push("Read-only running-services inventory.");
+      return plan;
+    }
+    if (input.actionType === ("linux_list_failed_services" as ActionType)) {
+      const plan = base(input);
+      plan.commands = [LINUX_LIST_FAILED_SERVICES];
+      plan.requiresApproval = false;
+      plan.warnings.push("Read-only failed-services inventory.");
+      return plan;
+    }
+    if (input.actionType === ("linux_check_important_services" as ActionType)) {
+      const plan = base(input);
+      plan.commands = [LINUX_CHECK_IMPORTANT_SERVICES];
+      plan.requiresApproval = false;
+      plan.warnings.push("Read-only important-services health check.");
       return plan;
     }
     if (input.actionType === ActionType.linux_check_ssh_status) {

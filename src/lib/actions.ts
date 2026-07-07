@@ -165,7 +165,16 @@ export type ActionType =
   | "fortigate_create_policy"
   | "fortigate_create_zone_policy"
   | "fortigate_update_policy"
-  | "linux_check_service_status";
+  | "linux_check_service_status"
+  | "linux_list_running_services"
+  | "linux_list_failed_services"
+  | "linux_check_important_services"
+  | "linux_daily_check"
+  | "mikrotik_daily_check"
+  | "mikrotik_show_logs"
+  | "mikrotik_list_ip_services"
+  | "linux_open_port"
+  | "close_port";
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 

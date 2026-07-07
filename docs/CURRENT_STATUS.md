@@ -8,58 +8,73 @@ Product mode: `PRODUCT_MODE=persian_command_catalog`
 
 ## Product State
 
-The project is a Persian-first Mini-SOAR prototype. The controlled product path remains:
+The project now behaves as a Persian-first Network & Security Command Center with the controlled path:
 
 `AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`
 
-Task 16 is partially in progress. The AI resolver, AI chat response contract, and Command Catalog AI fallback are now hardened. Daily Check UX, Linux Service Health, and broader result UX work are still open.
+Task 16 is functionally complete for:
+
+- AI resolver / AI assistant contract / honest catalog AI fallback
+- vendor-aware Daily Check foundations and Persian UI
+- Linux Service Health templates, connector coverage, and UI
+- result navigation in a new tab with popup-block fallback
+- structured Action Result formatting for key Linux and MikroTik actions
 
 ## What Works
 
-- Backend AI resolver now maps supported Persian requests to real registered templates instead of defaulting to vague manual proposals when a template exists.
-- `POST /api/ai/chat` returns a structured contract with assistant message, execution support, implementation state, mapped template, missing fields, next step, and optional ActionPlan.
-- `POST /api/commands/ai-propose` now returns honest modes:
-  `executable_action_plan`, `needs_input`, `manual_proposal`.
-- Command Catalog frontend now reacts to those modes and sends executable plans to Action Center without the earlier misleading “created but not executed” state.
-- Execution pipeline protections remain intact: explicit `intent=execute`, template resolution, real connector invocation, persisted result output, and `connectorInvoked=true` required before success.
-- Backend build, backend test suite, targeted Task 16 resolver/fallback test, and frontend build all pass.
+- AI-supported Persian requests that map to registered templates create executable ActionPlans instead of vague manual proposals.
+- Command Catalog AI fallback now returns honest modes: `executable_action_plan`, `needs_input`, `manual_proposal`.
+- Daily Check now uses vendor-aware profiles across Linux, MikroTik, FortiGate, Cisco, pfSense, Juniper, Palo Alto, Windows, Docker, and Kubernetes.
+- Linux and MikroTik Daily Check remain the real connector-backed execution paths.
+- Linux Service Health is available for running services, failed services, important services, and targeted service status checks.
+- Action execution results open in a new tab from Action Center, with a visible fallback link if the browser blocks popups.
+- Action Result view now shows Persian summary, execution status, device/vendor, duration, structured output, next actions, and collapsed raw output.
+- Execution safety remains strict: `intent=execute`, resolved template, real connector invocation, persisted stdout/stderr/exitCode/duration, and no success without `connectorInvoked=true`.
 
 ## Partial or Open
 
-- AI assistant panel still contains older mixed English/mojibake UI strings outside the new execution-state card.
-- Daily Check is implemented in backend foundations from Task 15.1, but the broader Task 16 UX pass is not finished.
-- Linux Service Health panel and its new command set are not implemented yet in this round.
-- Global “open result in new tab with popup-block fallback” work is not finished across every entry point.
+- Older mojibake strings still exist in unrelated legacy UI/backend areas and need a dedicated encoding cleanup task.
+- Daily Check for non-Linux/MikroTik vendors is honest manual-only today; it is not real execution yet.
+- Frontend build still emits the existing large-chunk warning; this is not introduced by Task 16.
+- The local database needed the Task 16 enum migration SQL executed for validation; other environments must also apply it before using the new Linux service-health actions.
 
 ## Known Bugs and Risks
 
-- Mojibake remains in parts of older frontend/backend strings and docs; this should be fixed in a dedicated UTF-8 cleanup task.
-- Frontend production build still reports the existing large-chunk warning from Vite; this is not a new regression from this round.
-- Success must continue to require real execution evidence. Preview-only states must never be treated as successful execution.
+- If another environment does not apply `20260707160000_task16_linux_service_health`, creating plans for new Linux service-health actions will fail at the database enum layer.
+- Several legacy screens still mix older English text with Persian-first UI conventions.
+- Success semantics must stay evidence-based; preview-only states must never be shown as successful execution.
 
 ## Vendor Status
 
-| Vendor | Catalog state | Connector status | Daily Check | Notes |
-|---|---|---|---|---|
-| Linux | `implemented` + some `manualOnly` | Real `linux-ssh` templates registered | Real connector-backed | Strongest execution path with AI mapping support |
-| MikroTik | `implemented` + `manualOnly` + `planned` | Real `mikrotik-ssh` templates registered | Real connector-backed | Strong execution path with AI mapping support |
-| FortiGate | Mostly `manualOnly` | No product-grade executable catalog flow yet | Manual-only/profile exists | Legacy foundations exist but not promoted |
-| Cisco | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Honest non-executable state |
-| pfSense | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Honest non-executable state |
-| Juniper | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Planned/manual only |
-| Palo Alto | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Planned/manual only |
-| Windows | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Planned/manual only |
-| Docker | Planned direction | No registered product execution connector | Manual-only/profile exists | No product commands yet |
-| Kubernetes | Planned direction | No registered product execution connector | Manual-only/profile exists | No product commands yet |
+| Vendor | implemented | manualOnly | planned | connector status | daily check status |
+|---|---|---|---|---|---|
+| Linux | Yes | Some catalog items | No | `linux-ssh` real connector | Real execution |
+| MikroTik | Yes | Some catalog items | Some | `mikrotik-ssh` real connector | Real execution |
+| FortiGate | No product-grade execute path in current mode | Yes | Some | connector not ready for promoted product flow | Manual checklist |
+| Cisco | No | Yes | Some | connector not ready | Manual checklist |
+| pfSense | No | Yes | Some | connector not ready | Manual checklist |
+| Juniper | No | Yes | Some | connector not ready | Manual checklist |
+| Palo Alto | No | Yes | Some | connector not ready | Manual checklist |
+| Windows | No | Yes | Some | connector not ready | Manual checklist |
+| Docker | No | Yes | Some | connector not ready | Manual checklist |
+| Kubernetes | No | Yes | Some | connector not ready | Manual checklist |
 
 ## Next Recommended Task
 
-Continue Task 16 with the remaining product-core items in this order:
+1. Run a focused UTF-8/mojibake cleanup pass without touching execution policy.
+2. Apply the Task 16 enum migration to every shared/local environment that uses the project database.
+3. If product scope continues, deepen Linux/MikroTik result UX and start real connector work for the next vendor.
 
-1. Finish Daily Check UI/result experience.
-2. Add Linux Service Health templates/UI.
-3. Apply global new-tab result navigation and result formatting cleanup.
-4. Run a dedicated mojibake/UTF-8 repair pass without touching execution policy.
+## Validation
+
+- `cd backend && npm run prisma:generate`
+- `cd backend && npm run validate:command-catalog`
+- `cd backend && npm run build`
+- `cd backend && npm test`
+- `cd backend && npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql`
+- `pnpm build`
+
+Validation status: passed. Frontend build still shows the existing Vite chunk-size warning only.
 
 ## Protected Behavior
 

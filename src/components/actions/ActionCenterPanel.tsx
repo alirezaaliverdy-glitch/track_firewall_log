@@ -21,6 +21,7 @@ import {
   type StructuredValidationError,
 } from "@/lib/actions";
 import { subscribeToActionPlanCreated } from "@/lib/actionPlanHandoff";
+import { actionResultUrl, openActionResultInNewTab } from "@/lib/actionResultNavigation";
 
 const safeNumber = (value: unknown): number => {
   const n = Number(value ?? 0);
@@ -386,6 +387,7 @@ export default function ActionCenterPanel() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [resultFallbackId, setResultFallbackId] = useState<string | null>(null);
   const [fieldFixes, setFieldFixes] = useState<Record<string, string>>({});
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
@@ -498,11 +500,13 @@ export default function ActionCenterPanel() {
 
   const executeSelected = () => {
     if (!selectedAction) return;
-    setWorking("execute"); setMessage(null);
+    setWorking("execute"); setMessage(null); setResultFallbackId(null);
     setSelectedAction((current) => current ? { ...current, status: "executing" } : current);
     quickExecuteAction(selectedAction.id, { intent: "execute", reason: "Execute from Action Center" }).then((plan) => {
       const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
-      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.open(`/actions/${encodeURIComponent(plan.id)}/result`, "_blank", "noopener,noreferrer");
+      if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) {
+        if (!openActionResultInNewTab(plan.id)) { setResultFallbackId(plan.id); setMessage("پاپ‌آپ مسدود شد. نتیجه را در تب جدید باز کنید."); }
+      }
       else { setSelectedAction(plan); setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد.")); }
     }).catch((error: unknown) => { void reloadSelected(selectedAction.id); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); }).finally(() => setWorking(null));
   };
@@ -510,12 +514,15 @@ export default function ActionCenterPanel() {
   const executeFromList = (action: ActionPlan) => {
     setWorking(action.id);
     setMessage(null);
+    setResultFallbackId(null);
     setActions((current) => current.map((item) => item.id === action.id ? { ...item, status: "executing" } : item));
     quickExecuteAction(action.id, { intent: "execute", reason: "Execute from Action Center" })
       .then((plan) => {
         setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
         const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
-        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) window.open(`/actions/${encodeURIComponent(plan.id)}/result`, "_blank", "noopener,noreferrer");
+        if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) {
+          if (!openActionResultInNewTab(plan.id)) { setResultFallbackId(plan.id); setMessage("پاپ‌آپ مسدود شد. نتیجه را در تب جدید باز کنید."); }
+        }
         else setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد."));
       })
       .catch((error: unknown) => { void getAction(action.id).then((plan) => setActions((current) => current.map((item) => item.id === plan.id ? plan : item))); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); })
@@ -911,9 +918,19 @@ export default function ActionCenterPanel() {
       )}
 
       {message && (
-        <p className="mt-3 text-left text-xs text-zinc-400" role="status" aria-live="polite">
-          {message}
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-left text-xs text-zinc-400" role="status" aria-live="polite">
+          <p>{message}</p>
+          {resultFallbackId && (
+            <a
+              href={actionResultUrl(resultFallbackId)}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded border border-cyan-800 px-2 py-1 text-cyan-300"
+            >
+              مشاهده نتیجه در تب جدید
+            </a>
+          )}
+        </div>
       )}
     </section>
   );

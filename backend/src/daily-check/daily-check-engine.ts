@@ -1,29 +1,97 @@
 import { getVendorDailyCheckProfile, type DailyCheckSectionProfile } from "./vendor-daily-check-profiles.js";
 
-export type DailySeverity = "green" | "yellow" | "red" | "gray";
 export type DailyStatus = "safe" | "needs_review" | "critical" | "not_supported";
-export type DailyCheckOutput = { template: string; stdout: string; stderr?: string; exitCode?: number | null };
 
-function assess(section: DailyCheckSectionProfile, outputs: DailyCheckOutput[]) {
-  if (!section.commands.length) return { severity: "gray" as const, status: "not_supported" as const };
-  const text = outputs.map((x) => `${x.stdout}\n${x.stderr ?? ""}`).join("\n").toLowerCase();
-  if (outputs.some((x) => typeof x.exitCode === "number" && x.exitCode !== 0) || /\b(critical|panic|failed|failure)\b/.test(text)) return { severity: "red" as const, status: "critical" as const };
-  if (/\b(warn|warning|degraded|inactive|error)\b/.test(text)) return { severity: "yellow" as const, status: "needs_review" as const };
-  return { severity: "green" as const, status: "safe" as const };
+export type DailyCheckOutput = {
+  template: string;
+  stdout: string;
+  stderr?: string;
+  exitCode?: number | null;
+};
+
+type DailySectionResult = {
+  key: string;
+  titleFa: string;
+  status: DailyStatus;
+  severity: DailyStatus;
+  summaryFa: string;
+  items: string[];
+  evidence: string[];
+  suggestedActions: string[];
+};
+
+function normalizeText(outputs: DailyCheckOutput[]) {
+  return outputs
+    .map((output) => `${output.stdout}\n${output.stderr ?? ""}`)
+    .join("\n")
+    .toLowerCase();
+}
+
+function summarize(section: DailyCheckSectionProfile, status: DailyStatus, evidenceCount: number) {
+  if (status === "critical") return `در بخش ${section.titleFa} مورد بحرانی دیده شد.`;
+  if (status === "needs_review") return `بخش ${section.titleFa} نیازمند بررسی بیشتر است.`;
+  if (status === "not_supported") return `برای بخش ${section.titleFa} اجرای واقعی در دسترس نیست.`;
+  return evidenceCount > 0 ? `بخش ${section.titleFa} بدون هشدار جدی ثبت شد.` : `برای بخش ${section.titleFa} داده مستقیمی ثبت نشد.`;
+}
+
+function assessSection(section: DailyCheckSectionProfile, outputs: DailyCheckOutput[]): DailyStatus {
+  if (outputs.length === 0) return "not_supported";
+  const text = normalizeText(outputs);
+  if (outputs.some((output) => typeof output.exitCode === "number" && output.exitCode !== 0)) return "critical";
+  if (/\b(critical|panic|failed|failure|error)\b/.test(text)) return "critical";
+  if (/\b(warn|warning|degraded|inactive|disabled|refused)\b/.test(text)) return "needs_review";
+  return "safe";
+}
+
+function matchingOutputs(section: DailyCheckSectionProfile, outputs: DailyCheckOutput[]) {
+  if (section.templates.length === 0) return [];
+  return outputs.filter((output) => section.templates.some((template) => output.template.toLowerCase().includes(template.toLowerCase())));
 }
 
 export function buildDailyCheckResult(input: { deviceId: string; vendor: unknown; outputs?: DailyCheckOutput[] }) {
   const profile = getVendorDailyCheckProfile(input.vendor);
   if (!profile) throw new Error("DAILY_CHECK_VENDOR_UNSUPPORTED");
+
   const outputs = input.outputs ?? [];
-  const sections = profile.sections.map((entry) => {
-    const matching = outputs.filter((output) => entry.commands.some((command) => output.template.toLowerCase().includes(command.split("/")[0].toLowerCase())));
-    const state = profile.implementationState === "implemented" ? assess(entry, matching.length ? matching : outputs) : { severity: "gray" as const, status: "not_supported" as const };
-    return { key: entry.key, titleFa: entry.titleFa, ...state, items: entry.commands, evidence: matching.map((x) => x.stdout).filter(Boolean).slice(0, 20), suggestedActions: entry.suggestedActions };
+  const sections: DailySectionResult[] = profile.sections.map((section) => {
+    const evidenceOutputs = matchingOutputs(section, outputs);
+    const sectionOutputs = evidenceOutputs.length > 0 ? evidenceOutputs : outputs;
+    const status = profile.implementationState === "implemented" ? assessSection(section, sectionOutputs) : "not_supported";
+
+    return {
+      key: section.key,
+      titleFa: section.titleFa,
+      status,
+      severity: status,
+      summaryFa: summarize(section, status, evidenceOutputs.length),
+      items: section.parserRules,
+      evidence: evidenceOutputs.flatMap((output) => [output.stdout, output.stderr ?? ""]).filter(Boolean).slice(0, 8),
+      suggestedActions: section.suggestedActions,
+    };
   });
-  const severities = sections.map((x) => x.severity);
-  const overallStatus: DailyStatus = severities.includes("red") ? "critical" : severities.includes("yellow") ? "needs_review" : severities.every((x) => x === "gray") ? "not_supported" : "safe";
-  const supported = sections.filter((x) => x.severity !== "gray");
-  const score = supported.length ? Math.round(supported.reduce((sum, x) => sum + (x.severity === "green" ? 100 : x.severity === "yellow" ? 60 : 20), 0) / supported.length) : 0;
-  return { deviceId: input.deviceId, vendor: profile.vendor, overallStatus, score, sections, rawOutputs: outputs, executedTemplates: outputs.map((x) => x.template), manualSections: profile.implementationState === "manualOnly" ? sections.map((x) => x.key) : [], unsupportedSections: profile.implementationState === "planned" ? sections.map((x) => x.key) : [] };
+
+  const overallStatus: DailyStatus = sections.some((section) => section.status === "critical")
+    ? "critical"
+    : sections.some((section) => section.status === "needs_review")
+      ? "needs_review"
+      : sections.every((section) => section.status === "not_supported")
+        ? "not_supported"
+        : "safe";
+
+  const scored = sections.filter((section) => section.status !== "not_supported");
+  const score = scored.length === 0
+    ? 0
+    : Math.round(scored.reduce((sum, section) => sum + (section.status === "safe" ? 100 : section.status === "needs_review" ? 60 : 20), 0) / scored.length);
+
+  return {
+    deviceId: input.deviceId,
+    vendor: profile.vendor,
+    overallStatus,
+    score,
+    sections,
+    rawOutputs: outputs,
+    executedTemplates: outputs.map((output) => output.template),
+    manualSections: profile.implementationState === "manualOnly" ? sections.map((section) => section.key) : [],
+    unsupportedSections: profile.implementationState === "planned" ? sections.map((section) => section.key) : [],
+  };
 }

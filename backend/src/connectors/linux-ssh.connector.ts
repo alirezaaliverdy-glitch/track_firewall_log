@@ -93,7 +93,10 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.linux_read_auth_logs,
   ActionType.linux_read_users,
   ActionType.linux_read_docker,
-  ActionType.linux_read_nginx
+  ActionType.linux_read_nginx,
+  "linux_list_running_services" as ActionType,
+  "linux_list_failed_services" as ActionType,
+  "linux_check_important_services" as ActionType
   ,ActionType.linux_daily_check
 ];
 
@@ -102,7 +105,8 @@ const LINUX_READ_ACTIONS = new Set<ActionType>([
   ActionType.linux_check_sudo_users, ActionType.linux_check_fail2ban_status,
   ActionType.linux_read_hostname, ActionType.linux_read_interfaces, ActionType.linux_read_routes,
   ActionType.linux_read_listening_ports, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
-  ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx
+  ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx,
+  "linux_list_running_services" as ActionType, "linux_list_failed_services" as ActionType, "linux_check_important_services" as ActionType
 ]);
 
 function linuxReadCommand(actionType: ActionType, sudo = "") {
@@ -119,7 +123,10 @@ function linuxReadCommand(actionType: ActionType, sudo = "") {
     [ActionType.linux_read_auth_logs]: { template: "journalctl SSH authentication events", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -n 200` },
     [ActionType.linux_read_users]: { template: "getent passwd", command: "getent passwd" },
     [ActionType.linux_read_docker]: { template: "docker ps", command: "docker ps --no-trunc" },
-    [ActionType.linux_read_nginx]: { template: "nginx -t", command: `${sudo}nginx -t` }
+    [ActionType.linux_read_nginx]: { template: "nginx -t", command: `${sudo}nginx -t` },
+    ["linux_list_running_services" as ActionType]: { template: "running services", command: "systemctl list-units --type=service --state=running --no-pager --plain" },
+    ["linux_list_failed_services" as ActionType]: { template: "failed services", command: "systemctl --failed --type=service --no-pager --plain" },
+    ["linux_check_important_services" as ActionType]: { template: "important services", command: "for s in ssh sshd nginx apache2 httpd docker fail2ban postgresql mysql mariadb redis; do if systemctl list-unit-files --type=service 2>/dev/null | grep -q \"^${s}\\.service\"; then printf '=== %s ===\\n' \"$s\"; systemctl is-active \"$s\" 2>/dev/null || true; systemctl status \"$s\" --no-pager --lines=5 2>/dev/null || true; fi; done" }
   };
   return commands[actionType];
 }

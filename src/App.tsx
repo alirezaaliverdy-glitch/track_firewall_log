@@ -32,6 +32,7 @@ import AppBackground from "./components/background/AppBackground";
 import CommandCatalogPanel from "./components/commands/CommandCatalogPanel";
 import ActionResultView from "./components/actions/ActionResultView";
 import DailyCheckPanel from "./components/daily-check/DailyCheckPanel";
+import LinuxServiceHealthPanel from "./components/services/LinuxServiceHealthPanel";
 
 function App() {
   const { user, logout } = useAuth();
@@ -72,6 +73,9 @@ function App() {
 
           <ErrorBoundary title="AI Security Assistant unavailable">
             <DailyCheckPanel />
+          </ErrorBoundary>
+          <ErrorBoundary title="Linux Service Health unavailable">
+            <LinuxServiceHealthPanel />
           </ErrorBoundary>
           <ErrorBoundary title="AI Security Assistant unavailable">
             <AiSecurityAssistantPanel />

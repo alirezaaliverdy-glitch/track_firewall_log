@@ -3,49 +3,65 @@
 ## هدف فعلی
 
 - جهت محصول: Persian Network & Security Command Center با مسیر `AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`.
-- کار فعال: ادامه Task 16 با تمرکز روی resolver مرکزی AI، چت AI، و fallback کاتالوگ بدون تغییر رفتار اجرای lab.
+- کار فعال: Task 16 تا اینجا برای Daily Check چندوندوری، Linux Service Health، باز شدن نتیجه در تب جدید، و Action Result UX تکمیل شده است.
 
 ## تغییرات انجام‌شده
 
-- resolver مرکزی `backend/src/ai/ai-template-resolver.ts` اضافه و برای Linux/MikroTik/Daily Check/Fallback سخت‌گیرانه شد.
-- `POST /api/commands/ai-propose` روی modeهای واقعی `executable_action_plan` / `needs_input` / `manual_proposal` تثبیت شد.
-- پاسخ `POST /api/ai/chat` ساختاریافته شد و خطای provider با پیام فارسی شفاف برمی‌گردد.
-- UI کاتالوگ و کلاینت AI با قرارداد جدید sync شدند تا ActionPlan قابل اجرا را به مرکز عملیات بفرستند و نیازمندی ورودی را صادقانه نشان دهند.
-- تست جدید resolver/fallback اضافه شد و build/test فعلی سبز است.
+- Daily Check backend برای Linux و MikroTik با پروفایل‌های vendor-aware و خروجی ساختاریافته سخت‌گیرانه شد.
+- UI فارسی Daily Check اضافه/بازنویسی شد و وضعیت `اجرای واقعی` / `چک‌لیست دستی` / `در حال توسعه` را صادقانه نشان می‌دهد.
+- Linux Service Health با دستورات `running/failed/status/important services` به کاتالوگ، template registry، planner، connector و UI اضافه شد.
+- Result UX طوری سخت‌گیرانه شد که بعد از اجرای موفق، نتیجه در تب جدید باز شود و در صورت popup block لینک fallback نشان داده شود.
+- `ActionResultView` و formatterهای مرتبط برای Linux/MikroTik/Daily Check و Service Health بازنویسی شدند.
+- backend build/test و frontend build پاس شدند؛ برای عبور تست‌های plan creation، migration enum جدید به دیتابیس محلی execute شد.
 
 ## فایل‌های مهم
 
-- `AGENTS.md`: قواعد ثابت پروژه، lab mode، رفتارهای محافظت‌شده.
-- `backend/src/ai/ai-template-resolver.ts`: منبع واحد نگاشت درخواست AI به template/catalog.
-- `backend/src/routes/ai.ts`: routeهای وضعیت provider، context و chat.
-- `backend/src/routes/command-catalog.ts`: fallback هوش مصنوعی کاتالوگ و ساخت ActionPlan.
-- `backend/src/services/ai-chat.service.ts`: جریان end-to-end چت AI تا ActionPlan پیشنهادی.
-- `src/lib/ai.ts`: قرارداد کلاینت AI و normalize پاسخ ساختاریافته.
-- `src/lib/commandCatalog.ts`: modeهای fallback کاتالوگ در فرانت.
-- `src/components/commands/CommandCatalogPanel.tsx`: handoff درست به Action Center.
+- `AGENTS.md`: قواعد ثابت پروژه، lab mode، محدودیت‌های اجرای واقعی.
+- `backend/src/daily-check/vendor-daily-check-profiles.ts`: منبع واحد پروفایل Daily Check برای همه vendorها.
+- `backend/src/daily-check/daily-check-engine.ts`: ساخت خروجی نهایی Daily Check با `overallStatus`, `score`, `sections`, `rawOutputs`.
+- `backend/src/commands/catalog/index.ts`: آیتم‌های جدید Linux Service Health و Daily Check.
+- `backend/src/commands/execution/execution-template-registry.ts`: templateهای اجرایی Linux Service Health.
+- `backend/src/connectors/vendors/linux-edge.planner.ts`: command planهای read-only لینوکس برای سرویس‌ها.
+- `backend/src/connectors/linux-ssh.connector.ts`: اجرای واقعی templateهای لینوکسی و read-only commands.
+- `src/components/daily-check/DailyCheckPanel.tsx`: پنل فارسی Daily Check.
+- `src/components/services/LinuxServiceHealthPanel.tsx`: پنل سلامت سرویس‌های لینوکس.
+- `src/components/actions/ActionCenterPanel.tsx`: اجرای ActionPlan و باز کردن نتیجه در تب جدید با fallback.
+- `src/components/actions/ActionResultView.tsx`: نمایش ساختاریافته نتیجه اجرا.
+- `src/features/actions/actionResultFormatter.ts`: formatterهای نتیجه برای اکشن‌های Linux/MikroTik.
 
 ## کارهای باقی‌مانده
 
-- فوری: تکمیل باقی Task 16 در Daily Check UI، Service Health و result UX سراسری.
-- نزدیک: پاکسازی mojibake رشته‌های قدیمی و یکدست‌سازی Persian-first UI.
-- بعداً: افزودن connector واقعی برای vendorهای غیر Linux/MikroTik و گسترش formatter/result UX.
+- فوری:
+  - پاک‌سازی mojibakeهای قدیمی در فایل‌هایی که خارج از محدوده مستقیم Task 16 مانده‌اند.
+  - اگر محیط‌های دیگر از دیتابیس مشترک استفاده می‌کنند، migration Task 16 روی آن‌ها هم اعمال شود.
+- نزدیک:
+  - افزودن formatter و UX عمیق‌تر برای vendorهای غیر Linux/MikroTik وقتی connector واقعی آماده شد.
+  - اضافه کردن نمایش مستقیم نتیجه Daily Check در tab جدید از داخل پنل Daily Check، اگر later execution entrypoint مستقل اضافه شود.
+- بعداً:
+  - connector واقعی برای FortiGate/Cisco/pfSense/Juniper/Palo Alto/Windows/Docker/Kubernetes.
+  - کوچک‌سازی chunk فرانت‌اند و code-splitting.
 
 ## دستوراتی که اجرا شده
 
 - `git status --short`
-- `git diff -- backend/src/routes/ai.ts backend/src/routes/command-catalog.ts backend/src/services/ai-chat.service.ts src/components/ai/AiSecurityAssistantPanel.tsx src/lib/ai.ts backend/src/ai/ai-template-resolver.ts`
-- `rg -n "ai-propose|assistantMessageRecord|connectorInvoked|window.open|ActionResultView|DailyCheckPanel|LinuxServiceHealthPanel|linux_list_running_services|linux_list_failed_services|linux_check_important_services" -S backend src`
+- `Get-Content AGENTS.md`
+- `Get-Content CODEX_HANDOFF.md`
+- `Get-Content docs/CURRENT_STATUS.md`
+- `Get-Content docs/TASK_HISTORY.md`
+- `rg -n "window.open|openActionResultInNewTab|ActionResultView|DailyCheckPanel|LinuxServiceHealthPanel|task16" -S backend src`
+- `npm run prisma:generate` در `backend`
+- `npm run validate:command-catalog` در `backend`
 - `npm run build` در `backend`
 - `npm test` در `backend`
-- `npx tsx --test test/task16-ai-resolver-and-fallback.test.ts` در `backend`
 - `pnpm build`
+- `npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql` در `backend`
 
 ## نکته‌های مهم
 
-- Supported actions after user confirmation در lab unrestricted mode باید قابل اجرا بمانند.
-- هرگز بدون `connectorInvoked=true` وضعیت `succeeded` ثبت نشود.
-- Linux و MikroTik در حال حاضر قوی‌ترین هدف‌های اجرای واقعی هستند.
-- سایر vendorها تا آماده‌شدن connector باید صادقانه `manualOnly` یا `planned` بمانند.
-- Persian-first flow حفظ شود.
-- هیچ secret، token، password یا `.env` value وارد مستندات یا خروجی نشود.
+- Supported actions execute after user confirmation in lab unrestricted mode.
+- Never mark succeeded unless connectorInvoked=true.
+- Linux and MikroTik are currently the strongest real execution targets.
+- Other vendors may be manual/planned unless connectors are ready.
+- Persian-first flow باید حفظ شود.
 - `ACTION_EXECUTION_MODE=quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` نباید تغییر کنند.
+- هیچ secret، token، password یا `.env` value وارد کد، داک، یا خروجی نشود.

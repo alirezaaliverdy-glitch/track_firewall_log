@@ -864,6 +864,9 @@ enum AiIntentType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_list_running_services
+  linux_list_failed_services
+  linux_check_important_services
   linux_open_port
   linux_daily_check
   mikrotik_daily_check
@@ -1041,6 +1044,9 @@ enum ActionType {
   fortigate_list_address_objects
   fortigate_list_routes
   linux_check_service_status
+  linux_list_running_services
+  linux_list_failed_services
+  linux_check_important_services
   linux_open_port
   linux_check_ssh_status
   linux_check_failed_logins
