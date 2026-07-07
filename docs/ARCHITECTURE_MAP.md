@@ -1,134 +1,43 @@
 # Architecture Map
 
-## High-Level Flow
+## Core Flows
 
-User / Upload / Device Context
+`Persian Catalog or AI fallback -> validated ActionPlan -> Preview -> User Confirm -> PolicyGuard -> registered Connector -> Audit/Result`
 
--> Backend processing
+`Raw events/snapshots -> vendor profile -> Vendor Finding Engine -> persisted Finding -> proposed ActionPlan -> controlled execution flow`
 
--> SecurityEvent
+Creation is permissive; execution is controlled. Preview never implies execution, and success requires `connectorInvoked=true`.
 
--> Detection/Incident
+## Backend Map
 
--> AI Assistant
+| Area | Purpose | Main path | Route/API | Status |
+|---|---|---|---|---|
+| Auth | Session login/logout and route protection | `backend/src/services/auth.service.ts`, `routes/auth.ts` | `/api/auth/*` | Implemented |
+| Devices | Device inventory, discovery, capabilities | `services/device.service.ts`, `routes/devices.ts` | `/api/devices/*` | Implemented |
+| Credentials | Encrypted credential references | `services/credential*.ts`, `routes/credentials.ts` | `/api/credentials/*` | Implemented |
+| Command catalog | Persian curated search, validation, plan handoff | `commands/catalog/`, `routes/command-catalog.ts` | `/api/commands/*` | Linux/MikroTik executable; others manual/planned |
+| AI assistant | Evidence Pack, provider, structured intents | `ai/`, `services/ai-*.ts`, `routes/ai.ts` | `/api/ai/*` | Implemented; proposal-first |
+| AI/template resolver | Maps validated action/catalog metadata to registered templates | `commands/catalog/catalog-action-resolver.ts`, `commands/execution/execution-template-registry.ts` | Used by action routes | Implemented for registered templates |
+| ActionPlan lifecycle | Propose, validate, preview, approve, execute, result | `services/action-plan.service.ts`, `routes/actions.ts` | `/api/actions/*` | Implemented; verification/rollback partial |
+| PolicyGuard | Re-check execution boundaries | `services/policy-guard.service.ts`, vendor guards | Action execution boundary | Implemented; lab exception protected |
+| Execution templates | Structured allowlisted command definitions | `commands/execution/` | Internal registry | Linux/MikroTik strongest |
+| Connectors | Vendor planners and SSH invocation | `connectors/` | `/api/connectors/*`, action plan APIs | Linux/MikroTik real; FortiGate legacy foundation; others incomplete |
+| Daily Check | Vendor profiles and grouped read-only plans/results | `daily-check/`, `routes/daily-check.ts` | `/api/daily-check/*` | Linux/MikroTik real; eight manual-only |
+| Telemetry | Linux collection and shared vendor findings | `telemetry/`, `routes/linux-telemetry.ts`, `routes/telemetry-findings.ts` | `/api/devices/:id/telemetry/*`, `/api/*findings*` | Linux ingestion real; other collectors partial |
+| Events/detection | Event store, collectors, detection, incidents | `services/event*.ts`, `services/detection.service.ts`, routes | `/api/events/*`, `/api/detections/*`, `/api/incidents/*` | Foundation implemented |
+| Audit/result | Execution evidence, output, approvals | `ActionAuditLog`, `ActionApproval`, action service | `/api/actions/:id`, `/audit` | Implemented; no fake-success rule enforced |
+| Prisma models | Persistent product state | `backend/prisma/schema.prisma` | Prisma client | 28 models including Finding/Action/Assessment/Event domains |
 
--> ActionIntent
+## Frontend Map
 
--> ActionPlan
-
--> PolicyGuard
-
--> Connector
-
--> AuditLog
-
-## Persian Command Catalog Flow
-
-Selected device -> Persian catalog search/filter -> backend parameter validation -> proposed ActionPlan with `catalogCommandId` metadata -> existing Action Center -> confirmation -> PolicyGuard/Connector -> verification/audit. When no curated result exists, `/api/commands/ai-propose` creates only a custom draft/proposal.
-
-## Backend Main Areas
-
-- `backend/src/config/env.ts`: runtime configuration and safety validation
-- `backend/prisma/schema.prisma`: database models
-- `backend/src/services/providers`: AI providers
-- `backend/src/ai/context`: AI context builder
-- `backend/src/ai/prompts`: centralized prompt location
-- `backend/src/actions` and action-plan services: action planning and lifecycle
-- `backend/src/commands/catalog` and `routes/command-catalog.ts`: Persian-first curated product catalog, search, validation, and proposal-only AI fallback
-- PolicyGuard services: execution safety checks
-- `backend/src/connectors`: vendor execution/read connectors
-- Device services/routes: device registry and credentials
-- Incident/event services/routes: detection and security event storage
-- Assessment/hardening services: security analysis and recommendations
-- `backend/src/telemetry/linux`: read-only Linux snapshots, posture analysis, bounded stream sessions, and live signal parsing
-- `backend/src/routes/linux-telemetry.ts`: authenticated snapshot, options, analysis, stream control, and SSE APIs
-
-## Frontend Main Areas
-
-- App shell and routing
-- Auth/Login
-- Dashboard
-- Action Center
-- AI Security Assistant
-- Device management
-- Security events/incidents
-- Linux device telemetry
-- UI components and animated background
-
-## Core Product Rule
-
-Action creation is permissive.
-
-Execution is controlled.
-
-## Action Flow
-
-User request
-
--> AI/deterministic intent
-
--> catalog or generic action fallback
-
--> ActionPlan
-
--> UI review
-
--> user executes
-
--> PolicyGuard
-
--> connector
-
--> audit result
-
-## AI Flow
-
-User message
-
--> compact vendor-aware Evidence Pack (bounded events/findings/incidents/actions; secrets and raw logs excluded by default)
-
--> central system prompt
-
--> structured response
-
--> ActionIntent or explanation
-
--> ActionPlan if operational
-
-## Connector Flow
-
-Device credential reference
-
--> connector registry
-
--> vendor planner
-
--> controlled dry run / preflight
-
--> PolicyGuard and user confirmation
-
--> connector execution
-
--> verification, rollback metadata, and audit result
-
-## Linux Telemetry Flow
-
-Linux SSH device and existing credential reference
-
--> fixed read-only command allowlist
-
--> root / non-interactive sudo / limited privilege detection
-
--> partial structured `DeviceSnapshot`
-
--> Linux posture analyzer
-
--> compact AI context summary
-
-Live selected source
-
--> bounded SSH stream
-
--> lightweight suspicious signal parser
-
--> SSE viewer and suspicious `SecurityEvent` persistence
+| Area | Purpose | Main path | Related API | Status |
+|---|---|---|---|---|
+| App shell/routing | Authenticated composition and result route | `src/App.tsx`, `src/main.tsx` | — | Implemented; mostly single-page composition |
+| Device registry | Devices, credentials, connection/capabilities | `components/devices/DeviceRegistryPanel.tsx` | `/api/devices`, `/api/credentials` | Implemented |
+| Command catalog | Persian search, parameters, plan creation | `components/commands/CommandCatalogPanel.tsx` | `/api/commands/*` | Implemented |
+| AI assistant | Chat, context, missing fields, action proposals | `components/ai/AiSecurityAssistantPanel.tsx` | `/api/ai/*` | Implemented |
+| Action center | Review, preview, confirm, execute, audits | `components/actions/ActionCenterPanel.tsx` | `/api/actions/*` | Implemented |
+| Action result | Honest connector output/result view | `components/actions/ActionResultView.tsx` | `/api/actions/:id` | Implemented at `/actions/:id/result` |
+| Daily Check | Vendor profile selection and grouped results | `components/daily-check/DailyCheckPanel.tsx` | `/api/daily-check/*`, actions | Linux/MikroTik executable; others manual |
+| Service health | Backend/provider availability indicators | app/header and API helpers | `/api/health`, `/api/ai/provider/status` | Basic/partial |
+| Telemetry/events | Linux stream, findings, event/incident review | `components/telemetry/`, `events/`, `findings/`, `incidents/` | telemetry, findings, events, incidents APIs | Implemented foundation; vendor ingestion partial |

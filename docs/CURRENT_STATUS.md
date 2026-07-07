@@ -1,98 +1,59 @@
 # Current Project Status
 
-## Product
+Last updated: 2026-07-07
 
-Firewall Log Analyzer / AI Security Orchestrator.
+Branch: `product-persian-command-catalog`
 
-## Current Stage
+Product mode: `PRODUCT_MODE=persian_command_catalog`
 
-MVP / prototype moving toward Mini-SOAR.
+## Product State
 
-## Completed So Far
+The project is an MVP/prototype Mini-SOAR. Its primary path is Persian-first and backend-first:
 
-- React/Vite frontend
-- Fastify/TypeScript backend
-- Prisma/PostgreSQL schema
-- Login/auth page
-- Main app UI polish
-- Animated main app background
-- Action Center redesign
-- Device registry
-- Security event store
-- Detection engine foundation
-- Incident builder foundation
-- AI Security Assistant
-- ActionPlan / PolicyGuard / Audit foundation
-- MikroTik controlled execution foundation
-- Project config and production safety cleanup
-- Central AI brain with permissive universal action planning
-- Linux read-only security snapshot and live telemetry foundation
-- Linux telemetry device alias selection and configured SSH management-port handling
-- One-click Linux live monitoring with real-time findings and proposal-only fix actions
-- Multi-vendor Full Analysis and Hardening profiles for MikroTik, Linux, FortiGate, pfSense, Cisco, and generic devices
-- Compact, vendor-aware AI Evidence Packs with bounded events, findings, incidents, actions, secret filtering, and raw-log exclusion by default
-- Central Security Orchestrator prompt and structured analysis/action output contracts across in-app AI provider calls
-- Vendor-aware telemetry profile registry for 12 platforms and a normalized persisted Finding engine
-- Shared snapshot/live aggregation, noise suppression, stable fingerprints, live finding SSE, and proposal-only finding remediation
-- Persian-first backend Command Catalog foundation with six vendors, Persian search/filter UI, ActionPlan handoff, and proposal-only AI fallback
-- Strict command-catalog lifecycle with startup validation, real execution-template registry, pre-creation parameter validation, device/vendor filtering, and explicit implemented/manual/planned/unsupported states
-- End-to-end catalog handoff: complete ActionPlan catalog metadata, product-aware quick-execute resolution, automatic Action Center selection/navigation, and state-aware execution buttons
-- Real prepared-command execution lifecycle with connector-confirmed success, persisted output/exit metadata, Persian preview separation, and a dedicated command result view
-- Deterministic preview fingerprints, explicit execute intent, connector-invocation proof, structured quick-execute traces, and hard fake-connector regression coverage
-- Lab-unrestricted shared execution for catalog and AI actions, including controlled Linux user/sudo/group lock operations with Persian parameter extraction
+`AI/Catalog -> ActionPlan -> Preview -> User Confirm -> PolicyGuard -> Connector -> Audit/Result`
+
+The catalog contains 51 items: 22 implemented connector-backed commands (15 Linux, 7 MikroTik, including Daily Check), 28 manual-only items, and 1 planned MikroTik item. AI uses compact Evidence Packs and can propose actions; it cannot silently execute raw commands.
+
+## What Works
+
+- React/Vite application with authentication, device/credential registry, Persian command catalog, AI assistant, Action Center, dedicated result view, Daily Check, events/incidents, findings, and Linux telemetry.
+- Fastify/Prisma/PostgreSQL backend with catalog validation, ActionPlan lifecycle, stable preview fingerprinting, explicit execute intent, PolicyGuard, SSH connectors, result persistence, and audit.
+- Real registered Linux and MikroTik catalog/Daily Check templates after one confirmation in protected lab-unrestricted mode.
+- Vendor-aware telemetry registry for Linux, MikroTik, FortiGate, pfSense, Cisco, Palo Alto, Juniper, Windows, Docker, Kubernetes, AWS, and Azure; normalized persisted findings are currently fed by Linux snapshots/live streams.
+- Multi-vendor deterministic assessment/hardening profiles and proposal-only remediation.
+
+## Partial or Open
+
+- Verification is primarily output/result review; automatic rollback is incomplete.
+- FortiGate has legacy planner/SSH connector foundations, but Persian product catalog and Daily Check remain manual-only and need product-path integration/testing before executable claims.
+- Non-Linux telemetry profiles mostly provide rule scaffolding; their collectors/parsers do not yet feed the shared engine.
+- Detection correlation/rule DSL, reporting, broader Linux distro testing, and production hardening remain incomplete.
+
+## Known Bugs and Risks
+
+- Some existing Persian source strings/docs have mojibake and need a scoped UTF-8 cleanup with regression testing.
+- Root frontend package version remains `0.0.0`; backend is `0.1.0` (informational, not runtime failure).
+- Successful execution must continue to require `connectorInvoked=true`; preview-only responses must never be accepted as success.
+
+## Vendor Status
+
+| Vendor | Product catalog state | Connector status | Daily Check | Telemetry status |
+|---|---|---|---|---|
+| Linux | `implemented` (15) plus `manualOnly` (2) | Real `linux-ssh` registered templates | `implemented`, connector-backed | Implemented snapshots/live ingestion and findings |
+| MikroTik | `implemented` (7), `manualOnly` (1), `planned` (1) | Real `mikrotik-ssh` registered templates | `implemented`, connector-backed | Implemented profile/rules; collector integration partial |
+| FortiGate | `manualOnly` (7) | Legacy SSH connector/planner exists; not wired as executable product catalog/Daily Check | `manualOnly` | Implemented profile/rules; collector integration open |
+| Cisco | `manualOnly` (7) | No registered product execution connector | `manualOnly` | Planned/scaffold profile; collector integration open |
+| pfSense | `manualOnly` (6) | Planner is manual/unsupported; no real execution connector | `manualOnly` | Implemented profile/rules; collector integration open |
+| Juniper | `manualOnly` (1) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
+| Palo Alto | `manualOnly` (1) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
+| Windows | `manualOnly` (1) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
+| Docker | No product catalog item (`planned` direction) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
+| Kubernetes | No product catalog item (`planned` direction) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
+
+## Next Recommended Task
+
+Run a dedicated UTF-8/Persian mojibake repair across product-facing source strings and docs, with backend/frontend tests and no execution-policy changes. After that, add real collectors/connectors one vendor at a time rather than promoting manual/planned entries early.
 
 ## Protected Behavior
 
-These must not be changed unless explicitly requested:
-
-- `ACTION_EXECUTION_MODE=quick_controlled`
-- `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true`
-- Existing MikroTik quick execution flow
-- Action creation should be permissive
-- Execution should remain controlled and audited
-
-## Current Strengths
-
-- ActionPlan architecture exists
-- Vendor connector architecture exists
-- MikroTik support is strongest
-- The product catalog currently exposes 19 connector-backed commands: 13 Linux and 6 MikroTik; other prepared operations are explicit manual-only or planned items
-- Catalog-created implemented actions resolve through their catalog ID/template before dry-run, while safe unique action-type fallback preserves older valid plans
-- Full Analysis is grouped by vendor/device and reports collected data, missing telemetry, findings, and proposed actions
-- AI Chat sends the provider a compact Evidence Pack instead of the full legacy security context and exposes lightweight context metadata
-- Vendor hardening findings can create review-only ActionPlans without automatic execution
-- UI is becoming premium and usable
-- Backend has meaningful security models
-
-## Current Weaknesses
-
-- Event Intelligence Core is not yet mature
-- Non-Linux vendor collectors/parsers still need to feed their scaffolded profiles into the shared Finding Engine
-- Detection Engine needs correlation/rule DSL
-- Verification and rollback are incomplete
-- Linux telemetry needs broader distro and production-host testing
-- FortiGate support needs deeper real-world testing
-- Reporting is not complete
-
-## Next Planned Tasks
-
-- Event Intelligence Core
-- Task 13: Detection Engine 2.0
-- Task 14: Action Verification and Rollback
-- Task 15: Report Generator
-
-The next product-catalog iteration should promote manual/planned items only after real connector handlers and verification paths exist, and continue Persian localization without changing controlled execution.
-
-## Latest Task
-
-Task 14.1E unified AI and prepared-command execution in lab unrestricted mode. Supported AI intents now receive real catalog metadata and execute after one confirmation; Linux sudo membership, group inspection, lock, and unlock operations have validated SSH templates.
-
-## Last Updated
-
-2026-07-05
-
-## Task 15.1 Update
-
-- Vendor-aware Daily Check profiles now cover Linux, MikroTik, FortiGate, Cisco, pfSense, Juniper, Palo Alto, Windows, Docker, and Kubernetes.
-- Linux and MikroTik use real read-only connector templates; other vendors are clearly manual-only.
-- Global aliases, executable AI fallback metadata, one-time stale-preview rebuild, grouped Persian results, and new-tab result navigation are implemented.
+Keep `ACTION_EXECUTION_MODE=quick_controlled` and `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true`. In this lab combination, one confirmation is enough for supported registered Linux/MikroTik templates, while device, parameters, template/connector, `intent=execute`, real invocation, audit, and real-result checks remain mandatory.
