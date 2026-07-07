@@ -56,6 +56,10 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function isActionPlanControlSource(value: unknown) {
+  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(value);
+}
+
 function numberParam(parameters: Record<string, unknown>, key: string) {
   const value = Number(parameters[key]);
   return Number.isInteger(value) ? value : undefined;
@@ -206,6 +210,9 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   const originalParameters = asObject(plan.parametersJson);
   const canonical = normalizeIntent({ ...originalParameters, actionType: plan.actionType });
   delete canonical.actionType;
+  if (isActionPlanControlSource(originalParameters.source) && canonical.sourceIp === originalParameters.source) {
+    delete canonical.sourceIp;
+  }
   const parameters = { ...originalParameters, ...canonical };
   const normalizedPlan = { ...plan, parametersJson: JSON.parse(JSON.stringify(parameters)) } as ActionPlan;
   const catalog = getActionCatalogEntry(plan.actionType);

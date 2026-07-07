@@ -245,6 +245,18 @@ function storedNormalizedParameters(plan: ActionPlan, normalized: Record<string,
   );
 }
 
+const NON_EXECUTION_PARAMETER_FIELDS = new Set([
+  "metadata", "actionType", "deviceId", "vendor", "executionSupport", "missingFields", "clarificationQuestions",
+  "source", "implementationState", "connectorType", "executionTemplateRef", "normalizedParams", "requiredParamsSatisfied",
+  "requiresExplicitReview", "expectedImpact", "suggestedPrechecks", "suggestedVerification", "suggestedRollback"
+]);
+
+function executionParametersOnly(parameters: Record<string, unknown>) {
+  const resolverParams = asObject(parameters.normalizedParams);
+  if (Object.keys(resolverParams).length > 0 || "normalizedParams" in parameters) return resolverParams;
+  return Object.fromEntries(Object.entries(parameters).filter(([key]) => !NON_EXECUTION_PARAMETER_FIELDS.has(key)));
+}
+
 const EXECUTION_ONLY_FIELDS = new Set(["breakGlass", "executeConfirmation", "deviceNameConfirmation", "reason", "intent"]);
 
 function stableJson(value: unknown) {
@@ -494,7 +506,7 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   const productMatches = COMMAND_CATALOG.filter((item) => item.implementationState === "implemented" && item.executionSupport === "connector" && item.actionType === actionType);
   if (productMatches.length === 1 && asObject(parameters.metadata).source !== "command_catalog") {
     const item = productMatches[0];
-    const normalizedParams = Object.fromEntries(Object.entries(parameters).filter(([key]) => !["metadata", "actionType", "deviceId", "vendor", "executionSupport", "missingFields", "clarificationQuestions"].includes(key)));
+    const normalizedParams = executionParametersOnly(parameters);
     const existingSource = String(asObject(parameters.metadata).source ?? parameters.source ?? "");
     const mappedSource = ["command_search_ai_fallback", "ai_mapped_template"].includes(existingSource) ? existingSource : "command_catalog";
     parameters = {

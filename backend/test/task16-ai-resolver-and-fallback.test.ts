@@ -130,9 +130,21 @@ test("command catalog AI fallback creates executable Linux open-port-list plans"
     assert.equal(body.actionPlan.parametersJson.requiredParamsSatisfied, true);
     assert.equal(body.actionPlan.parametersJson.metadata.source, "ai_mapped_template");
     assert.equal(body.actionPlan.parametersJson.metadata.connectorInvoked, false);
+    assert.deepEqual(body.actionPlan.parametersJson.metadata.normalizedParams, {});
     assert.equal(body.actionPlan.parametersJson.sourceIp, undefined);
     assert.equal(body.actionPlan.parametersJson.ipAddress, undefined);
     assert.equal(body.actionPlan.parametersJson.port, undefined);
+
+    const validation = await app.inject({
+      method: "POST",
+      url: `/api/actions/${body.actionPlan.id}/validate`,
+    });
+    assert.equal(validation.statusCode, 200, validation.body);
+    const validated = validation.json();
+    const errors = JSON.stringify(validated.validationJson);
+    assert.doesNotMatch(errors, /sourceIp/i);
+    assert.doesNotMatch(errors, /ipAddress/i);
+    assert.doesNotMatch(errors, /port has an invalid value/i);
 
     const ui = actionExecutionUiState(body.actionPlan);
     assert.equal(ui.canApproveAndExecute, true);

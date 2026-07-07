@@ -728,7 +728,7 @@ export default function ActionCenterPanel() {
                           className="inline-flex h-8 min-w-24 items-center justify-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          تأیید و اجرا
+                          تایید و اجرا
                         </button>
                       )}
                       <button
@@ -769,7 +769,7 @@ export default function ActionCenterPanel() {
                     className="inline-flex h-8 items-center gap-1.5 rounded border border-green-900/70 px-2.5 text-xs font-medium text-green-300 hover:text-green-200 disabled:opacity-60"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    تأیید و اجرا
+                    تایید و اجرا
                   </button>
                 )}
                 <button
