@@ -46,6 +46,13 @@ export type AiChatResponse = {
   providerStatus: AiProviderStatus | null;
   structured: StructuredAiResponse | null;
   evidenceMetadata: EvidencePackMetadata | null;
+  shouldCreateActionPlan: boolean;
+  executionSupport: string;
+  implementationState: string;
+  mappedTemplate: string | null;
+  missingFields: string[];
+  nextStepFa: string;
+  warnings: string[];
 };
 
 export type EvidencePackMetadata = {
@@ -418,17 +425,27 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
   };
 }
 
-export async function sendAiMessage(sessionId: string | null | undefined, message: string) {
+export async function sendAiMessage(sessionId: string | null | undefined, message: string, deviceId?: string) {
   const payload = await requestJson<unknown>("/ai/chat", {
     method: "POST",
-    body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), message }),
+    body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), ...(deviceId ? { deviceId } : {}), message }),
   });
   const source = normalizeObject(payload);
   const evidence = normalizeObject(source.evidenceMetadata);
+  const assistantRecord = source.assistantMessageRecord ?? (typeof source.assistantMessage === "object" ? source.assistantMessage : null);
+  const assistantText = typeof source.assistantMessage === "string" ? source.assistantMessage : "";
+  const assistantMessage = assistantRecord
+    ? normalizeAiMessage({
+        ...normalizeObject(assistantRecord),
+        content: assistantText || String(normalizeObject(assistantRecord).content ?? ""),
+      })
+    : assistantText
+      ? normalizeAiMessage({ id: `assistant-${Date.now()}`, sessionId: String(source.sessionId ?? sessionId ?? ""), role: "assistant", content: assistantText, structuredJson: {}, createdAt: new Date().toISOString() })
+      : null;
   return {
     sessionId: String(source.sessionId ?? sessionId ?? ""),
     message: source.message ? normalizeAiMessage(source.message) : null,
-    assistantMessage: source.assistantMessage ? normalizeAiMessage(source.assistantMessage) : null,
+    assistantMessage,
     actionIntent: source.actionIntent ? normalizeAiIntent(source.actionIntent) : null,
     actionPlan: source.actionPlan ? normalizeObject(source.actionPlan) as AiChatResponse["actionPlan"] : null,
     actionDebug: source.actionDebug ? normalizeActionDebug(source.actionDebug) : null,
@@ -442,6 +459,13 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
       includedIncidentsCount: safeNumber(evidence.includedIncidentsCount),
       includedActionPlansCount: safeNumber(evidence.includedActionPlansCount),
     } : null,
+    shouldCreateActionPlan: Boolean(source.shouldCreateActionPlan),
+    executionSupport: String(source.executionSupport ?? "manual"),
+    implementationState: String(source.implementationState ?? "manualOnly"),
+    mappedTemplate: typeof source.mappedTemplate === "string" ? source.mappedTemplate : null,
+    missingFields: normalizeArray<unknown>(source.missingFields).map(String),
+    nextStepFa: String(source.nextStepFa ?? ""),
+    warnings: normalizeArray<unknown>(source.warnings).map(String),
   } satisfies AiChatResponse;
 }
 

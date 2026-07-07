@@ -301,6 +301,7 @@ export default function AiSecurityAssistantPanel() {
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
   const [evidenceMetadata, setEvidenceMetadata] = useState<EvidencePackMetadata | null>(null);
+  const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null } | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
@@ -333,6 +334,7 @@ export default function AiSecurityAssistantPanel() {
     setSessionId(null);
     setMessages([]);
     setLastIntent(null);
+    setExecutionState(null);
     setStructuredResponse(null);
     setActionDebug(null);
     setCreatedPlanId(null);
@@ -462,6 +464,7 @@ export default function AiSecurityAssistantPanel() {
         setProviderStatus(response.providerStatus ?? providerStatus);
         setStructuredResponse(response.structured);
         setEvidenceMetadata(response.evidenceMetadata);
+        setExecutionState({ support: response.executionSupport, implementation: response.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate });
         setCreatedPlanId(response.actionPlan?.id ?? null);
         if (response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);
@@ -737,6 +740,19 @@ export default function AiSecurityAssistantPanel() {
               <p className="mt-1 text-xs text-yellow-100/80">
                 Missing: {structuredResponse.intent.missingFields.join(", ") || "none"}
               </p>
+            </div>
+          )}
+          {executionState && (
+            <div className="mt-3 rounded-lg border border-cyan-900/70 bg-cyan-950/20 p-3 text-right" dir="rtl">
+              <div className="flex items-center justify-between gap-2">
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${executionState.support === "connector" && executionState.missing.length === 0 ? "bg-emerald-950 text-emerald-300" : executionState.missing.length ? "bg-amber-950 text-amber-300" : executionState.implementation === "unsupported" ? "bg-red-950 text-red-300" : "bg-slate-800 text-slate-300"}`}>
+                  {executionState.support === "connector" && executionState.missing.length === 0 ? "قابل اجرا" : executionState.missing.length ? "نیازمند تکمیل اطلاعات" : executionState.implementation === "unsupported" ? "پشتیبانی نمی‌شود" : "فقط بررسی دستی"}
+                </span>
+                {executionState.template && <code className="text-[10px] text-cyan-400">{executionState.template}</code>}
+              </div>
+              <p className="mt-2 text-xs text-slate-300">{executionState.nextStep}</p>
+              {createdPlanId && <button type="button" onClick={reviewInActionCenter} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">رفتن به مرکز عملیات</button>}
+              {!createdPlanId && executionState.missing.length > 0 && <button type="button" onClick={() => setInput(executionState.nextStep)} className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white">تکمیل اطلاعات</button>}
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-1.5">

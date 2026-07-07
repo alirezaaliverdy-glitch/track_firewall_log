@@ -8,6 +8,7 @@ import { normalizeIntentType, normalizeVendor } from "./ai-normalization.js";
 import { routeCatalogIntent } from "../actions/intent-router.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
+import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -165,7 +166,7 @@ function intentDebug(input: {
   };
 }
 
-export async function chatWithAssistant(input: { sessionId?: string; message: string }) {
+export async function chatWithAssistant(input: { sessionId?: string; message: string; deviceId?: string }) {
   const message = input.message.trim();
   if (!message) throw new Error("message is required");
 
@@ -246,16 +247,39 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       })
     : undefined;
   const debug = intentDebug({ intent: actionIntent, structuredIntent: effectiveStructuredIntent });
-  const actionPlan = debug.canCreateActionPlan && actionIntent
-    ? await proposeActionPlan({ aiIntentId: actionIntent.id })
-    : null;
+  const selectedDeviceId = input.deviceId ?? actionIntent?.deviceId;
+  const selectedDevice = selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null;
+  const resolution = resolveAiTemplate({ userText: message, selectedDevice, aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null });
+  const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
+  const actionPlan = resolution.implementationState === "implemented" && resolutionMissing.length === 0 && selectedDevice && resolution.catalogItem
+    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: resolution.canonicalVendor, actionType: resolution.canonicalActionType, riskLevel: resolution.catalogItem.riskLevel, parametersJson: { ...resolution.normalizedParams, executionSupport: "connector", metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, executionTemplateRef: resolution.executionTemplateRef, connectorType: resolution.connectorType, implementationState: "implemented", executionSupport: "connector", normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
+    : debug.canCreateActionPlan && actionIntent && resolution.implementationState !== "implemented"
+      ? await proposeActionPlan({ aiIntentId: actionIntent.id })
+      : null;
+  const executionSupport = resolution.executionSupport;
+  const implementationState = resolution.implementationState;
+  const nextStepFa = actionPlan
+    ? executionSupport === "connector" ? "برای بازبینی و تأیید به مرکز عملیات بروید." : "پیشنهاد را در مرکز عملیات به‌صورت دستی بررسی کنید."
+    : resolutionMissing.length ? missingFieldsMessageFa(resolutionMissing) : resolution.reasonFa;
+  const assistantText = actionPlan && executionSupport === "connector"
+    ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
+    : resolutionMissing.length ? nextStepFa : providerResponse.assistantMessage;
 
   return {
     sessionId: session.id,
     message: userMessage,
-    assistantMessage,
+    assistantMessage: assistantText,
+    assistantMessageRecord: assistantMessage,
+    shouldCreateActionPlan: Boolean(actionPlan),
     actionIntent,
     actionPlan,
+    executionSupport,
+    implementationState,
+    mappedTemplate: resolution.executionTemplateRef,
+    missingFields: resolutionMissing,
+    nextStepFa,
+    warnings: executionSupport === "connector" ? [] : [resolution.reasonFa],
+    resolution,
     actionDebug: debug,
     providerStatus: getAiProviderStatus(providerResponse.error),
     evidenceMetadata: context.evidencePack.metadata,

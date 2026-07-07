@@ -2,45 +2,50 @@
 
 ## هدف فعلی
 
-- جهت محصول: Mini-SOAR فارسی‌محور با کاتالوگ دستور backend-first و اجرای کنترل‌شده.
-- کار فعال: Task 15.0؛ پایدارسازی حافظه پروژه، handoff و اسکریپت‌های snapshot/check بدون تغییر رفتار اجرا.
+- جهت محصول: Persian Network & Security Command Center با مسیر `AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`.
+- کار فعال: ادامه Task 16 با تمرکز روی resolver مرکزی AI، چت AI، و fallback کاتالوگ بدون تغییر رفتار اجرای lab.
 
 ## تغییرات انجام‌شده
 
-- اسناد حافظه با وضعیت واقعی کاتالوگ، Daily Check، telemetry و مسیر اجرا همگام شدند.
-- snapshot قابل بازتولید و کنترل یکپارچگی حافظه اضافه/تقویت شد.
-- ساختار ثابت این فایل و ترتیب مطالعه سریع مستند شد.
+- resolver مرکزی `backend/src/ai/ai-template-resolver.ts` اضافه و برای Linux/MikroTik/Daily Check/Fallback سخت‌گیرانه شد.
+- `POST /api/commands/ai-propose` روی modeهای واقعی `executable_action_plan` / `needs_input` / `manual_proposal` تثبیت شد.
+- پاسخ `POST /api/ai/chat` ساختاریافته شد و خطای provider با پیام فارسی شفاف برمی‌گردد.
+- UI کاتالوگ و کلاینت AI با قرارداد جدید sync شدند تا ActionPlan قابل اجرا را به مرکز عملیات بفرستند و نیازمندی ورودی را صادقانه نشان دهند.
+- تست جدید resolver/fallback اضافه شد و build/test فعلی سبز است.
 
 ## فایل‌های مهم
 
-- `AGENTS.md`: قواعد ثابت پروژه و رفتار محافظت‌شده.
-- `docs/CURRENT_STATUS.md`: وضعیت جاری، شکاف‌ها و پیشنهاد کار بعدی.
-- `docs/ARCHITECTURE_MAP.md`: نقشه جریان‌ها و اجزای اصلی.
-- `backend/src/commands/catalog/`: کاتالوگ فارسی و اعتبارسنجی آن.
-- `backend/src/commands/execution/`: templateهای ثبت‌شده اجرای واقعی.
-- `backend/src/daily-check/` و `backend/src/telemetry/`: Daily Check و Finding Engine چندفروشنده‌ای.
+- `AGENTS.md`: قواعد ثابت پروژه، lab mode، رفتارهای محافظت‌شده.
+- `backend/src/ai/ai-template-resolver.ts`: منبع واحد نگاشت درخواست AI به template/catalog.
+- `backend/src/routes/ai.ts`: routeهای وضعیت provider، context و chat.
+- `backend/src/routes/command-catalog.ts`: fallback هوش مصنوعی کاتالوگ و ساخت ActionPlan.
+- `backend/src/services/ai-chat.service.ts`: جریان end-to-end چت AI تا ActionPlan پیشنهادی.
+- `src/lib/ai.ts`: قرارداد کلاینت AI و normalize پاسخ ساختاریافته.
+- `src/lib/commandCatalog.ts`: modeهای fallback کاتالوگ در فرانت.
+- `src/components/commands/CommandCatalogPanel.tsx`: handoff درست به Action Center.
 
 ## کارهای باقی‌مانده
 
-- فوری: ثبت commit همین task.
-- نزدیک: اصلاح mojibake باقی‌مانده در رشته‌های فارسی source با task مستقل و تست UI/API.
-- بعداً: اتصال collector/parser و connector واقعی برای vendorهای غیر Linux/MikroTik؛ تکمیل verification و rollback.
+- فوری: تکمیل باقی Task 16 در Daily Check UI، Service Health و result UX سراسری.
+- نزدیک: پاکسازی mojibake رشته‌های قدیمی و یکدست‌سازی Persian-first UI.
+- بعداً: افزودن connector واقعی برای vendorهای غیر Linux/MikroTik و گسترش formatter/result UX.
 
 ## دستوراتی که اجرا شده
 
-- `git branch --show-current`
 - `git status --short`
-- `git log -8 --pretty=format:"%h|%ad|%s" --date=short`
-- بازرسی فایل‌ها با `Get-Content` و `rg`
-- `powershell -ExecutionPolicy Bypass -File scripts/project-snapshot.ps1`
-- `powershell -ExecutionPolicy Bypass -File scripts/check-project-memory.ps1`
-- `cd backend; npm run build; npm test` (موفق، 109/109)
-- `pnpm build` (موفق، با هشدار موجود اندازه chunk)
+- `git diff -- backend/src/routes/ai.ts backend/src/routes/command-catalog.ts backend/src/services/ai-chat.service.ts src/components/ai/AiSecurityAssistantPanel.tsx src/lib/ai.ts backend/src/ai/ai-template-resolver.ts`
+- `rg -n "ai-propose|assistantMessageRecord|connectorInvoked|window.open|ActionResultView|DailyCheckPanel|LinuxServiceHealthPanel|linux_list_running_services|linux_list_failed_services|linux_check_important_services" -S backend src`
+- `npm run build` در `backend`
+- `npm test` در `backend`
+- `npx tsx --test test/task16-ai-resolver-and-fallback.test.ts` در `backend`
+- `pnpm build`
 
 ## نکته‌های مهم
 
-- در lab unrestricted، action پشتیبانی‌شده بعد از یک تأیید کاربر اجرا می‌شود.
-- هرگز بدون `connectorInvoked=true` وضعیت `succeeded` ثبت نشود؛ preview نتیجه اجرا نیست و موفقیت جعلی ممنوع است.
-- Linux و MikroTik در حال حاضر قوی‌ترین اهداف اجرای واقعی هستند؛ vendorهای دیگر تا آماده‌شدن connector ممکن است `manualOnly` یا `planned` باشند.
-- مسیر فارسی‌محور باید از Catalog/AI به ActionPlan، preview، تأیید، PolicyGuard، Connector و Audit/Result برسد.
-- حالت‌های `quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` محافظت‌شده‌اند. هیچ secret یا credential در اسناد ثبت نشود.
+- Supported actions after user confirmation در lab unrestricted mode باید قابل اجرا بمانند.
+- هرگز بدون `connectorInvoked=true` وضعیت `succeeded` ثبت نشود.
+- Linux و MikroTik در حال حاضر قوی‌ترین هدف‌های اجرای واقعی هستند.
+- سایر vendorها تا آماده‌شدن connector باید صادقانه `manualOnly` یا `planned` بمانند.
+- Persian-first flow حفظ شود.
+- هیچ secret، token، password یا `.env` value وارد مستندات یا خروجی نشود.
+- `ACTION_EXECUTION_MODE=quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` نباید تغییر کنند.

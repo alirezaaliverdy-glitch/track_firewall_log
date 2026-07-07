@@ -8,52 +8,64 @@ Product mode: `PRODUCT_MODE=persian_command_catalog`
 
 ## Product State
 
-The project is an MVP/prototype Mini-SOAR. Its primary path is Persian-first and backend-first:
+The project is a Persian-first Mini-SOAR prototype. The controlled product path remains:
 
-`AI/Catalog -> ActionPlan -> Preview -> User Confirm -> PolicyGuard -> Connector -> Audit/Result`
+`AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`
 
-The catalog contains 51 items: 22 implemented connector-backed commands (15 Linux, 7 MikroTik, including Daily Check), 28 manual-only items, and 1 planned MikroTik item. AI uses compact Evidence Packs and can propose actions; it cannot silently execute raw commands.
+Task 16 is partially in progress. The AI resolver, AI chat response contract, and Command Catalog AI fallback are now hardened. Daily Check UX, Linux Service Health, and broader result UX work are still open.
 
 ## What Works
 
-- React/Vite application with authentication, device/credential registry, Persian command catalog, AI assistant, Action Center, dedicated result view, Daily Check, events/incidents, findings, and Linux telemetry.
-- Fastify/Prisma/PostgreSQL backend with catalog validation, ActionPlan lifecycle, stable preview fingerprinting, explicit execute intent, PolicyGuard, SSH connectors, result persistence, and audit.
-- Real registered Linux and MikroTik catalog/Daily Check templates after one confirmation in protected lab-unrestricted mode.
-- Vendor-aware telemetry registry for Linux, MikroTik, FortiGate, pfSense, Cisco, Palo Alto, Juniper, Windows, Docker, Kubernetes, AWS, and Azure; normalized persisted findings are currently fed by Linux snapshots/live streams.
-- Multi-vendor deterministic assessment/hardening profiles and proposal-only remediation.
+- Backend AI resolver now maps supported Persian requests to real registered templates instead of defaulting to vague manual proposals when a template exists.
+- `POST /api/ai/chat` returns a structured contract with assistant message, execution support, implementation state, mapped template, missing fields, next step, and optional ActionPlan.
+- `POST /api/commands/ai-propose` now returns honest modes:
+  `executable_action_plan`, `needs_input`, `manual_proposal`.
+- Command Catalog frontend now reacts to those modes and sends executable plans to Action Center without the earlier misleading “created but not executed” state.
+- Execution pipeline protections remain intact: explicit `intent=execute`, template resolution, real connector invocation, persisted result output, and `connectorInvoked=true` required before success.
+- Backend build, backend test suite, targeted Task 16 resolver/fallback test, and frontend build all pass.
 
 ## Partial or Open
 
-- Verification is primarily output/result review; automatic rollback is incomplete.
-- FortiGate has legacy planner/SSH connector foundations, but Persian product catalog and Daily Check remain manual-only and need product-path integration/testing before executable claims.
-- Non-Linux telemetry profiles mostly provide rule scaffolding; their collectors/parsers do not yet feed the shared engine.
-- Detection correlation/rule DSL, reporting, broader Linux distro testing, and production hardening remain incomplete.
+- AI assistant panel still contains older mixed English/mojibake UI strings outside the new execution-state card.
+- Daily Check is implemented in backend foundations from Task 15.1, but the broader Task 16 UX pass is not finished.
+- Linux Service Health panel and its new command set are not implemented yet in this round.
+- Global “open result in new tab with popup-block fallback” work is not finished across every entry point.
 
 ## Known Bugs and Risks
 
-- Some existing Persian source strings/docs have mojibake and need a scoped UTF-8 cleanup with regression testing.
-- Root frontend package version remains `0.0.0`; backend is `0.1.0` (informational, not runtime failure).
-- Successful execution must continue to require `connectorInvoked=true`; preview-only responses must never be accepted as success.
+- Mojibake remains in parts of older frontend/backend strings and docs; this should be fixed in a dedicated UTF-8 cleanup task.
+- Frontend production build still reports the existing large-chunk warning from Vite; this is not a new regression from this round.
+- Success must continue to require real execution evidence. Preview-only states must never be treated as successful execution.
 
 ## Vendor Status
 
-| Vendor | Product catalog state | Connector status | Daily Check | Telemetry status |
+| Vendor | Catalog state | Connector status | Daily Check | Notes |
 |---|---|---|---|---|
-| Linux | `implemented` (15) plus `manualOnly` (2) | Real `linux-ssh` registered templates | `implemented`, connector-backed | Implemented snapshots/live ingestion and findings |
-| MikroTik | `implemented` (7), `manualOnly` (1), `planned` (1) | Real `mikrotik-ssh` registered templates | `implemented`, connector-backed | Implemented profile/rules; collector integration partial |
-| FortiGate | `manualOnly` (7) | Legacy SSH connector/planner exists; not wired as executable product catalog/Daily Check | `manualOnly` | Implemented profile/rules; collector integration open |
-| Cisco | `manualOnly` (7) | No registered product execution connector | `manualOnly` | Planned/scaffold profile; collector integration open |
-| pfSense | `manualOnly` (6) | Planner is manual/unsupported; no real execution connector | `manualOnly` | Implemented profile/rules; collector integration open |
-| Juniper | `manualOnly` (1) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
-| Palo Alto | `manualOnly` (1) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
-| Windows | `manualOnly` (1) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
-| Docker | No product catalog item (`planned` direction) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
-| Kubernetes | No product catalog item (`planned` direction) | No registered product execution connector | `manualOnly` | Planned/scaffold profile |
+| Linux | `implemented` + some `manualOnly` | Real `linux-ssh` templates registered | Real connector-backed | Strongest execution path with AI mapping support |
+| MikroTik | `implemented` + `manualOnly` + `planned` | Real `mikrotik-ssh` templates registered | Real connector-backed | Strong execution path with AI mapping support |
+| FortiGate | Mostly `manualOnly` | No product-grade executable catalog flow yet | Manual-only/profile exists | Legacy foundations exist but not promoted |
+| Cisco | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Honest non-executable state |
+| pfSense | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Honest non-executable state |
+| Juniper | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Planned/manual only |
+| Palo Alto | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Planned/manual only |
+| Windows | `manualOnly` | No registered product execution connector | Manual-only/profile exists | Planned/manual only |
+| Docker | Planned direction | No registered product execution connector | Manual-only/profile exists | No product commands yet |
+| Kubernetes | Planned direction | No registered product execution connector | Manual-only/profile exists | No product commands yet |
 
 ## Next Recommended Task
 
-Run a dedicated UTF-8/Persian mojibake repair across product-facing source strings and docs, with backend/frontend tests and no execution-policy changes. After that, add real collectors/connectors one vendor at a time rather than promoting manual/planned entries early.
+Continue Task 16 with the remaining product-core items in this order:
+
+1. Finish Daily Check UI/result experience.
+2. Add Linux Service Health templates/UI.
+3. Apply global new-tab result navigation and result formatting cleanup.
+4. Run a dedicated mojibake/UTF-8 repair pass without touching execution policy.
 
 ## Protected Behavior
 
-Keep `ACTION_EXECUTION_MODE=quick_controlled` and `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true`. In this lab combination, one confirmation is enough for supported registered Linux/MikroTik templates, while device, parameters, template/connector, `intent=execute`, real invocation, audit, and real-result checks remain mandatory.
+Keep:
+
+- `ACTION_EXECUTION_MODE=quick_controlled`
+- `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true`
+
+In this lab mode, one user confirmation is enough for supported Linux/MikroTik templates, but selected device, validated parameters, registered template/connector, explicit `intent=execute`, real connector invocation, audit logs, and real execution results remain mandatory.
