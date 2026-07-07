@@ -19,6 +19,8 @@ function requiredParamsComplete(item: CatalogItem, values: Record<string, string
 
 function goToActionCenter(actionPlanId: string) {
   const url = new URL(window.location.href);
+  url.pathname = "/actions";
+  url.search = "";
   url.searchParams.set("selected", actionPlanId);
   url.hash = "action-center";
   window.history.pushState({}, "", url);
@@ -107,7 +109,15 @@ export default function CommandCatalogPanel() {
   async function askAi() {
     if (!aiText.trim()) return;
     try {
-      const result = await proposeWithAi(aiText, vendor || "generic", deviceId || undefined);
+      const selectedVendor = selectedDevice ? vendorOf(selectedDevice) : vendor || "generic";
+      const result = await proposeWithAi({
+        requestText: aiText,
+        vendor: selectedVendor,
+        selectedVendor,
+        currentVendor: selectedVendor,
+        deviceId: deviceId || undefined,
+        searchFilters: { q: query, category, riskLevel, readOnly, executable },
+      });
       if (result.mode === "executable_action_plan") {
         setMessage(result.messageFa);
         goToActionCenter(result.actionPlanId);

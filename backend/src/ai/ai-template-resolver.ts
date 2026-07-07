@@ -24,6 +24,11 @@ export type AiTemplateResolution = {
   catalogItem: CommandCatalogItem | null;
 };
 
+const PERSIAN_DIGITS: Record<string, string> = {
+  "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4", "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
+  "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4", "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
+};
+
 const VENDOR_ALIASES: Record<string, string> = {
   linux: "linux",
   linuxedge: "linux",
@@ -51,7 +56,7 @@ const VENDOR_ALIASES: Record<string, string> = {
 };
 
 const MISSING_FIELD_LABELS: Record<string, string> = {
-  deviceId: "دستگاه هدف را انتخاب کنید.",
+  deviceId: "اول دستگاه را انتخاب کنید تا برنامه قابل اجرا ساخته شود.",
   port: "شماره پورت را وارد کنید.",
   serviceName: "نام سرویس لینوکس را وارد کنید.",
   username: "نام کاربر لینوکس را وارد کنید.",
@@ -64,6 +69,22 @@ export function normalizeAiVendor(value: unknown): string | null {
   return VENDOR_ALIASES[compact] ?? null;
 }
 
+function normalizeUserText(value: string) {
+  return value
+    .replace(/[۰-۹٠-٩]/g, (digit) => PERSIAN_DIGITS[digit] ?? digit)
+    .replace(/[ي]/g, "ی")
+    .replace(/[ك]/g, "ک")
+    .replace(/[\u200c‌]/g, " ")
+    .replace(/[؟?،,؛;:.!()[\]{}"']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function includesAny(text: string, values: string[]) {
+  return values.some((value) => text.includes(normalizeUserText(value)));
+}
+
 function inferredVendorFromAction(actionType: string): string | null {
   if (actionType.startsWith("linux_") || actionType === "open_port") return "linux";
   if (actionType.startsWith("mikrotik_")) return "mikrotik";
@@ -73,10 +94,12 @@ function inferredVendorFromAction(actionType: string): string | null {
 }
 
 function inferVendorFromText(userText: string): string | null {
-  const compact = userText.toLowerCase().replace(/[\s_-]+/g, "");
+  const compact = normalizeUserText(userText).replace(/[\s_-]+/g, "");
   for (const [alias, vendor] of Object.entries(VENDOR_ALIASES)) {
     if (compact.includes(alias)) return vendor;
   }
+  if (compact.includes("لینوکس")) return "linux";
+  if (compact.includes("میکروتیک") || compact.includes("ميکروتيک")) return "mikrotik";
   return null;
 }
 
@@ -99,24 +122,40 @@ function normalizeParams(parameters: Record<string, unknown>) {
   return next;
 }
 
-function resolveActionAlias(userText: string, rawActionType: string, canonicalVendor: string) {
-  if (/وضعیت.*سرویس|service.*status|service.*check/i.test(userText) && canonicalVendor === "linux") {
-    return "linux_check_service_status";
-  }
+function extractServiceName(text: string) {
+  const known = ["nginx", "apache2", "apache", "httpd", "ssh", "sshd", "docker", "fail2ban", "postgresql", "mysql", "mariadb", "redis", "ufw"];
+  const service = known.find((name) => new RegExp(`\\b${name}\\b`, "i").test(text));
+  if (!service) return undefined;
+  if (service === "apache") return "apache2";
+  return service;
+}
 
-  if (/چک\s*روزانه|daily[\s-]*check/i.test(userText)) {
+function resolveActionAlias(userText: string, rawActionType: string, canonicalVendor: string) {
+  const text = normalizeUserText(userText);
+
+  if (canonicalVendor === "linux" && includesAny(text, [
+    "وضعیت پورت", "وضعیت پورت ها", "وضعیت پورت‌ها", "پورت های باز", "پورت‌های باز", "لیست پورت", "پورت های فعال", "پورت‌های فعال", "چه پورت هایی بازه", "چه پورت‌هایی بازه", "open ports", "list ports", "listening ports",
+  ])) return "linux_read_listening_ports";
+
+  if (canonicalVendor === "linux" && includesAny(text, ["وضعیت فایروال", "فایروال رو ببین", "ufw", "firewall status"])) return "linux_read_firewall_status";
+
+  if (canonicalVendor === "linux" && includesAny(text, ["کاربران sudo", "یوزرهای sudo", "چه کسانی sudo دارن", "sudo users"])) return "linux_check_sudo_users";
+
+  if (includesAny(text, ["چک روزانه", "بررسی روزانه", "وضعیت کلی سرور", "سلامت سرور", "daily check"])) {
     if (canonicalVendor === "linux") return "linux_daily_check";
     if (canonicalVendor === "mikrotik") return "mikrotik_daily_check";
     return "vendor_daily_check";
   }
 
-  if (/لاگ.*(ورود|لاگین)|login.*log/i.test(userText) && canonicalVendor === "mikrotik") {
-    return "mikrotik_show_logs";
-  }
+  if (canonicalVendor === "mikrotik" && includesAny(text, ["لاگ لاگین میکروتیک", "ورودهای ناموفق میکروتیک", "login logs", "failed login"])) return "mikrotik_show_logs";
 
-  if (rawActionType === "open_port" && canonicalVendor === "linux") {
-    return "linux_open_port";
-  }
+  if (canonicalVendor === "linux" && includesAny(text, ["وضعیت", "چک", "بررسی", "ببین", "status", "check"]) && extractServiceName(text)) return "linux_check_service_status";
+
+  if (/وضعیت.*سرویس|service.*status|service.*check/i.test(text) && canonicalVendor === "linux") return "linux_check_service_status";
+
+  if (/لاگ.*(ورود|لاگین)|login.*log/i.test(text) && canonicalVendor === "mikrotik") return "mikrotik_show_logs";
+
+  if (rawActionType === "open_port" && canonicalVendor === "linux") return "linux_open_port";
 
   return rawActionType;
 }
@@ -135,28 +174,37 @@ function missingFieldsForItem(item: CommandCatalogItem | null, params: Record<st
 }
 
 export function missingFieldsMessageFa(fields: string[]) {
+  if (fields.includes("deviceId")) return MISSING_FIELD_LABELS.deviceId;
   if (fields.length === 1) return MISSING_FIELD_LABELS[fields[0]] ?? `مقدار ${fields[0]} را وارد کنید.`;
-  return `اطلاعات لازم را کامل کنید: ${fields.map((field) => MISSING_FIELD_LABELS[field] ?? field).join("، ")}`;
+  return `برای ساخت برنامه اجرا، این اطلاعات لازم است: ${fields.map((field) => MISSING_FIELD_LABELS[field] ?? field).join("، ")}`;
 }
 
 export function resolveAiTemplate(input: {
   userText: string;
   selectedDevice?: AiResolverDevice | null;
   detectedVendor?: unknown;
+  currentVendor?: unknown;
+  searchFilters?: Record<string, unknown> | null;
   aiIntent?: { intentType?: unknown; parameters?: Record<string, unknown> } | null;
   params?: Record<string, unknown>;
 }): AiTemplateResolution {
   const parsed = parseAiIntent(input.userText);
   const rawActionType = String(input.aiIntent?.intentType ?? parsed?.intentType ?? "generic_security_action");
+  const normalizedText = normalizeUserText(input.userText);
   const normalizedParams = normalizeParams({
     ...(parsed?.parameters ?? {}),
     ...(input.aiIntent?.parameters ?? {}),
     ...(input.params ?? {}),
   });
+  const serviceName = extractServiceName(normalizedText);
+  if (serviceName && !normalizedParams.serviceName && includesAny(normalizedText, ["وضعیت", "چک", "بررسی", "ببین", "status", "check"])) {
+    normalizedParams.serviceName = serviceName;
+  }
 
   const canonicalVendor =
     normalizeAiVendor(input.selectedDevice?.type)
     ?? normalizeAiVendor(input.selectedDevice?.vendor)
+    ?? normalizeAiVendor(input.currentVendor)
     ?? normalizeAiVendor(input.detectedVendor)
     ?? normalizeAiVendor(normalizedParams.vendor)
     ?? normalizeAiVendor(normalizedParams.targetDeviceHint)
@@ -181,10 +229,8 @@ export function resolveAiTemplate(input: {
       executionSupport: "connector",
       normalizedParams: mergedParams,
       missingFields,
-      confidence: parsed ? 0.96 : 0.85,
-      reasonFa: missingFields.length
-        ? missingFieldsMessageFa(missingFields)
-        : "درخواست به template اجرایی ثبت‌شده نگاشت شد.",
+      confidence: parsed ? 0.96 : 0.9,
+      reasonFa: missingFields.length ? missingFieldsMessageFa(missingFields) : "درخواست به template اجرایی ثبت‌شده نگاشت شد.",
       catalogItem: item,
     };
   }
@@ -221,7 +267,7 @@ export function resolveAiTemplate(input: {
     normalizedParams,
     missingFields: [],
     confidence: parsed ? 0.5 : 0.25,
-    reasonFa: "برای این درخواست template اجرایی ثبت‌شده پیدا نشد و فقط پیشنهاد دستی ساخته می‌شود.",
+    reasonFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.",
     catalogItem: null,
   };
 }

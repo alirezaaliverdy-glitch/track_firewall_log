@@ -20,9 +20,12 @@ Task 16 is functionally complete for:
 - result navigation in a new tab with popup-block fallback
 - structured Action Result formatting for key Linux and MikroTik actions
 
+Task 16.2 is complete for Command Catalog AI fallback: no-result `Ask AI` requests now use the central AI template resolver first and create executable ActionPlans when a registered template exists.
+
 ## What Works
 
 - AI-supported Persian requests that map to registered templates create executable ActionPlans instead of vague manual proposals.
+- Command Catalog AI fallback maps Persian Linux port-status phrases such as `وضعیت پورت های رو میخوام ببینم` to `linux_read_listening_ports` with `executionTemplateRef=linux_list_open_ports` and `connectorType=linux-ssh`.
 - Command Catalog AI fallback now returns honest modes: `executable_action_plan`, `needs_input`, `manual_proposal`.
 - Daily Check now uses vendor-aware profiles across Linux, MikroTik, FortiGate, Cisco, pfSense, Juniper, Palo Alto, Windows, Docker, and Kubernetes.
 - Linux and MikroTik Daily Check remain the real connector-backed execution paths.
@@ -43,6 +46,7 @@ Task 16 is functionally complete for:
 - If another environment does not apply `20260707160000_task16_linux_service_health`, creating plans for new Linux service-health actions will fail at the database enum layer.
 - Several legacy screens still mix older English text with Persian-first UI conventions.
 - Success semantics must stay evidence-based; preview-only states must never be shown as successful execution.
+- `command_search_ai_fallback` metadata is now treated as controlled catalog metadata only when it is implemented, connector-backed, and has a registered execution template.
 
 ## Vendor Status
 
@@ -72,7 +76,7 @@ Task 16 is functionally complete for:
 - `cd backend && npm run build`
 - `cd backend && npm test`
 - `cd backend && npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql`
-- `pnpm build`
+- `pnpm build` or equivalent root build command when pnpm is unavailable
 
 Validation status: passed. Frontend build still shows the existing Vite chunk-size warning only.
 

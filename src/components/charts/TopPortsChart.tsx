@@ -61,7 +61,7 @@ export default function TopPortsChart() {
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
                 cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                formatter={(value: number) => [value, "Events"]}
+                formatter={(value) => [Number(value ?? 0), "Events"]}
               />
               <Bar dataKey="count" name="Events" radius={[4, 4, 0, 0]}>
                 {data.map((entry) => (

@@ -79,9 +79,16 @@ export function createCatalogAction(id: string, deviceId: string, params: Record
   });
 }
 
-export function proposeWithAi(requestText: string, vendor: string, deviceId?: string) {
+export function proposeWithAi(input: { requestText: string; vendor: string; selectedVendor?: string; currentVendor?: string; deviceId?: string; searchFilters?: Record<string, unknown> }) {
   return request<AiProposalResponse>("/commands/ai-propose", {
     method: "POST",
-    body: JSON.stringify({ request: requestText, vendor, ...(deviceId ? { deviceId } : {}) }),
+    body: JSON.stringify({
+      request: input.requestText,
+      vendor: input.vendor,
+      selectedVendor: input.selectedVendor ?? input.vendor,
+      currentVendor: input.currentVendor ?? input.selectedVendor ?? input.vendor,
+      searchFilters: input.searchFilters ?? {},
+      ...(input.deviceId ? { deviceId: input.deviceId, selectedDeviceId: input.deviceId } : {}),
+    }),
   });
 }

@@ -360,7 +360,7 @@ export function approvalPreconditionError(plan: Pick<ActionPlan, "actionType" | 
 export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status"> & { parametersJson?: unknown }, mode: ActionExecutionMode = env.actionExecutionMode) {
   const catalog = getActionCatalogEntry(plan.actionType);
   const metadata = asObject(asObject(plan.parametersJson).metadata);
-  const productCatalogControlled = metadata.source === "command_catalog" && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
+  const productCatalogControlled = ["command_catalog", "command_search_ai_fallback"].includes(String(metadata.source)) && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
   const controlled = productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
@@ -496,7 +496,7 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
       ...parameters,
       executionSupport: "connector",
       metadata: {
-        ...asObject(parameters.metadata), source: "command_catalog", catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION,
+        ...asObject(parameters.metadata), source: asObject(parameters.metadata).source === "command_search_ai_fallback" ? "command_search_ai_fallback" : "command_catalog", catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION,
         catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, implementationState: "implemented",
         executionSupport: "connector", executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType,
         normalizedParams, requiredParamsSatisfied: item.requiredParams.every((field) => normalizedParams[field.key] !== undefined && normalizedParams[field.key] !== ""),

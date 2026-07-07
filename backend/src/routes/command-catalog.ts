@@ -50,22 +50,73 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     const plan = await proposeActionPlan({ source: "user", requestedBy: request.body.requestedBy, deviceId: device.id, vendor: item.vendor, actionType: item.actionType, riskLevel: item.riskLevel, parametersJson: { ...normalizedParams, vendor: item.vendor, executionSupport: manualOnly ? "manual_or_not_implemented" : item.executionSupport, requiresExplicitReview: true, expectedImpact: item.descriptionFa, suggestedPrechecks: item.prechecks, suggestedVerification: item.verification, suggestedRollback: item.rollback.available ? item.rollback.steps : [item.rollback.notAvailableReasonFa], metadata: { catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, executionSupport: item.executionSupport, implementationState: item.implementationState, executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType, source: "command_catalog", normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
     return reply.code(201).send(plan);
   });
-  app.post<{ Body: { request?: string; vendor?: string; deviceId?: string; createActionPlan?: boolean } }>("/api/commands/ai-propose", async (request, reply) => {
+  app.post<{ Body: { request?: string; vendor?: string; selectedVendor?: string; currentVendor?: string; deviceId?: string; selectedDeviceId?: string; createActionPlan?: boolean; searchFilters?: Record<string, unknown> } }>("/api/commands/ai-propose", async (request, reply) => {
     const userRequest = request.body?.request?.trim();
     if (!userRequest) return reply.code(400).send({ error: "REQUEST_REQUIRED", messageFa: "درخواست خود را وارد کنید." });
-    const device = request.body.deviceId ? await prisma.device.findUnique({ where: { id: request.body.deviceId } }) : null;
-    const resolution = resolveAiTemplate({ userText: userRequest, selectedDevice: device, detectedVendor: request.body.vendor });
-    const executableItem = resolution.implementationState === "implemented" ? resolution.catalogItem : null;
-    const draft = { titleFa: executableItem?.titleFa ?? "پیشنهاد سفارشی هوش مصنوعی", status: "draft", vendor: resolution.canonicalVendor, intent: resolution.canonicalActionType, userRequest, availableCatalogCategories: [...new Set(searchCatalog({ vendor: resolution.canonicalVendor }).map((x) => x.category))], deviceId: request.body.deviceId ?? null, executionSupport: resolution.executionSupport, requiresReview: true, autoExecuted: false };
-    if (request.body.createActionPlan === false) return reply.code(201).send({ mode: "manual_proposal", draft, actionPlan: null, resolution });
-    if (executableItem) {
-      if (resolution.missingFields.length) return reply.code(200).send({ mode: "needs_input", draft, actionPlan: null, missingFields: resolution.missingFields, messageFa: missingFieldsMessageFa(resolution.missingFields), resolution });
-      if (!request.body.deviceId) return reply.code(400).send({ error: "DEVICE_REQUIRED", messageFa: "ابتدا دستگاه هدف را انتخاب کنید." });
-      const normalizedParams = resolution.normalizedParams;
-      const actionPlan = await proposeActionPlan({ source: "ai", deviceId: request.body.deviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, executionSupport: "connector", metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, executionSupport: "connector", implementationState: "implemented", executionTemplateRef: resolution.executionTemplateRef, connectorType: resolution.connectorType, source: "ai_mapped_template", normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
-      return reply.code(201).send({ mode: "executable_action_plan", actionPlanId: actionPlan.id, messageFa: "برنامه اجرای قابل تأیید ساخته شد.", draft, actionPlan, resolution });
+
+    const selectedDeviceId = request.body.selectedDeviceId ?? request.body.deviceId;
+    if (!selectedDeviceId) {
+      return reply.code(200).send({
+        mode: "needs_input",
+        missingFields: ["deviceId"],
+        messageFa: "اول دستگاه را انتخاب کنید تا برنامه قابل اجرا ساخته شود.",
+      });
     }
-    const actionPlan = await proposeActionPlan({ source: "ai", deviceId: request.body.deviceId, vendor: resolution.canonicalVendor, actionType: "generic_security_action", riskLevel: "medium", parametersJson: { request: userRequest, vendor: resolution.canonicalVendor, executionSupport: "manual_or_not_implemented", requiresExplicitReview: true, metadata: { source: "ai_manual_proposal", implementationState: resolution.implementationState, draft } } });
-    return reply.code(201).send({ mode: "manual_proposal", actionPlanId: actionPlan.id, messageFa: "پیشنهاد غیرخودکار برای بررسی ساخته شد.", draft, actionPlan, resolution });
+
+    const device = await prisma.device.findUnique({ where: { id: selectedDeviceId } });
+    if (!device) return reply.code(404).send({ error: "DEVICE_NOT_FOUND", messageFa: "دستگاه انتخاب‌شده پیدا نشد." });
+
+    const selectedVendor = request.body.selectedVendor ?? request.body.currentVendor ?? request.body.vendor;
+    const resolution = resolveAiTemplate({
+      userText: userRequest,
+      selectedDevice: device,
+      detectedVendor: request.body.vendor,
+      currentVendor: selectedVendor,
+      searchFilters: request.body.searchFilters ?? null,
+    });
+    const executableItem = resolution.implementationState === "implemented" ? resolution.catalogItem : null;
+    const draft = {
+      titleFa: executableItem?.titleFa ?? "پیشنهاد سفارشی هوش مصنوعی",
+      status: "draft",
+      vendor: resolution.canonicalVendor,
+      intent: resolution.canonicalActionType,
+      userRequest,
+      availableCatalogCategories: [...new Set(searchCatalog({ vendor: resolution.canonicalVendor }).map((x) => x.category))],
+      deviceId: selectedDeviceId,
+      executionSupport: resolution.executionSupport,
+      requiresReview: true,
+      autoExecuted: false,
+    };
+
+    if (request.body.createActionPlan === false) return reply.code(201).send({ mode: "manual_proposal", messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.", draft, actionPlan: null, resolution });
+
+    if (executableItem) {
+      if (resolution.missingFields.length) {
+        return reply.code(200).send({ mode: "needs_input", missingFields: resolution.missingFields, messageFa: missingFieldsMessageFa(resolution.missingFields), draft, actionPlan: null, resolution });
+      }
+
+      const normalizedParams = resolution.normalizedParams;
+      const actionPlan = await proposeActionPlan({ source: "ai", deviceId: selectedDeviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, source: "command_search_ai_fallback", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, source: "command_search_ai_fallback", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
+      return reply.code(201).send({
+        mode: "executable_action_plan",
+        actionPlanId: actionPlan.id,
+        executionSupport: "connector",
+        implementationState: "implemented",
+        executionTemplateRef: resolution.executionTemplateRef,
+        connectorType: resolution.connectorType,
+        messageFa: "برنامه اجرای قابل تأیید ساخته شد.",
+        draft,
+        actionPlan,
+        resolution,
+      });
+    }
+
+    return reply.code(200).send({
+      mode: "manual_proposal",
+      messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.",
+      draft,
+      actionPlan: null,
+      resolution,
+    });
   });
 };
