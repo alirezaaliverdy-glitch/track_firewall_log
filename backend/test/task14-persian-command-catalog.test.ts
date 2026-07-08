@@ -57,9 +57,10 @@ test("every implemented command creates a plan or explicitly requests input; man
   const app = await buildApp({ authRequired: false });
   const linux = await prisma.device.create({ data: { name: "Task 14.1 all Linux", vendor: "Linux", type: "linux_edge", host: "192.0.2.144", managementPort: 22, protocol: "ssh", environment: "lab" } });
   const mikrotik = await prisma.device.create({ data: { name: "Task 14.1 all MikroTik", vendor: "MikroTik", type: "mikrotik", host: "192.0.2.145", managementPort: 22, protocol: "ssh", environment: "lab" } });
-  t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: { in: [linux.id, mikrotik.id] } } }); await prisma.device.deleteMany({ where: { id: { in: [linux.id, mikrotik.id] } } }); await app.close(); });
+  const fortigate = await prisma.device.create({ data: { name: "Task 17 FortiGate", vendor: "FortiGate", type: "fortigate", host: "192.0.2.146", managementPort: 22, protocol: "ssh", environment: "lab" } });
+  t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: { in: [linux.id, mikrotik.id, fortigate.id] } } }); await prisma.device.deleteMany({ where: { id: { in: [linux.id, mikrotik.id, fortigate.id] } } }); await app.close(); });
   for (const item of COMMAND_CATALOG.filter((entry) => entry.implementationState === "implemented")) {
-    const response = await app.inject({ method: "POST", url: `/api/commands/catalog/${item.id}/create-action-plan`, payload: { deviceId: item.vendor === "linux" ? linux.id : mikrotik.id, params: {} } });
+    const response = await app.inject({ method: "POST", url: `/api/commands/catalog/${item.id}/create-action-plan`, payload: { deviceId: item.vendor === "linux" ? linux.id : item.vendor === "fortigate" ? fortigate.id : mikrotik.id, params: {} } });
     assert.ok([201, 422].includes(response.statusCode), `${item.id}:${response.statusCode}:${response.body}`);
     if (response.statusCode === 201) assert.equal(response.json().status, "proposed", item.id);
   }

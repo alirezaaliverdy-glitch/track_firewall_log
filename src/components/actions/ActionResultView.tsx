@@ -135,6 +135,34 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
           )}
         </section>
 
+        {formatted.tables && formatted.tables.length > 0 && (
+          <section className="mt-5 space-y-4 rounded-xl border border-slate-800 p-4">
+            {formatted.tables.map((table) => (
+              <div key={table.title} className="overflow-x-auto">
+                <h2 className="mb-3 font-semibold text-slate-100">{table.title}</h2>
+                <table className="w-full min-w-max text-sm">
+                  <thead><tr className="border-b border-slate-700 text-slate-400">{table.columns.map((column) => <th key={column} className="p-2 text-right">{column}</th>)}</tr></thead>
+                  <tbody>{table.rows.map((row, index) => <tr key={`${table.title}-${index}`} className="border-b border-slate-800">{table.columns.map((column) => <td key={column} className="p-2 text-slate-200">{String(row[column] ?? "—")}</td>)}</tr>)}</tbody>
+                </table>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {formatted.findings && formatted.findings.length > 0 && (
+          <section className="mt-5 rounded-xl border border-amber-900/60 p-4">
+            <h2 className="font-semibold text-slate-100">یافته‌ها</h2>
+            <div className="mt-3 space-y-3">{formatted.findings.map((finding, index) => (
+              <article key={`${finding.title}-${index}`} className="rounded-lg bg-black/20 p-3 text-sm">
+                <div className="flex gap-2"><strong>{finding.title}</strong><span className="text-amber-300">{finding.severity}</span></div>
+                <p className="mt-2 text-slate-300">{finding.whyItMatters}</p>
+                <p className="mt-1 text-xs text-slate-400">شاهد: {finding.evidence}</p>
+                <p className="mt-1 text-cyan-200">اقدام پیشنهادی: {finding.recommendedAction}</p>
+              </article>
+            ))}</div>
+          </section>
+        )}
+
         <section className="mt-5 rounded-xl border border-cyan-900/60 bg-cyan-950/15 p-4">
           <h2 className="font-semibold text-slate-100">پیشنهادهای بعدی</h2>
           {formatted.nextActionsFa.length === 0 ? (

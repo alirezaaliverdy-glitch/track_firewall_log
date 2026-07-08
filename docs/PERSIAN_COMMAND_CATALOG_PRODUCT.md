@@ -38,3 +38,10 @@
 - اجرا و نتیجه: `backend/src/services/action-plan.service.ts`, `src/components/actions/ActionResultView.tsx`
 
 بعد از تغییر کاتالوگ، در `backend` دستور `npm run validate:command-catalog` اجرا شود. vendorهای غیر Linux/MikroTik تا زمان وجود connector و verification واقعی، manual/planned باقی می‌مانند.
+# FortiGate Read-only Management Foundation (Task 17.0)
+
+FortiGate operational intelligence follows the same catalog-first path as other implemented vendors. The supported read-only families are system status, interfaces, routing/DNS, admin access, policies/NAT/VIP, VPN, and HA/VDOM/zone. Each family compiles only fixed CLI commands and produces the shared structured contract: Persian summary, status, sourced evidence, findings, tables, and a reference to collapsed raw output.
+
+The Daily Check combines those families into eight sections: سلامت سیستم، وضعیت لایسنس و FortiGuard، اینترفیس‌ها و دسترسی مدیریتی، مسیر و DNS، سیاست‌ها/NAT/VIP، شبکه خصوصی، افزونگی/VDOM/Zone، و امنیت مدیران. Missing evidence is not treated as a confirmed fault. Invalid licensing on a lab VM is `needs_review` unless device output proves that a required feature is blocked.
+
+Both `/api/commands/ai-propose` and operational chat use the central AI template resolver. With a selected FortiGate device, Persian interface/port requests resolve to the implemented `fortigate_show_interfaces` action and `fortigate_show_interfaces` execution template on `fortigate-ssh`; raw AI CLI is never executable.

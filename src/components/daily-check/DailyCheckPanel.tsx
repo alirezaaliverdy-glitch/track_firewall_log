@@ -141,12 +141,11 @@ export default function DailyCheckPanel() {
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {profile.sections.map((section) => (
             <article key={section.key} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <h3 className="text-sm font-semibold text-slate-100">{section.titleFa}</h3>
-              <p className="mt-2 text-xs text-slate-500">
-                {section.parserRules.length > 0 ? section.parserRules.join("، ") : "چک‌لیست دستی"}
-              </p>
-              {section.suggestedActions.length > 0 && (
-                <ul className="mt-3 space-y-1 text-xs text-slate-300">
+              <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-slate-100">{section.titleFa}</h3><span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] text-cyan-200">آماده بررسی</span></div>
+              <p className="mt-2 line-clamp-1 text-xs text-slate-500">{section.parserRules[0] ?? "چک‌لیست دستی"}</p>
+              <details className="mt-3 text-xs text-slate-300">
+                <summary className="cursor-pointer text-cyan-300">جزئیات</summary>
+                <ul className="mt-2 space-y-1">
                   {section.suggestedActions.slice(0, 3).map((item) => (
                     <li key={item} className="flex items-start gap-1">
                       <ArrowUpRight className="mt-0.5 h-3 w-3 text-cyan-400" />
@@ -154,7 +153,7 @@ export default function DailyCheckPanel() {
                     </li>
                   ))}
                 </ul>
-              )}
+              </details>
             </article>
           ))}
         </div>

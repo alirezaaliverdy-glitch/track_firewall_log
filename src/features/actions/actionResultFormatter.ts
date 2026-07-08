@@ -11,6 +11,8 @@ export type FormattedActionResult = {
   nextActionsFa: string[];
   structuredSections: ResultSection[];
   rawOutput: string;
+  tables?: Array<{ title: string; columns: string[]; rows: Array<Record<string, unknown>> }>;
+  findings?: Array<{ title: string; severity: string; whyItMatters: string; evidence: string; recommendedAction: string }>;
 };
 
 function parseServiceUnits(output: string) {
@@ -66,24 +68,26 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
   const params = normalizeObject(action.parametersJson);
   const parsed = normalizeObject(normalizeObject(action.resultJson).parsedResult);
 
-  if (["fortigate_show_interfaces", "fortigate_route_dns_check", "fortigate_license_status", "fortigate_admin_users"].includes(action.actionType)) {
-    const evidence = normalizeArray<unknown>(parsed.evidence).map(String);
-    const recommendations = normalizeArray<unknown>(parsed.recommendationsFa).map(String);
+  if (action.actionType.startsWith("fortigate_show_") || ["fortigate_route_dns_check", "fortigate_license_status", "fortigate_admin_users"].includes(action.actionType)) {
+    const evidence = normalizeArray<Record<string, unknown>>(parsed.evidence);
+    const findings = normalizeArray<Record<string, unknown>>(parsed.findings).map((item) => ({ title: String(item.title ?? "یافته"), severity: String(item.severity ?? "info"), whyItMatters: String(item.whyItMatters ?? "—"), evidence: String(item.evidence ?? "—"), recommendedAction: String(item.recommendedAction ?? "—") }));
+    const tables = normalizeArray<Record<string, unknown>>(parsed.tables).map((table) => ({ title: String(table.title ?? "جدول"), columns: normalizeArray<unknown>(table.columns).map(String), rows: normalizeArray<Record<string, unknown>>(table.rows) }));
     const commands = normalizeArray<Record<string, unknown>>(normalizeObject(action.resultJson).commands).map((item) => String(item.template ?? "-"));
     return {
-      summaryFa: String(parsed.summaryFa ?? "نتیجه بررسی FortiGate ثبت شد."),
-      nextActionsFa: recommendations,
+      summaryFa: String(parsed.summary ?? parsed.summaryFa ?? "نتیجه بررسی FortiGate ثبت شد."),
+      nextActionsFa: findings.map((item) => item.recommendedAction),
       structuredSections: [{
         title: action.actionType === "fortigate_license_status" ? "وضعیت لایسنس و FortiGuard" : action.actionType === "fortigate_route_dns_check" ? "مسیر و DNS" : action.actionType === "fortigate_admin_users" ? "کاربران مدیر" : "وضعیت اینترفیس‌ها و دسترسی مدیریتی",
         rows: [
           { label: "وضعیت", value: String(parsed.status ?? "not_checked") },
-          { label: "خلاصه", value: String(parsed.summaryFa ?? "قابل تشخیص نیست") },
-          { label: "شواهد", value: evidence.slice(0, 12).join("\n") || "شواهد قابل اتکا استخراج نشد" },
+          { label: "خلاصه", value: String(parsed.summary ?? parsed.summaryFa ?? "قابل تشخیص نیست") },
+          { label: "شواهد", value: evidence.slice(0, 12).map((item) => `${item.label ?? "شاهد"}: ${item.value ?? "—"} (${item.source ?? "CLI"})`).join("\n") || "شواهد قابل اتکا استخراج نشد" },
           { label: "فرمان‌ها", value: commands.join("، ") || "ثبت نشده" },
-          { label: "اطمینان parser", value: String(parsed.confidence ?? "-") },
         ],
       }],
       rawOutput,
+      tables,
+      findings,
     };
   }
 
@@ -142,7 +146,7 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
         rows: [
           { label: "وضعیت", value: String(section.status ?? section.severity ?? "-") },
           { label: "خلاصه", value: String(section.summaryFa ?? "-") },
-          { label: "اقلام", value: normalizeArray<unknown>(section.items).map(String).join(" | ") || "-" },
+          { label: "شواهد کلیدی", value: normalizeArray<unknown>(section.evidence).map(String).slice(0, 3).join("\n") || "شواهد کافی ثبت نشد" },
         ],
       })),
       rawOutput,

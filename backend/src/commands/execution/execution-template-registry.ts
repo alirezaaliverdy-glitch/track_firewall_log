@@ -31,6 +31,12 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "fortigate_route_dns_check", actionType: "fortigate_route_dns_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_license_status", actionType: "fortigate_license_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_admin_users", actionType: "fortigate_admin_users", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_system_status", actionType: "fortigate_show_system_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_routing_dns", actionType: "fortigate_show_routing_dns", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_admin_access", actionType: "fortigate_show_admin_access", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_firewall_policies", actionType: "fortigate_show_firewall_policies", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_vpn_status", actionType: "fortigate_show_vpn_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_ha_vdom_zone", actionType: "fortigate_show_ha_vdom_zone", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
 ];
 
 export const EXECUTION_TEMPLATE_REGISTRY = Object.freeze(Object.fromEntries(templates.map((template) => [template.id, template])) as Record<string, ExecutionTemplate>);

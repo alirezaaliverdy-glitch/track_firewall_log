@@ -73,6 +73,12 @@ const FORTIGATE_ACTIONS = new Set<ActionType>([
   ,ActionType.fortigate_route_dns_check
   ,ActionType.fortigate_license_status
   ,ActionType.fortigate_admin_users
+  ,ActionType.fortigate_show_system_status
+  ,ActionType.fortigate_show_routing_dns
+  ,ActionType.fortigate_show_admin_access
+  ,ActionType.fortigate_show_firewall_policies
+  ,ActionType.fortigate_show_vpn_status
+  ,ActionType.fortigate_show_ha_vdom_zone
 ]);
 
 export function isFortiGateAction(actionType: ActionType) {

@@ -878,6 +878,12 @@ enum AiIntentType {
   fortigate_route_dns_check
   fortigate_license_status
   fortigate_admin_users
+  fortigate_show_system_status
+  fortigate_show_routing_dns
+  fortigate_show_admin_access
+  fortigate_show_firewall_policies
+  fortigate_show_vpn_status
+  fortigate_show_ha_vdom_zone
   mikrotik_list_management_services
   mikrotik_check_login_logs
   mikrotik_block_ip
@@ -1087,6 +1093,12 @@ enum ActionType {
   fortigate_route_dns_check
   fortigate_license_status
   fortigate_admin_users
+  fortigate_show_system_status
+  fortigate_show_routing_dns
+  fortigate_show_admin_access
+  fortigate_show_firewall_policies
+  fortigate_show_vpn_status
+  fortigate_show_ha_vdom_zone
   mikrotik_list_management_services
   mikrotik_check_login_logs
   mikrotik_block_ip

@@ -2,6 +2,14 @@
 
 Last updated: 2026-07-08
 
+## Task 17.0 FortiGate Read-only Intelligence
+
+- FortiGate has real connector-backed read-only plans for system status, interfaces, routing/DNS, admin access, firewall policy/NAT/VIP, VPN, and HA/VDOM/zone.
+- Daily Check returns eight concise Persian sections from the same normalized parsers used by individual ActionResults.
+- Severity is evidence-based: unknown data is `not_checked`, unsupported CLI is `not_supported`, standalone HA is not critical, and invalid VM lab licensing is normally `needs_review`.
+- Persian Ask AI/chat interface requests resolve to `fortigate_show_interfaces` with `fortigate-ssh` and a registered template.
+- Protected quick-controlled lab execution and the `connectorInvoked=true` success requirement are unchanged.
+
 Branch: `product-persian-command-catalog`
 
 Product mode: `PRODUCT_MODE=persian_command_catalog`

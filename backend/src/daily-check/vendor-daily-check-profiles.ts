@@ -223,12 +223,14 @@ export const VENDOR_DAILY_CHECK_PROFILES: Readonly<Record<DailyCheckVendor, Vend
     requiredConnector: "fortigate-ssh",
     implementationState: "implemented",
     sections: [
-      section("system_health", "سلامت سیستم", ["get system status", "get system performance status", "diagnose sys top-summary"], ["نسخه، زمان، CPU، حافظه و نشست‌ها"], ["مصرف بالای منابع یا خطای سیستم => needs_review"], ["روند مصرف منابع و نشست‌های غیرعادی را بررسی کنید."]),
-      section("license", "وضعیت لایسنس", ["get system status", "show system fortiguard"], ["اعتبار لایسنس و سرویس‌های FortiGuard"], ["expired یا invalid => critical"], ["وضعیت قرارداد و به‌روزرسانی FortiGuard را بررسی کنید."]),
-      section("route_dns", "مسیر و DNS", ["routing-table all", "get system dns"], ["مسیر پیش‌فرض و DNSهای تنظیم‌شده"], ["نبود مسیر پیش‌فرض یا DNS => needs_review"], ["دسترسی gateway و پاسخ DNS را اعتبارسنجی کنید."]),
-      section("management", "دسترسی مدیریتی", ["show system interface"], ["allowaccess روی اینترفیس‌ها"], ["telnet/http یا مدیریت روی WAN => critical"], ["مدیریت را به HTTPS/SSH و شبکه‌های مجاز محدود کنید."]),
-      section("admins", "کاربران مدیر", ["show system admin"], ["نام مدیر، پروفایل و trusthost"], ["super_admin بدون trusthost => needs_review"], ["حساب‌ها و trusthostهای مدیریتی را بازبینی کنید."]),
-      section("interfaces", "وضعیت اینترفیس‌ها", ["show system interface"], ["نام، IP، وضعیت و دسترسی مدیریتی"], ["اینترفیس مهم غیرفعال => needs_review"], ["وضعیت لینک و IP اینترفیس‌های عملیاتی را بررسی کنید."])
+      section("system_health", "سلامت سیستم", ["get system status", "get system performance status"], ["نسخه، build، hostname، uptime، CPU، حافظه و نشست‌ها"], ["فقط مصرف منبع اثبات‌شده و شدید => critical"], ["روند مصرف منابع و نشست‌ها را بررسی کنید."]),
+      section("license", "وضعیت لایسنس و FortiGuard", ["get system status"], ["اعتبار لایسنس و اثر قابل مشاهده سرویس‌ها"], ["Invalid در VM آزمایشگاهی => needs_review مگر مسدود شدن قابلیت اثبات شود"], ["FortiGuard و به‌روزرسانی signature را جداگانه بررسی کنید."]),
+      section("interfaces", "اینترفیس‌ها و دسترسی مدیریتی", ["show system interface", "get system interface physical"], ["تعداد، IP، link، role و allowaccess"], ["مدیریت روی WAN یا HTTP/Telnet => needs_review"], ["دسترسی مدیریت را محدود و پروتکل ناامن را حذف کنید."]),
+      section("route_dns", "مسیر و DNS", ["routing-table all", "get system dns", "show system dns"], ["default route، gateway، interface و DNS"], ["نبود مسیر پیش‌فرض یا DNS => needs_review"], ["gateway و پاسخ DNS را اعتبارسنجی کنید."]),
+      section("policy_nat_vip", "Policy / NAT / VIP", ["show firewall policy", "show firewall address", "show firewall vip", "show firewall ippool"], ["تعداد policy، وضعیت، NAT، VIP و logging"], ["policy فعال بدون logging => needs_review"], ["Policyهای بدون لاگ و objectهای منتشرشده را بازبینی کنید."]),
+      section("vpn", "VPN", ["vpn ipsec", "vpn ssl"], ["IPsec up/down و SSL-VPN"], ["نبود شواهد => not_checked، نه critical"], ["تونل‌های down و محدودیت کاربران SSL-VPN را بررسی کنید."]),
+      section("ha_vdom_zone", "HA / VDOM / Zone", ["system ha", "system vdom", "system zone"], ["HA mode، sync، VDOM و zone members"], ["standalone => safe/informational"], ["در HA فعال، وضعیت sync را بررسی کنید."]),
+      section("admin_security", "Admin Security", ["show system admin", "show system interface"], ["تعداد مدیر، profile، وجود trusthost و سطح مدیریت"], ["مدیر بدون trusthost یا مدیریت عمومی => needs_review"], ["trusthost و allowaccess را محدود کنید."])
     ]
   },
   cisco: manualProfile("cisco", "چک روزانه Cisco", [

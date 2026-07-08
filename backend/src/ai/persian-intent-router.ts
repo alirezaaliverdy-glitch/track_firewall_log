@@ -168,17 +168,29 @@ export function routePersianIntent(input: PersianIntentRouterInput): PersianInte
   }
 
   if (vendor === "fortigate") {
-    if (includesAny(text, ["وضعیت پورت ها", "وضعیت پورت هامو", "پورت های باز", "پورت های باز fortigate", "وضعیت اینترفیس ها", "اینترفیس های فایروال", "show interfaces", "interface status"])) {
+    if (includesAny(text, ["وضعیت پورت ها", "وضعیت پورت هامو", "وضعیت پورت های فایروال", "وضعیت اینترفیس ها", "پورت های فورتی گیت رو نشون بده", "interface های فورتی گیت", "اینترفیس ها رو چک کن", "کدوم پورت ها ip دارن", "کدوم پورت ها ssh", "کدوم پورت ها https", "show interfaces", "interface status"])) {
       return output({ actionType: "fortigate_show_interfaces", executionTemplateRef: "fortigate_show_interfaces", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
     }
-    if (includesAny(text, ["route و dns", "مسیر و dns", "route and dns", "routing dns"])) {
+    if (includesAny(text, ["route و dns", "مسیر و dns", "مسیر پیش فرض", "گیت وی", "route and dns", "routing dns"])) {
       return output({ actionType: "fortigate_route_dns_check", executionTemplateRef: "fortigate_route_dns_check", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
     }
     if (includesAny(text, ["وضعیت لایسنس", "لایسنس", "fortiguard", "license status"])) {
       return output({ actionType: "fortigate_license_status", executionTemplateRef: "fortigate_license_status", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
     }
-    if (includesAny(text, ["کاربران ادمین", "کاربران مدیر", "admin users", "administrator users"])) {
+    if (includesAny(text, ["کاربران ادمین", "کاربران مدیر", "امنیت ادمین", "trusthost", "admin users", "administrator users"])) {
       return output({ actionType: "fortigate_admin_users", executionTemplateRef: "fortigate_admin_users", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["وضعیت سیستم", "سلامت سیستم", "نسخه فورتی گیت", "مصرف cpu", "مصرف memory"])) {
+      return output({ actionType: "fortigate_show_system_status", executionTemplateRef: "fortigate_show_system_status", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["policy ها", "قوانین فایروال", "nat و vip", "وضعیت policy", "firewall policies"])) {
+      return output({ actionType: "fortigate_show_firewall_policies", executionTemplateRef: "fortigate_show_firewall_policies", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["وضعیت vpn", "تونل ipsec", "ssl vpn", "vpn status"])) {
+      return output({ actionType: "fortigate_show_vpn_status", executionTemplateRef: "fortigate_show_vpn_status", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["وضعیت ha", "vdom ها", "zone ها", "ha vdom zone"])) {
+      return output({ actionType: "fortigate_show_ha_vdom_zone", executionTemplateRef: "fortigate_show_ha_vdom_zone", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
     }
     if (includesAny(text, ["چک روزانه fortigate", "چک روزانه فورتی گیت", "بررسی روزانه فایروال", "daily check"])) {
       return output({ actionType: "fortigate_daily_check", executionTemplateRef: "fortigate_daily_check", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });

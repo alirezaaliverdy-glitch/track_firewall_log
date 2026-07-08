@@ -26,6 +26,7 @@ import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { resolveCatalogAction } from "../commands/catalog/catalog-action-resolver.js";
 import { COMMAND_CATALOG, COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
 import { buildDailyCheckResult } from "../daily-check/daily-check-engine.js";
+import { buildFortiGateDailyCheck, parseFortiGateReadOnlyResult } from "../fortigate/readonly-result-parser.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -1012,7 +1013,12 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const exitCodes = result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
     const executionSucceeded = result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0);
     const dailyCheck = plan.actionType === ActionType.linux_daily_check || plan.actionType === ActionType.mikrotik_daily_check || plan.actionType === ActionType.fortigate_daily_check
-      ? buildDailyCheckResult({ deviceId: device.id, vendor: plan.actionType === ActionType.linux_daily_check ? "linux" : plan.actionType === ActionType.mikrotik_daily_check ? "mikrotik" : "fortigate", outputs: result.commands })
+      ? plan.actionType === ActionType.fortigate_daily_check
+        ? buildFortiGateDailyCheck(device.id, result.commands)
+        : buildDailyCheckResult({ deviceId: device.id, vendor: plan.actionType === ActionType.linux_daily_check ? "linux" : "mikrotik", outputs: result.commands })
+      : null;
+    const fortigateReadOnly = String(plan.actionType).startsWith("fortigate_show_") || ["fortigate_route_dns_check", "fortigate_license_status", "fortigate_admin_users"].includes(String(plan.actionType))
+      ? parseFortiGateReadOnlyResult(String(plan.actionType), result.commands)
       : null;
     const resultPayload = {
       ...result,
@@ -1024,7 +1030,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
-      parsedResult: dailyCheck ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands),
+      parsedResult: dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands),
       resultUrl: `/actions/${id}/result`
     };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });

@@ -20,7 +20,7 @@ test("daily check selects vendor profile, groups output, and labels unsupported 
   assert.equal(getVendorDailyCheckProfile("routeros")?.vendor, "mikrotik"); assert.equal(getVendorDailyCheckProfile("linux_edge")?.vendor, "linux");
   const result = buildDailyCheckResult({ deviceId: "linux-1", vendor: "linux", outputs: [{ template: "linux daily check", stdout: "uptime ok\nservices active", exitCode: 0 }] });
   assert.ok(result.sections.length >= 5); assert.equal(result.executedTemplates.length, 1);
-  const manual = buildDailyCheckResult({ deviceId: "forti-1", vendor: "fortigate" }); assert.equal(manual.overallStatus, "not_supported"); assert.ok(manual.manualSections.length > 0);
+  const fortigate = buildDailyCheckResult({ deviceId: "forti-1", vendor: "fortigate" }); assert.equal(fortigate.overallStatus, "needs_review"); assert.ok(fortigate.sections.every((section) => section.status === "not_checked"));
 });
 test("preview fingerprint ignores generated metadata and output", () => {
   const base = { actionType: ActionType.linux_daily_check, deviceId: "d1", parametersJson: { vendor: "linux", metadata: { catalogCommandId: "linux.daily-check", executionTemplateRef: "linux_daily_check", normalizedParams: {} } } };
