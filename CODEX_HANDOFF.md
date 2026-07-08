@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Task 17 - FortiGate SSH Read-only Discovery (2026-07-08)
+
+- FortiGate now has a first-class `fortigate-ssh` execution template for `fortigate_daily_check`.
+- The connector uses an interactive FortiOS shell with prompt detection and automatic `--More--` continuation.
+- Discovery parses system identity/licensing/health, interfaces and management exposure, default route, DNS, and admin users.
+- Daily Check v1 is real, read-only, connector-backed, and rendered as Persian structured sections; success still requires `connectorInvoked=true`.
+- Migration: `20260708120000_fortigate_readonly_discovery` adds `fortigate_daily_check` to both Prisma enums.
+
 ## هدف فعلی
 
 - جهت محصول: Persian Network & Security Command Center با مسیر `AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`.

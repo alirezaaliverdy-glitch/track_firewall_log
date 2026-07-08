@@ -39,6 +39,16 @@ function assessSection(section: DailyCheckSectionProfile, outputs: DailyCheckOut
   const text = normalizeText(outputs);
   if (outputs.some((output) => typeof output.exitCode === "number" && output.exitCode !== 0)) return "critical";
   if (/\b(critical|panic|failed|failure|error)\b/.test(text)) return "critical";
+  if (section.key === "license" && /\b(expired|invalid|unlicensed|not licensed)\b/.test(text)) return "critical";
+  if (section.key === "management" && /set\s+allowaccess\s+.*\b(?:telnet|http)\b/.test(text)) return "critical";
+  if (section.key === "system_health") {
+    const memory = Number(text.match(/memory:\s*(\d+)%/)?.[1] ?? 0);
+    const cpu = Number(text.match(/cpu states:\s*(\d+)%\s*user/)?.[1] ?? 0);
+    if (memory >= 90 || cpu >= 90) return "critical";
+    if (memory >= 75 || cpu >= 75) return "needs_review";
+  }
+  if ((section.key === "route_dns" && !/(?:0\.0\.0\.0\/0|\bs\*\b|primary\s*:)/.test(text)) ||
+      (section.key === "admins" && /set\s+accprofile\s+"?super_admin"?/.test(text) && !/set\s+trusthost\d+/.test(text))) return "needs_review";
   if (/\b(warn|warning|degraded|inactive|disabled|refused)\b/.test(text)) return "needs_review";
   return "safe";
 }

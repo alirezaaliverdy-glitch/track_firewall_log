@@ -21,6 +21,7 @@ function supportLabel(profile: VendorDailyCheckProfile | null) {
 function commandIdForVendor(vendor: string) {
   if (vendor === "linux") return "linux.daily-check";
   if (vendor === "mikrotik") return "mikrotik.daily-check";
+  if (vendor === "fortigate") return "fortigate.daily-check";
   return "";
 }
 

@@ -2,6 +2,13 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17 - FortiGate SSH Read-only Discovery and Daily Check (2026-07-08)
+
+- Summary: promoted FortiGate to an interactive `fortigate-ssh` connector with prompt/pagination handling, structured discovery parsing, and connector-backed Persian Daily Check v1.
+- Areas: FortiGate connector/compiler/catalog, Prisma action enums, Daily Check engine/profile, Persian result formatter, tests and docs.
+- Validation: Prisma generation, catalog validation (53 items), backend build and existing suite passed; dedicated FortiGate tests passed; frontend build passed.
+- Commit: pending.
+
 ## Task 10 - Project Integrity and Production Safety (2026-07-01)
 
 - Summary: hardened config and env handling while preserving quick-controlled lab behavior.

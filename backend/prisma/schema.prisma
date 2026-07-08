@@ -873,6 +873,7 @@ enum AiIntentType {
   linux_open_port
   linux_daily_check
   mikrotik_daily_check
+  fortigate_daily_check
   mikrotik_list_management_services
   mikrotik_check_login_logs
   mikrotik_block_ip
@@ -1077,6 +1078,7 @@ enum ActionType {
   linux_read_nginx
   linux_daily_check
   mikrotik_daily_check
+  fortigate_daily_check
   mikrotik_list_management_services
   mikrotik_check_login_logs
   mikrotik_block_ip

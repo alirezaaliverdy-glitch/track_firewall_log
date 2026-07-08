@@ -28,7 +28,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     }
     const items = searchCatalog({ ...request.query, vendor, readOnly: bool(request.query.readOnly), executable: bool(request.query.executable), includePlanned: bool(request.query.includePlanned) }).filter((item) => {
       if (!device || item.implementationState === "manualOnly") return true;
-      return item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" ? device.protocol === "ssh" : true;
+      return item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" ? device.protocol === "ssh" : true;
     });
     return { count: items.length, items };
   });

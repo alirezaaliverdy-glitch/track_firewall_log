@@ -67,7 +67,8 @@ const FORTIGATE_ACTIONS = new Set<ActionType>([
   ActionType.fortigate_list_interfaces,
   ActionType.fortigate_list_policies,
   ActionType.fortigate_list_address_objects,
-  ActionType.fortigate_list_routes
+  ActionType.fortigate_list_routes,
+  ActionType.fortigate_daily_check
 ]);
 
 export function isFortiGateAction(actionType: ActionType) {

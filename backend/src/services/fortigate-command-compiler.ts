@@ -202,6 +202,11 @@ export function compileFortiGateAction(input: {
   const vdom = safeOptionalName(p, "vdom");
   if (p.vdomRequired === true && !vdom) throw new Error("FORTIGATE_VDOM_REQUIRED");
 
+  if (actionType === ActionType.fortigate_daily_check) {
+    const commands = ["get system status", "get system performance status", "diagnose sys top-summary", "show system interface", "get router info routing-table all", "get system dns", "show system fortiguard", "show system admin"];
+    return result({ category: "daily-check", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate daily check: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+  }
+
   if (actionType === ActionType.fortigate_list_admins) return readOnly("show system admin", "management");
   if (actionType === ActionType.fortigate_list_zones) return readOnly("show system zone", "zone");
   if (actionType === ActionType.fortigate_list_interfaces) return readOnly("show system interface", "interface");

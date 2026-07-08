@@ -217,16 +217,20 @@ export const VENDOR_DAILY_CHECK_PROFILES: Readonly<Record<DailyCheckVendor, Vend
       ),
     ],
   },
-  fortigate: manualProfile("fortigate", "چک روزانه FortiGate", [
-    "system status و firmware را دستی بررسی کنید.",
-    "CPU، حافظه و session count را بررسی کنید.",
-    "daemonها و سرویس‌های مدیریتی را بررسی کنید.",
-    "interface، route و HA را بررسی کنید.",
-    "policy، local-in و NAT/VIP را بررسی کنید.",
-    "SSL-VPN، IPsec و HA state را بررسی کنید.",
-    "admin login، threat و config change log را بررسی کنید.",
-    "برای یافته‌های مهم، ActionPlan دستی بسازید.",
-  ]),
+  fortigate: {
+    vendor: "fortigate",
+    titleFa: "چک روزانه FortiGate",
+    requiredConnector: "fortigate-ssh",
+    implementationState: "implemented",
+    sections: [
+      section("system_health", "سلامت سیستم", ["get system status", "get system performance status", "diagnose sys top-summary"], ["نسخه، زمان، CPU، حافظه و نشست‌ها"], ["مصرف بالای منابع یا خطای سیستم => needs_review"], ["روند مصرف منابع و نشست‌های غیرعادی را بررسی کنید."]),
+      section("license", "وضعیت لایسنس", ["get system status", "show system fortiguard"], ["اعتبار لایسنس و سرویس‌های FortiGuard"], ["expired یا invalid => critical"], ["وضعیت قرارداد و به‌روزرسانی FortiGuard را بررسی کنید."]),
+      section("route_dns", "مسیر و DNS", ["routing-table all", "get system dns"], ["مسیر پیش‌فرض و DNSهای تنظیم‌شده"], ["نبود مسیر پیش‌فرض یا DNS => needs_review"], ["دسترسی gateway و پاسخ DNS را اعتبارسنجی کنید."]),
+      section("management", "دسترسی مدیریتی", ["show system interface"], ["allowaccess روی اینترفیس‌ها"], ["telnet/http یا مدیریت روی WAN => critical"], ["مدیریت را به HTTPS/SSH و شبکه‌های مجاز محدود کنید."]),
+      section("admins", "کاربران مدیر", ["show system admin"], ["نام مدیر، پروفایل و trusthost"], ["super_admin بدون trusthost => needs_review"], ["حساب‌ها و trusthostهای مدیریتی را بازبینی کنید."]),
+      section("interfaces", "وضعیت اینترفیس‌ها", ["show system interface"], ["نام، IP، وضعیت و دسترسی مدیریتی"], ["اینترفیس مهم غیرفعال => needs_review"], ["وضعیت لینک و IP اینترفیس‌های عملیاتی را بررسی کنید."])
+    ]
+  },
   cisco: manualProfile("cisco", "چک روزانه Cisco", [
     "نسخه، uptime و alarmها را بررسی کنید.",
     "CPU و memory را دستی بررسی کنید.",

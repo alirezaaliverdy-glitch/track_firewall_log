@@ -24,7 +24,7 @@ export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
       if (!template) errors.push(`${prefix}: implemented command has no registered template`);
       else if (template.actionType !== item.actionType || template.connectorType !== item.connectorType) errors.push(`${prefix}: template/action/connector mismatch`);
       else {
-        const connectorVendor = template.connectorType === "linux-ssh" ? "linux_edge" : "mikrotik";
+        const connectorVendor = template.connectorType === "linux-ssh" ? "linux_edge" : template.connectorType === "fortigate-ssh" ? "fortigate" : "mikrotik";
         const connector = getDeviceConnectors().find((candidate) => candidate.name === connectorVendor);
         const planner = getVendorPlanners().find((candidate) => candidate.vendor === connectorVendor);
         if (!connector?.supportedActions.includes(item.actionType as ActionType)) errors.push(`${prefix}: action is absent from real connector`);

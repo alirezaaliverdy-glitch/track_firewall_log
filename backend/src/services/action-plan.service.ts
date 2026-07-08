@@ -982,8 +982,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const startedAt = String(asObject(asObject(executing.parametersJson).metadata).executionStartedAt ?? completedAt);
     const exitCodes = result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
     const executionSucceeded = result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0);
-    const dailyCheck = plan.actionType === ActionType.linux_daily_check || plan.actionType === ActionType.mikrotik_daily_check
-      ? buildDailyCheckResult({ deviceId: device.id, vendor: plan.actionType === ActionType.linux_daily_check ? "linux" : "mikrotik", outputs: result.commands })
+    const dailyCheck = plan.actionType === ActionType.linux_daily_check || plan.actionType === ActionType.mikrotik_daily_check || plan.actionType === ActionType.fortigate_daily_check
+      ? buildDailyCheckResult({ deviceId: device.id, vendor: plan.actionType === ActionType.linux_daily_check ? "linux" : plan.actionType === ActionType.mikrotik_daily_check ? "mikrotik" : "fortigate", outputs: result.commands })
       : null;
     const resultPayload = {
       ...result,

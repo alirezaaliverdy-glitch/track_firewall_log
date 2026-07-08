@@ -109,7 +109,7 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
     };
   }
 
-  if (action.actionType === "linux_daily_check" || action.actionType === "mikrotik_daily_check") {
+  if (action.actionType === "linux_daily_check" || action.actionType === "mikrotik_daily_check" || action.actionType === "fortigate_daily_check") {
     const sections = parseDailySections(action);
     const overallStatus = String(normalizeObject(normalizeObject(action.resultJson).parsedResult).overallStatus ?? "نامشخص");
     return {

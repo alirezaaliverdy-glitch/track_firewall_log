@@ -1,6 +1,6 @@
 # Current Project Status
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 Branch: `product-persian-command-catalog`
 
@@ -60,7 +60,7 @@ Task 16.3 is complete for deterministic Persian intent routing across AI chat an
 |---|---|---|---|---|---|
 | Linux | Yes | Some catalog items | No | `linux-ssh` real connector | Real execution |
 | MikroTik | Yes | Some catalog items | Some | `mikrotik-ssh` real connector | Real execution |
-| FortiGate | No product-grade execute path in current mode | Yes | Some | connector not ready for promoted product flow | Manual checklist |
+| FortiGate | Read-only discovery and Daily Check v1 | Existing write catalog unchanged | Some | `fortigate-ssh` interactive SSH connector | Real read-only execution |
 | Cisco | No | Yes | Some | connector not ready | Manual checklist |
 | pfSense | No | Yes | Some | connector not ready | Manual checklist |
 | Juniper | No | Yes | Some | connector not ready | Manual checklist |
@@ -86,6 +86,13 @@ Task 16.3 is complete for deterministic Persian intent routing across AI chat an
 - `pnpm build` or equivalent root build command when pnpm is unavailable
 
 Validation status: passed. Frontend build still shows the existing Vite chunk-size warning only.
+
+## FortiGate SSH Read-only Discovery and Daily Check (2026-07-08)
+
+- `fortigate-ssh` now uses an interactive FortiOS shell, recognizes prompts, and advances `--More--` pagination automatically.
+- Discovery collects and parses version, serial, hostname, operation mode, system time, license, CPU/memory/sessions, interfaces/IPs, default route, DNS, and administrators.
+- `fortigate_daily_check` is a registered read-only ActionPlan template using eight approved commands and six Persian result sections.
+- Success continues to require a real connector call with `connectorInvoked=true`.
 
 ## Protected Behavior
 

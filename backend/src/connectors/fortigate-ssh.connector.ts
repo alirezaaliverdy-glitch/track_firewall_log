@@ -51,15 +51,20 @@ const BASIC_COMMANDS = [
 ] as const;
 
 const DISCOVERY_COMMANDS = [
-  "show system zone",
+  "get system performance status",
+  "diagnose sys top-summary",
   "show system interface",
+  "get router info routing-table all",
+  "get system dns",
+  "show system fortiguard",
+  "show system admin",
+  "show system zone",
   "show firewall policy",
   "show firewall address",
   "show firewall addrgrp",
   "show firewall service custom",
   "show firewall service group",
-  "show firewall schedule recurring",
-  "get router info routing-table all"
+  "show firewall schedule recurring"
 ] as const;
 
 const OPTIONAL_COMMANDS = [
@@ -198,26 +203,53 @@ function assertCatalogCommand(command: string, allowedCommands: Set<string>) {
   }
 }
 
+const PROMPT_PATTERN = /(?:^|\r?\n)[^\r\n]{1,160}(?:\s+\([^)]+\))?\s*[#$]\s*$/;
+const MORE_PATTERN = /(?:\u001b\[[0-9;?]*[A-Za-z])*\s*--More--\s*(?:\u001b\[[0-9;?]*[A-Za-z])*/g;
+
 function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeoutMs, allowedCommands?: Set<string>): Promise<ExecResult> {
   if (allowedCommands) assertCatalogCommand(command, allowedCommands);
   else assertReadOnlyCommand(command);
   return new Promise((resolve, reject) => {
-    client.exec(command, (error, stream) => {
+    client.shell({ term: "vt100", cols: 200, rows: 1000 }, (error, stream) => {
       if (error) {
         reject(error);
         return;
       }
       let stdout = "";
       let stderr = "";
+      let commandSent = false;
+      let settled = false;
+      const finish = (result: ExecResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        stream.close();
+        const withoutPrompt = result.stdout.replace(PROMPT_PATTERN, "").replace(new RegExp(`^\\s*${command.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*`, "i"), "");
+        resolve({ ...result, stdout: sanitizeOutput(withoutPrompt) });
+      };
       const timer = setTimeout(() => {
         stream.close();
         reject(new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", "FortiGate SSH command timed out.", 504));
       }, timeoutMs);
-      stream.on("close", (code: number | null) => {
-        clearTimeout(timer);
-        resolve({ stdout: sanitizeOutput(stdout), stderr: sanitizeOutput(stderr), exitCode: code });
+      stream.on("close", () => finish({ stdout, stderr: sanitizeOutput(stderr), exitCode: PROMPT_PATTERN.test(stdout) ? 0 : 1 }));
+      stream.on("data", (chunk: Buffer) => {
+        const text = chunk.toString("utf8");
+        stdout += text;
+        if (!commandSent && PROMPT_PATTERN.test(stdout)) {
+          stdout = "";
+          commandSent = true;
+          stream.write(`${command}\n`);
+          return;
+        }
+        if (commandSent && MORE_PATTERN.test(stdout)) {
+          stdout = stdout.replace(MORE_PATTERN, "");
+          MORE_PATTERN.lastIndex = 0;
+          stream.write(" ");
+          return;
+        }
+        MORE_PATTERN.lastIndex = 0;
+        if (commandSent && PROMPT_PATTERN.test(stdout)) finish({ stdout, stderr: sanitizeOutput(stderr), exitCode: 0 });
       });
-      stream.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
       stream.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
     });
   });
@@ -240,21 +272,59 @@ function parsePolicies(output: string) {
   return Array.from(output.matchAll(/^\s*edit\s+(\d+)/gim)).map((match) => `policy ${match[1]}`).filter(Boolean);
 }
 
+function parseInterfaceDetails(output: string): FortiGateDiscovery["interfaceDetails"] {
+  return output.split(/^\s*edit\s+/m).slice(1).map((block) => {
+    const name = block.match(/^"?([^"\r\n]+)"?/)?.[1]?.trim() ?? "";
+    const ip = block.match(/^\s*set\s+ip\s+([^\s]+)(?:\s+([^\s]+))?/m);
+    return {
+      name,
+      ip: ip ? `${ip[1]}${ip[2] ? ` ${ip[2]}` : ""}` : undefined,
+      allowAccess: block.match(/^\s*set\s+allowaccess\s+(.+)$/m)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [],
+      status: block.match(/^\s*set\s+status\s+(\S+)/m)?.[1]
+    };
+  }).filter((item) => item.name);
+}
+
+function parseAdmins(output: string): FortiGateDiscovery["adminUsers"] {
+  return output.split(/^\s*edit\s+/m).slice(1).map((block) => ({
+    name: block.match(/^"?([^"\r\n]+)"?/)?.[1]?.trim() ?? "",
+    profile: block.match(/^\s*set\s+accprofile\s+"?([^"\r\n]+)"?/m)?.[1]?.trim(),
+    trustHosts: Array.from(block.matchAll(/^\s*set\s+trusthost\d+\s+(.+)$/gm)).map((match) => match[1].trim())
+  })).filter((item) => item.name);
+}
+
 function discoveryFrom(results: Record<string, ExecResult>): FortiGateDiscovery {
   const status = results["get system status"]?.stdout ?? "";
   const hostname = matchStatus(status, "Hostname");
   const versionLine = status.match(/Version:\s*(.+)$/im)?.[1]?.trim();
   const version = versionLine?.match(/v?(\d+\.\d+(?:\.\d+)?)/i)?.[1];
+  const performance = results["get system performance status"]?.stdout ?? "";
+  const interfacesOutput = results["show system interface"]?.stdout ?? "";
+  const routesOutput = results["get router info routing-table all"]?.stdout ?? "";
+  const defaultRouteLine = routesOutput.split(/\r?\n/).find((line) => /(?:^|\s)(?:S\*|0\.0\.0\.0\/0)/.test(line));
+  const defaultRouteMatch = defaultRouteLine?.match(/via\s+([^,\s]+)(?:,\s*(\S+))?/i);
+  const dnsOutput = results["get system dns"]?.stdout ?? "";
+  const interfaceDetails = parseInterfaceDetails(interfacesOutput);
   const vdomMode = /Virtual domain configuration:\s*(enable|multiple)/i.test(status) ? "enabled" : /Virtual domain configuration:\s*disable/i.test(status) ? "disabled" : "unknown";
   return {
     version,
     model: matchStatus(status, "Version")?.split(" v")?.[0]?.trim(),
     serial: matchStatus(status, "Serial-Number"),
     hostname,
+    operationMode: matchStatus(status, "Current HA mode") ?? matchStatus(status, "Operation Mode"),
+    systemTime: matchStatus(status, "System time"),
+    licenseStatus: matchStatus(status, "License Status") ?? matchStatus(status, "License Status Validation"),
+    cpuUsage: Number(performance.match(/CPU states:\s*(\d+)%\s*user/i)?.[1] ?? performance.match(/CPU.*?(\d+)%/i)?.[1] ?? NaN) || undefined,
+    memoryUsage: Number(performance.match(/Memory:\s*(\d+)%/i)?.[1] ?? NaN) || undefined,
+    sessionCount: Number(performance.match(/Average network usage:.*?sessions\s+(\d+)/i)?.[1] ?? performance.match(/sessions?\s*[:=]\s*(\d+)/i)?.[1] ?? NaN) || undefined,
     vdomMode,
     currentVdom: status.match(/Current virtual domain:\s*(.+)$/im)?.[1]?.trim(),
     zones: parseEditNames(results["show system zone"]?.stdout ?? ""),
-    interfaces: parseEditNames(results["show system interface"]?.stdout ?? ""),
+    interfaces: interfaceDetails.map((item) => item.name),
+    interfaceDetails,
+    defaultRoute: defaultRouteMatch ? { gateway: defaultRouteMatch[1], interface: defaultRouteMatch[2] } : undefined,
+    dnsServers: Array.from(dnsOutput.matchAll(/^\s*(?:primary|secondary)\s*:\s*(\S+)/gim)).map((match) => match[1]),
+    adminUsers: parseAdmins(results["show system admin"]?.stdout ?? ""),
     policies: parsePolicies(results["show firewall policy"]?.stdout ?? ""),
     addressObjects: parseEditNames(results["show firewall address"]?.stdout ?? ""),
     addressGroups: parseEditNames(results["show firewall addrgrp"]?.stdout ?? ""),

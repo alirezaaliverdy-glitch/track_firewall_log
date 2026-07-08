@@ -171,6 +171,7 @@ export type ActionType =
   | "linux_check_important_services"
   | "linux_daily_check"
   | "mikrotik_daily_check"
+  | "fortigate_daily_check"
   | "mikrotik_show_logs"
   | "mikrotik_list_ip_services"
   | "linux_open_port"
