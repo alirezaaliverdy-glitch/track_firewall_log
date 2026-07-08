@@ -2,12 +2,19 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.1 - FortiGate Intent Routing and Result UX (2026-07-08)
+
+- Summary: unified FortiGate operational requests under the central AI resolver, added four executable read-only templates, structured FortiGate result parsing, corrected Daily Check severity semantics, and improved Persian result summaries/counts.
+- Validation: catalog valid with 57 items; dedicated FortiGate resolver/compiler tests 4/4; backend build/full tests and `pnpm build` passed. Playwright MCP was unavailable in this session.
+- Migration: `20260708150000_fortigate_readonly_intents` applied locally.
+- Commit: pending.
+
 ## Task 17 - FortiGate SSH Read-only Discovery and Daily Check (2026-07-08)
 
 - Summary: promoted FortiGate to an interactive `fortigate-ssh` connector with prompt/pagination handling, structured discovery parsing, and connector-backed Persian Daily Check v1.
 - Areas: FortiGate connector/compiler/catalog, Prisma action enums, Daily Check engine/profile, Persian result formatter, tests and docs.
 - Validation: Prisma generation, catalog validation (53 items), backend build and existing suite passed; dedicated FortiGate tests passed; frontend build passed.
-- Commit: pending.
+- Commit: `d30adac Add FortiGate SSH discovery and daily check`.
 
 ## Task 10 - Project Integrity and Production Safety (2026-07-01)
 

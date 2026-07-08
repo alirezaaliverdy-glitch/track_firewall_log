@@ -69,6 +69,10 @@ const FORTIGATE_ACTIONS = new Set<ActionType>([
   ActionType.fortigate_list_address_objects,
   ActionType.fortigate_list_routes,
   ActionType.fortigate_daily_check
+  ,ActionType.fortigate_show_interfaces
+  ,ActionType.fortigate_route_dns_check
+  ,ActionType.fortigate_license_status
+  ,ActionType.fortigate_admin_users
 ]);
 
 export function isFortiGateAction(actionType: ActionType) {

@@ -64,6 +64,28 @@ function mapRows(title: string, rows: Array<{ label: string; value: string }>): 
 export function formatActionResult(action: ActionPlan): FormattedActionResult {
   const rawOutput = actionRawOutput(action);
   const params = normalizeObject(action.parametersJson);
+  const parsed = normalizeObject(normalizeObject(action.resultJson).parsedResult);
+
+  if (["fortigate_show_interfaces", "fortigate_route_dns_check", "fortigate_license_status", "fortigate_admin_users"].includes(action.actionType)) {
+    const evidence = normalizeArray<unknown>(parsed.evidence).map(String);
+    const recommendations = normalizeArray<unknown>(parsed.recommendationsFa).map(String);
+    const commands = normalizeArray<Record<string, unknown>>(normalizeObject(action.resultJson).commands).map((item) => String(item.template ?? "-"));
+    return {
+      summaryFa: String(parsed.summaryFa ?? "نتیجه بررسی FortiGate ثبت شد."),
+      nextActionsFa: recommendations,
+      structuredSections: [{
+        title: action.actionType === "fortigate_license_status" ? "وضعیت لایسنس و FortiGuard" : action.actionType === "fortigate_route_dns_check" ? "مسیر و DNS" : action.actionType === "fortigate_admin_users" ? "کاربران مدیر" : "وضعیت اینترفیس‌ها و دسترسی مدیریتی",
+        rows: [
+          { label: "وضعیت", value: String(parsed.status ?? "not_checked") },
+          { label: "خلاصه", value: String(parsed.summaryFa ?? "قابل تشخیص نیست") },
+          { label: "شواهد", value: evidence.slice(0, 12).join("\n") || "شواهد قابل اتکا استخراج نشد" },
+          { label: "فرمان‌ها", value: commands.join("، ") || "ثبت نشده" },
+          { label: "اطمینان parser", value: String(parsed.confidence ?? "-") },
+        ],
+      }],
+      rawOutput,
+    };
+  }
 
   if (action.actionType === "linux_open_port" || action.actionType === "linux_close_port" || action.actionType === "close_port") {
     const port = String(params.port ?? params.toPort ?? "-");

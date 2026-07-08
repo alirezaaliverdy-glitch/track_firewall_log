@@ -27,6 +27,10 @@ const templates: ExecutionTemplate[] = [
   { id: "mikrotik_backup_config", actionType: "mikrotik_create_backup", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "mikrotik_daily_check", actionType: "mikrotik_daily_check", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "fortigate_daily_check", actionType: "fortigate_daily_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_show_interfaces", actionType: "fortigate_show_interfaces", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_route_dns_check", actionType: "fortigate_route_dns_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_license_status", actionType: "fortigate_license_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_admin_users", actionType: "fortigate_admin_users", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
 ];
 
 export const EXECUTION_TEMPLATE_REGISTRY = Object.freeze(Object.fromEntries(templates.map((template) => [template.id, template])) as Record<string, ExecutionTemplate>);

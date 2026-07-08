@@ -206,6 +206,19 @@ export function compileFortiGateAction(input: {
     const commands = ["get system status", "get system performance status", "diagnose sys top-summary", "show system interface", "get router info routing-table all", "get system dns", "show system fortiguard", "show system admin"];
     return result({ category: "daily-check", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate daily check: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
   }
+  if (actionType === ActionType.fortigate_show_interfaces) {
+    const commands = ["show system interface", "get system interface"];
+    return result({ category: "interface", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate interfaces: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+  }
+  if (actionType === ActionType.fortigate_route_dns_check) {
+    const commands = ["get router info routing-table all", "get system dns"];
+    return result({ category: "network", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate route dns: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+  }
+  if (actionType === ActionType.fortigate_license_status) {
+    const commands = ["get system status", "show system fortiguard"];
+    return result({ category: "license", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate license: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+  }
+  if (actionType === ActionType.fortigate_admin_users) return readOnly("show system admin", "management");
 
   if (actionType === ActionType.fortigate_list_admins) return readOnly("show system admin", "management");
   if (actionType === ActionType.fortigate_list_zones) return readOnly("show system zone", "zone");

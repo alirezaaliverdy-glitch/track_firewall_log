@@ -320,7 +320,36 @@ function withExecutionMetadata(parametersJson: unknown, patch: Record<string, un
   return { ...parameters, metadata: { ...asObject(parameters.metadata), ...patch } };
 }
 
-function parseExecutionResult(actionType: ActionType, stdout: string) {
+function parseExecutionResult(actionType: ActionType, stdout: string, commands: Array<{ template: string }> = []) {
+  if (actionType.toString().startsWith("fortigate_")) {
+    const lower = stdout.toLowerCase();
+    const evidence = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 40);
+    let status: "safe" | "needs_review" | "critical" | "not_checked" | "not_supported" = evidence.length ? "safe" : "not_checked";
+    let summaryFa = "خروجی FortiGate جمع‌آوری و برای بازبینی ساختاریافته شد.";
+    const recommendationsFa: string[] = [];
+    if (actionType === ActionType.fortigate_license_status) {
+      const invalid = /license status\s*:\s*invalid|license.*invalid/.test(lower);
+      status = invalid ? "needs_review" : /license status\s*:\s*(valid|licensed)/.test(lower) ? "safe" : "not_checked";
+      summaryFa = invalid ? "لایسنس FortiGate معتبر نیست. برای محیط آزمایشگاهی قابل انتظار است، اما در محیط عملیاتی باید بررسی شود." : status === "safe" ? "وضعیت لایسنس و FortiGuard معتبر گزارش شد." : "وضعیت لایسنس از خروجی قابل تشخیص نبود.";
+      if (invalid) recommendationsFa.push("در صورت استفاده عملیاتی، لایسنس VM را از FortiCloud فعال کنید.");
+    } else if (actionType === ActionType.fortigate_route_dns_check) {
+      const route = /0\.0\.0\.0\/0|\bs\*\b/.test(lower);
+      const dns = /(?:primary|secondary)\s*:\s*(?:\d{1,3}\.){3}\d{1,3}/.test(lower);
+      status = route && dns ? "safe" : route || dns ? "needs_review" : evidence.length ? "not_checked" : "not_checked";
+      summaryFa = route && dns ? "مسیر پیش‌فرض و DNS روی FortiGate تنظیم شده‌اند." : "مسیر پیش‌فرض یا DNS به‌طور کامل قابل تأیید نیست.";
+    } else if (actionType === ActionType.fortigate_show_interfaces) {
+      const http = /set\s+allowaccess\s+[^\r\n]*\bhttp\b/.test(lower);
+      const management = /set\s+allowaccess\s+[^\r\n]*\b(?:ssh|https)\b/.test(lower);
+      status = http ? "critical" : management ? "needs_review" : /edit\s+"?[^\r\n"]+/.test(lower) ? "safe" : "not_checked";
+      summaryFa = http ? "دسترسی مدیریتی HTTP روی یکی از اینترفیس‌ها فعال است." : management ? "دسترسی SSH/HTTPS روی اینترفیس مشاهده شد و محدوده مجاز آن باید بررسی شود." : status === "safe" ? "اینترفیس‌ها بدون دسترسی مدیریتی پرخطر شناسایی شدند." : "وضعیت اینترفیس‌ها قابل تشخیص نبود.";
+    } else if (actionType === ActionType.fortigate_admin_users) {
+      const admin = /set\s+accprofile\s+"?super_admin"?/.test(lower);
+      const trusthost = /set\s+trusthost\d+/.test(lower);
+      status = admin && !trusthost ? "needs_review" : admin ? "safe" : "not_checked";
+      summaryFa = admin && !trusthost ? "حداقل یک مدیر سطح بالا بدون trusthost قابل تأیید مشاهده شد." : admin ? "کاربران مدیر و محدودیت trusthost جمع‌آوری شدند." : "کاربران مدیر از خروجی قابل تشخیص نبودند.";
+    }
+    return { status, summaryFa, evidence, recommendationsFa, commands: commands.map((command) => command.template), rawOutput: stdout, confidence: status === "not_checked" ? 0.35 : 0.9 };
+  }
   if (actionType !== ActionType.linux_read_listening_ports && actionType !== ActionType.linux_list_open_ports) return null;
   return {
     listeningPorts: stdout.split(/\r?\n/).slice(1).map((line) => line.trim()).filter(Boolean).slice(0, 500).map((line) => {
@@ -995,7 +1024,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
-      parsedResult: dailyCheck ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n")),
+      parsedResult: dailyCheck ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands),
       resultUrl: `/actions/${id}/result`
     };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });

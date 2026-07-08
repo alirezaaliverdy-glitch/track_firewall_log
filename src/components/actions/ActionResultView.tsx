@@ -61,6 +61,9 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
   const result = normalizeObject(action.resultJson);
   const deviceName = action.device?.name ?? action.deviceId ?? "-";
   const vendor = String(metadata.vendor ?? action.device?.vendor ?? action.device?.type ?? "-");
+  const parsedResult = normalizeObject(result.parsedResult);
+  const dailySections = Array.isArray(parsedResult.sections) ? parsedResult.sections as Array<Record<string, unknown>> : [];
+  const countStatus = (status: string) => dailySections.filter((section) => section.status === status).length;
 
   return (
     <main className="mx-auto max-w-5xl p-4 sm:p-8" dir="rtl">
@@ -101,6 +104,12 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
           <InfoCard label="وندور" value={vendor} />
           <InfoCard label="مدت زمان" value={formatDuration(action)} />
           <InfoCard label="اجراکننده" value={String(result.executor ?? metadata.executionTemplateRef ?? "-")} />
+          {vendor.toLowerCase().includes("forti") && <InfoCard label="کانکتور" value="fortigate-ssh" />}
+          {vendor.toLowerCase().includes("forti") && <InfoCard label="فراخوانی کانکتور" value={metadata.connectorInvoked === true ? "connectorInvoked=true" : "اجرا نشده"} />}
+          {dailySections.length > 0 && <InfoCard label="بحرانی" value={String(countStatus("critical"))} />}
+          {dailySections.length > 0 && <InfoCard label="نیازمند بررسی" value={String(countStatus("needs_review"))} />}
+          {dailySections.length > 0 && <InfoCard label="ایمن" value={String(countStatus("safe"))} />}
+          {dailySections.length > 0 && <InfoCard label="بررسی‌نشده" value={String(countStatus("not_checked"))} />}
         </dl>
 
         <section className="mt-5 rounded-xl border border-slate-800 p-4">

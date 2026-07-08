@@ -10,7 +10,7 @@ export type PersianIntentRouterOutput = {
   matched: boolean;
   actionType: string | null;
   executionTemplateRef: string | null;
-  connectorType: "linux-ssh" | "mikrotik-ssh" | null;
+  connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | null;
   requiredParams: string[];
   normalizedParams: Record<string, unknown>;
   missingFields: string[];
@@ -45,6 +45,7 @@ function canonicalVendor(value: string | null | undefined) {
   if (!text) return null;
   if (["linux", "linuxedge", "linuxserver", "ubuntu", "debian"].some((alias) => text.includes(alias)) || text.includes("\u0644\u06cc\u0646\u0648\u06a9\u0633")) return "linux";
   if (["mikrotik", "routeros"].some((alias) => text.includes(alias)) || text.includes("\u0645\u06cc\u06a9\u0631\u0648\u062a\u06cc\u06a9")) return "mikrotik";
+  if (["fortigate", "fortinet", "fortios"].some((alias) => text.includes(alias)) || text.includes("فورتی گیت")) return "fortigate";
   return text;
 }
 
@@ -72,7 +73,7 @@ function extractServiceName(text: string) {
 function output(input: {
   actionType: string;
   executionTemplateRef: string;
-  connectorType: "linux-ssh" | "mikrotik-ssh";
+  connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh";
   requiredParams?: string[];
   normalizedParams?: Record<string, unknown>;
   confidence?: number;
@@ -163,6 +164,24 @@ export function routePersianIntent(input: PersianIntentRouterInput): PersianInte
 
     if (ipAddress && includesAny(text, ["\u0628\u0644\u0627\u06a9 \u06a9\u0646", "block"])) {
       return output({ actionType: "mikrotik_block_ip", executionTemplateRef: "mikrotik_block_ip", connectorType: "mikrotik-ssh", requiredParams: ["ipAddress"], normalizedParams: { ipAddress }, readOnly: false });
+    }
+  }
+
+  if (vendor === "fortigate") {
+    if (includesAny(text, ["وضعیت پورت ها", "وضعیت پورت هامو", "پورت های باز", "پورت های باز fortigate", "وضعیت اینترفیس ها", "اینترفیس های فایروال", "show interfaces", "interface status"])) {
+      return output({ actionType: "fortigate_show_interfaces", executionTemplateRef: "fortigate_show_interfaces", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["route و dns", "مسیر و dns", "route and dns", "routing dns"])) {
+      return output({ actionType: "fortigate_route_dns_check", executionTemplateRef: "fortigate_route_dns_check", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["وضعیت لایسنس", "لایسنس", "fortiguard", "license status"])) {
+      return output({ actionType: "fortigate_license_status", executionTemplateRef: "fortigate_license_status", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["کاربران ادمین", "کاربران مدیر", "admin users", "administrator users"])) {
+      return output({ actionType: "fortigate_admin_users", executionTemplateRef: "fortigate_admin_users", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
+    if (includesAny(text, ["چک روزانه fortigate", "چک روزانه فورتی گیت", "بررسی روزانه فایروال", "daily check"])) {
+      return output({ actionType: "fortigate_daily_check", executionTemplateRef: "fortigate_daily_check", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
     }
   }
 

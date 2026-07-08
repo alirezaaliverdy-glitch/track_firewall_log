@@ -138,7 +138,7 @@ export default function DailyCheckPanel() {
       </div>
 
       {profile && (
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {profile.sections.map((section) => (
             <article key={section.key} className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
               <h3 className="text-sm font-semibold text-slate-100">{section.titleFa}</h3>

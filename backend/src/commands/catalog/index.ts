@@ -77,6 +77,10 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("mikrotik", "change-ssh-port", "تغییر پورت SSH", "Change SSH port", "management", "mikrotik_change_service_port", planned({ mutates: true, riskLevel: "high" })),
 
   item("fortigate", "daily-check", "چک روزانه FortiGate", "Daily check", "daily-check", "fortigate_daily_check", implemented("fortigate_daily_check", { mutates: false, searchKeywordsFa: ["بررسی روزانه فایروال", "سلامت فورتی گیت"] })),
+  item("fortigate", "interfaces", "وضعیت اینترفیس‌ها و پورت‌های مدیریتی", "Interface status", "network", "fortigate_show_interfaces", implemented("fortigate_show_interfaces", { mutates: false, searchKeywordsFa: ["وضعیت پورت ها", "پورت های باز", "اینترفیس های فایروال"] })),
+  item("fortigate", "route-dns", "بررسی مسیر و DNS", "Route and DNS", "network", "fortigate_route_dns_check", implemented("fortigate_route_dns_check", { mutates: false, searchKeywordsFa: ["route و dns", "مسیر و dns"] })),
+  item("fortigate", "license", "وضعیت لایسنس و FortiGuard", "License and FortiGuard", "system", "fortigate_license_status", implemented("fortigate_license_status", { mutates: false, searchKeywordsFa: ["وضعیت لایسنس", "FortiGuard"] })),
+  item("fortigate", "admins", "کاربران مدیر", "Admin users", "identity", "fortigate_admin_users", implemented("fortigate_admin_users", { mutates: false, searchKeywordsFa: ["کاربران ادمین", "admin users"] })),
   item("cisco", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("pfsense", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("juniper", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),

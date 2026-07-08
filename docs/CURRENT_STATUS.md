@@ -93,6 +93,8 @@ Validation status: passed. Frontend build still shows the existing Vite chunk-si
 - Discovery collects and parses version, serial, hostname, operation mode, system time, license, CPU/memory/sessions, interfaces/IPs, default route, DNS, and administrators.
 - `fortigate_daily_check` is a registered read-only ActionPlan template using eight approved commands and six Persian result sections.
 - Success continues to require a real connector call with `connectorInvoked=true`.
+- Persian operational intent routing now covers interface/management ports, route/DNS, license/FortiGuard, admin users, and Daily Check through the same central resolver used by chat and AI propose.
+- Supported FortiGate results are structured and Persian-first. `License Invalid` is a lab warning (`needs_review`), unknown parsing is `not_checked`, and command unavailability is `not_supported`.
 
 ## Protected Behavior
 

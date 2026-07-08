@@ -874,6 +874,10 @@ enum AiIntentType {
   linux_daily_check
   mikrotik_daily_check
   fortigate_daily_check
+  fortigate_show_interfaces
+  fortigate_route_dns_check
+  fortigate_license_status
+  fortigate_admin_users
   mikrotik_list_management_services
   mikrotik_check_login_logs
   mikrotik_block_ip
@@ -1079,6 +1083,10 @@ enum ActionType {
   linux_daily_check
   mikrotik_daily_check
   fortigate_daily_check
+  fortigate_show_interfaces
+  fortigate_route_dns_check
+  fortigate_license_status
+  fortigate_admin_users
   mikrotik_list_management_services
   mikrotik_check_login_logs
   mikrotik_block_ip

@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Task 17.1 - FortiGate Intent and Result UX (2026-07-08)
+
+- Chat and `/api/commands/ai-propose` share `resolveAiTemplate`; Persian FortiGate interface/port, route/DNS, license/FortiGuard, admin-user, and Daily Check requests now resolve to registered `fortigate-ssh` templates.
+- New actions are read-only: `fortigate_show_interfaces`, `fortigate_route_dns_check`, `fortigate_license_status`, and `fortigate_admin_users`.
+- FortiGate result parsing returns status, Persian summary, evidence, recommendations, commands, raw output, and confidence. Unknown output is `not_checked`; unavailable commands are `not_supported`; lab `License Invalid` is `needs_review`.
+- Result UX shows connector evidence and Daily Check status counts; raw CLI remains collapsed.
+- Playwright MCP was requested but not exposed in this session, so browser acceptance was covered by resolver/compiler tests plus backend/frontend builds, not click automation.
+
 ## Task 17 - FortiGate SSH Read-only Discovery (2026-07-08)
 
 - FortiGate now has a first-class `fortigate-ssh` execution template for `fortigate_daily_check`.
