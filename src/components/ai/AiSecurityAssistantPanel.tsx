@@ -23,6 +23,7 @@ import {
 } from "@/lib/ai";
 import { listDevices, type Device } from "@/lib/devices";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
+import { startGuidedSession } from "@/lib/guidedActions";
 
 const EXAMPLES = [
   "امروز چه تهدیدهایی داشتیم؟",
@@ -61,6 +62,20 @@ function normalizedVendor(value: unknown, intentType?: string) {
   if (["mikrotik", "routeros", "mt", "mkt"].includes(token) || intentType?.startsWith("mikrotik_")) return "mikrotik";
   if (["fortigate", "fortinet", "fortios"].includes(token) || intentType?.startsWith("fortigate_")) return "fortigate";
   if (["linux", "linuxedge", "ubuntu"].includes(token) || intentType?.startsWith("linux_")) return "linux_edge";
+  return null;
+}
+
+function vendorOfDevice(device?: Device | null) {
+  if (!device) return "";
+  if (device.type === "linux_edge") return "linux";
+  if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
+  return device.type;
+}
+
+function connectorTypeOf(vendor: string) {
+  if (vendor === "fortigate") return "fortigate-ssh";
+  if (vendor === "mikrotik") return "mikrotik-ssh";
+  if (vendor === "linux") return "linux-ssh";
   return null;
 }
 
@@ -302,6 +317,9 @@ export default function AiSecurityAssistantPanel() {
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
   const [evidenceMetadata, setEvidenceMetadata] = useState<EvidencePackMetadata | null>(null);
   const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null } | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string; deviceId: string; initialRequest: string }>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
@@ -354,6 +372,13 @@ export default function AiSecurityAssistantPanel() {
 
   useEffect(() => {
     refreshSummary();
+    void listDevices().then((next) => {
+      setDevices(next);
+      const params = new URLSearchParams(window.location.search);
+      const selected = params.get("deviceId") ?? params.get("selectedDeviceId");
+      if (selected && next.some((device) => device.id === selected)) setSelectedDeviceId(selected);
+      else if (next.length === 1) setSelectedDeviceId(next[0].id);
+    }).catch(() => setDevices([]));
   }, []);
 
   const safeMessages = useMemo(() => normalizeArray<AiMessage>(messages).map(normalizeAiMessage), [messages]);
@@ -440,6 +465,7 @@ export default function AiSecurityAssistantPanel() {
     const generation = viewGeneration.current;
     setError(null);
     setCreatedPlanId(null);
+    setGuidedStart(null);
     const optimisticUser = normalizeAiMessage({
       id: `local-${Date.now()}`,
       sessionId: sessionId ?? "",
@@ -450,7 +476,13 @@ export default function AiSecurityAssistantPanel() {
     setMessages((current) => [...current, optimisticUser]);
     setInput("");
 
-    sendAiMessage(sessionId, trimmed)
+    const selectedDevice = devices.find((device) => device.id === selectedDeviceId) ?? null;
+    const selectedVendor = vendorOfDevice(selectedDevice);
+    sendAiMessage(sessionId, trimmed, selectedDeviceId || undefined, {
+      selectedVendor: selectedVendor || undefined,
+      selectedConnectorType: connectorTypeOf(selectedVendor),
+      selectedDeviceName: selectedDevice?.name,
+    })
       .then((response) => {
         if (generation !== viewGeneration.current) return;
         setSessionId(response.sessionId || sessionId);
@@ -466,6 +498,15 @@ export default function AiSecurityAssistantPanel() {
         setEvidenceMetadata(response.evidenceMetadata);
         setExecutionState({ support: response.executionSupport, implementation: response.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate });
         setCreatedPlanId(response.actionPlan?.id ?? null);
+        if (response.mode === "guided_workflow" && response.blueprintId && (response.deviceId || selectedDeviceId) && (response.vendor || selectedVendor)) {
+          setGuidedStart({
+            blueprintId: response.blueprintId,
+            initialValues: response.initialValues ?? {},
+            vendor: response.vendor ?? selectedVendor,
+            deviceId: response.deviceId ?? selectedDeviceId,
+            initialRequest: trimmed,
+          });
+        }
         if (response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);
         }
@@ -477,6 +518,18 @@ export default function AiSecurityAssistantPanel() {
         setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته سرویس هوش مصنوعی");
       })
       .finally(() => { if (generation === viewGeneration.current) setLoading(false); });
+  };
+
+  const startGuidedWorkflow = () => {
+    if (!guidedStart) return;
+    startGuidedSession(guidedStart)
+      .then((session) => {
+        window.location.assign(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
+      })
+      .catch((err: unknown) => {
+        setError("شروع ساخت مرحله‌ای انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در شروع Workflow");
+      });
   };
 
   return (
@@ -502,6 +555,21 @@ export default function AiSecurityAssistantPanel() {
           <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} aria-hidden="true" />
           {summaryLoading ? "Refreshing..." : "Refresh Summary"}
         </button>
+        <div className="flex flex-col gap-1 text-right" dir="rtl">
+          <label className="text-xs text-zinc-400">دستگاه مقصد</label>
+          <select
+            value={selectedDeviceId}
+            onChange={(event) => setSelectedDeviceId(event.target.value)}
+            className="h-9 min-w-[220px] rounded-md border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none"
+          >
+            <option value="">انتخاب دستگاه</option>
+            {devices.map((device) => (
+              <option key={device.id} value={device.id}>
+                {device.name} - {vendorOfDevice(device)}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="button"
           onClick={clearChat}
@@ -752,6 +820,7 @@ export default function AiSecurityAssistantPanel() {
               </div>
               <p className="mt-2 text-xs text-slate-300">{executionState.nextStep}</p>
               {createdPlanId && <button type="button" onClick={reviewInActionCenter} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">رفتن به مرکز عملیات</button>}
+              {guidedStart && <button type="button" onClick={startGuidedWorkflow} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">شروع ساخت مرحله‌ای</button>}
               {!createdPlanId && executionState.missing.length > 0 && <button type="button" onClick={() => setInput(executionState.nextStep)} className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white">تکمیل اطلاعات</button>}
             </div>
           )}

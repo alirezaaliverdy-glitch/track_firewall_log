@@ -53,6 +53,13 @@ export type AiChatResponse = {
   missingFields: string[];
   nextStepFa: string;
   warnings: string[];
+  mode: string;
+  blueprintId: string | null;
+  initialValues: Record<string, unknown> | null;
+  vendor: string | null;
+  connectorType: string | null;
+  deviceId: string | null;
+  selectedDeviceName: string | null;
 };
 
 export type EvidencePackMetadata = {
@@ -425,10 +432,10 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
   };
 }
 
-export async function sendAiMessage(sessionId: string | null | undefined, message: string, deviceId?: string) {
+export async function sendAiMessage(sessionId: string | null | undefined, message: string, deviceId?: string, selectedContext?: { selectedVendor?: string; selectedConnectorType?: string | null; selectedDeviceName?: string }) {
   const payload = await requestJson<unknown>("/ai/chat", {
     method: "POST",
-    body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), ...(deviceId ? { deviceId } : {}), message }),
+    body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), ...(deviceId ? { deviceId, selectedDeviceId: deviceId } : {}), ...(selectedContext ?? {}), message }),
   });
   const source = normalizeObject(payload);
   const evidence = normalizeObject(source.evidenceMetadata);
@@ -466,6 +473,13 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
     missingFields: normalizeArray<unknown>(source.missingFields).map(String),
     nextStepFa: String(source.nextStepFa ?? ""),
     warnings: normalizeArray<unknown>(source.warnings).map(String),
+    mode: String(source.mode ?? "manual_or_not_supported"),
+    blueprintId: typeof source.blueprintId === "string" ? source.blueprintId : null,
+    initialValues: source.initialValues ? normalizeObject(source.initialValues) : null,
+    vendor: typeof source.vendor === "string" ? source.vendor : null,
+    connectorType: typeof source.connectorType === "string" ? source.connectorType : null,
+    deviceId: typeof source.deviceId === "string" ? source.deviceId : null,
+    selectedDeviceName: typeof source.selectedDeviceName === "string" ? source.selectedDeviceName : null,
   } satisfies AiChatResponse;
 }
 

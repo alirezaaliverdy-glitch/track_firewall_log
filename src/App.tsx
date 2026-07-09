@@ -33,11 +33,22 @@ import CommandCatalogPanel from "./components/commands/CommandCatalogPanel";
 import ActionResultView from "./components/actions/ActionResultView";
 import DailyCheckPanel from "./components/daily-check/DailyCheckPanel";
 import LinuxServiceHealthPanel from "./components/services/LinuxServiceHealthPanel";
+import GuidedActionWizard from "./components/guided-actions/GuidedActionWizard";
 
 function App() {
   const { user, logout } = useAuth();
   const resultMatch = window.location.pathname.match(/^\/actions\/([^/]+)\/result\/?$/);
   if (resultMatch) return <div className="authenticated-app"><AppBackground /><ActionResultView actionPlanId={decodeURIComponent(resultMatch[1])} /></div>;
+  const guidedMatch = window.location.pathname.match(/^\/guided-actions\/([^/]+)\/?$/);
+  if (guidedMatch) return (
+    <div className="authenticated-app">
+      <AppBackground />
+      <main className="App relative z-10 mx-auto max-w-screen-lg px-4 pb-12 pt-6 sm:px-6">
+        <h1 dir="rtl" className="mb-4 text-right text-2xl font-bold text-slate-100">ساخت مرحله‌ای اکشن</h1>
+        <GuidedActionWizard sessionId={decodeURIComponent(guidedMatch[1])} onClose={() => { window.location.pathname = "/"; }} />
+      </main>
+    </div>
+  );
   return (
     <Suspense fallback={<h1>loading logs ...</h1>}>
       <LogProvider>

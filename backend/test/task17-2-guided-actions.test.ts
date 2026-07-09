@@ -33,13 +33,37 @@ test("FortiGate port status request never invents srcInterface", () => {
 test("FortiGate VPN setup resolves to partial guided workflow with fixed dropdowns", () => {
   const resolution = resolveAiTemplate({ userText: "برام VPN بساز", selectedDevice: fortigateDevice });
   assert.equal(resolution.mode, "guided_workflow");
-  assert.equal(resolution.blueprintId, "fortigate_guided_ipsec_vpn_setup");
-  const blueprint = getGuidedActionBlueprint("fortigate_guided_ipsec_vpn_setup");
+  assert.equal(resolution.blueprintId, "fortigate_guided_vpn_setup");
+  assert.equal(resolution.canonicalVendor, "fortigate");
+  assert.equal(resolution.connectorType, "fortigate-ssh");
+  assert.notEqual(resolution.canonicalActionType, "custom_vendor_action");
+  const blueprint = getGuidedActionBlueprint("fortigate_guided_vpn_setup");
   assert.ok(blueprint);
   assert.equal(blueprint.implementationState, "partial");
-  const scenario = blueprint.steps[0]?.fields.find((field) => field.key === "vpnScenario");
+  const scenario = blueprint.steps[0]?.fields.find((field) => field.key === "vpnType");
   assert.equal(scenario?.type, "select");
   assert.ok(scenario?.options?.length);
+});
+
+test("FortiGate VDOM setup resolves to guided workflow", () => {
+  const resolution = resolveAiTemplate({ userText: "برام vdom بساز", selectedDevice: fortigateDevice });
+  assert.equal(resolution.mode, "guided_workflow");
+  assert.equal(resolution.blueprintId, "fortigate_guided_vdom_create");
+});
+
+test("FortiGate Zone setup resolves to guided workflow and extracts name", () => {
+  const resolution = resolveAiTemplate({ userText: "یه zone به اسم DMZ بساز", selectedDevice: fortigateDevice });
+  assert.equal(resolution.mode, "guided_workflow");
+  assert.equal(resolution.blueprintId, "fortigate_guided_zone_create");
+  assert.equal(resolution.initialValues?.zoneName, "DMZ");
+});
+
+test("Guided request without selected device asks for target device and creates no unknown-vendor plan", () => {
+  const resolution = resolveAiTemplate({ userText: "برام vpn بساز" });
+  assert.equal(resolution.mode, "clarification");
+  assert.equal(resolution.questionFa, "اول دستگاه مقصد را انتخاب کن.");
+  assert.notEqual(resolution.canonicalVendor, "unknown");
+  assert.notEqual(resolution.canonicalActionType, "custom_vendor_action");
 });
 
 test("FortiGate firewall policy request resolves to guided workflow and extracts source subnet", () => {
@@ -90,17 +114,17 @@ test("ActionSession rejects invalid enum in Persian and does not build an Action
 
 test("Unsupported/partial FortiGate workflow does not fake executable command or success", async () => {
   const session = startGuidedActionSession({
-    blueprintId: "fortigate_guided_ipsec_vpn_setup",
+    blueprintId: "fortigate_guided_vpn_setup",
     deviceId: "fg-partial-vpn",
     vendor: "fortigate",
     initialRequest: "برام VPN بساز",
-    initialValues: { vpnScenario: "site_to_site", name: "vpn1", remoteGateway: "203.0.113.5", pskMode: "secretRef", pskSecretRef: "secret://vpn1" },
+    initialValues: { vpnType: "ipsec_site_to_site", name: "vpn1", localSubnets: "10.0.0.0/24", remoteSubnets: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "generate" },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
   assert.equal(built.ok, false);
   assert.equal(built.ok ? "" : built.error, "PLANNED");
-  const blueprint = getGuidedActionBlueprint("fortigate_guided_ipsec_vpn_setup");
+  const blueprint = getGuidedActionBlueprint("fortigate_guided_vpn_setup");
   assert.ok(blueprint);
   assert.equal(blueprint.implementationState, "partial");
 });
@@ -155,4 +179,102 @@ test("ActionSession API starts FortiGate guided workflow and exposes Persian ste
   assert.equal(body.status, "collecting_inputs");
   assert.equal(body.currentStep.id, "policy_basics");
   assert.ok(body.currentStep.fields.some((field: { labelFa: string }) => field.labelFa === "اینترفیس مبدا"));
+});
+
+test("AI propose FortiGate VPN returns guided workflow without creating ActionPlan", async (t) => {
+  const app = await buildApp({ authRequired: false });
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.2A FortiGate VPN",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.173",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+    await app.close();
+  });
+
+  const before = await prisma.actionPlan.count({ where: { deviceId: device.id } });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/commands/ai-propose",
+    payload: {
+      request: "برام vpn بساز",
+      selectedDeviceId: device.id,
+      selectedVendor: "fortigate",
+      selectedConnectorType: "fortigate-ssh",
+      selectedDeviceName: device.name,
+    },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const body = response.json();
+  assert.equal(body.mode, "guided_workflow");
+  assert.equal(body.blueprintId, "fortigate_guided_vpn_setup");
+  assert.equal(body.vendor, "fortigate");
+  assert.equal(body.connectorType, "fortigate-ssh");
+  assert.equal(body.actionPlan, null);
+  assert.equal(await prisma.actionPlan.count({ where: { deviceId: device.id } }), before);
+});
+
+test("AI propose guided request without device returns clarification and no unknown ActionPlan", async (t) => {
+  const app = await buildApp({ authRequired: false });
+  t.after(async () => { await app.close(); });
+  const before = await prisma.actionPlan.count();
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/commands/ai-propose",
+    payload: { request: "برام vpn بساز" },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const body = response.json();
+  assert.equal(body.mode, "clarification");
+  assert.equal(body.questionFa, "اول دستگاه مقصد را انتخاب کن.");
+  assert.equal(body.actionPlan, null);
+  assert.equal(await prisma.actionPlan.count(), before);
+});
+
+test("Bottom chatbot FortiGate VPN returns guided workflow and no ActionPlan", async (t) => {
+  const app = await buildApp({ authRequired: false });
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.2A FortiGate Chat",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.174",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  t.after(async () => {
+    await prisma.aiChatMessage.deleteMany({});
+    await prisma.aiChatSession.deleteMany({});
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+    await app.close();
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/chat",
+    payload: {
+      message: "برام vpn بساز",
+      selectedDeviceId: device.id,
+      selectedVendor: "fortigate",
+      selectedConnectorType: "fortigate-ssh",
+      selectedDeviceName: device.name,
+    },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const body = response.json();
+  assert.equal(body.mode, "guided_workflow");
+  assert.equal(body.blueprintId, "fortigate_guided_vpn_setup");
+  assert.equal(body.assistantMessage, "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید.");
+  assert.equal(body.actionPlan, null);
 });

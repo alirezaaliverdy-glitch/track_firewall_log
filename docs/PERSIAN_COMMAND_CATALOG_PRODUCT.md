@@ -10,6 +10,8 @@
 
 `Persian intent -> Resolver -> GuidedActionBlueprint -> ActionSession -> ActionPlan preview -> Action Center confirmation -> Connector`
 
+از Task 17.2A به بعد، درخواست‌های چندمرحله‌ای مثل VPN، VDOM، Zone، Policy/Rule، VIP/NAT/Port Forward، Interface/VLAN/Subinterface و Route/Gateway قبل از fallback عمومی تشخیص داده می‌شوند. وقتی دستگاه انتخاب شده و blueprint برای vendor وجود دارد، خروجی باید `guided_workflow` باشد. fallback عمومی نباید این درخواست‌ها را به `custom_vendor_action`، `generic_security_action`، `unsupported_vendor` یا `manual_or_not_implemented` تبدیل کند. اگر دستگاه انتخاب نشده باشد، پاسخ باید clarification فارسی `اول دستگاه مقصد را انتخاب کن.` باشد و ActionPlan ساخته نشود.
+
 کاتالوگ نقطه شروع عملیات است و AI فقط وقتی دستور مناسب پیدا نشود، draft یا ActionPlan پیشنهادی می‌سازد. هیچ endpoint کاتالوگ یا AI نباید خودکار اجرا کند یا متن خام shell تولیدشده توسط AI را اجرا کند.
 
 ## قرارداد وضعیت

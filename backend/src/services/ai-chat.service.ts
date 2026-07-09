@@ -251,9 +251,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const selectedDevice = selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null;
   const resolution = resolveAiTemplate({ userText: message, selectedDevice, aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null });
   const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
-  const actionPlan = resolution.implementationState === "implemented" && resolutionMissing.length === 0 && selectedDevice && resolution.catalogItem
+  const actionPlan = resolution.mode === "executable_action_plan" && resolution.implementationState === "implemented" && resolutionMissing.length === 0 && selectedDevice && resolution.catalogItem
     ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: resolution.canonicalVendor, actionType: resolution.canonicalActionType, riskLevel: resolution.catalogItem.riskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, executionTemplateRef: resolution.executionTemplateRef, connectorType: resolution.connectorType, implementationState: "implemented", executionSupport: "connector", normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
-    : debug.canCreateActionPlan && actionIntent && resolution.implementationState !== "implemented"
+    : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
   const executionSupport = resolution.executionSupport;
@@ -264,7 +264,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const assistantText = actionPlan && executionSupport === "connector"
     ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
     : resolutionMissing.length ? nextStepFa : providerResponse.assistantMessage;
-  const guidedAssistantText = resolution.mode === "guided_workflow" || resolution.mode === "clarification" ? nextStepFa : assistantText;
+  const guidedAssistantText = resolution.mode === "guided_workflow"
+    ? "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید."
+    : resolution.mode === "clarification" ? nextStepFa : assistantText;
 
   return {
     sessionId: session.id,
@@ -279,6 +281,10 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     mode: resolution.mode,
     blueprintId: resolution.blueprintId ?? null,
     initialValues: resolution.initialValues ?? null,
+    vendor: resolution.canonicalVendor,
+    connectorType: resolution.connectorType,
+    deviceId: selectedDevice?.id ?? null,
+    selectedDeviceName: selectedDevice?.name ?? null,
     clarification: resolution.mode === "clarification" ? { questionFa: resolution.questionFa, options: resolution.options ?? [] } : null,
     mappedTemplate: resolution.executionTemplateRef,
     missingFields: resolutionMissing,

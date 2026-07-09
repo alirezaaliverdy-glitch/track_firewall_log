@@ -14,6 +14,13 @@ function vendorOf(device?: Device) {
   return device.type ?? "";
 }
 
+function connectorTypeOf(vendor: string) {
+  if (vendor === "fortigate") return "fortigate-ssh";
+  if (vendor === "mikrotik") return "mikrotik-ssh";
+  if (vendor === "linux") return "linux-ssh";
+  return null;
+}
+
 function requiredParamsComplete(item: CatalogItem, values: Record<string, string>) {
   return item.requiredParams.every((field) => String(values[field.key] ?? item.defaultParams[field.key] ?? "").trim());
 }
@@ -49,7 +56,12 @@ export default function CommandCatalogPanel() {
 
   useEffect(() => {
     void listDevices()
-      .then(setDevices)
+      .then((next) => {
+        setDevices(next);
+        const params = new URLSearchParams(window.location.search);
+        const selected = params.get("deviceId") ?? params.get("selectedDeviceId");
+        if (selected && next.some((device) => device.id === selected)) setDeviceId(selected);
+      })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "دریافت دستگاه‌ها انجام نشد."));
   }, []);
 
@@ -117,6 +129,8 @@ export default function CommandCatalogPanel() {
         vendor: selectedVendor,
         selectedVendor,
         currentVendor: selectedVendor,
+        selectedConnectorType: connectorTypeOf(selectedVendor),
+        selectedDeviceName: selectedDevice?.name,
         deviceId: deviceId || undefined,
         searchFilters: { q: query, category, riskLevel, readOnly, executable },
       });
@@ -126,7 +140,7 @@ export default function CommandCatalogPanel() {
         return;
       }
       if (result.mode === "guided_workflow") {
-        setGuidedWorkflow({ blueprintId: result.blueprintId, initialValues: result.initialValues, initialRequest: aiText, vendor: selectedVendor });
+        setGuidedWorkflow({ blueprintId: result.blueprintId, initialValues: result.initialValues, initialRequest: aiText, vendor: result.vendor ?? selectedVendor });
         setMessage(result.messageFa);
         return;
       }

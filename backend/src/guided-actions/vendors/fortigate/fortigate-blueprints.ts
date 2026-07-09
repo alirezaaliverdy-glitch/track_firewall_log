@@ -236,6 +236,97 @@ const vpnFields = [
   field("remoteSubnets", "شبکه‌های سمت مقابل", "cidrList", false),
 ];
 
+const guidedVpnTypeOptions = [
+  { labelFa: "IPsec Site-to-Site", value: "ipsec_site_to_site", source: "project_default" as const },
+  { labelFa: "SSL VPN", value: "ssl_vpn", source: "project_default" as const },
+  { labelFa: "IPsec Remote Access - partial", value: "ipsec_remote_access", source: "project_default" as const },
+];
+
+const guidedAuthOptions = [
+  { labelFa: "PSK", value: "psk", source: "project_default" as const },
+  { labelFa: "Certificate - partial", value: "certificate", source: "project_default" as const },
+];
+
+const guidedPskOptions = [
+  { labelFa: "تولید خودکار", value: "generate", source: "project_default" as const },
+  { labelFa: "ورود دستی", value: "manual", source: "project_default" as const },
+];
+
+const guidedProposalOptions = [
+  { labelFa: "AES256-SHA256", value: "aes256-sha256", source: "existing_template" as const },
+  { labelFa: "AES128-SHA256", value: "aes128-sha256", source: "existing_template" as const },
+];
+
+const guidedVpnSteps = [
+  {
+    id: "vpn_type",
+    titleFa: "نوع VPN",
+    fields: [
+      field("vpnType", "نوع VPN", "select", true, { options: guidedVpnTypeOptions, validation: { allowedValues: guidedVpnTypeOptions.map((item) => item.value) } }),
+      field("name", "نام تونل", "text", false, { validation: nameValidation }),
+    ],
+  },
+  {
+    id: "vpn_networks",
+    titleFa: "شبکه‌ها و مسیرها",
+    fields: [
+      field("localSubnets", "شبکه‌های محلی", "cidrList", true),
+      field("remoteSubnets", "شبکه‌های سمت مقابل", "cidrList", true, { dependsOn: { vpnType: "ipsec_site_to_site" } }),
+      field("vpnPoolCidr", "Pool VPN", "cidr", true, { dependsOn: { vpnType: "ssl_vpn" } }),
+      field("allowedSubnets", "شبکه‌های مجاز", "cidrList", true),
+    ],
+  },
+  {
+    id: "vpn_gateway",
+    titleFa: "اینترفیس و Gateway",
+    fields: [
+      field("wanInterface", "اینترفیس WAN", "interfaceSelect", true, { dynamicOptions: { provider: "fortigate_interfaces" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
+      field("remoteGateway", "Remote Gateway", "text", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, validation: { pattern: "^[A-Za-z0-9_.:-]{1,253}$" } }),
+    ],
+  },
+  {
+    id: "vpn_auth",
+    titleFa: "احراز هویت و امنیت",
+    fields: [
+      field("authMethod", "روش احراز هویت", "select", true, { options: guidedAuthOptions, validation: { allowedValues: guidedAuthOptions.map((item) => item.value) } }),
+      field("pskMode", "روش PSK", "select", true, { dependsOn: { authMethod: "psk" }, options: guidedPskOptions, validation: { allowedValues: guidedPskOptions.map((item) => item.value) } }),
+      field("psk", "PSK", "password", true, { secret: true, dependsOn: { pskMode: "manual" } }),
+      field("proposal", "Proposal", "select", false, { options: guidedProposalOptions, validation: { allowedValues: guidedProposalOptions.map((item) => item.value) } }),
+    ],
+  },
+  {
+    id: "vpn_policy",
+    titleFa: "Policy و دسترسی",
+    fields: [
+      field("createFirewallPolicy", "Policy هم ساخته شود", "checkbox", false),
+      field("natEnabled", "NAT فعال باشد", "checkbox", false),
+      field("logTraffic", "لاگ ترافیک فعال باشد", "checkbox", false),
+      field("enableAfterCreate", "بعد از ساخت فعال شود", "checkbox", false),
+    ],
+  },
+  {
+    id: "vpn_preview",
+    titleFa: "پیش‌نمایش",
+    descriptionFa: "خلاصه، تغییرات لازم، ریسک، پیش‌نمایش CLI در صورت وجود template، برنامه verification و rollback قبل از ساخت ActionPlan بررسی می‌شود.",
+    fields: [],
+  },
+];
+
+const vdomFields = [
+  field("vdomName", "نام VDOM", "text", true, { validation: nameValidation }),
+  field("mode", "Mode", "select", false, { options: [{ labelFa: "NAT", value: "nat", source: "project_default" }, { labelFa: "Transparent - planned", value: "transparent", source: "project_default" }], validation: { allowedValues: ["nat", "transparent"] } }),
+  field("assignInterfaces", "اینترفیس‌ها", "multiSelect", false, { dynamicOptions: { provider: "fortigate_interfaces" } }),
+  field("resourceLimits", "Resource limits - planned", "textarea", false),
+  field("interVdomLink", "Inter-VDOM link - planned", "checkbox", false),
+];
+
+const zoneFields = [
+  field("zoneName", "نام Zone", "text", true, { validation: nameValidation }),
+  field("members", "اعضای Zone", "multiSelect", true, { dynamicOptions: { provider: "fortigate_interfaces" } }),
+  field("intrazone", "Intrazone", "select", false, { options: [{ labelFa: "allow", value: "allow", source: "project_default" }, { labelFa: "deny", value: "deny", source: "project_default" }], validation: { allowedValues: ["allow", "deny"] } }),
+  field("description", "توضیح", "textarea", false),
+];
+
 const sslVpnFields = [
   field("portal", "Portal", "text", true, { validation: nameValidation }),
   field("userGroup", "گروه کاربری", "userGroupSelect", true, { dynamicOptions: { provider: "fortigate_user_groups" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
@@ -256,6 +347,81 @@ function unsupported(reasonFa: string) {
 }
 
 export const FORTIGATE_GUIDED_BLUEPRINTS = Object.freeze([
+  {
+    id: "fortigate_guided_vpn_setup",
+    vendor: "fortigate",
+    titleFa: "راه‌اندازی مرحله‌ای VPN فورتی‌گیت",
+    descriptionFa: "VPN را مرحله‌به‌مرحله با نوع، شبکه‌ها، Gateway، احراز هویت، Policy و پیش‌نمایش جمع‌آوری می‌کند.",
+    category: "vpn",
+    risk: "high",
+    actionKind: "guided_action",
+    implementationState: "partial",
+    researchStatus: "partial",
+    supportedConnectors: ["fortigate-ssh"],
+    requiredCapabilities: ["fortigate_create_ipsec_tunnel", "fortigate_update_ssl_vpn_settings"],
+    fixedOptionSources: { vpnType: "project_default", authMethod: "project_default", pskMode: "project_default", proposal: "existing_template" },
+    dynamicOptionSources: { wanInterface: "fortigate_interfaces" },
+    prerequisites: [{ id: "vpn_design_review", titleFa: "بازبینی طراحی VPN و Secret", required: true }],
+    steps: guidedVpnSteps,
+    buildActionPlan: unsupported("این سناریو هنوز اجرای کامل ندارد، اما می‌توان اطلاعات و پیش‌نمایش ساختار اکشن را آماده کرد."),
+    verification: { commands: ["show vpn ipsec phase1-interface", "show vpn ssl settings", "get vpn ipsec tunnel summary"] },
+    rollback: { template: "manual_snapshot_backed" },
+    uiHints: { limitationFa: "Execution template کامل VPN هنوز پیاده‌سازی نشده است؛ ActionPlan اجرایی ساخته نمی‌شود." },
+  },
+  {
+    id: "fortigate_guided_vdom_create",
+    vendor: "fortigate",
+    titleFa: "ساخت مرحله‌ای VDOM فورتی‌گیت",
+    descriptionFa: "VDOM یک تغییر پرریسک است و قبل از اجرا به جمع‌آوری نام، mode، اینترفیس‌ها و تایید مضاعف نیاز دارد.",
+    category: "vdom",
+    risk: "critical",
+    actionKind: "guided_action",
+    implementationState: "planned",
+    researchStatus: "partial",
+    supportedConnectors: ["fortigate-ssh"],
+    requiredCapabilities: ["fortigate_create_vdom"],
+    dynamicOptionSources: { assignInterfaces: "fortigate_interfaces" },
+    prerequisites: [{ id: "double_confirm", titleFa: "تایید مضاعف قبل از اجرا", required: true }],
+    steps: [{ id: "vdom_details", titleFa: "مشخصات VDOM", fields: vdomFields }],
+    buildActionPlan: unsupported("VDOM creation هنوز template اجرایی کامل ندارد. این workflow فقط اطلاعات و پیش‌نمایش ساختار اکشن را آماده می‌کند."),
+    verification: { commands: ["show system vdom"] },
+    rollback: { template: "manual_snapshot_backed_double_confirmation" },
+    uiHints: { requiresDoubleConfirmation: true },
+  },
+  {
+    id: "fortigate_guided_zone_create",
+    vendor: "fortigate",
+    titleFa: "ساخت مرحله‌ای Zone فورتی‌گیت",
+    descriptionFa: "Zone را با نام، اعضا، Intrazone و توضیح اختیاری آماده ساخت می‌کند.",
+    category: "zone",
+    risk: "high",
+    actionKind: "guided_action",
+    implementationState: "implemented",
+    researchStatus: "verified_from_existing_templates",
+    supportedConnectors: ["fortigate-ssh"],
+    requiredCapabilities: ["fortigate_create_zone"],
+    dynamicOptionSources: { members: "fortigate_interfaces" },
+    prerequisites: [{ id: "interface_snapshot", titleFa: "Snapshot اینترفیس‌ها", required: true }],
+    steps: [{ id: "zone_details", titleFa: "مشخصات Zone", fields: zoneFields }],
+    buildActionPlan: (context) => {
+      const required = zoneFields.filter((item) => ["zoneName", "members"].includes(item.key));
+      const missingFields = missing(context, required);
+      if (missingFields.length) return { ok: false as const, status: "needs_input" as const, reasonFa: "برای ساخت Zone نام و اعضا لازم است.", missingFields };
+      const members = Array.isArray(context.values.members) ? context.values.members : String(context.values.members).split(",").map((item) => item.trim()).filter(Boolean);
+      return {
+        ok: true as const,
+        actionPlanInput: actionPlan(context, "fortigate_create_zone", "high", {
+          name: context.values.zoneName,
+          interfaces: members,
+          intrazone: context.values.intrazone,
+          description: context.values.description,
+        }),
+        preview: { summaryFa: "Zone بعد از تایید در Action Center ساخته می‌شود." },
+      };
+    },
+    verification: { commands: ["show system zone"] },
+    rollback: { template: "delete_created_zone" },
+  },
   {
     id: "fortigate_guided_firewall_policy_create",
     vendor: "fortigate",
@@ -449,16 +615,29 @@ function extractPort(text: string) {
   return Number.isInteger(value) && value >= 1 && value <= 65535 ? value : undefined;
 }
 
+function extractNamedValue(text: string, keyword: string) {
+  const value = text.match(new RegExp(`${keyword}\\s+(?:به\\s+اسم|اسم|named|name)?\\s*([A-Za-z0-9_.:-]{2,79})`, "i"))?.[1]
+    ?? text.match(/(?:به\s+اسم|اسم|named|name)\s+([A-Za-z0-9_.:-]{2,79})/i)?.[1];
+  return value && /^[a-z0-9_.:-]+$/.test(value) ? value.toUpperCase() : value;
+}
+
 export function resolveFortiGateGuidedIntent(userText: string) {
   const text = normalize(userText);
   if (/(vpn|ipsec|تونل|وی\s*پی\s*ان)/i.test(text) && /(بساز|راه|تنظیم|create|setup)/i.test(text)) {
-    return { blueprintId: "fortigate_guided_ipsec_vpn_setup", initialValues: {}, reasonFa: "درخواست VPN چندمرحله‌ای است و باید با Workflow کنترل‌شده ساخته شود." };
+    const vpnType = /ssl\s*vpn/i.test(text) ? "ssl_vpn" : /remote/i.test(text) ? "ipsec_remote_access" : /vpn|ipsec|تونل/i.test(text) ? "ipsec_site_to_site" : undefined;
+    return { blueprintId: "fortigate_guided_vpn_setup", initialValues: { vpnType }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
   }
   if (/(ssl\s*vpn)/i.test(text) && /(بساز|تنظیم|setup|create)/i.test(text)) {
-    return { blueprintId: "fortigate_guided_ssl_vpn_setup", initialValues: {}, reasonFa: "تنظیم SSL VPN چندمرحله‌ای است." };
+    return { blueprintId: "fortigate_guided_vpn_setup", initialValues: { vpnType: "ssl_vpn" }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
+  }
+  if (/(vdom|وی\s*دام)/i.test(text) && /(بساز|ایجاد|create)/i.test(text)) {
+    return { blueprintId: "fortigate_guided_vdom_create", initialValues: { vdomName: extractNamedValue(text, "vdom") }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
+  }
+  if (/(zone|زون)/i.test(text) && /(بساز|ایجاد|اضافه|بنداز|create|add)/i.test(text)) {
+    return { blueprintId: "fortigate_guided_zone_create", initialValues: { zoneName: extractNamedValue(text, "(?:zone|زون)") }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
   }
   if (/(policy|رول|قانون)/i.test(text) && /(بساز|دسترسی|create|اجازه)/i.test(text)) {
-    return { blueprintId: "fortigate_guided_firewall_policy_create", initialValues: { sourceCidr: extractCidr(text), dstaddr: /اینترنت|internet/i.test(text) ? "all" : undefined, services: /اینترنت|internet/i.test(text) ? ["ALL"] : undefined, action: "accept", nat: /اینترنت|internet/i.test(text), logTraffic: "all", disabled: true }, reasonFa: "ساخت Policy نیاز به انتخاب مرحله‌ای اینترفیس، آبجکت و سرویس دارد." };
+    return { blueprintId: "fortigate_guided_firewall_policy_create", initialValues: { sourceCidr: extractCidr(text), dstaddr: /اینترنت|internet/i.test(text) ? "all" : undefined, services: /اینترنت|internet/i.test(text) ? ["ALL"] : undefined, action: "accept", nat: /اینترنت|internet/i.test(text), logTraffic: "all", disabled: true }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
   }
   if (/(service|سرویس)/i.test(text) && /(port|پورت|\d{1,5})/i.test(text) && /(بساز|create)/i.test(text)) {
     const port = extractPort(text);
@@ -467,13 +646,13 @@ export function resolveFortiGateGuidedIntent(userText: string) {
   if (/(address|object|آبجکت|آدرس)/i.test(text) && /(بساز|اضافه|create)/i.test(text)) {
     return { blueprintId: "fortigate_guided_address_object_create", initialValues: { cidr: extractCidr(text), type: "subnet" }, reasonFa: "ساخت Address Object با نوع کنترل‌شده انجام می‌شود." };
   }
-  if (/(vip|فوروارد|port forward)/i.test(text) && /(بساز|create)/i.test(text)) {
-    return { blueprintId: "fortigate_guided_vip_port_forward_create", initialValues: { protocol: "tcp" }, reasonFa: "VIP/Port Forward چند فیلد وابسته دارد و با Workflow ساخته می‌شود." };
+  if (/(vip|nat|فوروارد|port forward)/i.test(text) && /(بساز|create|کن)/i.test(text)) {
+    return { blueprintId: "fortigate_guided_vip_port_forward_create", initialValues: { protocol: "tcp" }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
   }
   if (/(route|روت|gateway|گیت)/i.test(text) && /(بساز|عوض|تغییر|create)/i.test(text)) {
     return { blueprintId: "fortigate_guided_static_route_create", initialValues: { destinationCidr: extractCidr(text) }, reasonFa: "Route باید با مسیر قدیم/جدید و تایید کنترل‌شده ساخته شود." };
   }
-  if (/(vlan)/i.test(text) && /(بساز|create)/i.test(text)) {
+  if (/(vlan|subinterface|اینترفیس)/i.test(text) && /(بساز|create|آی پی|ip)/i.test(text)) {
     return { blueprintId: "fortigate_guided_interface_vlan_create", initialValues: {}, reasonFa: "ساخت VLAN Interface چندمرحله‌ای است." };
   }
   return null;

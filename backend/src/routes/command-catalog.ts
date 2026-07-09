@@ -8,7 +8,15 @@ import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 
 const bool = (value: unknown) => value === "true" ? true : value === "false" ? false : undefined;
-const deviceVendor = (device: { type: string; vendor: string }) => device.type === "linux_edge" ? "linux" : device.type === "generic_firewall" || device.type === "generic_syslog_source" ? "generic" : device.type;
+const deviceVendor = (device: { type: string; vendor: string }) => {
+  const vendor = device.vendor.toLowerCase();
+  if (device.type === "fortigate" || vendor.includes("forti")) return "fortigate";
+  if (device.type === "mikrotik" || vendor.includes("mikrotik") || vendor.includes("routeros")) return "mikrotik";
+  if (device.type === "linux_edge" || vendor.includes("linux")) return "linux";
+  if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
+  return device.type;
+};
+const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : null;
 function invalidValue(type: string, value: unknown) {
   if (type === "ip") return typeof value !== "string" || net.isIP(value) === 0;
   if (type === "cidr") { if (typeof value !== "string") return true; const [address, prefix] = value.split("/"); const version = net.isIP(address); const max = version === 4 ? 32 : version === 6 ? 128 : -1; return prefix === undefined || !/^\d+$/.test(prefix) || Number(prefix) > max; }
@@ -50,12 +58,39 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     const plan = await proposeActionPlan({ source: "user", requestedBy: request.body.requestedBy, deviceId: device.id, vendor: item.vendor, actionType: item.actionType, riskLevel: item.riskLevel, parametersJson: { ...normalizedParams, vendor: item.vendor, executionSupport: manualOnly ? "manual_or_not_implemented" : item.executionSupport, requiresExplicitReview: true, expectedImpact: item.descriptionFa, suggestedPrechecks: item.prechecks, suggestedVerification: item.verification, suggestedRollback: item.rollback.available ? item.rollback.steps : [item.rollback.notAvailableReasonFa], metadata: { catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, executionSupport: item.executionSupport, implementationState: item.implementationState, executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType, source: "command_catalog", normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
     return reply.code(201).send(plan);
   });
-  app.post<{ Body: { request?: string; vendor?: string; selectedVendor?: string; currentVendor?: string; deviceId?: string; selectedDeviceId?: string; createActionPlan?: boolean; searchFilters?: Record<string, unknown> } }>("/api/commands/ai-propose", async (request, reply) => {
+  app.post<{ Body: { request?: string; vendor?: string; selectedVendor?: string; currentVendor?: string; selectedConnectorType?: string; selectedDeviceName?: string; deviceId?: string; selectedDeviceId?: string; createActionPlan?: boolean; searchFilters?: Record<string, unknown> } }>("/api/commands/ai-propose", async (request, reply) => {
     const userRequest = request.body?.request?.trim();
     if (!userRequest) return reply.code(400).send({ error: "REQUEST_REQUIRED", messageFa: "درخواست خود را وارد کنید." });
 
     const selectedDeviceId = request.body.selectedDeviceId ?? request.body.deviceId;
     if (!selectedDeviceId) {
+      const noDeviceResolution = resolveAiTemplate({
+        userText: userRequest,
+        detectedVendor: request.body.vendor,
+        currentVendor: request.body.selectedVendor ?? request.body.currentVendor ?? request.body.vendor,
+        selectedConnectorType: request.body.selectedConnectorType,
+        selectedDeviceName: request.body.selectedDeviceName,
+      });
+      if (noDeviceResolution.mode === "clarification") {
+        return reply.code(200).send({
+          mode: "clarification",
+          questionFa: noDeviceResolution.questionFa,
+          options: noDeviceResolution.options ?? [],
+          messageFa: noDeviceResolution.questionFa,
+          actionPlan: null,
+          draft: {
+            titleFa: "نیاز به انتخاب دستگاه",
+            status: "needs_input",
+            vendor: noDeviceResolution.canonicalVendor,
+            intent: noDeviceResolution.canonicalActionType,
+            userRequest,
+            deviceId: null,
+            executionSupport: noDeviceResolution.executionSupport,
+            autoExecuted: false,
+          },
+          resolution: noDeviceResolution,
+        });
+      }
       return reply.code(200).send({
         mode: "needs_input",
         missingFields: ["deviceId"],
@@ -67,11 +102,14 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (!device) return reply.code(404).send({ error: "DEVICE_NOT_FOUND", messageFa: "دستگاه انتخاب‌شده پیدا نشد." });
 
     const selectedVendor = request.body.selectedVendor ?? request.body.currentVendor ?? request.body.vendor;
+    const resolvedVendor = deviceVendor(device);
     const resolution = resolveAiTemplate({
       userText: userRequest,
       selectedDevice: device,
-      detectedVendor: request.body.vendor,
-      currentVendor: selectedVendor,
+      detectedVendor: resolvedVendor,
+      currentVendor: resolvedVendor ?? selectedVendor,
+      selectedConnectorType: request.body.selectedConnectorType,
+      selectedDeviceName: request.body.selectedDeviceName ?? device.name,
       searchFilters: request.body.searchFilters ?? null,
     });
     const executableItem = resolution.implementationState === "implemented" ? resolution.catalogItem : null;
@@ -79,6 +117,9 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       titleFa: executableItem?.titleFa ?? "پیشنهاد سفارشی هوش مصنوعی",
       status: "draft",
       vendor: resolution.canonicalVendor,
+      selectedVendor: resolution.canonicalVendor,
+      selectedConnectorType: connectorTypeForVendor(resolution.canonicalVendor),
+      selectedDeviceName: device.name,
       intent: resolution.canonicalActionType,
       userRequest,
       availableCatalogCategories: [...new Set(searchCatalog({ vendor: resolution.canonicalVendor }).map((x) => x.category))],
@@ -95,6 +136,9 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
         initialValues: resolution.initialValues ?? resolution.normalizedParams,
         reasonFa: resolution.reasonFa,
         messageFa: resolution.reasonFa,
+        vendor: resolution.canonicalVendor,
+        connectorType: resolution.connectorType,
+        deviceId: selectedDeviceId,
         draft,
         actionPlan: null,
         resolution,

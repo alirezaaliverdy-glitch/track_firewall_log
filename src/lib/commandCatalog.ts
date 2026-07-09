@@ -20,6 +20,7 @@ export type GuidedActionField = {
   secret?: boolean;
   options?: Array<{ labelFa: string; value: string; source?: string }>;
   validation?: { allowedValues?: string[]; allowCustom?: boolean; min?: number; max?: number; pattern?: string };
+  dependsOn?: Record<string, unknown>;
 };
 
 export type CatalogItem = {
@@ -75,6 +76,9 @@ export type AiProposalResponse =
       reasonFa: string;
       blueprintId: string;
       initialValues: Record<string, unknown>;
+      vendor?: string;
+      connectorType?: string | null;
+      deviceId?: string;
       actionPlan: null;
       draft: Record<string, unknown>;
       resolution?: Record<string, unknown>;
@@ -112,7 +116,7 @@ export function createCatalogAction(id: string, deviceId: string, params: Record
   });
 }
 
-export function proposeWithAi(input: { requestText: string; vendor: string; selectedVendor?: string; currentVendor?: string; deviceId?: string; searchFilters?: Record<string, unknown> }) {
+export function proposeWithAi(input: { requestText: string; vendor: string; selectedVendor?: string; currentVendor?: string; selectedConnectorType?: string | null; selectedDeviceName?: string; deviceId?: string; searchFilters?: Record<string, unknown> }) {
   return request<AiProposalResponse>("/commands/ai-propose", {
     method: "POST",
     body: JSON.stringify({
@@ -120,6 +124,8 @@ export function proposeWithAi(input: { requestText: string; vendor: string; sele
       vendor: input.vendor,
       selectedVendor: input.selectedVendor ?? input.vendor,
       currentVendor: input.currentVendor ?? input.selectedVendor ?? input.vendor,
+      selectedConnectorType: input.selectedConnectorType ?? undefined,
+      selectedDeviceName: input.selectedDeviceName,
       searchFilters: input.searchFilters ?? {},
       ...(input.deviceId ? { deviceId: input.deviceId, selectedDeviceId: input.deviceId } : {}),
     }),

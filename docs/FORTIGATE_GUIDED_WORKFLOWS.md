@@ -35,6 +35,7 @@ Research notes: `backend/src/guided-actions/vendors/fortigate/fortigate-research
 Implemented/executable where compiler-backed:
 
 - `fortigate_guided_firewall_policy_create`
+- `fortigate_guided_zone_create`
 - `fortigate_guided_address_object_create`
 - `fortigate_guided_service_object_create`
 - `fortigate_guided_static_route_create`
@@ -42,9 +43,10 @@ Implemented/executable where compiler-backed:
 
 Partial/planned, no fake executable success:
 
+- `fortigate_guided_vpn_setup`: public VPN workflow ID for IPsec site-to-site, SSL VPN, and partial remote-access setup. It collects `vpnType`, networks, WAN/Gateway, auth/PSK, policy access choices, and preview metadata; it does not build a complete executable VPN ActionPlan yet.
+- `fortigate_guided_vdom_create`: planned high-risk VDOM workflow. It collects VDOM name, mode, optional interface assignment, planned resource limits, and planned inter-VDOM link settings. Executable VDOM creation must require double confirmation when promoted.
 - `fortigate_guided_vip_port_forward_create`: VIP creation is compiler-backed, optional follow-up policy creation remains separate.
-- `fortigate_guided_ipsec_vpn_setup`: collects controlled VPN values and requires PSK `secretRef`; does not build a full executable tunnel plan yet.
-- `fortigate_guided_ssl_vpn_setup`: collects controlled listener/portal/group values; does not build a complete executable SSL VPN plan yet.
+- `fortigate_guided_ipsec_vpn_setup` and `fortigate_guided_ssl_vpn_setup`: legacy/internal IDs from the first guided pass; new resolver routing uses `fortigate_guided_vpn_setup`.
 - `fortigate_guided_policy_enable_disable_or_move`: metadata and selectors exist, but branch-specific build is not complete.
 
 ## Fixed Dropdowns
@@ -57,7 +59,12 @@ Fixed FortiGate fields use `select`/`multiSelect`:
 - Address type: `subnet`, `iprange`, `fqdn`, `wildcard-fqdn`, `geography`
 - Interface allowaccess: `ping`, `https`, `ssh`, `http`, `fgfm`, `snmp`, `radius-acct`, `probe-response`, `fabric`
 - VIP protocol: currently executable as `tcp` only in the existing template
-- VPN scenario/PSK mode: project defaults while official VPN enum work remains partial
+- VPN type: `ipsec_site_to_site`, `ssl_vpn`, `ipsec_remote_access` (remote access is partial)
+- VPN auth method: `psk`, `certificate` (certificate is partial)
+- VPN PSK mode: `generate`, `manual`
+- VPN proposal values: only existing-template/project-verified dropdown values
+
+Guided routing keywords include Persian/English forms for `vpn`, `ipsec`, `ssl vpn`, tunnel creation, `vdom`, `zone`, policy/rule creation, VIP/NAT/port forward, interface/VLAN/subinterface, and route/static route/gateway changes. These keywords must not be handled by generic AI fallback when a selected FortiGate device exists.
 
 Variable user-entered values are validated: name patterns, IP, CIDR, CIDR lists, IP ranges, ports, VLAN ID, and free-text comments.
 

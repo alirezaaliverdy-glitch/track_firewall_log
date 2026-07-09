@@ -50,6 +50,8 @@ function publicBlueprint(blueprint: GuidedActionBlueprint) {
 function shape(session: GuidedActionSession, blueprint: GuidedActionBlueprint) {
   return {
     sessionId: session.id,
+    deviceId: session.deviceId,
+    vendor: session.vendor,
     status: session.status,
     blueprint: publicBlueprint(blueprint),
     currentStep: session.status === "collecting_inputs" ? blueprint.steps[session.currentStepIndex] ?? null : null,
@@ -103,9 +105,10 @@ export function answerGuidedActionStep(id: string, input: { stepId: string; valu
   const allowedKeys = new Set(step.fields.map((field) => field.key));
   const unknownKey = Object.keys(input.values).find((key) => !allowedKeys.has(key));
   if (unknownKey) return { ok: false as const, code: 422, error: "UNKNOWN_FIELD", messageFa: `فیلد ${unknownKey} در این Workflow تعریف نشده است.` };
-  const issues = validateGuidedValues(step.fields, input.values);
+  const nextAnswers = { ...session.answers, ...input.values };
+  const issues = validateGuidedValues(activeGuidedFields([step], nextAnswers), nextAnswers);
   if (issues.length) return { ok: false as const, code: 422, error: "VALIDATION_FAILED", messageFa: issues[0]?.messageFa ?? "ورودی معتبر نیست.", issues };
-  session.answers = { ...session.answers, ...input.values };
+  session.answers = nextAnswers;
   session.currentStepIndex += 1;
   session.status = session.currentStepIndex >= blueprint.steps.length ? "ready_to_build" : "collecting_inputs";
   session.updatedAt = now();

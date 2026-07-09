@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
-import { answerGuidedSession, buildGuidedPlan, cancelGuidedSession, startGuidedSession, type GuidedSession } from "@/lib/guidedActions";
+import { answerGuidedSession, buildGuidedPlan, cancelGuidedSession, getGuidedSession, startGuidedSession, type GuidedSession } from "@/lib/guidedActions";
 import type { GuidedActionField } from "@/lib/commandCatalog";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 
@@ -16,6 +16,10 @@ function parseValue(field: GuidedActionField, raw: string, checked: boolean) {
   return raw;
 }
 
+function activeFields(fields: GuidedActionField[], values: Record<string, unknown>) {
+  return fields.filter((field) => !field.dependsOn || Object.entries(field.dependsOn).every(([key, value]) => values[key] === value));
+}
+
 function goToActionCenter(actionPlanId: string) {
   const url = new URL(window.location.href);
   url.pathname = "/actions";
@@ -28,28 +32,40 @@ function goToActionCenter(actionPlanId: string) {
 }
 
 export default function GuidedActionWizard(props: {
-  blueprintId: string;
-  deviceId: string;
-  vendor: string;
-  initialRequest: string;
-  initialValues: Record<string, unknown>;
+  sessionId?: string;
+  blueprintId?: string;
+  deviceId?: string;
+  vendor?: string;
+  initialRequest?: string;
+  initialValues?: Record<string, unknown>;
   onClose: () => void;
 }) {
   const [session, setSession] = useState<GuidedSession | null>(null);
-  const [values, setValues] = useState<Record<string, unknown>>(props.initialValues);
+  const [values, setValues] = useState<Record<string, unknown>>(props.initialValues ?? {});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setBusy(true);
-    startGuidedSession(props)
+    const load = props.sessionId
+      ? getGuidedSession(props.sessionId)
+      : props.blueprintId && props.deviceId && props.vendor
+        ? startGuidedSession({
+          blueprintId: props.blueprintId,
+          deviceId: props.deviceId,
+          vendor: props.vendor,
+          initialRequest: props.initialRequest ?? "",
+          initialValues: props.initialValues ?? {},
+        })
+        : Promise.reject(new Error("اطلاعات شروع Workflow کامل نیست."));
+    load
       .then((next) => {
         setSession(next);
         setValues(next.answers);
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "شروع Workflow ناموفق بود."))
       .finally(() => setBusy(false));
-  }, [props.blueprintId, props.deviceId, props.vendor, props.initialRequest]);
+  }, [props.sessionId, props.blueprintId, props.deviceId, props.vendor, props.initialRequest]);
 
   const currentStep = session?.currentStep ?? null;
   const stepValues = useMemo(() => ({ ...session?.answers, ...values }), [session?.answers, values]);
@@ -58,7 +74,8 @@ export default function GuidedActionWizard(props: {
     if (!session || !currentStep) return;
     setBusy(true);
     try {
-      const payload = Object.fromEntries(currentStep.fields.map((field) => [field.key, stepValues[field.key]]));
+      const fields = activeFields(currentStep.fields, stepValues);
+      const payload = Object.fromEntries(fields.map((field) => [field.key, stepValues[field.key]]));
       const next = await answerGuidedSession(session.sessionId, { stepId: currentStep.id, values: payload });
       setSession(next);
       setValues(next.answers);
@@ -101,7 +118,7 @@ export default function GuidedActionWizard(props: {
           <p className="mt-1 text-sm text-slate-400">{session?.blueprint.descriptionFa}</p>
           {session && (
             <p className="mt-2 text-xs text-slate-500">
-              Vendor: {session.blueprint.vendor} | Device: {props.deviceId} | State: {session.blueprint.implementationState}
+              Vendor: {session.blueprint.vendor} | Device: {session.deviceId ?? props.deviceId ?? ""} | State: {session.blueprint.implementationState}
             </p>
           )}
         </div>
@@ -118,7 +135,7 @@ export default function GuidedActionWizard(props: {
           <h3 className="text-base font-semibold">{currentStep.titleFa}</h3>
           {currentStep.descriptionFa && <p className="text-sm text-slate-400">{currentStep.descriptionFa}</p>}
           <div className="grid gap-3 md:grid-cols-2">
-            {currentStep.fields.map((field) => {
+            {activeFields(currentStep.fields, stepValues).map((field) => {
               const raw = valueToString(stepValues[field.key]);
               return (
                 <label key={field.key} className="block text-sm text-slate-200">

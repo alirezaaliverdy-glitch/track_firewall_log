@@ -24,6 +24,8 @@ export type GuidedActionBlueprint = {
 
 export type GuidedSession = {
   sessionId: string;
+  deviceId: string;
+  vendor: string;
   status: "collecting_inputs" | "ready_to_build" | "built" | "cancelled";
   blueprint: GuidedActionBlueprint;
   currentStep: GuidedActionStep | null;
@@ -49,6 +51,10 @@ export function startGuidedSession(input: { blueprintId: string; deviceId: strin
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function getGuidedSession(sessionId: string) {
+  return request<GuidedSession>(`/action-sessions/${encodeURIComponent(sessionId)}`);
 }
 
 export function answerGuidedSession(sessionId: string, input: { stepId: string; values: Record<string, unknown> }) {

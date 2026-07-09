@@ -2,11 +2,12 @@ import { COMMAND_CATALOG, type CommandCatalogItem } from "../commands/catalog/in
 import { getExecutionTemplate } from "../commands/execution/execution-template-registry.js";
 import { routePersianIntent } from "./persian-intent-router.js";
 import { parseAiIntent } from "../services/ai-intent.service.js";
-import { resolveGuidedAction } from "../guided-actions/registry.js";
+import { getGuidedActionBlueprint, resolveGuidedAction } from "../guided-actions/registry.js";
 import type { GuidedActionField } from "../guided-actions/types.js";
 
 export type AiResolverDevice = {
   id: string;
+  name?: string;
   vendor: string;
   type: string;
   protocol?: string;
@@ -92,6 +93,25 @@ function normalizeUserText(value: string) {
 
 function includesAny(text: string, values: string[]) {
   return values.some((value) => text.includes(normalizeUserText(value)));
+}
+
+function connectorTypeForVendor(vendor: string | null | undefined) {
+  if (vendor === "fortigate") return "fortigate-ssh";
+  if (vendor === "mikrotik") return "mikrotik-ssh";
+  if (vendor === "linux") return "linux-ssh";
+  return null;
+}
+
+function isGuidedOperationalIntent(userText: string) {
+  const text = normalizeUserText(userText);
+  const hasCreateVerb = includesAny(text, ["بساز", "ایجاد کن", "راه بنداز", "راه‌انداز", "create", "build", "setup", "add"]);
+  const hasGuidedKeyword = includesAny(text, [
+    "vpn", "وی پی ان", "تونل", "ipsec", "ssl vpn", "wireguard", "l2tp", "ikev2",
+    "vdom", "وی دام", "zone", "زون", "policy", "رول", "rule", "اجازه دسترسی", "دسترسی بده",
+    "vip", "port forward", "پورت فوروارد", "nat", "service", "سرویس", "object", "آبجکت", "vlan", "subinterface", "اینترفیس بساز",
+    "route", "static route", "gateway عوض", "گیت وی",
+  ]);
+  return hasGuidedKeyword && (hasCreateVerb || includesAny(text, ["دسترسی بده", "اجازه دسترسی بده", "پورت فوروارد کن", "gateway عوض کن", "روی port آی پی بزار"]));
 }
 
 function inferredVendorFromAction(actionType: string): string | null {
@@ -194,6 +214,8 @@ export function resolveAiTemplate(input: {
   selectedDevice?: AiResolverDevice | null;
   detectedVendor?: unknown;
   currentVendor?: unknown;
+  selectedConnectorType?: unknown;
+  selectedDeviceName?: unknown;
   searchFilters?: Record<string, unknown> | null;
   aiIntent?: { intentType?: unknown; parameters?: Record<string, unknown> } | null;
   params?: Record<string, unknown>;
@@ -227,18 +249,40 @@ export function resolveAiTemplate(input: {
     };
   }
 
+  if (!input.selectedDevice?.id && isGuidedOperationalIntent(input.userText)) {
+    return {
+      mode: "clarification",
+      canonicalVendor: selectedVendor ?? "generic",
+      canonicalActionType: "guided_workflow_device_required",
+      catalogCommandId: null,
+      executionTemplateRef: null,
+      connectorType: connectorTypeForVendor(selectedVendor),
+      implementationState: "manualOnly",
+      executionSupport: "manual",
+      normalizedParams: {},
+      missingFields: ["deviceId"],
+      confidence: 0.9,
+      reasonFa: "اول دستگاه مقصد را انتخاب کن.",
+      catalogItem: null,
+      questionFa: "اول دستگاه مقصد را انتخاب کن.",
+      options: [],
+    };
+  }
+
   const guidedVendor = selectedVendor;
-  const guided = guidedVendor ? resolveGuidedAction({ text: input.userText, vendor: guidedVendor }) : null;
+  const guided = guidedVendor && isGuidedOperationalIntent(input.userText) ? resolveGuidedAction({ text: input.userText, vendor: guidedVendor }) : null;
   if (guided) {
+    const blueprint = getGuidedActionBlueprint(guided.blueprintId);
+    const implementationState = blueprint?.implementationState === "implemented" ? "implemented" : blueprint?.implementationState === "partial" ? "planned" : "planned";
     return {
       mode: "guided_workflow",
       canonicalVendor: guidedVendor ?? "generic",
       canonicalActionType: guided.blueprintId,
       catalogCommandId: null,
       executionTemplateRef: null,
-      connectorType: "fortigate-ssh",
-      implementationState: "planned",
-      executionSupport: "not_implemented",
+      connectorType: connectorTypeForVendor(guidedVendor),
+      implementationState,
+      executionSupport: implementationState === "implemented" ? "connector" : "not_implemented",
       normalizedParams: guided.initialValues,
       missingFields: [],
       confidence: 0.93,
