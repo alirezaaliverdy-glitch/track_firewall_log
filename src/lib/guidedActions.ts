@@ -24,8 +24,8 @@ export type GuidedActionBlueprint = {
 
 export type GuidedSession = {
   sessionId: string;
-  deviceId: string;
-  vendor: string;
+  deviceId: string | null;
+  vendor: string | null;
   status: "collecting_inputs" | "ready_to_build" | "built" | "cancelled";
   blueprint: GuidedActionBlueprint;
   currentStep: GuidedActionStep | null;
@@ -46,7 +46,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function startGuidedSession(input: { blueprintId: string; deviceId: string; vendor: string; initialRequest: string; initialValues: Record<string, unknown> }) {
+export function startGuidedSession(input: { blueprintId: string; deviceId?: string | null; vendor?: string | null; initialRequest: string; initialValues: Record<string, unknown> }) {
   return request<GuidedSession>("/action-sessions/start", {
     method: "POST",
     body: JSON.stringify(input),

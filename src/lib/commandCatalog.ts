@@ -76,9 +76,9 @@ export type AiProposalResponse =
       reasonFa: string;
       blueprintId: string;
       initialValues: Record<string, unknown>;
-      vendor?: string;
+      vendor?: string | null;
       connectorType?: string | null;
-      deviceId?: string;
+      deviceId?: string | null;
       actionPlan: null;
       draft: Record<string, unknown>;
       resolution?: Record<string, unknown>;

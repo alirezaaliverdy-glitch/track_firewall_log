@@ -2,6 +2,14 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.2B - Force Multi-Step Requests into Guided Wizard (2026-07-09)
+
+- Summary: removed the no-device chat dead-end for guided workflows. VPN/VDOM/Zone/Policy/VIP/NAT/VLAN/Route-style creation requests now return `guided_workflow`, start an ActionSession, and open the Persian wizard with device selection as step one when needed.
+- Areas: `backend/src/ai/ai-template-resolver.ts`, `backend/src/routes/command-catalog.ts`, `backend/src/routes/action-sessions.ts`, `backend/src/guided-actions/session-service.ts`, `src/components/ai/AiSecurityAssistantPanel.tsx`, `src/components/commands/CommandCatalogPanel.tsx`, `src/components/guided-actions/GuidedActionWizard.tsx`, tests and docs.
+- Safety: no guided request creates a normal ActionPlan before wizard completion; partial/planned workflows still do not fake execution or success; protected quick-controlled lab behavior remains unchanged.
+- Validation: backend `npm run build`; backend `npm test` passed with 139/139; root `pnpm build` passed with existing chunk-size warning.
+- Commit: pending.
+
 ## Task 17.2A - Guided Workflow Routing for Multi-Step Requests (2026-07-09)
 
 - Summary: fixed multi-step operational routing so VPN/VDOM/Zone/Policy/VIP/NAT/Route/VLAN creation requests open Guided Action Wizard instead of producing generic/custom ActionPlans with unknown vendor.

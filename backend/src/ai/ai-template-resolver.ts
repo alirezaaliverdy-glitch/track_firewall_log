@@ -114,6 +114,21 @@ function isGuidedOperationalIntent(userText: string) {
   return hasGuidedKeyword && (hasCreateVerb || includesAny(text, ["دسترسی بده", "اجازه دسترسی بده", "پورت فوروارد کن", "gateway عوض کن", "روی port آی پی بزار"]));
 }
 
+function resolveVendorlessGuidedAction(userText: string) {
+  const text = normalizeUserText(userText);
+  const reasonFa = "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی در یک فرم مرحله‌ای گرفته شود.";
+  if (includesAny(text, ["vpn", "ipsec", "ssl vpn", "wireguard", "l2tp"])) {
+    return { blueprintId: "fortigate_guided_vpn_setup", initialValues: { vpnType: includesAny(text, ["ssl vpn"]) ? "ssl_vpn" : includesAny(text, ["ipsec"]) ? "ipsec_site_to_site" : undefined }, reasonFa };
+  }
+  if (includesAny(text, ["vdom"])) return { blueprintId: "fortigate_guided_vdom_create", initialValues: {}, reasonFa };
+  if (includesAny(text, ["zone"])) return { blueprintId: "fortigate_guided_zone_create", initialValues: {}, reasonFa };
+  if (includesAny(text, ["policy", "rule"])) return { blueprintId: "fortigate_guided_firewall_policy_create", initialValues: {}, reasonFa };
+  if (includesAny(text, ["vip", "port forward", "nat"])) return { blueprintId: "fortigate_guided_vip_port_forward_create", initialValues: { protocol: "tcp" }, reasonFa };
+  if (includesAny(text, ["vlan", "subinterface"])) return { blueprintId: "fortigate_guided_interface_vlan_create", initialValues: {}, reasonFa };
+  if (includesAny(text, ["static route", "route", "gateway"])) return { blueprintId: "fortigate_guided_static_route_create", initialValues: {}, reasonFa };
+  return null;
+}
+
 function inferredVendorFromAction(actionType: string): string | null {
   if (actionType.startsWith("linux_") || actionType === "open_port") return "linux";
   if (actionType.startsWith("mikrotik_")) return "mikrotik";
@@ -250,6 +265,30 @@ export function resolveAiTemplate(input: {
   }
 
   if (!input.selectedDevice?.id && isGuidedOperationalIntent(input.userText)) {
+    const guided = selectedVendor
+      ? resolveGuidedAction({ text: input.userText, vendor: selectedVendor })
+      : resolveVendorlessGuidedAction(input.userText);
+    if (guided) {
+      const blueprint = getGuidedActionBlueprint(guided.blueprintId);
+      const implementationState = blueprint?.implementationState === "implemented" ? "implemented" : "planned";
+      return {
+        mode: "guided_workflow",
+        canonicalVendor: selectedVendor ?? "generic",
+        canonicalActionType: guided.blueprintId,
+        catalogCommandId: null,
+        executionTemplateRef: null,
+        connectorType: selectedVendor ? connectorTypeForVendor(selectedVendor) : null,
+        implementationState,
+        executionSupport: implementationState === "implemented" ? "connector" : "not_implemented",
+        normalizedParams: guided.initialValues,
+        missingFields: [],
+        confidence: 0.93,
+        reasonFa: guided.reasonFa,
+        catalogItem: null,
+        blueprintId: guided.blueprintId,
+        initialValues: guided.initialValues,
+      };
+    }
     return {
       mode: "clarification",
       canonicalVendor: selectedVendor ?? "generic",

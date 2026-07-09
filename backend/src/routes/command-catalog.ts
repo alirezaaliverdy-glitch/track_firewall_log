@@ -71,6 +71,30 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
         selectedConnectorType: request.body.selectedConnectorType,
         selectedDeviceName: request.body.selectedDeviceName,
       });
+      if (noDeviceResolution.mode === "guided_workflow" && noDeviceResolution.blueprintId) {
+        return reply.code(200).send({
+          mode: "guided_workflow",
+          blueprintId: noDeviceResolution.blueprintId,
+          initialValues: noDeviceResolution.initialValues ?? noDeviceResolution.normalizedParams,
+          reasonFa: noDeviceResolution.reasonFa,
+          messageFa: noDeviceResolution.reasonFa,
+          vendor: noDeviceResolution.canonicalVendor === "generic" ? null : noDeviceResolution.canonicalVendor,
+          connectorType: noDeviceResolution.connectorType,
+          deviceId: null,
+          draft: {
+            titleFa: "ساخت مرحله‌ای اکشن",
+            status: "guided_workflow",
+            vendor: noDeviceResolution.canonicalVendor === "generic" ? null : noDeviceResolution.canonicalVendor,
+            intent: noDeviceResolution.canonicalActionType,
+            userRequest,
+            deviceId: null,
+            executionSupport: noDeviceResolution.executionSupport,
+            autoExecuted: false,
+          },
+          actionPlan: null,
+          resolution: noDeviceResolution,
+        });
+      }
       if (noDeviceResolution.mode === "clarification") {
         return reply.code(200).send({
           mode: "clarification",

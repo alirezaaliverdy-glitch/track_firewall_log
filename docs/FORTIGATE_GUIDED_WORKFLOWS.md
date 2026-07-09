@@ -24,6 +24,8 @@ ActionSession lifecycle:
 
 Execution still happens only through the existing Action Center quick-execute path after user confirmation. ActionSession never executes connector commands directly.
 
+Task 17.2B hard routing: clear multi-step requests must open a guided wizard even when the main chat has no selected device. `/api/commands/ai-propose` and `/api/ai/chat` return `mode=guided_workflow`; the frontend starts `/api/action-sessions/start` and navigates to `/guided-actions/:sessionId`. If no device was supplied, the session is pending and the first wizard step is `device_selection` (`انتخاب دستگاه`). Choosing a device resolves its vendor from the database and switches to the matching vendor blueprint before action-specific steps. No ActionPlan is created until the wizard fields are complete and the user clicks build preview.
+
 ## FortiGate Workflow Registry
 
 Registry file: `backend/src/guided-actions/vendors/fortigate/fortigate-blueprints.ts`.

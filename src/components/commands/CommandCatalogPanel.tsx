@@ -49,7 +49,7 @@ export default function CommandCatalogPanel() {
   const [params, setParams] = useState<Record<string, Record<string, string>>>({});
   const [message, setMessage] = useState("");
   const [aiText, setAiText] = useState("");
-  const [guidedWorkflow, setGuidedWorkflow] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; initialRequest: string; vendor: string }>(null);
+  const [guidedWorkflow, setGuidedWorkflow] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; initialRequest: string; vendor: string | null; deviceId: string | null }>(null);
   const [loading, setLoading] = useState(false);
 
   const selectedDevice = useMemo(() => devices.find((device) => device.id === deviceId), [devices, deviceId]);
@@ -140,8 +140,15 @@ export default function CommandCatalogPanel() {
         return;
       }
       if (result.mode === "guided_workflow") {
-        setGuidedWorkflow({ blueprintId: result.blueprintId, initialValues: result.initialValues, initialRequest: aiText, vendor: result.vendor ?? selectedVendor });
         setMessage(result.messageFa);
+        const start = await import("@/lib/guidedActions").then((module) => module.startGuidedSession({
+          blueprintId: result.blueprintId,
+          initialValues: result.initialValues,
+          initialRequest: aiText,
+          vendor: result.vendor ?? selectedVendor ?? null,
+          deviceId: result.deviceId ?? (deviceId || null),
+        }));
+        window.location.assign(`/guided-actions/${encodeURIComponent(start.sessionId)}`);
         return;
       }
       if (result.mode === "clarification") {
@@ -241,11 +248,11 @@ export default function CommandCatalogPanel() {
 
       {message && <p className="mb-3 rounded-lg bg-cyan-950/50 p-3 text-sm text-cyan-200">{message}</p>}
 
-      {guidedWorkflow && deviceId && (
+      {guidedWorkflow && (
         <GuidedActionWizard
           blueprintId={guidedWorkflow.blueprintId}
-          deviceId={deviceId}
-          vendor={guidedWorkflow.vendor}
+          deviceId={guidedWorkflow.deviceId ?? undefined}
+          vendor={guidedWorkflow.vendor ?? undefined}
           initialRequest={guidedWorkflow.initialRequest}
           initialValues={guidedWorkflow.initialValues}
           onClose={() => setGuidedWorkflow(null)}

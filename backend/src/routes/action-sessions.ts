@@ -24,6 +24,15 @@ function sendResult(reply: { code: (statusCode: number) => { send: (body: unknow
 
 export const actionSessionRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { blueprintId?: string; deviceId?: string; vendor?: string; initialRequest?: string; initialValues?: Record<string, unknown> } }>("/api/action-sessions/start", async (request, reply) => {
+    if (request.body?.blueprintId && !request.body.deviceId) {
+      return sendResult(reply, startGuidedActionSession({
+        blueprintId: request.body.blueprintId,
+        deviceId: null,
+        vendor: null,
+        initialRequest: request.body.initialRequest,
+        initialValues: request.body.initialValues ?? {},
+      }));
+    }
     if (!request.body?.blueprintId || !request.body.deviceId || !request.body.vendor) {
       return reply.code(400).send({ error: "MISSING_INPUT", messageFa: "Blueprint، دستگاه و وندور الزامی هستند." });
     }
@@ -47,7 +56,7 @@ export const actionSessionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: { stepId?: string; values?: Record<string, unknown> } }>("/api/action-sessions/:id/answers", async (request, reply) => {
     if (!request.body?.stepId) return reply.code(400).send({ error: "STEP_REQUIRED", messageFa: "شناسه مرحله الزامی است." });
-    return sendResult(reply, answerGuidedActionStep(request.params.id, { stepId: request.body.stepId, values: request.body.values ?? {} }));
+    return sendResult(reply, await answerGuidedActionStep(request.params.id, { stepId: request.body.stepId, values: request.body.values ?? {} }));
   });
 
   app.post<{ Params: { id: string }; Body: { requestedBy?: string } }>("/api/action-sessions/:id/build-plan", async (request, reply) => {

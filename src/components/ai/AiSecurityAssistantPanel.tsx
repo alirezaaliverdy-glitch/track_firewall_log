@@ -319,7 +319,7 @@ export default function AiSecurityAssistantPanel() {
   const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null } | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
-  const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string; deviceId: string; initialRequest: string }>(null);
+  const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string | null; deviceId: string | null; initialRequest: string }>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
@@ -498,14 +498,23 @@ export default function AiSecurityAssistantPanel() {
         setEvidenceMetadata(response.evidenceMetadata);
         setExecutionState({ support: response.executionSupport, implementation: response.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate });
         setCreatedPlanId(response.actionPlan?.id ?? null);
-        if (response.mode === "guided_workflow" && response.blueprintId && (response.deviceId || selectedDeviceId) && (response.vendor || selectedVendor)) {
-          setGuidedStart({
+        if (response.mode === "guided_workflow" && response.blueprintId) {
+          const guided = {
             blueprintId: response.blueprintId,
             initialValues: response.initialValues ?? {},
-            vendor: response.vendor ?? selectedVendor,
-            deviceId: response.deviceId ?? selectedDeviceId,
+            vendor: response.vendor ?? (selectedVendor || null),
+            deviceId: response.deviceId ?? (selectedDeviceId || null),
             initialRequest: trimmed,
-          });
+          };
+          setGuidedStart(guided);
+          startGuidedSession(guided)
+            .then((session) => {
+              window.location.assign(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
+            })
+            .catch((err: unknown) => {
+              setError("شروع ساخت مرحله‌ای انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+              setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در شروع Workflow");
+            });
         }
         if (response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);

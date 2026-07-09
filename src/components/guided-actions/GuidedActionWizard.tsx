@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
 import { answerGuidedSession, buildGuidedPlan, cancelGuidedSession, getGuidedSession, startGuidedSession, type GuidedSession } from "@/lib/guidedActions";
 import type { GuidedActionField } from "@/lib/commandCatalog";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
+import { listDevices, type Device } from "@/lib/devices";
 
 function valueToString(value: unknown) {
   if (Array.isArray(value)) return value.join(",");
@@ -44,16 +45,21 @@ export default function GuidedActionWizard(props: {
   const [values, setValues] = useState<Record<string, unknown>>(props.initialValues ?? {});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
+
+  useEffect(() => {
+    void listDevices().then(setDevices).catch(() => setDevices([]));
+  }, []);
 
   useEffect(() => {
     setBusy(true);
     const load = props.sessionId
       ? getGuidedSession(props.sessionId)
-      : props.blueprintId && props.deviceId && props.vendor
+      : props.blueprintId
         ? startGuidedSession({
           blueprintId: props.blueprintId,
-          deviceId: props.deviceId,
-          vendor: props.vendor,
+          deviceId: props.deviceId ?? null,
+          vendor: props.vendor ?? null,
           initialRequest: props.initialRequest ?? "",
           initialValues: props.initialValues ?? {},
         })
@@ -140,7 +146,20 @@ export default function GuidedActionWizard(props: {
               return (
                 <label key={field.key} className="block text-sm text-slate-200">
                   {field.labelFa}
-                  {field.type === "select" ? (
+                  {field.type === "deviceObjectSelect" ? (
+                    <select
+                      value={raw}
+                      onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 p-2"
+                    >
+                      <option value="">انتخاب دستگاه</option>
+                      {devices.map((device) => (
+                        <option key={device.id} value={device.id}>
+                          {device.name} - {device.type} - {device.host}:{device.managementPort}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.type === "select" ? (
                     <select
                       value={raw}
                       onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
