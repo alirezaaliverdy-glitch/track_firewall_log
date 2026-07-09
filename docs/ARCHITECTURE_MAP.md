@@ -6,6 +6,8 @@
 
 `Raw events/snapshots -> vendor profile -> Vendor Finding Engine -> persisted Finding -> proposed ActionPlan -> controlled execution flow`
 
+`Resolver -> executable_action_plan | needs_input | guided_workflow | clarification | manual_or_not_supported`
+
 Creation is permissive; execution is controlled. Preview never implies execution, and success requires `connectorInvoked=true`.
 
 ## Backend Map
@@ -16,6 +18,7 @@ Creation is permissive; execution is controlled. Preview never implies execution
 | Devices | Device inventory, discovery, capabilities | `services/device.service.ts`, `routes/devices.ts` | `/api/devices/*` | Implemented |
 | Credentials | Encrypted credential references | `services/credential*.ts`, `routes/credentials.ts` | `/api/credentials/*` | Implemented |
 | Command catalog | Persian curated search, validation, plan handoff | `commands/catalog/`, `routes/command-catalog.ts` | `/api/commands/*` | Linux/MikroTik executable; others manual/planned |
+| Guided actions | Backend-owned multi-step blueprints and session state | `backend/src/guided-actions/`, `routes/action-sessions.ts` | `/api/action-sessions/*` | Implemented foundation; FortiGate registry added |
 | AI assistant | Evidence Pack, provider, structured intents | `ai/`, `services/ai-*.ts`, `routes/ai.ts` | `/api/ai/*` | Implemented; proposal-first |
 | AI/template resolver | Maps validated action/catalog metadata to registered templates | `commands/catalog/catalog-action-resolver.ts`, `commands/execution/execution-template-registry.ts` | Used by action routes | Implemented for registered templates |
 | ActionPlan lifecycle | Propose, validate, preview, approve, execute, result | `services/action-plan.service.ts`, `routes/actions.ts` | `/api/actions/*` | Implemented; verification/rollback partial |
@@ -35,6 +38,7 @@ Creation is permissive; execution is controlled. Preview never implies execution
 | App shell/routing | Authenticated composition and result route | `src/App.tsx`, `src/main.tsx` | — | Implemented; mostly single-page composition |
 | Device registry | Devices, credentials, connection/capabilities | `components/devices/DeviceRegistryPanel.tsx` | `/api/devices`, `/api/credentials` | Implemented |
 | Command catalog | Persian search, parameters, plan creation | `components/commands/CommandCatalogPanel.tsx` | `/api/commands/*` | Implemented |
+| Guided action wizard | Persian multi-step input collection and plan build | `components/guided-actions/GuidedActionWizard.tsx` | `/api/action-sessions/*` | Implemented foundation |
 | AI assistant | Chat, context, missing fields, action proposals | `components/ai/AiSecurityAssistantPanel.tsx` | `/api/ai/*` | Implemented |
 | Action center | Review, preview, confirm, execute, audits | `components/actions/ActionCenterPanel.tsx` | `/api/actions/*` | Implemented |
 | Action result | Honest connector output/result view | `components/actions/ActionResultView.tsx` | `/api/actions/:id` | Implemented at `/actions/:id/result` |

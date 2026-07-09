@@ -133,6 +133,8 @@ export function routePersianIntent(input: PersianIntentRouterInput): PersianInte
 
   if (vendor === "linux") {
     if (includesAny(text, [
+      "\u0648\u0636\u0639\u06cc\u062a \u067e\u0648\u0631\u062a \u0647\u0627\u0645\u0648 \u0646\u0634\u0648\u0646 \u0628\u062f\u0647",
+      "\u0648\u0636\u0639\u06cc\u062a \u067e\u0648\u0631\u062a\u200c\u0647\u0627",
       "\u0648\u0636\u0639\u06cc\u062a \u067e\u0648\u0631\u062a \u0647\u0627\u06cc \u0628\u0627\u0632 \u0631\u0648 \u0646\u0634\u0648\u0646 \u0628\u062f\u0647",
       "\u067e\u0648\u0631\u062a \u0647\u0627\u06cc \u0628\u0627\u0632 \u0631\u0648 \u0646\u0634\u0648\u0646 \u0628\u062f\u0647",
       "\u0644\u06cc\u0633\u062a \u067e\u0648\u0631\u062a \u0647\u0627\u06cc \u0628\u0627\u0632",
@@ -184,6 +186,18 @@ export function routePersianIntent(input: PersianIntentRouterInput): PersianInte
     const interfaceName = extractInterfaceName(text);
     const allowaccess = extractAllowAccess(text);
     const zoneName = extractZoneName(valueText) ?? extractZoneName(text);
+    if (includesAny(text, [
+      "\u0648\u0636\u0639\u06cc\u062a \u067e\u0648\u0631\u062a \u0647\u0627\u0645\u0648 \u0646\u0634\u0648\u0646 \u0628\u062f\u0647",
+      "\u0648\u0636\u0639\u06cc\u062a \u067e\u0648\u0631\u062a \u0647\u0627",
+      "\u0648\u0636\u0639\u06cc\u062a \u067e\u0648\u0631\u062a\u200c\u0647\u0627",
+      "\u067e\u0648\u0631\u062a\u200c\u0647\u0627\u06cc \u0641\u0648\u0631\u062a\u06cc\u200c\u06af\u06cc\u062a \u0631\u0648 \u0646\u0634\u0648\u0646 \u0628\u062f\u0647",
+      "\u0648\u0636\u0639\u06cc\u062a \u0627\u06cc\u0646\u062a\u0631\u0641\u06cc\u0633 \u0647\u0627",
+      "\u0648\u0636\u0639\u06cc\u062a \u0627\u06cc\u0646\u062a\u0631\u0641\u06cc\u0633\u200c\u0647\u0627",
+      "show interfaces",
+      "interface status",
+    ])) {
+      return output({ actionType: "fortigate_show_interfaces", executionTemplateRef: "fortigate_show_interfaces", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
     if (interfaceName && allowaccess && includesAny(text, ["فعال کن", "allowaccess", "فقط", "ssh", "ping"])) {
       return output({ actionType: "fortigate_update_interface_allowaccess", executionTemplateRef: "fortigate_update_interface_allowaccess", connectorType: "fortigate-ssh", requiredParams: ["name", "allowaccess"], normalizedParams: { name: interfaceName, allowaccess }, readOnly: false });
     }

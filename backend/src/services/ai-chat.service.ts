@@ -264,17 +264,22 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const assistantText = actionPlan && executionSupport === "connector"
     ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
     : resolutionMissing.length ? nextStepFa : providerResponse.assistantMessage;
+  const guidedAssistantText = resolution.mode === "guided_workflow" || resolution.mode === "clarification" ? nextStepFa : assistantText;
 
   return {
     sessionId: session.id,
     message: userMessage,
-    assistantMessage: assistantText,
+    assistantMessage: guidedAssistantText,
     assistantMessageRecord: assistantMessage,
     shouldCreateActionPlan: Boolean(actionPlan),
     actionIntent,
     actionPlan,
     executionSupport,
     implementationState,
+    mode: resolution.mode,
+    blueprintId: resolution.blueprintId ?? null,
+    initialValues: resolution.initialValues ?? null,
+    clarification: resolution.mode === "clarification" ? { questionFa: resolution.questionFa, options: resolution.options ?? [] } : null,
     mappedTemplate: resolution.executionTemplateRef,
     missingFields: resolutionMissing,
     nextStepFa,

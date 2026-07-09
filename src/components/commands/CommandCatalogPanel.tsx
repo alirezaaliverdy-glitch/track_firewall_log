@@ -3,6 +3,7 @@ import { Bot, Search, ShieldCheck } from "lucide-react";
 import { listDevices, type Device } from "@/lib/devices";
 import { createCatalogAction, proposeWithAi, searchCommands, type CatalogItem } from "@/lib/commandCatalog";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
+import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
 
 const VENDORS = ["linux", "mikrotik", "fortigate", "cisco", "pfsense", "generic"];
 
@@ -41,6 +42,7 @@ export default function CommandCatalogPanel() {
   const [params, setParams] = useState<Record<string, Record<string, string>>>({});
   const [message, setMessage] = useState("");
   const [aiText, setAiText] = useState("");
+  const [guidedWorkflow, setGuidedWorkflow] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; initialRequest: string; vendor: string }>(null);
   const [loading, setLoading] = useState(false);
 
   const selectedDevice = useMemo(() => devices.find((device) => device.id === deviceId), [devices, deviceId]);
@@ -121,6 +123,15 @@ export default function CommandCatalogPanel() {
       if (result.mode === "executable_action_plan") {
         setMessage(result.messageFa);
         goToActionCenter(result.actionPlanId);
+        return;
+      }
+      if (result.mode === "guided_workflow") {
+        setGuidedWorkflow({ blueprintId: result.blueprintId, initialValues: result.initialValues, initialRequest: aiText, vendor: selectedVendor });
+        setMessage(result.messageFa);
+        return;
+      }
+      if (result.mode === "clarification") {
+        setMessage(`${result.questionFa} ${result.options.map((option) => option.labelFa).join(" / ")}`);
         return;
       }
       if (result.mode === "needs_input") {
@@ -215,6 +226,17 @@ export default function CommandCatalogPanel() {
       </div>
 
       {message && <p className="mb-3 rounded-lg bg-cyan-950/50 p-3 text-sm text-cyan-200">{message}</p>}
+
+      {guidedWorkflow && deviceId && (
+        <GuidedActionWizard
+          blueprintId={guidedWorkflow.blueprintId}
+          deviceId={deviceId}
+          vendor={guidedWorkflow.vendor}
+          initialRequest={guidedWorkflow.initialRequest}
+          initialValues={guidedWorkflow.initialValues}
+          onClose={() => setGuidedWorkflow(null)}
+        />
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => {

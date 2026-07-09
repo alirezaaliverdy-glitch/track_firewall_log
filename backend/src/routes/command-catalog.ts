@@ -88,11 +88,37 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       autoExecuted: false,
     };
 
-    if (request.body.createActionPlan === false) return reply.code(201).send({ mode: "manual_proposal", messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.", draft, actionPlan: null, resolution });
+    if (resolution.mode === "guided_workflow" && resolution.blueprintId) {
+      return reply.code(200).send({
+        mode: "guided_workflow",
+        blueprintId: resolution.blueprintId,
+        initialValues: resolution.initialValues ?? resolution.normalizedParams,
+        reasonFa: resolution.reasonFa,
+        messageFa: resolution.reasonFa,
+        draft,
+        actionPlan: null,
+        resolution,
+      });
+    }
+
+    if (resolution.mode === "clarification") {
+      return reply.code(200).send({
+        mode: "clarification",
+        questionFa: resolution.questionFa,
+        options: resolution.options ?? [],
+        messageFa: resolution.questionFa,
+        draft,
+        actionPlan: null,
+        resolution,
+      });
+    }
+
+    if (request.body.createActionPlan === false) return reply.code(201).send({ mode: "manual_or_not_supported", messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.", draft, actionPlan: null, resolution });
 
     if (executableItem) {
       if (resolution.missingFields.length) {
-        return reply.code(200).send({ mode: "needs_input", missingFields: resolution.missingFields, messageFa: missingFieldsMessageFa(resolution.missingFields), draft, actionPlan: null, resolution });
+        const declaredFields = executableItem.requiredParams.filter((field) => resolution.missingFields.includes(field.key));
+        return reply.code(200).send({ mode: "needs_input", templateRef: resolution.executionTemplateRef, missingFields: resolution.missingFields, fields: declaredFields, messageFa: missingFieldsMessageFa(resolution.missingFields), draft, actionPlan: null, resolution });
       }
 
       const normalizedParams = resolution.normalizedParams;
@@ -112,7 +138,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return reply.code(200).send({
-      mode: "manual_proposal",
+      mode: "manual_or_not_supported",
       messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.",
       draft,
       actionPlan: null,

@@ -2,6 +2,8 @@ import { COMMAND_CATALOG, type CommandCatalogItem } from "../commands/catalog/in
 import { getExecutionTemplate } from "../commands/execution/execution-template-registry.js";
 import { routePersianIntent } from "./persian-intent-router.js";
 import { parseAiIntent } from "../services/ai-intent.service.js";
+import { resolveGuidedAction } from "../guided-actions/registry.js";
+import type { GuidedActionField } from "../guided-actions/types.js";
 
 export type AiResolverDevice = {
   id: string;
@@ -11,6 +13,7 @@ export type AiResolverDevice = {
 };
 
 export type AiTemplateResolution = {
+  mode: "executable_action_plan" | "needs_input" | "guided_workflow" | "clarification" | "manual_or_not_supported";
   canonicalVendor: string;
   canonicalActionType: string;
   catalogCommandId: string | null;
@@ -23,6 +26,11 @@ export type AiTemplateResolution = {
   confidence: number;
   reasonFa: string;
   catalogItem: CommandCatalogItem | null;
+  blueprintId?: string;
+  initialValues?: Record<string, unknown>;
+  missingGuidedFields?: GuidedActionField[];
+  questionFa?: string;
+  options?: Array<{ labelFa: string; value: string }>;
 };
 
 const PERSIAN_DIGITS: Record<string, string> = {
@@ -176,6 +184,11 @@ export function missingFieldsMessageFa(fields: string[]) {
   return `برای ساخت برنامه اجرا، این اطلاعات لازم است: ${fields.map((field) => MISSING_FIELD_LABELS[field] ?? field).join("، ")}`;
 }
 
+function isAmbiguousPortRequest(userText: string) {
+  const text = normalizeUserText(userText);
+  return includesAny(text, ["وضعیت پورت", "پورت هامو", "پورت ها", "پورت‌ها", "open ports", "listening ports"]) && !includesAny(text, ["اینترفیس", "interface", "فیزیکی", "tcp", "udp", "listen"]);
+}
+
 export function resolveAiTemplate(input: {
   userText: string;
   selectedDevice?: AiResolverDevice | null;
@@ -190,6 +203,52 @@ export function resolveAiTemplate(input: {
     ?? normalizeAiVendor(input.selectedDevice?.vendor)
     ?? normalizeAiVendor(input.currentVendor)
     ?? normalizeAiVendor(input.detectedVendor);
+
+  if (!selectedVendor && isAmbiguousPortRequest(input.userText)) {
+    return {
+      mode: "clarification",
+      canonicalVendor: "generic",
+      canonicalActionType: "port_status_clarification",
+      catalogCommandId: null,
+      executionTemplateRef: null,
+      connectorType: null,
+      implementationState: "manualOnly",
+      executionSupport: "manual",
+      normalizedParams: {},
+      missingFields: [],
+      confidence: 0.8,
+      reasonFa: "منظورت از پورت‌ها را مشخص کن.",
+      catalogItem: null,
+      questionFa: "منظورت از پورت‌ها کدام است؟",
+      options: [
+        { labelFa: "پورت‌های فیزیکی / اینترفیس‌های دستگاه", value: "physical_interfaces" },
+        { labelFa: "پورت‌های TCP/UDP باز و سرویس‌های در حال Listen", value: "listening_ports" },
+      ],
+    };
+  }
+
+  const guidedVendor = selectedVendor;
+  const guided = guidedVendor ? resolveGuidedAction({ text: input.userText, vendor: guidedVendor }) : null;
+  if (guided) {
+    return {
+      mode: "guided_workflow",
+      canonicalVendor: guidedVendor ?? "generic",
+      canonicalActionType: guided.blueprintId,
+      catalogCommandId: null,
+      executionTemplateRef: null,
+      connectorType: "fortigate-ssh",
+      implementationState: "planned",
+      executionSupport: "not_implemented",
+      normalizedParams: guided.initialValues,
+      missingFields: [],
+      confidence: 0.93,
+      reasonFa: guided.reasonFa,
+      catalogItem: null,
+      blueprintId: guided.blueprintId,
+      initialValues: guided.initialValues,
+    };
+  }
+
   const routed = routePersianIntent({
     text: input.userText,
     selectedDeviceId: input.selectedDevice?.id ?? null,
@@ -202,6 +261,7 @@ export function resolveAiTemplate(input: {
     const missingFields = Array.from(new Set([...routed.missingFields, ...missingFieldsForItem(item, mergedParams)]));
     if (item?.implementationState === "implemented" && template) {
       return {
+        mode: missingFields.length ? "needs_input" : "executable_action_plan",
         canonicalVendor: item.vendor,
         canonicalActionType: item.actionType,
         catalogCommandId: item.id,
@@ -250,6 +310,7 @@ export function resolveAiTemplate(input: {
 
   if (item?.implementationState === "implemented" && template) {
     return {
+      mode: missingFields.length ? "needs_input" : "executable_action_plan",
       canonicalVendor,
       canonicalActionType: item.actionType,
       catalogCommandId: item.id,
@@ -267,6 +328,7 @@ export function resolveAiTemplate(input: {
 
   if (item) {
     return {
+      mode: missingFields.length ? "needs_input" : "manual_or_not_supported",
       canonicalVendor,
       canonicalActionType: item.actionType,
       catalogCommandId: item.id,
@@ -287,6 +349,7 @@ export function resolveAiTemplate(input: {
   }
 
   return {
+    mode: "manual_or_not_supported",
     canonicalVendor,
     canonicalActionType: resolvedActionType,
     catalogCommandId: null,

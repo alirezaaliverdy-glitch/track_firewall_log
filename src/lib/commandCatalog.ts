@@ -10,6 +10,18 @@ export type CatalogParam = {
   placeholderFa?: string;
 };
 
+export type GuidedActionField = {
+  key: string;
+  labelFa: string;
+  type: string;
+  required: boolean;
+  placeholderFa?: string;
+  helpFa?: string;
+  secret?: boolean;
+  options?: Array<{ labelFa: string; value: string; source?: string }>;
+  validation?: { allowedValues?: string[]; allowCustom?: boolean; min?: number; max?: number; pattern?: string };
+};
+
 export type CatalogItem = {
   id: string;
   vendor: string;
@@ -43,15 +55,36 @@ export type AiProposalResponse =
       mode: "needs_input";
       messageFa: string;
       missingFields: string[];
+      fields?: GuidedActionField[];
+      templateRef?: string;
       actionPlan: null;
       draft: Record<string, unknown>;
       resolution?: Record<string, unknown>;
     }
   | {
-      mode: "manual_proposal";
+      mode: "manual_proposal" | "manual_or_not_supported";
       messageFa?: string;
       actionPlanId?: string;
       actionPlan: ActionPlan | null;
+      draft: Record<string, unknown>;
+      resolution?: Record<string, unknown>;
+    }
+  | {
+      mode: "guided_workflow";
+      messageFa: string;
+      reasonFa: string;
+      blueprintId: string;
+      initialValues: Record<string, unknown>;
+      actionPlan: null;
+      draft: Record<string, unknown>;
+      resolution?: Record<string, unknown>;
+    }
+  | {
+      mode: "clarification";
+      messageFa?: string;
+      questionFa: string;
+      options: Array<{ labelFa: string; value: string }>;
+      actionPlan: null;
       draft: Record<string, unknown>;
       resolution?: Record<string, unknown>;
     };

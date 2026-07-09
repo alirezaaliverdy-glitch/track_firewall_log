@@ -6,6 +6,10 @@
 
 `Device -> Command Catalog -> validated ActionPlan -> Preview -> User Confirm -> PolicyGuard -> Connector -> Audit/Result`
 
+برای عملیات چندمرحله‌ای:
+
+`Persian intent -> Resolver -> GuidedActionBlueprint -> ActionSession -> ActionPlan preview -> Action Center confirmation -> Connector`
+
 کاتالوگ نقطه شروع عملیات است و AI فقط وقتی دستور مناسب پیدا نشود، draft یا ActionPlan پیشنهادی می‌سازد. هیچ endpoint کاتالوگ یا AI نباید خودکار اجرا کند یا متن خام shell تولیدشده توسط AI را اجرا کند.
 
 ## قرارداد وضعیت
@@ -32,6 +36,7 @@
 
 - قرارداد و داده: `backend/src/commands/catalog/types.ts`, `backend/src/commands/catalog/index.ts`
 - validation/resolution: `command-catalog-validator.ts`, `catalog-action-resolver.ts`
+- guided actions: `backend/src/guided-actions/`, `backend/src/routes/action-sessions.ts`
 - template registry: `backend/src/commands/execution/execution-template-registry.ts`
 - API: `backend/src/routes/command-catalog.ts`
 - UI: `src/components/commands/CommandCatalogPanel.tsx`
@@ -57,3 +62,15 @@ Implemented FortiGate actions use the same controlled path:
 The registry covers interface/VLAN, zone, address/service objects, firewall policy, VIP/IP pool, routing/DNS/NTP, VPN, admin/access/security, VDOM, HA, and SD-WAN actions. Command Search Ask AI and the bottom chatbot both use the central resolver, so supported Persian requests produce executable FortiGate ActionPlans instead of generic prose or `generic_security_action`.
 
 Secret handling remains strict. Plain PSK/API token/password/certificate material must never appear in params, prompts, logs, docs, or UI; VPN PSK flows require `secretRef`/`pskSecretRef`.
+
+## Global Guided Actions (Task 17.2)
+
+The resolver can now return `guided_workflow` for multi-step operational requests. The frontend opens `ساخت مرحله‌ای اکشن`, collects Persian-labeled fields, validates fixed dropdowns and IP/CIDR/port values, and calls `/api/action-sessions/:id/build-plan`. The session API builds only backend template-backed ActionPlans and never executes directly.
+
+FortiGate workflows added:
+
+- Policy creation, address object creation, service object creation, static route, and VLAN interface are executable when all required values are supplied.
+- VIP/port forward is partial because optional policy creation remains a separate workflow.
+- IPsec VPN, SSL VPN, and policy enable/disable/move are partial/planned until deeper CLI/template coverage is complete.
+
+The port-status intent bug is fixed. With a selected FortiGate device, `وضعیت پورت هامو نشون بده` maps to `fortigate_show_interfaces` without `srcInterface`. With a selected Linux device it maps to the listening/open-port template. Without a vendor/device, the UI gets a Persian clarification between physical interfaces and TCP/UDP listening ports.

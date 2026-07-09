@@ -217,6 +217,6 @@ test("command catalog AI fallback returns executable, needs_input, and manual mo
     payload: { request: "برای این دستگاه یک بررسی سفارشی امنیتی بساز", vendor: "linux", deviceId: linux.id },
   });
   assert.equal(manual.statusCode, 200);
-  assert.equal(manual.json().mode, "manual_proposal");
+  assert.equal(manual.json().mode, "manual_or_not_supported");
   assert.equal(manual.json().actionPlan, null);
 });
