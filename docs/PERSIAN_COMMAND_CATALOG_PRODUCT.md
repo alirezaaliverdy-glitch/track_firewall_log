@@ -45,3 +45,15 @@ FortiGate operational intelligence follows the same catalog-first path as other 
 The Daily Check combines those families into eight sections: سلامت سیستم، وضعیت لایسنس و FortiGuard، اینترفیس‌ها و دسترسی مدیریتی، مسیر و DNS، سیاست‌ها/NAT/VIP، شبکه خصوصی، افزونگی/VDOM/Zone، و امنیت مدیران. Missing evidence is not treated as a confirmed fault. Invalid licensing on a lab VM is `needs_review` unless device output proves that a required feature is blocked.
 
 Both `/api/commands/ai-propose` and operational chat use the central AI template resolver. With a selected FortiGate device, Persian interface/port requests resolve to the implemented `fortigate_show_interfaces` action and `fortigate_show_interfaces` execution template on `fortigate-ssh`; raw AI CLI is never executable.
+
+## FortiGate Full Control Engine (Task 17.1)
+
+FortiGate is now a connector-backed management target, not a read-only vendor. The full-control registry is `backend/src/fortigate/full-control-registry.ts` and records action metadata: `actionType`, `titleFa`, `category`, `risk`, `readCommand`, create/update/delete/enable/disable templates, required params, prechecks, preview diff, execution template, verification commands, rollback template, parser, and UI hints.
+
+Implemented FortiGate actions use the same controlled path:
+
+`Persian intent -> FortiGate device -> ActionPlan -> config snapshot/preflight -> CLI preview/diff -> user confirmation -> PolicyGuard -> fortigate-ssh -> verification -> Persian result -> audit/rollback reference`
+
+The registry covers interface/VLAN, zone, address/service objects, firewall policy, VIP/IP pool, routing/DNS/NTP, VPN, admin/access/security, VDOM, HA, and SD-WAN actions. Command Search Ask AI and the bottom chatbot both use the central resolver, so supported Persian requests produce executable FortiGate ActionPlans instead of generic prose or `generic_security_action`.
+
+Secret handling remains strict. Plain PSK/API token/password/certificate material must never appear in params, prompts, logs, docs, or UI; VPN PSK flows require `secretRef`/`pskSecretRef`.

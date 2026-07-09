@@ -1,4 +1,5 @@
 import { ActionType, AiRiskLevel, type ActionPlan } from "@prisma/client";
+import { FORTIGATE_FULL_CONTROL_ACTION_TYPES } from "../fortigate/full-control-registry.js";
 import { compileFortiGateAction, type FortiGateCommandSpec } from "../services/fortigate-command-compiler.js";
 
 export type FortiGateValidation = {
@@ -11,7 +12,7 @@ export type FortiGateValidation = {
   rollbackJson: Record<string, unknown>;
 };
 
-const FORTIGATE_ACTIONS = new Set<ActionType>([
+const LEGACY_FORTIGATE_ACTIONS = [
   ActionType.fortigate_create_address_object,
   ActionType.fortigate_update_address_object,
   ActionType.fortigate_delete_managed_address_object,
@@ -79,6 +80,13 @@ const FORTIGATE_ACTIONS = new Set<ActionType>([
   ,ActionType.fortigate_show_firewall_policies
   ,ActionType.fortigate_show_vpn_status
   ,ActionType.fortigate_show_ha_vdom_zone
+] satisfies ActionType[];
+
+const FORTIGATE_ACTIONS = new Set<ActionType>([
+  ...LEGACY_FORTIGATE_ACTIONS,
+  ...FORTIGATE_FULL_CONTROL_ACTION_TYPES
+    .map((actionType) => (ActionType as Record<string, ActionType>)[actionType])
+    .filter(Boolean)
 ]);
 
 export function isFortiGateAction(actionType: ActionType) {

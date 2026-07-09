@@ -1,3 +1,4 @@
+import { FORTIGATE_FULL_CONTROL_REGISTRY } from "../../fortigate/full-control-registry.js";
 import type { CommandCatalogItem, CommandParam, CommandRiskLevel, CommandVendor, ImplementationState } from "./types.js";
 
 const param = (key: string, labelFa: string, helpFa: string, type: CommandParam["type"], placeholderFa?: string): CommandParam => ({ key, labelFa, helpFa, type, placeholderFa });
@@ -43,6 +44,17 @@ function item(vendor: CommandVendor, slug: string, titleFa: string, titleEn: str
 const implemented = (template: string, extra: Options = {}): Options => ({ ...extra, state: "implemented", template });
 const manual = (extra: Options = {}): Options => ({ ...extra, state: "manualOnly", mutates: extra.mutates ?? true });
 const planned = (extra: Options = {}): Options => ({ ...extra, state: "planned" });
+const fortiParam = (key: string): CommandParam => param(key, key, `مقدار ${key} را وارد کنید.`, key.toLowerCase().includes("ip") || key.toLowerCase().includes("gateway") ? "ip" : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("trusthost") ? "cidr" : key.toLowerCase().includes("port") || key.toLowerCase().includes("vlan") || key.toLowerCase().includes("priority") ? "number" : "string");
+const fullControlFortiGateItems = FORTIGATE_FULL_CONTROL_REGISTRY.map((entry) => item("fortigate", entry.actionType.replace(/^fortigate_/, "").replace(/_/g, "-"), entry.titleFa, entry.actionType, entry.category, entry.actionType, implemented(entry.executionTemplateRef, {
+  mutates: !entry.actionType.startsWith("fortigate_show_") && entry.actionType !== "fortigate_ha_precheck",
+  riskLevel: entry.risk as CommandRiskLevel,
+  required: entry.requiredParams.map(fortiParam),
+  prechecks: entry.preChecks,
+  verification: entry.verificationCommands,
+  rollback: entry.rollbackTemplate === "none_read_only" ? { available: false, notAvailableReasonFa: "این عملیات فقط خواندنی است." } : { available: true, steps: ["Snapshot قبل از تغییر و rollback reference در audit نگهداری می‌شود."] },
+  searchKeywordsFa: [entry.titleFa, entry.actionType.replace(/_/g, " "), entry.category],
+  uiHints: { executable: true, badgeFa: "اجراپذیر" },
+})));
 
 export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("linux", "daily-check", "چک روزانه", "Daily check", "daily-check", "linux_daily_check", implemented("linux_daily_check", { searchKeywordsFa: ["چک روزانه سرور", "بررسی روزانه"] })),
@@ -87,6 +99,7 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("fortigate", "firewall-policies", "Policy، NAT و VIP", "Policies, NAT and VIP", "firewall", "fortigate_show_firewall_policies", implemented("fortigate_show_firewall_policies", { mutates: false, searchKeywordsFa: ["policy ها", "nat و vip", "قوانین فایروال"] })),
   item("fortigate", "vpn-status", "وضعیت VPN", "VPN status", "vpn", "fortigate_show_vpn_status", implemented("fortigate_show_vpn_status", { mutates: false, searchKeywordsFa: ["وضعیت vpn", "تونل ipsec", "ssl vpn"] })),
   item("fortigate", "ha-vdom-zone", "HA، VDOM و Zone", "HA, VDOM and zones", "network", "fortigate_show_ha_vdom_zone", implemented("fortigate_show_ha_vdom_zone", { mutates: false, searchKeywordsFa: ["وضعیت ha", "vdom ها", "zone ها"] })),
+  ...fullControlFortiGateItems,
   item("cisco", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("pfsense", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("juniper", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),

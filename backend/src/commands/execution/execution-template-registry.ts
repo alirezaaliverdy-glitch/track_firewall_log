@@ -1,3 +1,5 @@
+import { FORTIGATE_FULL_CONTROL_ACTION_TYPES } from "../../fortigate/full-control-registry.js";
+
 export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh"; handler: string };
 
 const templates: ExecutionTemplate[] = [
@@ -37,6 +39,7 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "fortigate_show_firewall_policies", actionType: "fortigate_show_firewall_policies", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_vpn_status", actionType: "fortigate_show_vpn_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_ha_vdom_zone", actionType: "fortigate_show_ha_vdom_zone", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,...FORTIGATE_FULL_CONTROL_ACTION_TYPES.map((actionType) => ({ id: actionType, actionType, connectorType: "fortigate-ssh" as const, handler: "fortigatePlanner" }))
 ];
 
 export const EXECUTION_TEMPLATE_REGISTRY = Object.freeze(Object.fromEntries(templates.map((template) => [template.id, template])) as Record<string, ExecutionTemplate>);

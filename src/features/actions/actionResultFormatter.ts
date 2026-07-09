@@ -91,6 +91,38 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
     };
   }
 
+  if (action.actionType.startsWith("fortigate_")) {
+    const result = normalizeObject(action.resultJson);
+    const commands = normalizeArray<Record<string, unknown>>(result.commands);
+    const rollback = normalizeObject(result.rollbackJson);
+    const connectorSucceeded = action.status === "succeeded" && result.executed === true && normalizeObject(normalizeObject(action.parametersJson).metadata).connectorInvoked === true;
+    return {
+      summaryFa: connectorSucceeded
+        ? "عملیات FortiGate از مسیر کنترل‌شده اجرا و نتیجه واقعی کانکتور ثبت شد."
+        : "عملیات FortiGate کامل اجرا نشد یا شواهد کانکتور کافی نیست.",
+      nextActionsFa: ["خروجی verification و rollback reference را قبل از تغییر بعدی بازبینی کنید."],
+      structuredSections: [
+        {
+          title: "نتیجه اجرای FortiGate",
+          rows: [
+            { label: "ActionType", value: action.actionType },
+            { label: "وضعیت اجرا", value: executionStateFa(action) },
+            { label: "تعداد فرمان‌ها", value: String(commands.length) },
+            { label: "Rollback", value: String(rollback.type ?? "snapshot_backed_manual_rollback") },
+          ],
+        },
+        {
+          title: "Evidence",
+          rows: commands.slice(0, 12).map((command, index) => ({
+            label: String(command.template ?? `command ${index + 1}`),
+            value: `exitCode=${String(command.exitCode ?? "-")}\n${String(command.stdout ?? command.stderr ?? "").slice(0, 800) || "بدون خروجی"}`,
+          })),
+        },
+      ],
+      rawOutput,
+    };
+  }
+
   if (action.actionType === "linux_open_port" || action.actionType === "linux_close_port" || action.actionType === "close_port") {
     const port = String(params.port ?? params.toPort ?? "-");
     const protocol = String(params.protocol ?? "tcp");

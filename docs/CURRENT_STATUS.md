@@ -1,6 +1,15 @@
 # Current Project Status
 
-Last updated: 2026-07-08
+Last updated: 2026-07-09
+
+## Task 17.1 FortiGate Full Control Engine
+
+- FortiGate is no longer read-only in the command catalog. Full-control registry coverage now includes interfaces/VLANs, zones, address/service objects, policies, VIP/IP pools, routing/DNS/NTP, VPN, admin access, VDOM, HA, and SD-WAN.
+- Every implemented FortiGate action is registered as connector-backed through `fortigate-ssh`; implemented actions no longer intentionally fall through to `manual_or_not_implemented` or `generic_security_action` when a template exists.
+- Write flows keep the controlled Mini-SOAR path: structured ActionPlan, config snapshot/preflight, CLI preview/diff metadata, user confirmation, PolicyGuard, real connector execution, verification commands, audit, and rollback reference.
+- Persian Command Search Ask AI and bottom chatbot continue to share `resolveAiTemplate`; key operational phrases now map to real FortiGate ActionPlans including interface status, allowaccess changes, zone creation, policy creation with missing-field prompts, and VPN status.
+- Raw secrets remain blocked. VPN PSK handling requires `pskSecretRef`; plaintext PSK/API token/password/certificate material must not be emitted to UI/model logs.
+- Validation passed: Prisma generation, command catalog validation (136 items), backend build, backend tests (125/125), local enum migration apply, and frontend `pnpm build` with the existing large-chunk warning.
 
 ## Task 17.0 FortiGate Read-only Intelligence
 
@@ -68,7 +77,7 @@ Task 16.3 is complete for deterministic Persian intent routing across AI chat an
 |---|---|---|---|---|---|
 | Linux | Yes | Some catalog items | No | `linux-ssh` real connector | Real execution |
 | MikroTik | Yes | Some catalog items | Some | `mikrotik-ssh` real connector | Real execution |
-| FortiGate | Read-only discovery and Daily Check v1 | Existing write catalog unchanged | Some | `fortigate-ssh` interactive SSH connector | Real read-only execution |
+| FortiGate | Full-control catalog and read/write templates | Some legacy/manual review items | Some | `fortigate-ssh` interactive SSH connector | Real execution |
 | Cisco | No | Yes | Some | connector not ready | Manual checklist |
 | pfSense | No | Yes | Some | connector not ready | Manual checklist |
 | Juniper | No | Yes | Some | connector not ready | Manual checklist |
@@ -91,6 +100,7 @@ Task 16.3 is complete for deterministic Persian intent routing across AI chat an
 - `cd backend && npm test`
 - `cd backend && npx prisma db execute --file prisma/migrations/20260707183000_task16_3_persian_intent_aliases/migration.sql`
 - `cd backend && npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql`
+- `cd backend && npx prisma db execute --file prisma/migrations/20260709120000_task17_1_fortigate_full_control/migration.sql`
 - `pnpm build` or equivalent root build command when pnpm is unavailable
 
 Validation status: passed. Frontend build still shows the existing Vite chunk-size warning only.

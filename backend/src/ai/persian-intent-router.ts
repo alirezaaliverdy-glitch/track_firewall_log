@@ -64,6 +64,19 @@ function extractPort(text: string) {
   return Number.isInteger(value) && value >= 1 && value <= 65535 ? value : undefined;
 }
 
+function extractInterfaceName(text: string) {
+  return text.match(/\b(?:port|wan|lan|dmz)\d*\b/i)?.[0];
+}
+
+function extractAllowAccess(text: string) {
+  const values = ["ping", "ssh", "https", "http", "snmp", "fgfm"].filter((item) => new RegExp(`\\b${item}\\b`, "i").test(text));
+  return values.length > 0 ? values : undefined;
+}
+
+function extractZoneName(text: string) {
+  return text.match(/\bDMZ\b/i)?.[0] ?? text.match(/\bzone\s+(?:به\s+)?(?:اسم\s+)?([A-Za-z0-9_.:-]{1,79})\b/i)?.[1];
+}
+
 function extractServiceName(text: string) {
   const service = SERVICE_NAMES.find((name) => new RegExp(`\\b${name}\\b`, "i").test(text));
   if (!service) return undefined;
@@ -168,6 +181,40 @@ export function routePersianIntent(input: PersianIntentRouterInput): PersianInte
   }
 
   if (vendor === "fortigate") {
+    const interfaceName = extractInterfaceName(text);
+    const allowaccess = extractAllowAccess(text);
+    const zoneName = extractZoneName(valueText) ?? extractZoneName(text);
+    if (interfaceName && allowaccess && includesAny(text, ["فعال کن", "allowaccess", "فقط", "ssh", "ping"])) {
+      return output({ actionType: "fortigate_update_interface_allowaccess", executionTemplateRef: "fortigate_update_interface_allowaccess", connectorType: "fortigate-ssh", requiredParams: ["name", "allowaccess"], normalizedParams: { name: interfaceName, allowaccess }, readOnly: false });
+    }
+    if (interfaceName && ipAddress && includesAny(text, ["آی پی", "ip", "بزار", "تنظیم کن"])) {
+      return output({ actionType: "fortigate_update_interface_ip", executionTemplateRef: "fortigate_update_interface_ip", connectorType: "fortigate-ssh", requiredParams: ["name", "ip"], normalizedParams: { name: interfaceName, ip: `${ipAddress}/24` }, readOnly: false });
+    }
+    if (includesAny(text, ["vlan interface بساز", "یک vlan interface بساز", "vlan بساز"])) {
+      return output({ actionType: "fortigate_create_vlan_interface", executionTemplateRef: "fortigate_create_vlan_interface", connectorType: "fortigate-ssh", requiredParams: ["name", "parent", "vlanId"], normalizedParams: {}, readOnly: false });
+    }
+    if (interfaceName && includesAny(text, ["disable کن", "غیرفعال کن"])) {
+      return output({ actionType: "fortigate_disable_interface", executionTemplateRef: "fortigate_disable_interface", connectorType: "fortigate-ssh", requiredParams: ["name"], normalizedParams: { name: interfaceName }, readOnly: false });
+    }
+    if (zoneName && includesAny(text, ["zone بساز", "zone به اسم", "زون بساز"])) {
+      return output({ actionType: "fortigate_create_zone", executionTemplateRef: "fortigate_create_zone", connectorType: "fortigate-ssh", requiredParams: ["name"], normalizedParams: { name: zoneName, interfaces: [] }, readOnly: false });
+    }
+    if (interfaceName && zoneName && includesAny(text, ["بنداز داخل", "داخل", "اضافه کن"])) {
+      return output({ actionType: "fortigate_add_interface_to_zone", executionTemplateRef: "fortigate_add_interface_to_zone", connectorType: "fortigate-ssh", requiredParams: ["name", "interfaceName"], normalizedParams: { name: zoneName, interfaceName }, readOnly: false });
+    }
+    if (includesAny(text, ["policy بساز", "policy جدید", "دسترسی lan به dmz"])) {
+      const normalizedParams: Record<string, unknown> = { disabled: true };
+      if (text.includes("lan")) normalizedParams.srcintf = "lan";
+      if (text.includes("dmz")) normalizedParams.dstintf = "dmz";
+      return output({ actionType: "fortigate_create_policy", executionTemplateRef: "fortigate_create_policy", connectorType: "fortigate-ssh", requiredParams: ["srcintf", "dstintf", "srcaddr", "dstaddr", "services"], normalizedParams, readOnly: false });
+    }
+    const policyId = text.match(/policy\s+(?:شماره\s+)?(\d+)/i)?.[1];
+    if (policyId && includesAny(text, ["disable کن", "غیرفعال کن"])) {
+      return output({ actionType: "fortigate_disable_policy", executionTemplateRef: "fortigate_disable_policy", connectorType: "fortigate-ssh", requiredParams: ["policyId"], normalizedParams: { policyId }, readOnly: false });
+    }
+    if (includesAny(text, ["وضعیت vpn", "وضعیت vpn هامو", "vpn هامو", "vpn status"])) {
+      return output({ actionType: text.includes("ssl") ? "fortigate_show_ssl_vpn" : "fortigate_show_ipsec_vpns", executionTemplateRef: text.includes("ssl") ? "fortigate_show_ssl_vpn" : "fortigate_show_ipsec_vpns", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
+    }
     if (includesAny(text, ["وضعیت پورت ها", "وضعیت پورت هامو", "وضعیت پورت های فایروال", "وضعیت اینترفیس ها", "پورت های فورتی گیت رو نشون بده", "interface های فورتی گیت", "اینترفیس ها رو چک کن", "کدوم پورت ها ip دارن", "کدوم پورت ها ssh", "کدوم پورت ها https", "show interfaces", "interface status"])) {
       return output({ actionType: "fortigate_show_interfaces", executionTemplateRef: "fortigate_show_interfaces", connectorType: "fortigate-ssh", normalizedParams: {}, readOnly: true });
     }
