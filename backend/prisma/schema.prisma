@@ -906,6 +906,8 @@ enum AiIntentType {
   fortigate_update_dns
   fortigate_update_ntp
   fortigate_show_ipsec_vpns
+  fortigate_guided_workflow_preview
+  fortigate_guided_vpn_setup
   fortigate_create_ipsec_tunnel
   fortigate_update_ipsec_phase1
   fortigate_update_ipsec_phase2
@@ -1174,6 +1176,8 @@ enum ActionType {
   fortigate_update_dns
   fortigate_update_ntp
   fortigate_show_ipsec_vpns
+  fortigate_guided_workflow_preview
+  fortigate_guided_vpn_setup
   fortigate_create_ipsec_tunnel
   fortigate_update_ipsec_phase1
   fortigate_update_ipsec_phase2

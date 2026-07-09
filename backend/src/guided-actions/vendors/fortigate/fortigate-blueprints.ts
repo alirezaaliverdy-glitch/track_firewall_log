@@ -346,6 +346,195 @@ function unsupported(reasonFa: string) {
   return () => ({ ok: false as const, status: "planned" as const, reasonFa });
 }
 
+function textValue(context: GuidedActionBuildContext, key: string, fallback = "") {
+  const value = context.values[key];
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function listValue(context: GuidedActionBuildContext, key: string) {
+  const value = context.values[key];
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function enabledLabel(value: unknown) {
+  return value === true ? "فعال" : "غیرفعال";
+}
+
+function buildFortiGateVpnPreview(context: GuidedActionBuildContext) {
+  const required = guidedVpnSteps.flatMap((step) => step.fields).filter((item) => item.required);
+  const missingFields = missing(context, required.filter((item) => !item.dependsOn || Object.entries(item.dependsOn).every(([key, value]) => context.values[key] === value)));
+  if (missingFields.length) return { ok: false as const, status: "needs_input" as const, reasonFa: "برای ساخت پیش‌نمایش VPN چند مقدار لازم هنوز کامل نیست.", missingFields };
+
+  const vpnType = textValue(context, "vpnType", "ipsec_site_to_site");
+  const tunnelName = textValue(context, "name", `guided-${vpnType}-vpn`);
+  const localSubnets = listValue(context, "localSubnets");
+  const remoteSubnets = listValue(context, "remoteSubnets");
+  const allowedSubnets = listValue(context, "allowedSubnets");
+  const wanInterface = textValue(context, "wanInterface");
+  const remoteGateway = textValue(context, "remoteGateway");
+  const authMethod = textValue(context, "authMethod", "psk");
+  const pskMode = textValue(context, "pskMode", "generate");
+  const proposal = textValue(context, "proposal", "aes256-sha256");
+  const missingTemplates = vpnType === "ssl_vpn"
+    ? ["fortigate.guided_ssl_vpn_settings_template", "fortigate.guided_ssl_vpn_policy_template", "fortigate.guided_ssl_vpn_verification_parser"]
+    : ["fortigate.create_ipsec_site_to_site_vpn", "fortigate.guided_ipsec_phase1_template", "fortigate.guided_ipsec_phase2_template", "fortigate.guided_ipsec_policy_route_template", "fortigate.guided_ipsec_verification_parser"];
+  const verificationPlan = vpnType === "ssl_vpn"
+    ? ["show vpn ssl settings", "get vpn ssl monitor", "show firewall policy"]
+    : ["show vpn ipsec phase1-interface", "show vpn ipsec phase2-interface", "get vpn ipsec tunnel summary", "show firewall policy"];
+  const rollbackPlan = [
+    "قبل از اجرا snapshot/export تنظیمات گرفته شود.",
+    "در صورت تکمیل template اجرایی، phase2/phase1 ساخته‌شده، route و policyهای وابسته حذف یا به snapshot قبلی برگردانده شوند.",
+    "PSK یا password در rollback و audit ثبت نمی‌شود.",
+  ];
+  const cliOutline = vpnType === "ssl_vpn"
+    ? [
+        "config vpn ssl settings",
+        "  # set source-interface/source-address/port after template verification",
+        "end",
+        "config firewall policy",
+        "  # create SSL-VPN access policy after user confirmation",
+        "end",
+      ]
+    : [
+        "execute backup config flash before-guided-vpn",
+        "config vpn ipsec phase1-interface",
+        `  edit \"${tunnelName}\"`,
+        `  set interface \"${wanInterface}\"`,
+        `  set remote-gw ${remoteGateway || "<remote-gateway>"}`,
+        "  set psksecret [secret]",
+        "  next",
+        "end",
+        "config vpn ipsec phase2-interface",
+        `  edit \"${tunnelName}-p2\"`,
+        `  set phase1name \"${tunnelName}\"`,
+        "  # set local/remote selectors from approved CIDR lists",
+        "  next",
+        "end",
+        "config router static",
+        "  # create route only if requested/needed",
+        "end",
+        "config firewall policy",
+        "  # create policy only if createFirewallPolicy=true",
+        "end",
+      ];
+  const structuredPreview = {
+    summaryFa: "پیش‌نمایش ساختار اکشن VPN ساخته شد، اما اجرای واقعی این سناریو هنوز کامل نشده است.",
+    fieldsFa: {
+      "نوع VPN": vpnType,
+      "شبکه‌های محلی": localSubnets,
+      "شبکه‌های سمت مقابل": remoteSubnets,
+      "شبکه‌های مجاز": allowedSubnets,
+      "WAN interface": wanInterface,
+      "Remote Gateway": remoteGateway || "نیازمند تکمیل در سناریوی انتخاب‌شده",
+      "احراز هویت": authMethod === "psk" ? `PSK (${pskMode}) - مقدار مخفی است` : authMethod,
+      "Policy/NAT/Logging choices": {
+        createFirewallPolicy: enabledLabel(context.values.createFirewallPolicy),
+        natEnabled: enabledLabel(context.values.natEnabled),
+        logTraffic: enabledLabel(context.values.logTraffic),
+        enableAfterCreate: enabledLabel(context.values.enableAfterCreate),
+      },
+      "ریسک": "بالا؛ تغییر VPN می‌تواند روی دسترسی بین شبکه‌ها و مسیرها اثر بگذارد.",
+      "پیش‌نیازها": ["انتخاب دستگاه FortiGate", "snapshot/export تنظیمات", "تایید route و policy", "نگهداری secret در vault/secretRef"],
+      "تغییرات پیشنهادی": vpnType === "ssl_vpn"
+        ? ["آماده‌سازی تنظیمات SSL VPN", "ساخت policy دسترسی", "بررسی listener و source-address"]
+        : ["ساخت phase1-interface", "ساخت phase2-interface", "ساخت route در صورت نیاز", "ساخت address object و firewall policy در صورت انتخاب کاربر"],
+      "برنامه verification": verificationPlan,
+      "برنامه rollback": rollbackPlan,
+    },
+    cliOutline,
+    missingTemplates,
+    verificationPlan,
+    rollbackPlan,
+    researchNeeded: [
+      "FortiOS CLI دقیق Phase1/Phase2، proposal، selector و route باید با نسخه دستگاه تایید شود.",
+      "template اجرای چندمرحله‌ای و parser verification هنوز کامل نشده است.",
+    ],
+  };
+
+  return {
+    ok: true as const,
+    actionPlanInput: {
+      source: "ai" as const,
+      deviceId: context.deviceId,
+      vendor: "fortigate" as const,
+      actionType: "fortigate_guided_vpn_setup",
+      riskLevel: "high" as const,
+      requestedBy: context.requestedBy,
+      parametersJson: {
+        vendor: "fortigate",
+        vpnType,
+        name: tunnelName,
+        localSubnets,
+        remoteSubnets,
+        allowedSubnets,
+        wanInterface,
+        remoteGateway,
+        authMethod,
+        pskMode,
+        pskProvided: context.values.psk !== undefined ? "[secret]" : undefined,
+        proposal,
+        createFirewallPolicy: context.values.createFirewallPolicy === true,
+        natEnabled: context.values.natEnabled === true,
+        logTraffic: context.values.logTraffic === true,
+        enableAfterCreate: context.values.enableAfterCreate === true,
+        source: "guided_action_wizard",
+        implementationState: "partial",
+        executionSupport: "planned_or_partial",
+        executable: false,
+        connectorType: "fortigate-ssh",
+        operationCategory: "vpn",
+        blueprintId: context.blueprintId,
+        reasonFa: "قالب اجرای واقعی این سناریو هنوز کامل نشده است.",
+        missingTemplates,
+        structuredPreview,
+        cliOutline,
+        verificationPlan,
+        rollbackPlan,
+        metadata: {
+          source: "guided_action_wizard",
+          blueprintId: context.blueprintId,
+          initialRequest: context.initialRequest,
+          vendor: "fortigate",
+          actionType: "fortigate.guided_vpn_setup",
+          storedActionType: "fortigate_guided_vpn_setup",
+          operationCategory: "vpn",
+          executionSupport: "planned_or_partial",
+          implementationState: "partial",
+          executable: false,
+          connectorType: "fortigate-ssh",
+          executionTemplateRef: null,
+          missingTemplates,
+          reasonFa: "قالب اجرای واقعی این سناریو هنوز کامل نشده است.",
+          normalizedParams: {
+            vpnType,
+            name: tunnelName,
+            localSubnets,
+            remoteSubnets,
+            allowedSubnets,
+            wanInterface,
+            remoteGateway,
+            authMethod,
+            pskMode,
+            proposal,
+            createFirewallPolicy: context.values.createFirewallPolicy === true,
+            natEnabled: context.values.natEnabled === true,
+            logTraffic: context.values.logTraffic === true,
+            enableAfterCreate: context.values.enableAfterCreate === true,
+          },
+          requiredParamsSatisfied: true,
+          previewGenerated: true,
+          executed: false,
+          connectorInvoked: false,
+          lastExecutionStatus: "preview_only",
+        },
+      },
+    },
+    preview: structuredPreview,
+  };
+}
+
 export const FORTIGATE_GUIDED_BLUEPRINTS = Object.freeze([
   {
     id: "fortigate_guided_vpn_setup",
@@ -363,7 +552,7 @@ export const FORTIGATE_GUIDED_BLUEPRINTS = Object.freeze([
     dynamicOptionSources: { wanInterface: "fortigate_interfaces" },
     prerequisites: [{ id: "vpn_design_review", titleFa: "بازبینی طراحی VPN و Secret", required: true }],
     steps: guidedVpnSteps,
-    buildActionPlan: unsupported("این سناریو هنوز اجرای کامل ندارد، اما می‌توان اطلاعات و پیش‌نمایش ساختار اکشن را آماده کرد."),
+    buildActionPlan: buildFortiGateVpnPreview,
     verification: { commands: ["show vpn ipsec phase1-interface", "show vpn ssl settings", "get vpn ipsec tunnel summary"] },
     rollback: { template: "manual_snapshot_backed" },
     uiHints: { limitationFa: "Execution template کامل VPN هنوز پیاده‌سازی نشده است؛ ActionPlan اجرایی ساخته نمی‌شود." },

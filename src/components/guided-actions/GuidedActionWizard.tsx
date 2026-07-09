@@ -13,12 +13,22 @@ function valueToString(value: unknown) {
 function parseValue(field: GuidedActionField, raw: string, checked: boolean) {
   if (field.type === "checkbox") return checked;
   if (field.type === "number") return raw === "" ? "" : Number(raw);
-  if (field.type === "multiSelect") return raw.split(",").map((item) => item.trim()).filter(Boolean);
+  if (field.type === "multiSelect" || field.type === "cidrList" || field.type === "ipList") return raw.split(",").map((item) => item.trim()).filter(Boolean);
   return raw;
 }
 
 function activeFields(fields: GuidedActionField[], values: Record<string, unknown>) {
   return fields.filter((field) => !field.dependsOn || Object.entries(field.dependsOn).every(([key, value]) => values[key] === value));
+}
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isPreviewOnly(session: GuidedSession | null) {
+  const params = object(session?.actionPlan?.parametersJson);
+  const metadata = object(params.metadata);
+  return params.executable === false || metadata.executable === false || params.executionSupport === "planned_or_partial" || metadata.executionSupport === "planned_or_partial";
 }
 
 function goToActionCenter(actionPlanId: string) {
@@ -75,6 +85,7 @@ export default function GuidedActionWizard(props: {
 
   const currentStep = session?.currentStep ?? null;
   const stepValues = useMemo(() => ({ ...session?.answers, ...values }), [session?.answers, values]);
+  const previewOnly = isPreviewOnly(session);
 
   async function saveStep() {
     if (!session || !currentStep) return;
@@ -100,7 +111,9 @@ export default function GuidedActionWizard(props: {
       const next = await buildGuidedPlan(session.sessionId);
       setSession(next);
       if (next.actionPlanId) {
-        setMessage("پیش‌نمایش ActionPlan ساخته شد. ادامه اجرا در Action Center انجام می‌شود.");
+        setMessage(isPreviewOnly(next)
+          ? "پیش‌نمایش ساختار اکشن ساخته شد، اما اجرای واقعی این سناریو هنوز کامل نشده است."
+          : "پیش‌نمایش اکشن ساخته شد.");
         goToActionCenter(next.actionPlanId);
       }
     } catch (error) {
@@ -216,7 +229,7 @@ export default function GuidedActionWizard(props: {
           ساخت پیش‌نمایش اکشن
         </button>
         <button onClick={() => session?.actionPlanId && goToActionCenter(session.actionPlanId)} disabled={!session?.actionPlanId} className="rounded border border-slate-600 px-3 py-2 text-sm disabled:opacity-50">
-          رفتن به Action Center
+          {previewOnly ? "مشاهده پیش‌نمایش" : "رفتن به Action Center"}
         </button>
         <button onClick={() => void cancel()} className="rounded border border-slate-700 px-3 py-2 text-sm">
           لغو

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { GuidedActionBlueprint, GuidedActionField } from "./types.js";
 import { activeGuidedFields, maskGuidedSecrets, validateGuidedValues } from "./validators.js";
 import { getGuidedActionBlueprint } from "./registry.js";
-import { proposeActionPlan } from "../services/action-plan.service.js";
+import { getActionPlan, proposeActionPlan } from "../services/action-plan.service.js";
 import { prisma } from "../db/prisma.js";
 import { resolveGuidedAction } from "./registry.js";
 
@@ -40,6 +40,113 @@ const DEVICE_SELECTION_STEP = {
 
 function now() {
   return new Date().toISOString();
+}
+
+function toJson(value: unknown) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function previewOnlyInputFromPlanned(
+  session: GuidedActionSession,
+  blueprint: GuidedActionBlueprint,
+  requestedBy: string | undefined,
+  reasonFa: string,
+) {
+  const missingTemplates = blueprint.requiredCapabilities.map((capability) => `${blueprint.id}.${capability}.template`);
+  const verificationPlan = object(blueprint.verification).commands ?? [];
+  const rollbackPlan = object(blueprint.rollback).template ? [String(object(blueprint.rollback).template)] : ["manual_snapshot_backed"];
+  const structuredPreview = {
+    summaryFa: reasonFa,
+    blueprintId: blueprint.id,
+    implementationState: blueprint.implementationState,
+    missingTemplates,
+    verificationPlan,
+    rollbackPlan,
+    collectedValues: maskGuidedSecrets(session.answers, activeGuidedFields(blueprint.steps, session.answers)),
+  };
+  return {
+    source: "ai" as const,
+    deviceId: session.deviceId ?? "",
+    vendor: "fortigate" as const,
+    actionType: "fortigate_guided_workflow_preview",
+    riskLevel: blueprint.risk,
+    requestedBy,
+    parametersJson: {
+      vendor: "fortigate",
+      source: "guided_action_wizard",
+      blueprintId: blueprint.id,
+      implementationState: blueprint.implementationState === "implemented" ? "partial" : blueprint.implementationState,
+      executionSupport: "planned_or_partial",
+      executable: false,
+      connectorType: "fortigate-ssh",
+      operationCategory: blueprint.category,
+      reasonFa,
+      missingTemplates,
+      structuredPreview,
+      verificationPlan,
+      rollbackPlan,
+      metadata: {
+        source: "guided_action_wizard",
+        blueprintId: blueprint.id,
+        initialRequest: session.initialRequest,
+        vendor: "fortigate",
+        actionType: blueprint.id,
+        storedActionType: "fortigate_guided_workflow_preview",
+        operationCategory: blueprint.category,
+        executionSupport: "planned_or_partial",
+        implementationState: blueprint.implementationState === "implemented" ? "partial" : blueprint.implementationState,
+        executable: false,
+        connectorType: "fortigate-ssh",
+        executionTemplateRef: null,
+        missingTemplates,
+        reasonFa,
+        requiredParamsSatisfied: true,
+        previewGenerated: true,
+        executed: false,
+        connectorInvoked: false,
+        lastExecutionStatus: "preview_only",
+      },
+    },
+  };
+}
+
+async function persistPreviewOnlyPlan(planId: string, preview: Record<string, unknown> | undefined, parameters: Record<string, unknown>) {
+  const missingTemplates = Array.isArray(parameters.missingTemplates) ? parameters.missingTemplates.map(String) : [];
+  const verificationPlan = Array.isArray(parameters.verificationPlan) ? parameters.verificationPlan.map(String) : [];
+  const rollbackPlan = Array.isArray(parameters.rollbackPlan) ? parameters.rollbackPlan.map(String) : [];
+  const reasonFa = String(parameters.reasonFa ?? object(parameters.metadata).reasonFa ?? "قالب اجرای واقعی این سناریو هنوز کامل نشده است.");
+  await prisma.actionPlan.update({
+    where: { id: planId },
+    data: {
+      validationJson: toJson({
+        valid: true,
+        previewOnly: true,
+        executable: false,
+        reasonFa,
+        missingTemplates,
+        errors: [],
+        missingFields: [],
+      }),
+      dryRunJson: toJson({
+        status: "preview_only",
+        executable: false,
+        reasonFa,
+        preview: preview ?? parameters.structuredPreview ?? {},
+        cliOutline: parameters.cliOutline ?? [],
+        missingTemplates,
+        verificationPlan,
+        rollbackPlan,
+        commands: [],
+        plannedCommands: [],
+      }),
+      rollbackJson: toJson({ status: "preview_only", steps: rollbackPlan }),
+    },
+  });
+  return getActionPlan(planId);
 }
 
 function publicBlueprint(blueprint: GuidedActionBlueprint) {
@@ -176,12 +283,18 @@ export async function buildGuidedActionPlan(id: string, requestedBy?: string) {
     initialRequest: session.initialRequest,
     values: session.answers,
   });
-  if (!result.ok) return { ok: false as const, code: result.status === "needs_input" ? 422 : 409, error: result.status.toUpperCase(), messageFa: result.reasonFa, missingFields: result.missingFields };
-  const plan = await proposeActionPlan(result.actionPlanInput);
+  if (!result.ok && result.status === "needs_input") return { ok: false as const, code: 422, error: result.status.toUpperCase(), messageFa: result.reasonFa, missingFields: result.missingFields };
+  if (!result.ok && session.vendor !== "fortigate") return { ok: false as const, code: 409, error: result.status.toUpperCase(), messageFa: result.reasonFa, missingFields: result.missingFields };
+  const actionPlanInput = result.ok ? result.actionPlanInput : previewOnlyInputFromPlanned(session, blueprint, requestedBy, result.reasonFa);
+  const plan = await proposeActionPlan(actionPlanInput);
+  const parameters = object(plan.parametersJson);
+  const metadata = object(parameters.metadata);
+  const previewOnly = parameters.executionSupport === "planned_or_partial" || metadata.executable === false || parameters.executable === false;
+  const persistedPlan = previewOnly ? await persistPreviewOnlyPlan(plan.id, result.ok ? result.preview : object(actionPlanInput.parametersJson).structuredPreview as Record<string, unknown>, parameters) : plan;
   session.status = "built";
   session.actionPlanId = plan.id;
   session.updatedAt = now();
-  return { ok: true as const, value: { ...shape(session, blueprint), actionPlanId: plan.id, preview: result.preview, actionPlan: plan } };
+  return { ok: true as const, value: { ...shape(session, blueprint), actionPlanId: plan.id, preview: result.ok ? result.preview : object(actionPlanInput.parametersJson).structuredPreview as Record<string, unknown>, actionPlan: persistedPlan ?? plan } };
 }
 
 export function cancelGuidedActionSession(id: string) {

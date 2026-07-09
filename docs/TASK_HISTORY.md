@@ -2,6 +2,14 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.2C - Guided Build-Plan Preview for FortiGate VPN (2026-07-09)
+
+- Summary: fixed completed FortiGate VPN wizard build-plan so partial/planned execution templates create a preview-only ActionPlan instead of a useless 409.
+- Areas: `backend/src/guided-actions/session-service.ts`, `backend/src/guided-actions/vendors/fortigate/fortigate-blueprints.ts`, Prisma schema/migration, `backend/src/services/action-plan.service.ts`, `src/components/guided-actions/GuidedActionWizard.tsx`, `src/components/actions/ActionCenterPanel.tsx`, `src/lib/actionApprovalState.ts`, tests and docs.
+- Safety: execution remains disabled for preview-only guided plans; no raw AI commands, no connector invocation from wizard, no fake success, and PSK/password values are masked/excluded from persisted preview data.
+- Validation: `npm run prisma:generate`; local enum migration apply; backend `npm run build`; backend `npm test` passed with 140/140; root `pnpm build` passed with existing chunk-size/dynamic-import warnings.
+- Commit: pending.
+
 ## Task 17.2B - Force Multi-Step Requests into Guided Wizard (2026-07-09)
 
 - Summary: removed the no-device chat dead-end for guided workflows. VPN/VDOM/Zone/Policy/VIP/NAT/VLAN/Route-style creation requests now return `guided_workflow`, start an ActionSession, and open the Persian wizard with device selection as step one when needed.

@@ -13,6 +13,15 @@ export function actionExecutionUiState(action: ActionPlan) {
   const executionSupport = String(metadataValue(parameters, "executionSupport") ?? "");
   const metadata = object(parameters.metadata);
   const catalogState = String(metadata.implementationState ?? "");
+  if (metadata.source === "guided_action_wizard" && (metadata.executable === false || executionSupport === "planned_or_partial" || catalogState === "partial" || catalogState === "planned")) {
+    return {
+      state: "blocked",
+      canApproveAndExecute: false,
+      canExecute: false,
+      reason: String(metadata.reasonFa ?? parameters.reasonFa ?? "این اکشن هنوز اجرای واقعی کامل ندارد."),
+      missingField: null
+    };
+  }
   if (metadata.source === "command_catalog" && (catalogState !== "implemented" || executionSupport !== "connector" || !metadata.executionTemplateRef)) {
     return {
       state: "blocked",
@@ -22,7 +31,7 @@ export function actionExecutionUiState(action: ActionPlan) {
       missingField: null
     };
   }
-  if (action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action" || ["manual_or_not_implemented", "unsupported_vendor", "needs_parameters"].includes(executionSupport)) {
+  if (action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action" || ["manual_or_not_implemented", "unsupported_vendor", "needs_parameters", "planned_or_partial"].includes(executionSupport)) {
     return {
       state: executionSupport === "needs_parameters" ? "needs_value" : "blocked",
       canApproveAndExecute: false,

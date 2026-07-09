@@ -12,6 +12,8 @@
 
 Task 17.2B rule: multi-step creation requests such as VPN, VDOM, Zone, Policy/Rule, VIP/NAT/Port Forward, Interface/VLAN/Subinterface, and Route/Gateway must return `guided_workflow` before generic AI/manual fallback. No selected device is not a chat error. The app starts an ActionSession anyway, opens `/guided-actions/:sessionId`, and the wizard's first step is `device_selection` (`Ø§Ù†ØªØ®Ø§Ø¨ Ø¯Ø³ØªÚ¯Ø§Ù‡`). Only after the wizard has all required fields and the user builds a preview may an ActionPlan be created. These requests must never become `custom_vendor_action`, `generic_security_action`, `unsupported_vendor`, or `manual_or_not_implemented` while a guided blueprint exists.
 
+Task 17.2C rule: when the wizard has valid required fields but the executable backend template is not complete, build-plan must create a preview-only ActionPlan instead of returning a useless 409. For FortiGate VPN, the preview plan is non-executable (`executionSupport=planned_or_partial`, `executable=false`), includes Persian summary, safe CLI outline, missing templates, verification and rollback plans, and disables Action Center execution. Secrets such as PSK/password are masked and are not persisted as raw values.
+
 
 Ú©Ø§ØªØ§Ù„ÙˆÚ¯ Ù†Ù‚Ø·Ù‡ Ø´Ø±ÙˆØ¹ Ø¹Ù…Ù„ÛŒØ§Øª Ø§Ø³Øª Ùˆ AI ÙÙ‚Ø· ÙˆÙ‚ØªÛŒ Ø¯Ø³ØªÙˆØ± Ù…Ù†Ø§Ø³Ø¨ Ù¾ÛŒØ¯Ø§ Ù†Ø´ÙˆØ¯ØŒ draft ÛŒØ§ ActionPlan Ù¾ÛŒØ´Ù†Ù‡Ø§Ø¯ÛŒ Ù…ÛŒâ€ŒØ³Ø§Ø²Ø¯. Ù‡ÛŒÚ† endpoint Ú©Ø§ØªØ§Ù„ÙˆÚ¯ ÛŒØ§ AI Ù†Ø¨Ø§ÛŒØ¯ Ø®ÙˆØ¯Ú©Ø§Ø± Ø§Ø¬Ø±Ø§ Ú©Ù†Ø¯ ÛŒØ§ Ù…ØªÙ† Ø®Ø§Ù… shell ØªÙˆÙ„ÛŒØ¯Ø´Ø¯Ù‡ ØªÙˆØ³Ø· AI Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©Ù†Ø¯.
 

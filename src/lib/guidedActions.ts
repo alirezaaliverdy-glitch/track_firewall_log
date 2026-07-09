@@ -42,7 +42,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.messageFa ?? body.error ?? "خطا در ارتباط با سرور");
+  if (!response.ok) {
+    const details = body.issues ? `\n${JSON.stringify(body.issues)}` : body.missingFields ? `\n${JSON.stringify(body.missingFields)}` : "";
+    throw new Error(`${body.messageFa ?? body.error ?? "خطا در ارتباط با سرور"}${details}`);
+  }
   return body as T;
 }
 

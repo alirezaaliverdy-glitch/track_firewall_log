@@ -68,7 +68,7 @@ function vendorOf(action: ActionPlan) {
 
 function commandSummary(action: ActionPlan) {
   const dryRun = normalizeObject(action.dryRunJson);
-  const commands = Array.from(new Set([...textArray(dryRun.plannedCommands), ...textArray(dryRun.commands)]));
+  const commands = Array.from(new Set([...textArray(dryRun.plannedCommands), ...textArray(dryRun.commands), ...textArray(dryRun.cliOutline)]));
   const result = normalizeObject(action.resultJson);
   const executedCommands = normalizeArray<Record<string, unknown>>(result.commands).map((item) => String(item.template ?? item.command ?? "")).filter(Boolean);
   return (executedCommands.length ? executedCommands : commands).slice(0, 3);
@@ -154,7 +154,7 @@ function VendorPlanView({ dryRunJson }: { dryRunJson: Record<string, unknown> })
   const vendorPlan = Object.keys(normalizeObject(dryRunJson)).length > 0
     ? dryRunJson
     : normalizeObject(dryRunJson.vendorCommandPlan);
-  const commands = Array.from(new Set([...textArray(vendorPlan.plannedCommands), ...textArray(vendorPlan.commands)]));
+  const commands = Array.from(new Set([...textArray(vendorPlan.plannedCommands), ...textArray(vendorPlan.commands), ...textArray(vendorPlan.cliOutline)]));
   const apiCalls = normalizeArray<Record<string, unknown>>(vendorPlan.apiCalls);
   const warnings = textArray(vendorPlan.warnings);
   const rollbackSteps = textArray(vendorPlan.rollbackSteps);
@@ -314,6 +314,10 @@ function PlanSummary({ plan }: { plan: ActionPlan }) {
 
 function actionLabel(action: ActionPlan) {
   const params = normalizeObject(action.parametersJson);
+  const metadata = normalizeObject(params.metadata);
+  if (metadata.source === "guided_action_wizard") {
+    return String(metadata.actionType ?? params.blueprintId ?? action.actionType).replace(/_/g, " ");
+  }
   if (action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action") {
     return String(params.requestedOperation ?? "Proposed Action");
   }
@@ -333,6 +337,40 @@ function actionLabel(action: ActionPlan) {
 
 function ProposalDetails({ action }: { action: ActionPlan }) {
   const params = normalizeObject(action.parametersJson);
+  const metadata = normalizeObject(params.metadata);
+  if (metadata.source === "guided_action_wizard") {
+    const missingTemplates = textArray(metadata.missingTemplates ?? params.missingTemplates);
+    const preview = normalizeObject(params.structuredPreview ?? normalizeObject(action.dryRunJson).preview);
+    const rows = [
+      ["وضعیت", metadata.implementationState ?? params.implementationState],
+      ["پشتیبانی اجرا", metadata.executionSupport ?? params.executionSupport],
+      ["دلیل", metadata.reasonFa ?? params.reasonFa],
+      ["قابلیت اجرا", metadata.executable === false || params.executable === false ? "این اکشن هنوز اجرای واقعی کامل ندارد." : "قابل اجرا"],
+      ["Blueprint", metadata.blueprintId ?? params.blueprintId],
+      ["Connector", metadata.connectorType ?? params.connectorType],
+      ["Missing templates", missingTemplates.join(" | ")],
+      ["Verification", textArray(params.verificationPlan ?? normalizeObject(action.dryRunJson).verificationPlan).join(" | ")],
+      ["Rollback", textArray(params.rollbackPlan ?? normalizeObject(action.dryRunJson).rollbackPlan).join(" | ")]
+    ].filter(([, value]) => String(value ?? "").trim());
+    return (
+      <div className="mb-4 rounded border border-yellow-900/70 bg-yellow-950/15 p-3 text-right" dir="rtl">
+        <h4 className="text-sm font-semibold text-yellow-100">این اکشن هنوز اجرای واقعی کامل ندارد.</h4>
+        <dl className="mt-2 grid gap-2 text-xs text-zinc-300 sm:grid-cols-2">
+          {rows.map(([label, value]) => (
+            <div key={String(label)}>
+              <dt className="font-semibold text-zinc-500">{String(label)}</dt>
+              <dd className="mt-0.5 break-words">{String(value)}</dd>
+            </div>
+          ))}
+        </dl>
+        {Object.keys(preview).length > 0 && (
+          <pre className="mt-3 max-h-64 overflow-auto rounded border border-yellow-900/50 bg-black/30 p-2 text-left text-[11px] text-zinc-300" dir="ltr">
+            {JSON.stringify(preview, null, 2)}
+          </pre>
+        )}
+      </div>
+    );
+  }
   if (action.actionType !== "custom_vendor_action" && action.actionType !== "generic_security_action") return null;
   const rows = [
     ["Execution support", params.executionSupport],
@@ -938,7 +976,7 @@ export default function ActionCenterPanel() {
 
 function CatalogExecutionDebug({ action }: { action: ActionPlan }) {
   const metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
-  if (metadata.source !== "command_catalog") return null;
-  const fields = ["catalogCommandId", "actionType", "executionTemplateRef", "executionSupport", "connectorType", "executed", "connectorInvoked", "lastExecutionStatus", "previewStale", "staleReason"];
+  if (metadata.source !== "command_catalog" && metadata.source !== "guided_action_wizard") return null;
+  const fields = ["catalogCommandId", "blueprintId", "actionType", "storedActionType", "executionTemplateRef", "executionSupport", "implementationState", "executable", "connectorType", "executed", "connectorInvoked", "lastExecutionStatus", "previewStale", "staleReason"];
   return <div className="mb-4 rounded border border-cyan-950 bg-cyan-950/10 p-3"><h4 className="text-xs font-semibold text-cyan-200">Catalog execution debug</h4><dl className="mt-2 grid gap-2 sm:grid-cols-2">{fields.map((field) => <div key={field}><dt className="text-[11px] text-zinc-500">{field}</dt><dd className="text-xs text-zinc-300">{String(metadata[field] ?? "-")}</dd></div>)}</dl></div>;
 }

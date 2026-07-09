@@ -12,6 +12,8 @@ Creation is permissive; execution is controlled. Preview never implies execution
 
 Task 17.2B adds a hard resolver guard before generic/manual fallback: clearly multi-step operational creation requests must route to `guided_workflow` when a blueprint exists. The guard covers VPN, VDOM, Zone, Policy/Rule, VIP/NAT/Port Forward, Interface/VLAN/Subinterface, and Route/Gateway creation phrases in Persian and English. If no selected device exists, the resolver still returns `guided_workflow`; `/api/action-sessions/start` creates a pending session and the wizard's first step is `device_selection`. These requests must not create `vendor=unknown`, `custom_vendor_action`, `generic_security_action`, `unsupported_vendor`, or any normal ActionPlan before wizard completion.
 
+Task 17.2C extends guided build-plan behavior: after valid wizard completion, partial/planned FortiGate guided scenarios create preview-only ActionPlans instead of dead-end 409 responses. Preview-only plans carry `source=guided_action_wizard`, `executionSupport=planned_or_partial`, `executable=false`, `missingTemplates`, `verificationPlan`, and `rollbackPlan`; Action Center renders the preview and blocks execution before connector invocation.
+
 ## Backend Map
 
 | Area | Purpose | Main path | Route/API | Status |

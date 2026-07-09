@@ -24,6 +24,8 @@ ActionSession lifecycle:
 
 Execution still happens only through the existing Action Center quick-execute path after user confirmation. ActionSession never executes connector commands directly.
 
+Task 17.2C build-plan rule: completed FortiGate VPN sessions now create preview-only ActionPlans instead of returning 409 when execution templates are partial/planned. The persisted plan uses `executionSupport=planned_or_partial`, `implementationState=partial`, `executable=false`, `missingTemplates`, `verificationPlan`, `rollbackPlan`, and a safe CLI outline. Action Center displays the preview and disables execution with `این اکشن هنوز اجرای واقعی کامل ندارد.`. The DB enum action type is `fortigate_guided_vpn_setup`; metadata carries the product identity `fortigate.guided_vpn_setup`.
+
 Task 17.2B hard routing: clear multi-step requests must open a guided wizard even when the main chat has no selected device. `/api/commands/ai-propose` and `/api/ai/chat` return `mode=guided_workflow`; the frontend starts `/api/action-sessions/start` and navigates to `/guided-actions/:sessionId`. If no device was supplied, the session is pending and the first wizard step is `device_selection` (`انتخاب دستگاه`). Choosing a device resolves its vendor from the database and switches to the matching vendor blueprint before action-specific steps. No ActionPlan is created until the wizard fields are complete and the user clicks build preview.
 
 ## FortiGate Workflow Registry
@@ -91,3 +93,4 @@ Where official docs were not verified, enum sources are marked `verified_from_ex
 - Dynamic runtime option providers are declared, but fetching live interfaces/objects/groups/policies is not yet fully wired into the UI.
 - General multi-step execution metadata is present, but automatic sequential multi-step connector execution is not promoted beyond the existing single ActionPlan execution path.
 - VPN and SSL VPN setup need deeper official FortiOS CLI research before becoming full executable workflows.
+- Preview-only VPN plans intentionally do not persist raw PSK/password values; manual secrets are represented as `[secret]`.

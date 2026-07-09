@@ -112,21 +112,83 @@ test("ActionSession rejects invalid enum in Persian and does not build an Action
   assert.equal(built.ok, false);
 });
 
-test("Unsupported/partial FortiGate workflow does not fake executable command or success", async () => {
+test("Complete FortiGate VPN guided session builds preview-only ActionPlan without 409", async (t) => {
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.2C FortiGate VPN Preview",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.175",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+  });
+
   const session = startGuidedActionSession({
     blueprintId: "fortigate_guided_vpn_setup",
-    deviceId: "fg-partial-vpn",
+    deviceId: device.id,
     vendor: "fortigate",
     initialRequest: "vpn create",
-    initialValues: { vpnType: "ipsec_site_to_site", name: "vpn1", localSubnets: "10.0.0.0/24", remoteSubnets: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "generate" },
+    initialValues: { vpnType: "ipsec_site_to_site", name: "vpn1", localSubnets: "10.0.0.0/24", remoteSubnets: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "manual", psk: "super-secret-psk", createFirewallPolicy: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
+  });
+  assert.equal(session.ok, true);
+  const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  assert.ok(built.value.actionPlanId);
+  assert.equal(built.value.actionPlan.actionType, "fortigate_guided_vpn_setup");
+  const params = built.value.actionPlan.parametersJson as Record<string, unknown>;
+  const metadata = params.metadata as Record<string, unknown>;
+  assert.equal(params.vendor, "fortigate");
+  assert.equal(params.executionSupport, "planned_or_partial");
+  assert.equal(params.implementationState, "partial");
+  assert.equal(params.executable, false);
+  assert.equal(metadata.actionType, "fortigate.guided_vpn_setup");
+  assert.equal(metadata.connectorType, "fortigate-ssh");
+  assert.equal(metadata.source, "guided_action_wizard");
+  assert.ok(Array.isArray(params.missingTemplates));
+  assert.notEqual(JSON.stringify(built.value), "super-secret-psk");
+  assert.doesNotMatch(JSON.stringify(built.value), /super-secret-psk/);
+  assert.doesNotMatch(JSON.stringify(built.value.actionPlan.dryRunJson), /super-secret-psk/);
+  const blueprint = getGuidedActionBlueprint("fortigate_guided_vpn_setup");
+  assert.ok(blueprint);
+  assert.equal(blueprint.implementationState, "partial");
+});
+
+test("FortiGate VPN guided build rejects invalid CIDR before ActionPlan creation", async (t) => {
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.2C FortiGate VPN Invalid",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.176",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+  });
+  const before = await prisma.actionPlan.count({ where: { deviceId: device.id } });
+  const session = startGuidedActionSession({
+    blueprintId: "fortigate_guided_vpn_setup",
+    deviceId: device.id,
+    vendor: "fortigate",
+    initialRequest: "vpn create",
+    initialValues: { vpnType: "ipsec_site_to_site", name: "vpn_bad", localSubnets: "10.0.0.0/33", remoteSubnets: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "generate" },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
   assert.equal(built.ok, false);
-  assert.equal(built.ok ? "" : built.error, "PLANNED");
-  const blueprint = getGuidedActionBlueprint("fortigate_guided_vpn_setup");
-  assert.ok(blueprint);
-  assert.equal(blueprint.implementationState, "partial");
+  assert.equal(built.ok ? "" : built.error, "VALIDATION_FAILED");
+  assert.equal(await prisma.actionPlan.count({ where: { deviceId: device.id } }), before);
 });
 
 test("ActionSession API starts FortiGate guided workflow and exposes Persian step fields", async (t) => {

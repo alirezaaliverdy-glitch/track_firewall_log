@@ -374,6 +374,11 @@ export class ActionExecutionError extends Error {
 }
 
 async function ensureControlledCatalogAction(plan: ActionPlan) {
+  const previewMetadata = asObject(asObject(plan.parametersJson).metadata);
+  const previewExecutionSupport = String(previewMetadata.executionSupport ?? asObject(plan.parametersJson).executionSupport ?? "");
+  if (previewMetadata.source === "guided_action_wizard" && (previewMetadata.executable === false || previewExecutionSupport === "planned_or_partial")) {
+    throw new ActionExecutionError("PREVIEW_ONLY_GUIDED_ACTION", "این اکشن هنوز اجرای واقعی کامل ندارد.", 409);
+  }
   const device = plan.deviceId ? await prisma.device.findUnique({ where: { id: plan.deviceId } }) : null;
   const productCatalog = resolveCatalogAction(plan, device);
   if (productCatalog.matched) {
@@ -405,6 +410,10 @@ export function approvalPreconditionError(plan: Pick<ActionPlan, "actionType" | 
 export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "status"> & { parametersJson?: unknown }, mode: ActionExecutionMode = env.actionExecutionMode) {
   const catalog = getActionCatalogEntry(plan.actionType);
   const metadata = asObject(asObject(plan.parametersJson).metadata);
+  const executionSupport = String(metadata.executionSupport ?? asObject(plan.parametersJson).executionSupport ?? "");
+  if (metadata.source === "guided_action_wizard" && (metadata.executable === false || executionSupport === "planned_or_partial")) {
+    return new ActionExecutionError("PREVIEW_ONLY_GUIDED_ACTION", "این اکشن هنوز اجرای واقعی کامل ندارد.");
+  }
   const productCatalogControlled = ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(String(metadata.source)) && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
   const controlled = productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
