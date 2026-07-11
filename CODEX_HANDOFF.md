@@ -1,5 +1,17 @@
 # CODEX_HANDOFF.md
 
+## Task 17.6C - Standard Guided Parameter Flow (2026-07-11)
+
+- Added a generic catalog-backed guided blueprint path (`catalog:<commandId>`) so parameterized FortiGate, MikroTik, Linux, and future catalog actions use the same ActionSession wizard instead of raw inline preview cards.
+- Action Library parameterized cards now show support state and open the guided flow with URL state (`guidedBlueprintId`, `catalogActionId`, vendor/device) via the CTA `Configure / Create ActionPlan`; card-level parameter inputs were removed.
+- Guided validation now rejects missing, invalid, secret-sensitive, and exact-placeholder submitted values before preview/build-plan. UI-only/internal keys such as wizard source metadata are filtered out of execution params.
+- AI command proposal and AI Assistant routes now send actionable missing-parameter catalog tasks into the same guided flow. Deterministic guided/chat routing skips the external AI provider for recognized guided intents.
+- Execution support remains default-deny: verified parameterized actions build previewable ActionPlans and execute only after confirmation; manual/preview-only parameterized actions can build review plans but do not invoke connectors.
+- Guided UI now follows the active i18n text direction instead of hard-coded RTL and masks fields marked as password/generated secret/secret.
+- Playwright MCP was requested but is not exposed in this session; browser-level verification could not be run.
+- Migrations: none.
+- Validation passed: backend build; focused guided/support/AI regression tests (33/33); backend catalog validation (136 items); backend full test suite (152/152); root i18n parity (73 keys); root `pnpm build` with the existing Vite large-chunk warning.
+
 ## Task 17.6 - Disable Mandatory Action Backup Preflight (2026-07-11)
 
 - Removed mandatory automatic backup/export preflight from every Quick Controlled FortiGate and MikroTik execution path. Backup/export remains an optional manual operator action.

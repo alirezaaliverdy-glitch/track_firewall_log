@@ -10,6 +10,7 @@ import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
 import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
 import { startGuidedActionSession } from "../guided-actions/session-service.js";
+import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -180,9 +181,23 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     }
   });
 
+  const earlySelectedDevice = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId } }) : null;
+  const earlyResolution = resolveAiTemplate({ userText: message, selectedDevice: earlySelectedDevice });
+  const deterministicGuided = earlyResolution.mode === "guided_workflow" || (earlyResolution.catalogItem && earlyResolution.missingFields.length > 0);
   const context = await buildSecurityOrchestratorContext();
   const catalogMatch = routeCatalogIntent(message);
-  const providerCandidate = catalogMatch.aiRequired
+  const providerCandidate = deterministicGuided
+    ? {
+        assistantMessage: earlyResolution.reasonFa || "این درخواست باید در فرم مرحله‌ای تکمیل شود.",
+        shouldCreateIntent: true,
+        intent: catalogMatch.parsedIntent ? structuredFromParsed(catalogMatch.parsedIntent) : null,
+        confidence: 1,
+        provider: "mock" as const,
+        model: "deterministic-guided-router",
+        keyConfigured: false,
+        fallbackUsed: false
+      }
+    : catalogMatch.aiRequired
     ? await runAiProvider({ message, context })
     : {
         assistantMessage: catalogMatch.status === "matched" && catalogMatch.catalogEntry
@@ -249,7 +264,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     : undefined;
   const debug = intentDebug({ intent: actionIntent, structuredIntent: effectiveStructuredIntent });
   const selectedDeviceId = input.deviceId ?? actionIntent?.deviceId;
-  const selectedDevice = selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null;
+  const selectedDevice = earlySelectedDevice ?? (selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null);
   const resolution = resolveAiTemplate({ userText: message, selectedDevice, aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null });
   const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
   const actionPlan = resolution.mode === "executable_action_plan" && resolution.implementationState === "implemented" && resolutionMissing.length === 0 && selectedDevice && resolution.catalogItem
@@ -259,13 +274,15 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       : null;
   const executionSupport = resolution.executionSupport;
   const implementationState = resolution.implementationState;
-  const guidedSession = resolution.mode === "guided_workflow" && resolution.blueprintId
+  const parameterizedBlueprintId = resolutionMissing.length > 0 && resolution.catalogItem ? catalogGuidedBlueprintId(resolution.catalogItem.id) : null;
+  const guidedBlueprintId = resolution.mode === "guided_workflow" && resolution.blueprintId ? resolution.blueprintId : parameterizedBlueprintId;
+  const guidedSession = guidedBlueprintId
     ? startGuidedActionSession({
-        blueprintId: resolution.blueprintId,
+        blueprintId: guidedBlueprintId,
         deviceId: selectedDevice?.id ?? null,
         vendor: selectedDevice ? resolution.canonicalVendor : null,
         initialRequest: message,
-        initialValues: resolution.initialValues ?? {},
+        initialValues: resolution.initialValues ?? resolution.normalizedParams ?? {},
       })
     : null;
   const guidedSessionValue = guidedSession?.ok ? guidedSession.value : null;
@@ -275,7 +292,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const assistantText = actionPlan && executionSupport === "connector"
     ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
     : resolutionMissing.length ? nextStepFa : providerResponse.assistantMessage;
-  const guidedAssistantText = resolution.mode === "guided_workflow"
+  const responseMode = guidedBlueprintId ? "guided_workflow" : resolution.mode;
+  const guidedAssistantText = guidedBlueprintId
     ? "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید."
     : resolution.mode === "clarification" ? nextStepFa : assistantText;
 
@@ -289,9 +307,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     actionPlan,
     executionSupport,
     implementationState,
-    mode: resolution.mode,
-    blueprintId: resolution.blueprintId ?? null,
-    initialValues: resolution.initialValues ?? null,
+    mode: responseMode,
+    blueprintId: guidedBlueprintId ?? null,
+    initialValues: resolution.initialValues ?? resolution.normalizedParams ?? null,
     actionSessionId: guidedSessionValue?.sessionId ?? null,
     actionSession: guidedSessionValue,
     guidedActionUrl: guidedSessionValue?.sessionId ? `/guided-actions/${encodeURIComponent(guidedSessionValue.sessionId)}` : null,

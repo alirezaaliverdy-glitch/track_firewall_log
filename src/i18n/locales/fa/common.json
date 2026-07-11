@@ -47,6 +47,7 @@
   "actionLibrary.createVerified": "ساخت ActionPlan",
   "actionLibrary.createManual": "ساخت برنامه بازبینی",
   "actionLibrary.completeFields": "تکمیل فیلدهای لازم",
+  "actionLibrary.parameterized": "پیش از پیش‌نمایش باید پارامترها در فرم مرحله‌ای جمع‌آوری شوند.",
   "actionLibrary.noRawCli": "Raw CLI در کتابخانه نمایش داده نمی‌شود.",
   "actionLibrary.noResults": "اکشنی مطابق فیلترها پیدا نشد.",
   "actionLibrary.deviceOverrides": "Vendor دستگاه انتخاب‌شده انتخاب دستی Vendor را override می‌کند.",

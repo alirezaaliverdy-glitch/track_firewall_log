@@ -152,7 +152,7 @@ test("command catalog AI fallback creates executable Linux open-port-list plans"
   }
 });
 
-test("command catalog AI fallback returns executable, needs_input, and manual modes honestly", async (t) => {
+test("command catalog AI fallback returns executable, guided-parameter, and manual modes honestly", async (t) => {
   const app = await buildApp({ authRequired: false });
   const linux = await prisma.device.create({
     data: {
@@ -198,8 +198,10 @@ test("command catalog AI fallback returns executable, needs_input, and manual mo
     payload: { request: "وضعیت سرویس رو ببین", vendor: "linux", deviceId: linux.id },
   });
   assert.equal(needsInput.statusCode, 200);
-  assert.equal(needsInput.json().mode, "needs_input");
+  assert.equal(needsInput.json().mode, "guided_workflow");
+  assert.equal(needsInput.json().blueprintId, "catalog:linux.service-status");
   assert.deepEqual(needsInput.json().missingFields, ["serviceName"]);
+  assert.equal(needsInput.json().actionPlan, null);
 
   const noDevice = await app.inject({
     method: "POST",

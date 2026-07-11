@@ -2,6 +2,18 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.6C - Standard Guided Parameter Flow for Parameterized Actions (2026-07-11)
+
+- Summary: standardized parameterized action handling so catalog-backed FortiGate, MikroTik, Linux, and future vendor actions open a guided ActionSession instead of staying as inline/raw preview cards.
+- Backend: added generated `catalog:<commandId>` guided blueprints, normalized submitted params, rejected placeholder/example values, filtered UI/internal identifiers, and preserved default-deny support states during preview/build/execute.
+- Frontend: Action Library cards show executable/preview/manual/unsupported state and route parameterized actions to `Configure / Create ActionPlan`; guided modal stores selected action/vendor/device in URL state and follows active RTL/LTR direction.
+- AI: Command Catalog AI fallback and AI Assistant now route missing-parameter actionable tasks into the same guided flow. Deterministic guided routing avoids external AI provider calls for recognized guided intents.
+- Safety: verified actions execute only after preview and confirmation through the existing PolicyGuard/connector/audit path. Preview-only/manual-only parameterized actions can build review plans but do not invoke connectors.
+- Tests: added regressions for guided parameter collection, missing/invalid/placeholder blocking, connector invocation only after confirmation, preview/manual no-execute behavior, source checks for Action Library routing, and locale parity.
+- Migrations: none.
+- Validation: backend build; focused `task17-2`, `task17-3`, and `task16` guided/AI tests (33/33); backend catalog validation (136 items); backend full test suite (152/152); root i18n parity (73 keys); root `pnpm build` passed with the existing Vite large-chunk warning.
+- Playwright MCP: requested by task but not exposed in this session; browser-level verification remains a follow-up.
+
 ## Task 17.6 - Disable Mandatory Action Backup Preflight (2026-07-11)
 
 - Summary: removed automatic mandatory backup/export commands from Quick Controlled FortiGate and MikroTik execution paths; backup/export is optional/manual only.

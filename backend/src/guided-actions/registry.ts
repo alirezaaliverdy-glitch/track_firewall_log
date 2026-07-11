@@ -1,4 +1,5 @@
 import { FORTIGATE_GUIDED_BLUEPRINTS, resolveFortiGateGuidedIntent } from "./vendors/fortigate/fortigate-blueprints.js";
+import { buildCatalogGuidedBlueprint } from "./catalog-guided-blueprint.js";
 import type { GuidedActionBlueprint, GuidedActionBuildContext, GuidedActionField } from "./types.js";
 
 function planned(reasonFa: string) {
@@ -53,7 +54,7 @@ export const GUIDED_ACTION_BLUEPRINTS: readonly GuidedActionBlueprint[] = Object
 ]);
 
 export function getGuidedActionBlueprint(id: string) {
-  return GUIDED_ACTION_BLUEPRINTS.find((blueprint) => blueprint.id === id) ?? null;
+  return GUIDED_ACTION_BLUEPRINTS.find((blueprint) => blueprint.id === id) ?? buildCatalogGuidedBlueprint(id);
 }
 
 export function listGuidedActionBlueprints(filter?: { vendor?: string }) {

@@ -6,6 +6,7 @@ import { getExecutionTemplate } from "../commands/execution/execution-template-r
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
+import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 
 const bool = (value: unknown) => value === "true" ? true : value === "false" ? false : undefined;
 const deviceVendor = (device: { type: string; vendor: string }) => {
@@ -188,7 +189,23 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (executableItem) {
       if (resolution.missingFields.length) {
         const declaredFields = executableItem.requiredParams.filter((field) => resolution.missingFields.includes(field.key));
-        return reply.code(200).send({ mode: "needs_input", templateRef: resolution.executionTemplateRef, missingFields: resolution.missingFields, fields: declaredFields, messageFa: missingFieldsMessageFa(resolution.missingFields), draft, actionPlan: null, resolution });
+        const blueprintId = catalogGuidedBlueprintId(executableItem.id);
+        return reply.code(200).send({
+          mode: "guided_workflow",
+          blueprintId,
+          initialValues: resolution.normalizedParams,
+          reasonFa: missingFieldsMessageFa(resolution.missingFields),
+          messageFa: missingFieldsMessageFa(resolution.missingFields),
+          vendor: executableItem.vendor,
+          connectorType: resolution.connectorType,
+          deviceId: selectedDeviceId,
+          templateRef: resolution.executionTemplateRef,
+          missingFields: resolution.missingFields,
+          fields: declaredFields,
+          draft,
+          actionPlan: null,
+          resolution,
+        });
       }
 
       const normalizedParams = resolution.normalizedParams;

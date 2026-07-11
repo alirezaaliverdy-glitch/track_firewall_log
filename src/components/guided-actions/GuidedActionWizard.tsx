@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { answerGuidedSession, buildGuidedPlan, cancelGuidedSession, getGuidedSession, startGuidedSession, type GuidedSession } from "@/lib/guidedActions";
 import type { GuidedActionField } from "@/lib/commandCatalog";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
@@ -66,6 +67,7 @@ export default function GuidedActionWizard(props: {
   initialValues?: Record<string, unknown>;
   onClose: () => void;
 }) {
+  const { i18n } = useTranslation();
   const [session, setSession] = useState<GuidedSession | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>(props.initialValues ?? {});
   const [message, setMessage] = useState("");
@@ -147,7 +149,7 @@ export default function GuidedActionWizard(props: {
   }
 
   return (
-    <section dir="rtl" className="mb-5 rounded-xl border border-cyan-800 bg-slate-950 p-5 text-right text-slate-100">
+    <section dir={i18n.dir()} className={`mb-5 rounded-xl border border-cyan-800 bg-slate-950 p-5 text-slate-100 ${i18n.dir() === "rtl" ? "text-right" : "text-left"}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs text-cyan-300">ساخت مرحله‌ای اکشن</p>
@@ -228,7 +230,7 @@ export default function GuidedActionWizard(props: {
                     </>
                   ) : (
                     <input
-                      type={field.secret ? "password" : field.type === "number" ? "number" : "text"}
+                      type={field.secret || field.type === "password" || field.type === "generatedSecret" ? "password" : field.type === "number" ? "number" : "text"}
                       value={raw}
                       placeholder={field.placeholderFa}
                       onChange={(event) => setValues((current) => ({ ...current, [field.key]: parseValue(field, event.target.value, event.target.checked) }))}

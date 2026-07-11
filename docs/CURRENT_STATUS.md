@@ -2,6 +2,17 @@
 
 Last updated: 2026-07-11
 
+## Task 17.6C - Standard Guided Parameter Flow
+
+- Parameterized catalog actions now route through a standard guided ActionSession flow using generated `catalog:<commandId>` blueprints. This applies across FortiGate, MikroTik, Linux, and future catalog vendors.
+- Action Library cards no longer collect required parameters inline. Parameterized actions open the guided flow and preserve selected action/vendor/device in URL state; non-parameterized actions can still create plans directly.
+- The guided flow validates required fields before preview/build-plan and rejects exact placeholder/example values. Secret fields are masked, and internal UI control identifiers are not accepted as execution params.
+- AI Assistant and Command Catalog AI fallback now route recognized actionable tasks with missing parameters into the same guided flow instead of stopping at text-only or raw `needs_input` responses.
+- Verified actions still require validator/template/compiler, connector, PolicyGuard, semantic result support, confirmation, audit, and real connector invocation. Preview-only/manual-only parameterized actions can build review plans but cannot execute.
+- Guided UI follows the active `fa`/`en` direction setting; locale parity is maintained.
+- Playwright MCP browser tooling is not available in this session, so browser-level acceptance remains pending.
+- Validation passed: backend build; focused guided/support/AI regression tests (33/33); backend catalog validation (136 items); backend full test suite (152/152); root i18n parity (73 keys); root `pnpm build` with the existing Vite large-chunk warning.
+
 ## Task 17.6 - Optional/Manual Backup Export
 
 - Quick Controlled execution no longer creates mandatory automatic backup/export preflight commands for FortiGate or MikroTik actions.

@@ -5,6 +5,7 @@ import { listDevices, type Device } from "@/lib/devices";
 import { createCatalogAction, proposeWithAi, searchCommands, type CatalogItem } from "@/lib/commandCatalog";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
+import { startGuidedSession } from "@/lib/guidedActions";
 
 const VENDORS = ["fortigate", "mikrotik", "linux", "cisco", "pfsense", "generic"];
 
@@ -24,6 +25,14 @@ function connectorTypeOf(vendor: string) {
 
 function requiredParamsComplete(item: CatalogItem, values: Record<string, string>) {
   return item.requiredParams.every((field) => String(values[field.key] ?? item.defaultParams[field.key] ?? "").trim());
+}
+
+function isParameterized(item: CatalogItem) {
+  return item.requiredParams.length > 0 || item.optionalParams.length > 0;
+}
+
+function catalogBlueprintId(item: CatalogItem) {
+  return `catalog:${item.id}`;
 }
 
 function goToActionCenter(actionPlanId: string) {
@@ -48,9 +57,7 @@ export default function CommandCatalogPanel() {
   const [readOnly, setReadOnly] = useState(false);
   const [executable, setExecutable] = useState(false);
   const [supportState, setSupportState] = useState("");
-  const [expandedId, setExpandedId] = useState("");
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [params, setParams] = useState<Record<string, Record<string, string>>>({});
   const [message, setMessage] = useState("");
   const [aiText, setAiText] = useState("");
   const [guidedWorkflow, setGuidedWorkflow] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; initialRequest: string; vendor: string | null; deviceId: string | null }>(null);
@@ -95,19 +102,51 @@ export default function CommandCatalogPanel() {
 
   const categories = [...new Set(items.map((item) => item.category))];
 
+  function setGuidedUrlState(item: CatalogItem) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("guidedBlueprintId", catalogBlueprintId(item));
+    url.searchParams.set("catalogActionId", item.id);
+    url.searchParams.set("vendor", item.vendor);
+    if (deviceId) url.searchParams.set("deviceId", deviceId);
+    window.history.pushState({}, "", url);
+  }
+
+  function closeGuidedFlow() {
+    setGuidedWorkflow(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("guidedBlueprintId");
+    url.searchParams.delete("catalogActionId");
+    window.history.pushState({}, "", url);
+  }
+
+  function openCatalogGuidedFlow(item: CatalogItem) {
+    setGuidedUrlState(item);
+    setGuidedWorkflow({
+      blueprintId: catalogBlueprintId(item),
+      initialValues: {},
+      initialRequest: item.titleEn || item.titleFa,
+      vendor: item.vendor,
+      deviceId: deviceId || null,
+    });
+  }
+
   async function create(item: CatalogItem) {
+    if (isParameterized(item)) {
+      openCatalogGuidedFlow(item);
+      return;
+    }
     if (!deviceId) {
       setMessage("ابتدا دستگاه هدف را انتخاب کنید.");
       return;
     }
 
-    if (!requiredParamsComplete(item, params[item.id] ?? {})) {
+    if (!requiredParamsComplete(item, {})) {
       setMessage("اطلاعات الزامی این دستور را کامل کنید.");
       return;
     }
 
     try {
-      const plan = await createCatalogAction(item.id, deviceId, params[item.id] ?? {});
+      const plan = await createCatalogAction(item.id, deviceId, {});
 	      if (item.supportState === "manual_only" || item.supportState === "preview_only") {
 	        setMessage(t("common.message.manualCreated"));
 	      } else {
@@ -145,13 +184,13 @@ export default function CommandCatalogPanel() {
       }
       if (result.mode === "guided_workflow") {
         setMessage(result.messageFa);
-        const start = await import("@/lib/guidedActions").then((module) => module.startGuidedSession({
+        const start = await startGuidedSession({
           blueprintId: result.blueprintId,
           initialValues: result.initialValues,
           initialRequest: aiText,
           vendor: result.vendor ?? selectedVendor ?? null,
           deviceId: result.deviceId ?? (deviceId || null),
-        }));
+        });
         window.location.assign(`/guided-actions/${encodeURIComponent(start.sessionId)}`);
         return;
       }
@@ -266,15 +305,13 @@ export default function CommandCatalogPanel() {
           vendor={guidedWorkflow.vendor ?? undefined}
           initialRequest={guidedWorkflow.initialRequest}
           initialValues={guidedWorkflow.initialValues}
-          onClose={() => setGuidedWorkflow(null)}
+          onClose={closeGuidedFlow}
         />
       )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 	        {items.map((item) => {
-	          const values = params[item.id] ?? {};
-	          const ready = requiredParamsComplete(item, values);
-	          const expanded = expandedId === item.id;
+	          const parameterized = isParameterized(item);
 
           return (
             <article key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -294,36 +331,12 @@ export default function CommandCatalogPanel() {
 	              <p className="mt-2 text-sm text-slate-400">{item.descriptionFa}</p>
 	              {item.supportState !== "verified" && <p className="mt-2 text-xs text-amber-300">{item.supportReason || t("actionLibrary.executionUnavailable")}</p>}
 
-	              {expanded && item.requiredParams.map((field) => (
-                <label key={field.key} className="mt-2 block text-xs text-slate-300">
-                  {field.labelFa}
-                  <input
-                    placeholder={field.placeholderFa}
-                    value={values[field.key] ?? ""}
-                    onChange={(event) =>
-                      setParams((current) => ({
-                        ...current,
-                        [item.id]: {
-                          ...current[item.id],
-                          [field.key]: event.target.value,
-                        },
-                      }))
-                    }
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 p-2 text-sm"
-                  />
-                  <span className="mt-1 block text-slate-500">{field.helpFa}</span>
-                </label>
-              ))}
+	              {parameterized && <p className="mt-2 text-xs text-cyan-200">{t("actionLibrary.parameterized")}</p>}
 
 	              <div className="mt-3 flex flex-wrap gap-2">
-	                <button onClick={() => setExpandedId(expanded ? "" : item.id)} className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:border-cyan-700">
-	                  {t("actionLibrary.configure")}
+	                <button onClick={() => void create(item)} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm hover:bg-cyan-600">
+	                  {parameterized ? t("actionLibrary.configure") : item.supportState === "manual_only" || item.supportState === "preview_only" ? t("actionLibrary.createManual") : t("actionLibrary.createVerified")}
 	                </button>
-	                {expanded && (
-	                  <button onClick={() => void create(item)} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm hover:bg-cyan-600">
-	                    {item.supportState === "manual_only" || item.supportState === "preview_only" ? t("actionLibrary.createManual") : ready ? t("actionLibrary.createVerified") : t("actionLibrary.completeFields")}
-	                  </button>
-	                )}
 	              </div>
             </article>
           );

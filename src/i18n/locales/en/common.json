@@ -47,6 +47,7 @@
   "actionLibrary.createVerified": "Create ActionPlan",
   "actionLibrary.createManual": "Create review plan",
   "actionLibrary.completeFields": "Complete required fields",
+  "actionLibrary.parameterized": "Requires guided parameter collection before preview.",
   "actionLibrary.noRawCli": "Raw CLI is not displayed in the library.",
   "actionLibrary.noResults": "No matching actions.",
   "actionLibrary.deviceOverrides": "Selected device vendor overrides manual vendor selection.",

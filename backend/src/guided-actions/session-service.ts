@@ -5,6 +5,7 @@ import { getGuidedActionBlueprint } from "./registry.js";
 import { getActionPlan, proposeActionPlan } from "../services/action-plan.service.js";
 import { prisma } from "../db/prisma.js";
 import { resolveGuidedAction } from "./registry.js";
+import { isCatalogGuidedBlueprintId } from "./catalog-guided-blueprint.js";
 
 export type GuidedActionSessionStatus = "collecting_inputs" | "ready_to_build" | "built" | "cancelled";
 
@@ -240,9 +241,10 @@ export async function answerGuidedActionStep(id: string, input: { stepId: string
     const device = await prisma.device.findUnique({ where: { id: selectedDeviceId } });
     if (!device) return { ok: false as const, code: 404, error: "DEVICE_NOT_FOUND", messageFa: "دستگاه انتخاب‌شده پیدا نشد." };
     const vendor = deviceVendor(device);
-    const routed = resolveGuidedAction({ text: session.initialRequest ?? "", vendor });
+    const routed = isCatalogGuidedBlueprintId(session.blueprintId) ? { blueprintId: session.blueprintId, initialValues: {}, reasonFa: "" } : resolveGuidedAction({ text: session.initialRequest ?? "", vendor });
     const nextBlueprint = routed ? getGuidedActionBlueprint(routed.blueprintId) : null;
     if (!nextBlueprint) return { ok: false as const, code: 409, error: "BLUEPRINT_NOT_FOUND", messageFa: "برای این وندور هنوز فرم مرحله‌ای این سناریو آماده نیست." };
+    if (nextBlueprint.vendor !== vendor) return { ok: false as const, code: 409, error: "VENDOR_MISMATCH", messageFa: "این Workflow با وندور دستگاه سازگار نیست." };
     session.blueprintId = nextBlueprint.id;
     session.deviceId = device.id;
     session.vendor = vendor;

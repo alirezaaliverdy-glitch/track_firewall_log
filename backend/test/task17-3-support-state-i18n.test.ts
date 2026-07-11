@@ -80,7 +80,9 @@ test("frontend source has action-library route, dashboard shortcut, filters, and
   assert.match(app, /dashboard\.shortcuts\.library/);
   assert.match(library, /const VENDORS = \["fortigate", "mikrotik", "linux", "cisco", "pfsense", "generic"\]/);
   assert.match(library, /supportState/);
-  assert.match(library, /expandedId === item\.id/);
+  assert.match(library, /catalogBlueprintId\(item\)/);
+  assert.match(library, /guidedBlueprintId/);
+  assert.doesNotMatch(library, /expanded && item\.requiredParams/);
   assert.match(assistant, /response\.actionSessionId/);
   assert.match(assistant, /response\.guidedActionUrl/);
   assert.match(assistant, /window\.location\.assign\(url\)/);

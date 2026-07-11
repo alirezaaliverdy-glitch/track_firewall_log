@@ -56,6 +56,10 @@ export function validateGuidedValues(fields: GuidedActionField[], values: Record
       continue;
     }
     if (isBlank(value)) continue;
+    if (field.placeholderFa && typeof value === "string" && value.trim() === field.placeholderFa.trim()) {
+      issues.push({ field: field.key, messageFa: `${field.labelFa} نباید همان مقدار نمونه باشد.` });
+      continue;
+    }
 
     const allowedValues = field.validation?.allowedValues ?? field.options?.map((option) => option.value);
     if ((field.type === "select" || field.type === "multiSelect") && allowedValues?.length) {

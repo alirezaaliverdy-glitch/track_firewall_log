@@ -5,6 +5,7 @@ import { resolveAiTemplate } from "../src/ai/ai-template-resolver.js";
 import { buildApp } from "../src/app.js";
 import { getGuidedActionBlueprint } from "../src/guided-actions/registry.js";
 import { startGuidedActionSession, answerGuidedActionStep, buildGuidedActionPlan } from "../src/guided-actions/session-service.js";
+import { catalogGuidedBlueprintId } from "../src/guided-actions/catalog-guided-blueprint.js";
 import { validateFortiGateAction } from "../src/actions/fortigate-action-catalog.js";
 import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "../src/services/fortigate-guided-vpn.schema.js";
 import { dryRunActionPlan, quickExecuteActionPlan } from "../src/services/action-plan.service.js";
@@ -197,7 +198,7 @@ test("Complete FortiGate IPsec site-to-site guided session builds executable red
     deviceId: device.id,
     vendor: "fortigate",
     initialRequest: "vpn create",
-    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "test-vpn", localSubnet: "192.168.1.0/24", remoteSubnet: "10.10.10.0/24", allowedSubnets: "192.168.1.0/24", wanInterface: "port2", lanInterface: "port1", remoteGateway: "185.238.45.165", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "test-vpn", localSubnet: "192.168.1.0/24", remoteSubnet: "10.10.10.0/24", allowedSubnets: "192.168.1.0/24", wanInterface: "wan1", lanInterface: "internal1", remoteGateway: "203.0.113.10", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
@@ -218,8 +219,8 @@ test("Complete FortiGate IPsec site-to-site guided session builds executable red
   assert.equal(params.vpnName, "test-vpn");
   assert.equal(params.phase1Name, "test-vpn");
   assert.equal(params.phase2Name, "test-vpn-p2");
-  assert.equal(params.wanInterface, "port2");
-  assert.equal(params.lanInterface, "port1");
+  assert.equal(params.wanInterface, "wan1");
+  assert.equal(params.lanInterface, "internal1");
   assert.equal(params.srcInterface, undefined);
   assert.equal(params.dstInterface, undefined);
   assert.equal(params.sourceIp, undefined);
@@ -242,8 +243,8 @@ test("Complete FortiGate IPsec site-to-site guided session builds executable red
   assert.match(commands, /config vpn ipsec phase2-interface/);
   assert.match(commands, /config router static/);
   assert.match(commands, /config firewall policy/);
-  assert.match(commands, /set interface "port2"/);
-  assert.match(commands, /set remote-gw 185\.238\.45\.165/);
+  assert.match(commands, /set interface "wan1"/);
+  assert.match(commands, /set remote-gw 203\.0\.113\.10/);
   assert.match(commands, /set ike-version 2/);
   assert.match(commands, /set dhgrp 14/);
   assert.match(commands, /set src-subnet 192\.168\.1\.0 255\.255\.255\.0/);
@@ -258,6 +259,156 @@ test("Complete FortiGate IPsec site-to-site guided session builds executable red
   assert.equal(blueprint.implementationState, "partial");
 });
 
+test("parameterized catalog action uses guided flow and blocks missing, placeholder, and invalid params", async (t) => {
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.6C Linux Guided Params",
+      vendor: "Linux",
+      type: "linux_edge",
+      host: "192.0.2.181",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+  });
+
+  const blueprintId = catalogGuidedBlueprintId("linux.open-port");
+  const blueprint = getGuidedActionBlueprint(blueprintId);
+  assert.ok(blueprint);
+  assert.equal(blueprint.vendor, "linux");
+  assert.equal(blueprint.steps[0]?.id, "catalog_parameters");
+
+  const missing = startGuidedActionSession({ blueprintId, deviceId: device.id, vendor: "linux", initialRequest: "open port", initialValues: {} });
+  assert.equal(missing.ok, true);
+  const missingBuild = await buildGuidedActionPlan(missing.ok ? missing.value.sessionId : "");
+  assert.equal(missingBuild.ok, false);
+  assert.equal(missingBuild.ok ? "" : missingBuild.error, "VALIDATION_FAILED");
+
+  const placeholder = startGuidedActionSession({ blueprintId, deviceId: device.id, vendor: "linux", initialRequest: "open port", initialValues: {} });
+  assert.equal(placeholder.ok, true);
+  const placeholderAnswer = await answerGuidedActionStep(placeholder.ok ? placeholder.value.sessionId : "", { stepId: "catalog_parameters", values: { port: "55000" } });
+  assert.equal(placeholderAnswer.ok, false);
+  assert.equal(placeholderAnswer.ok ? "" : placeholderAnswer.error, "VALIDATION_FAILED");
+
+  const invalid = startGuidedActionSession({ blueprintId, deviceId: device.id, vendor: "linux", initialRequest: "open port", initialValues: {} });
+  assert.equal(invalid.ok, true);
+  const invalidAnswer = await answerGuidedActionStep(invalid.ok ? invalid.value.sessionId : "", { stepId: "catalog_parameters", values: { port: "abc" } });
+  assert.equal(invalidAnswer.ok, false);
+  assert.equal(invalidAnswer.ok ? "" : invalidAnswer.error, "VALIDATION_FAILED");
+});
+
+test("parameterized executable catalog action reaches connector only after confirmed execution", async (t) => {
+  const credential = await createCredential({ name: `task-17-6c-linux-${Date.now()}`, type: "password", username: "tester", password: "test-only-not-used", sudo: true });
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.6C Linux Confirmed Execute",
+      vendor: "Linux",
+      type: "linux_edge",
+      host: "192.0.2.182",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+      credentialId: credential.id,
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+    await prisma.deviceCredential.delete({ where: { id: credential.id } });
+  });
+
+  const session = startGuidedActionSession({
+    blueprintId: catalogGuidedBlueprintId("linux.open-port"),
+    deviceId: device.id,
+    vendor: "linux",
+    initialRequest: "open port",
+    initialValues: { port: 55001 },
+  });
+  assert.equal(session.ok, true);
+  const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  assert.equal(built.value.actionPlan.parametersJson.metadata.guidedBlueprintId, catalogGuidedBlueprintId("linux.open-port"));
+  assert.equal(built.value.actionPlan.parametersJson.metadata.supportState, "verified");
+  assert.equal(built.value.actionPlan.parametersJson.guided_action_wizard, undefined);
+  assert.equal(built.value.actionPlan.parametersJson.source, undefined);
+
+  await dryRunActionPlan(built.value.actionPlanId);
+  let executeCalls = 0;
+  const fakeConnector = {
+    name: "linux",
+    supportedActions: [ActionType.linux_open_port],
+    supports: () => true,
+    testConnection: async () => { throw new Error("not used"); },
+    getCapabilities: async () => { throw new Error("not used"); },
+    collectStatus: async () => { throw new Error("not used"); },
+    dryRun: async () => { throw new Error("not used"); },
+    rollback: async () => { throw new Error("not used"); },
+    execute: async () => {
+      executeCalls += 1;
+      return {
+        executed: true,
+        actionType: ActionType.linux_open_port,
+        deviceId: device.id,
+        commands: [{ template: "linux_open_port", stdout: "ok", stderr: "", exitCode: 0 }],
+      };
+    },
+  } as unknown as DeviceConnector;
+
+  assert.equal(executeCalls, 0);
+  const executed = await quickExecuteActionPlan(built.value.actionPlanId, { intent: "execute" }, { selectConnector: () => fakeConnector });
+  assert.equal(executeCalls, 1);
+  assert.equal(executed?.status, ActionPlanStatus.succeeded);
+});
+
+test("parameterized preview/manual catalog action builds review plan but never executes", async (t) => {
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.6C Linux Manual Params",
+      vendor: "Linux",
+      type: "linux_edge",
+      host: "192.0.2.183",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+  });
+
+  const session = startGuidedActionSession({
+    blueprintId: catalogGuidedBlueprintId("linux.restrict-ssh"),
+    deviceId: device.id,
+    vendor: "linux",
+    initialRequest: "restrict ssh",
+    initialValues: { allowedSource: "198.51.100.0/24" },
+  });
+  assert.equal(session.ok, true);
+  const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  assert.equal(built.value.actionPlan.parametersJson.metadata.supportState, "manual_only");
+
+  let executeCalls = 0;
+  const fakeConnector = {
+    name: "linux",
+    supportedActions: [ActionType.generic_security_action],
+    supports: () => true,
+    execute: async () => {
+      executeCalls += 1;
+      throw new Error("connector should not be invoked");
+    },
+  } as unknown as DeviceConnector;
+  await assert.rejects(() => quickExecuteActionPlan(built.value.actionPlanId, { intent: "execute" }, { selectConnector: () => fakeConnector }));
+  assert.equal(executeCalls, 0);
+});
+
 test("FortiGate guided VPN execution does not run mandatory backup/export", async (t) => {
   const credential = await createCredential({ name: `task-17-6-fg-${Date.now()}`, type: "password", username: "tester", password: "test-only-not-used", sudo: false });
   const device = await prisma.device.create({
@@ -270,7 +421,7 @@ test("FortiGate guided VPN execution does not run mandatory backup/export", asyn
       protocol: "ssh",
       environment: "lab",
       credentialId: credential.id,
-      capabilities: { fortigateStatus: { fortigate: { interfaces: ["port1", "port2"], zones: [], vdomMode: "disabled" } } },
+      capabilities: { fortigateStatus: { fortigate: { interfaces: ["internal1", "wan1"], zones: [], vdomMode: "disabled" } } },
     },
   });
   t.after(async () => {
@@ -284,7 +435,7 @@ test("FortiGate guided VPN execution does not run mandatory backup/export", asyn
     deviceId: device.id,
     vendor: "fortigate",
     initialRequest: "vpn create",
-    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "task17-6-vpn", localSubnet: "192.168.7.0/24", remoteSubnet: "10.20.30.0/24", allowedSubnets: "192.168.7.0/24", wanInterface: "port2", lanInterface: "port1", remoteGateway: "185.238.45.165", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "task17-6-vpn", localSubnet: "192.168.70.0/24", remoteSubnet: "10.30.40.0/24", allowedSubnets: "192.168.70.0/24", wanInterface: "wan1", lanInterface: "internal1", remoteGateway: "203.0.113.20", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
@@ -354,7 +505,7 @@ test("FortiGate guided VPN invalid params still fail before connector execution"
       protocol: "ssh",
       environment: "lab",
       credentialId: credential.id,
-      capabilities: { fortigateStatus: { fortigate: { interfaces: ["port1", "port2"], zones: [], vdomMode: "disabled" } } },
+      capabilities: { fortigateStatus: { fortigate: { interfaces: ["internal1", "wan1"], zones: [], vdomMode: "disabled" } } },
     },
   });
   t.after(async () => {
@@ -368,7 +519,7 @@ test("FortiGate guided VPN invalid params still fail before connector execution"
     deviceId: device.id,
     vendor: "fortigate",
     initialRequest: "vpn create",
-    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "task17-6-bad", localSubnet: "192.168.7.0/24", remoteSubnet: "10.20.30.0/24", allowedSubnets: "192.168.7.0/24", wanInterface: "port2", lanInterface: "port1", remoteGateway: "185.238.45.165", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true },
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "task17-6-bad", localSubnet: "192.168.70.0/24", remoteSubnet: "10.30.40.0/24", allowedSubnets: "192.168.70.0/24", wanInterface: "wan1", lanInterface: "internal1", remoteGateway: "203.0.113.30", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
