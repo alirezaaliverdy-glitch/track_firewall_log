@@ -1,11 +1,15 @@
 ﻿import assert from "node:assert/strict";
 import test from "node:test";
+import { ActionPlanStatus, ActionType } from "@prisma/client";
 import { resolveAiTemplate } from "../src/ai/ai-template-resolver.js";
 import { buildApp } from "../src/app.js";
 import { getGuidedActionBlueprint } from "../src/guided-actions/registry.js";
 import { startGuidedActionSession, answerGuidedActionStep, buildGuidedActionPlan } from "../src/guided-actions/session-service.js";
 import { validateFortiGateAction } from "../src/actions/fortigate-action-catalog.js";
 import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "../src/services/fortigate-guided-vpn.schema.js";
+import { dryRunActionPlan, quickExecuteActionPlan } from "../src/services/action-plan.service.js";
+import { createCredential } from "../src/services/credential.service.js";
+import type { DeviceConnector } from "../src/connectors/types.js";
 import { prisma } from "../src/db/prisma.js";
 
 const linuxDevice = { id: "linux-guided-1", vendor: "Linux", type: "linux_edge", protocol: "ssh" } as const;
@@ -252,6 +256,150 @@ test("Complete FortiGate IPsec site-to-site guided session builds executable red
   const blueprint = getGuidedActionBlueprint("fortigate_guided_vpn_setup");
   assert.ok(blueprint);
   assert.equal(blueprint.implementationState, "partial");
+});
+
+test("FortiGate guided VPN execution does not run mandatory backup/export", async (t) => {
+  const credential = await createCredential({ name: `task-17-6-fg-${Date.now()}`, type: "password", username: "tester", password: "test-only-not-used", sudo: false });
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.6 FortiGate VPN Execute",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.179",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+      credentialId: credential.id,
+      capabilities: { fortigateStatus: { fortigate: { interfaces: ["port1", "port2"], zones: [], vdomMode: "disabled" } } },
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+    await prisma.deviceCredential.delete({ where: { id: credential.id } });
+  });
+
+  const session = startGuidedActionSession({
+    blueprintId: "fortigate_guided_vpn_setup",
+    deviceId: device.id,
+    vendor: "fortigate",
+    initialRequest: "vpn create",
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "task17-6-vpn", localSubnet: "192.168.7.0/24", remoteSubnet: "10.20.30.0/24", allowedSubnets: "192.168.7.0/24", wanInterface: "port2", lanInterface: "port1", remoteGateway: "185.238.45.165", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
+  });
+  assert.equal(session.ok, true);
+  const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+
+  const preview = await dryRunActionPlan(built.value.actionPlanId);
+  assert.equal(preview?.status, ActionPlanStatus.dry_run_ready);
+  const dryRun = preview?.dryRunJson as Record<string, unknown>;
+  const planned = JSON.stringify(dryRun);
+  assert.doesNotMatch(planned, /show full-configuration/i);
+  assert.doesNotMatch(planned, /backup\/export preflight required/i);
+  assert.equal((dryRun.exactTarget as Record<string, unknown>)?.backupEnabled, false);
+  assert.equal((dryRun.exactTarget as Record<string, unknown>)?.requiresBackup, false);
+
+  let executeCalls = 0;
+  let commandPayload = "";
+  const fakeConnector = {
+    name: "fortigate",
+    supportedActions: [ActionType.fortigate_guided_vpn_setup],
+    supports: () => true,
+    testConnection: async () => { throw new Error("not used"); },
+    getCapabilities: async () => { throw new Error("not used"); },
+    collectStatus: async () => { throw new Error("not used"); },
+    dryRun: async () => { throw new Error("not used"); },
+    rollback: async () => { throw new Error("not used"); },
+    execute: async (plan) => {
+      executeCalls += 1;
+      const validation = validateFortiGateAction(plan);
+      commandPayload = validation.commandSpecs.map((spec) => spec.command).join("\n");
+      assert.equal(validation.valid, true, validation.errors.join(", "));
+      assert.doesNotMatch(commandPayload, /show full-configuration/i);
+      return {
+        executed: true,
+        actionType: ActionType.fortigate_guided_vpn_setup,
+        deviceId: device.id,
+        commands: validation.commandSpecs.map((spec) => ({ template: spec.template, stdout: "OK", stderr: "", exitCode: 0 })),
+        warnings: ["Backup is disabled for Quick Controlled execution."],
+        rollbackJson: { type: "delete_created_ipsec_vpn", backupEnabled: false, requiresBackup: false },
+      };
+    },
+  } as unknown as DeviceConnector;
+
+  const executed = await quickExecuteActionPlan(built.value.actionPlanId, { intent: "execute" }, { selectConnector: () => fakeConnector });
+  assert.equal(executeCalls, 1);
+  assert.equal(executed?.status, ActionPlanStatus.succeeded);
+  assert.match(commandPayload, /config vpn ipsec phase1-interface/);
+  assert.doesNotMatch(commandPayload, /show full-configuration/i);
+  const metadata = (executed?.parametersJson as Record<string, Record<string, unknown>>).metadata;
+  assert.equal(metadata.connectorInvoked, true);
+  assert.equal(metadata.backupEnabled, false);
+  assert.equal((executed?.resultJson as Record<string, unknown>).backupEnabled, false);
+  const audit = await prisma.actionAuditLog.findMany({ where: { actionPlanId: built.value.actionPlanId } });
+  assert.equal(audit.some((entry) => entry.eventType === "backup_export_created"), false);
+  assert.ok(audit.some((entry) => entry.eventType === "connector_invoked" && (entry.metadataJson as Record<string, unknown>)?.backupEnabled === false));
+});
+
+test("FortiGate guided VPN invalid params still fail before connector execution", async (t) => {
+  const credential = await createCredential({ name: `task-17-6-fg-invalid-${Date.now()}`, type: "password", username: "tester", password: "test-only-not-used", sudo: false });
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.6 FortiGate VPN Invalid Execute",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.180",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+      credentialId: credential.id,
+      capabilities: { fortigateStatus: { fortigate: { interfaces: ["port1", "port2"], zones: [], vdomMode: "disabled" } } },
+    },
+  });
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.delete({ where: { id: device.id } });
+    await prisma.deviceCredential.delete({ where: { id: credential.id } });
+  });
+
+  const session = startGuidedActionSession({
+    blueprintId: "fortigate_guided_vpn_setup",
+    deviceId: device.id,
+    vendor: "fortigate",
+    initialRequest: "vpn create",
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "task17-6-bad", localSubnet: "192.168.7.0/24", remoteSubnet: "10.20.30.0/24", allowedSubnets: "192.168.7.0/24", wanInterface: "port2", lanInterface: "port1", remoteGateway: "185.238.45.165", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true },
+  });
+  assert.equal(session.ok, true);
+  const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  await prisma.actionPlan.update({
+    where: { id: built.value.actionPlanId },
+    data: { parametersJson: { ...(built.value.actionPlan.parametersJson as Record<string, unknown>), wanInterface: "guided_action_wizard" } },
+  });
+
+  let executeCalls = 0;
+  const fakeConnector = {
+    name: "fortigate",
+    supportedActions: [ActionType.fortigate_guided_vpn_setup],
+    supports: () => true,
+    testConnection: async () => { throw new Error("not used"); },
+    getCapabilities: async () => { throw new Error("not used"); },
+    collectStatus: async () => { throw new Error("not used"); },
+    dryRun: async () => { throw new Error("not used"); },
+    rollback: async () => { throw new Error("not used"); },
+    execute: async () => {
+      executeCalls += 1;
+      throw new Error("connector should not be invoked");
+    },
+  } as unknown as DeviceConnector;
+
+  await assert.rejects(() => quickExecuteActionPlan(built.value.actionPlanId, { intent: "execute" }, { selectConnector: () => fakeConnector }));
+  assert.equal(executeCalls, 0);
+  const stored = await prisma.actionPlan.findUnique({ where: { id: built.value.actionPlanId } });
+  const metadata = (stored?.parametersJson as Record<string, Record<string, unknown>>).metadata;
+  assert.notEqual(metadata?.connectorInvoked, true);
 });
 
 test("FortiGate guided VPN parameter schema maps canonical interfaces and rejects placeholders", () => {

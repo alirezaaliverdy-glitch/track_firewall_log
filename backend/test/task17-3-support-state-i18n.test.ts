@@ -73,6 +73,8 @@ test("frontend source has action-library route, dashboard shortcut, filters, and
   const app = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
   const library = readFileSync(new URL("../../src/components/commands/CommandCatalogPanel.tsx", import.meta.url), "utf8");
   const assistant = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
+  const actionState = readFileSync(new URL("../../src/lib/actionApprovalState.ts", import.meta.url), "utf8");
+  const actionCenter = readFileSync(new URL("../../src/components/actions/ActionCenterPanel.tsx", import.meta.url), "utf8");
   const i18n = readFileSync(new URL("../../src/i18n/index.ts", import.meta.url), "utf8");
   assert.match(app, /\/action-library/);
   assert.match(app, /dashboard\.shortcuts\.library/);
@@ -82,6 +84,9 @@ test("frontend source has action-library route, dashboard shortcut, filters, and
   assert.match(assistant, /response\.actionSessionId/);
   assert.match(assistant, /response\.guidedActionUrl/);
   assert.match(assistant, /window\.location\.assign\(url\)/);
+  assert.match(actionCenter, /Backup is disabled for Quick Controlled execution\./);
+  assert.doesNotMatch(actionState, /The action changed after its preview/);
+  assert.doesNotMatch(actionCenter, /backup\/export preflight required/i);
   assert.match(i18n, /document\.documentElement\.dir = locale === "fa" \? "rtl" : "ltr"/);
   assert.match(i18n, /localStorage/);
 });

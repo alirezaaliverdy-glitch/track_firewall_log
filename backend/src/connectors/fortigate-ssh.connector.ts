@@ -475,12 +475,10 @@ export const fortigateSshConnector: DeviceConnector = {
     const policy = evaluateFortiGatePolicy(actionPlan, device);
     const validation = policy.validation;
     if (!policy.valid) throw new FortiGateConnectorError("CONNECTOR_ACTION_UNSUPPORTED", policy.errors.join(" "), 400);
-    const backupSpecs = policy.backupCommands.map((command) => ({ template: command, command, write: false, target: { backupName: policy.backupName, preflight: true } }));
     return {
       plannedCommands: [...policy.preflightCommands, ...validation.commandSpecs.map((item) => item.command)],
       validationWarnings: [
         ...policy.warnings,
-        ...(policy.requiresBackup ? [`Backup/export preflight required: ${policy.backupName}`] : []),
         ...(policy.requiresBreakGlass ? ["Break-glass confirmation is required for this critical FortiGate action."] : [])
       ],
       affectedPorts: [],
@@ -488,8 +486,8 @@ export const fortigateSshConnector: DeviceConnector = {
       rollbackSteps: validation.commandSpecs.flatMap((spec) => spec.rollbackSteps),
       riskLevel: validation.riskLevel,
       requiresApproval: true,
-      commandSpecs: [...backupSpecs, ...validation.commandSpecs.map((spec) => ({ template: spec.template, command: spec.command, write: spec.write, target: spec.target }))],
-      exactTarget: { ...validation.normalizedParameters, backupName: policy.backupName, requiresBackup: policy.requiresBackup, requiresBreakGlass: policy.requiresBreakGlass, lockoutSensitive: policy.lockoutSensitive }
+      commandSpecs: validation.commandSpecs.map((spec) => ({ template: spec.template, command: spec.command, write: spec.write, target: spec.target })),
+      exactTarget: { ...validation.normalizedParameters, backupEnabled: false, requiresBackup: false, requiresBreakGlass: policy.requiresBreakGlass, lockoutSensitive: policy.lockoutSensitive }
     };
   },
   async execute(actionPlan: ActionPlan, device: Device, audit?: ConnectorAudit): Promise<ConnectorExecutionResult> {
@@ -513,16 +511,13 @@ export const fortigateSshConnector: DeviceConnector = {
     const allowedCommands = new Set([...policy.preflightCommands, ...validation.commandSpecs.map((spec) => spec.command)]);
     const commands: ConnectorExecutionResult["commands"] = [];
     const credential = await getCredential(device);
-    await audit?.("policy_guard_passed", "FortiGate catalog validation passed.", { actionType: actionPlan.actionType, target: validation.normalizedParameters, commandCount: validation.commandSpecs.length });
+    await audit?.("policy_guard_passed", "FortiGate catalog validation passed.", { actionType: actionPlan.actionType, target: validation.normalizedParameters, commandCount: validation.commandSpecs.length, backupEnabled: false });
     return withSshWithCredential(device, credential, async (client) => {
-      await audit?.("connection_attempt", "FortiGate SSH execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType });
+      await audit?.("connection_attempt", "FortiGate SSH execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType, backupEnabled: false });
       for (const command of policy.preflightCommands) {
         const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
-        const isBackup = policy.backupCommands.includes(command);
-        const safeStdout = isBackup ? "[redacted-backup-output]" : result.stdout.slice(0, 4000);
-        commands.push({ template: command, stdout: safeStdout, stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode });
-        await audit?.(isBackup ? "backup_export_created" : "preflight_object_collected", "FortiGate preflight command executed.", { template: command, exitCode: result.exitCode, stdout: isBackup ? "[redacted-backup-output]" : result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
-        if (result.exitCode !== 0 && policy.requiresBackup) throw new FortiGateConnectorError("FORTIGATE_BACKUP_FAILED", result.stderr || "FortiGate backup/export preflight failed.", 502);
+        commands.push({ template: command, stdout: result.stdout.slice(0, 4000), stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode });
+        await audit?.("preflight_object_collected", "FortiGate lightweight preflight command executed.", { template: command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000), backupEnabled: false });
       }
       for (const spec of validation.commandSpecs) {
         const result = await exec(client, spec.command, env.sshCommandTimeoutMs, allowedCommands);
@@ -531,7 +526,7 @@ export const fortigateSshConnector: DeviceConnector = {
         if (result.exitCode !== 0) throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || result.stdout || `FortiGate command failed: ${spec.template}`, 502);
       }
       await audit?.("rollback_available", "Rollback metadata is available for this FortiGate action.", validation.rollbackJson);
-      return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: validation.warnings, rollbackJson: validation.rollbackJson };
+      return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: policy.warnings, rollbackJson: { ...validation.rollbackJson, backupEnabled: false, requiresBackup: false } };
     });
   },
   async rollback(): Promise<ConnectorExecutionResult> {

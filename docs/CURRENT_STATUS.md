@@ -2,6 +2,13 @@
 
 Last updated: 2026-07-11
 
+## Task 17.6 - Optional/Manual Backup Export
+
+- Quick Controlled execution no longer creates mandatory automatic backup/export preflight commands for FortiGate or MikroTik actions.
+- FortiGate execution no longer uses `show full-configuration`; guided IPsec VPN can execute after the normal single confirmation without backup/export preflight.
+- Backup/export is now clearly optional/manual. PolicyGuard, validation, registered connector/template requirements, audit logging, and real connector-result success conditions remain required.
+- Validation passed: focused regression tests, backend catalog validation (136 items), backend build/full test suite, and frontend production build. The frontend build retains only its existing Vite dynamic-import/chunk-size warnings.
+
 ## Task 17.5 Follow-up AI Assistant Action Routing
 
 - AI Assistant actionable VPN chat requests now route into the controlled guided flow instead of stopping at a text suggestion.

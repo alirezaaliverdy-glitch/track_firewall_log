@@ -96,7 +96,7 @@ export default function FortiGateCapabilityMatrixPanel() {
 
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-900/70 bg-blue-950/30 px-4 py-3 text-sm text-blue-200">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Execute automatically validates and builds a controlled command plan. High-impact actions retain backup and rollback safeguards.</span>
+            <span>Execute automatically validates and builds a controlled command plan. Quick Controlled execution does not run automatic backup/export; use manual backup actions when needed.</span>
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-slate-800">

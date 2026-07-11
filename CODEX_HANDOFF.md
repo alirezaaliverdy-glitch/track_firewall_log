@@ -1,5 +1,14 @@
 # CODEX_HANDOFF.md
 
+## Task 17.6 - Disable Mandatory Action Backup Preflight (2026-07-11)
+
+- Removed mandatory automatic backup/export preflight from every Quick Controlled FortiGate and MikroTik execution path. Backup/export remains an optional manual operator action.
+- FortiGate Quick Controlled execution no longer injects or executes `show full-configuration`; only controlled action commands (and any action-specific lightweight preflight) are permitted.
+- FortiGate guided IPsec site-to-site VPN now completes dry-run and confirmed connector execution without backup/export preflight. The regression test verifies no backup audit event, `backupEnabled=false`, and real connector invocation.
+- PolicyGuard, selected-device checks, parameter validation, registered templates/connectors, explicit `intent=execute`, audit logging, and evidence-based success semantics remain unchanged.
+- Migrations: none.
+- Validation passed: backend focused Task 17.2/17.3/generic tests; `npm run validate:command-catalog` (136 items); backend `npm run build`; backend `npm test`; root `pnpm build` (existing Vite dynamic-import/chunk-size warnings only).
+
 ## Task 17.5 Follow-up - AI Assistant Action Routing (2026-07-11)
 
 - Fixed AI Assistant action routing so actionable FortiGate VPN chat requests create a controlled guided ActionSession instead of returning only text.

@@ -270,7 +270,6 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     const mikrotikValidation = expert?.validation ?? validateMikroTikAction(normalizedPlan);
     errors.push(...(expert?.errors ?? mikrotikValidation.errors));
     warnings.push(...(expert?.warnings ?? mikrotikValidation.warnings));
-    if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
     if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
     if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
 
@@ -285,8 +284,8 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
       normalizedParameters: mikrotikValidation.normalizedParameters,
       rollbackJson: {
         ...mikrotikValidation.rollbackJson,
-        backupName: expert?.backupName,
-        requiresBackup: expert?.requiresBackup,
+        backupEnabled: false,
+        requiresBackup: false,
         requiresBreakGlass: expert?.requiresBreakGlass,
         lockoutSensitive: expert?.lockoutSensitive
       },
@@ -324,7 +323,6 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     const fortigateValidation = expert?.validation ?? validateFortiGateAction(normalizedPlan);
     errors.push(...(expert?.errors ?? fortigateValidation.errors));
     warnings.push(...(expert?.warnings ?? fortigateValidation.warnings));
-    if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
     if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
     if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
 
@@ -339,8 +337,8 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
       normalizedParameters: fortigateValidation.normalizedParameters,
       rollbackJson: {
         ...fortigateValidation.rollbackJson,
-        backupName: expert?.backupName,
-        requiresBackup: expert?.requiresBackup,
+        backupEnabled: false,
+        requiresBackup: false,
         requiresBreakGlass: expert?.requiresBreakGlass,
         lockoutSensitive: expert?.lockoutSensitive
       },

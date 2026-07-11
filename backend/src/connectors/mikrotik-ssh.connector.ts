@@ -527,21 +527,13 @@ export const mikrotikSshConnector: DeviceConnector = {
     if (!policy.valid) {
       throw new MikroTikConnectorError("CONNECTOR_ACTION_UNSUPPORTED", policy.errors.join(" "), 400);
     }
-    const backupSpecs = policy.backupCommands.map((command) => ({
-      template: command.startsWith("/system backup") ? "/system backup save name=<preflight>" : "/export hide-sensitive file=<preflight>",
-      command,
-      write: true,
-      target: { backupName: policy.backupName, preflight: true }
-    }));
-
     const sshPortChange = actionPlan.actionType === ActionType.mikrotik_change_service_port && validation.normalizedParameters.service === "ssh";
     const newPort = Number(validation.normalizedParameters.newPort ?? validation.normalizedParameters.port);
     const oldPort = Number(validation.normalizedParameters.oldPort);
     return {
-      plannedCommands: [...policy.backupCommands, ...validation.commandSpecs.map((spec) => spec.command)],
+      plannedCommands: validation.commandSpecs.map((spec) => spec.command),
       validationWarnings: [
         ...policy.warnings,
-        ...(policy.requiresBackup ? [`Backup/export preflight required: ${policy.backupName}`] : []),
         ...(policy.requiresBreakGlass ? ["Break-glass confirmation is required for this critical MikroTik action."] : []),
         ...(policy.lockoutWarning ? [policy.lockoutWarning] : [])
       ],
@@ -552,16 +544,16 @@ export const mikrotikSshConnector: DeviceConnector = {
       rollbackSteps: validation.commandSpecs.flatMap((spec) => spec.rollbackSteps),
       riskLevel: validation.riskLevel,
       requiresApproval: true,
-      commandSpecs: [...backupSpecs, ...validation.commandSpecs.map((spec) => ({
+      commandSpecs: validation.commandSpecs.map((spec) => ({
         template: spec.template,
         command: spec.command,
         write: spec.write,
         target: spec.target
-      }))],
+      })),
       exactTarget: {
         ...validation.normalizedParameters,
-        backupName: policy.backupName,
-        requiresBackup: policy.requiresBackup,
+        backupEnabled: false,
+        requiresBackup: false,
         requiresBreakGlass: policy.requiresBreakGlass,
         lockoutSensitive: policy.lockoutSensitive
       }
@@ -586,7 +578,6 @@ export const mikrotikSshConnector: DeviceConnector = {
     const updateAddressList = actionPlan.actionType === ActionType.mikrotik_update_address_list_entry;
     const addressListPlan = idempotentAddressList || updateAddressList ? addressListCommands(validation.normalizedParameters) : null;
     const allowedCommands = new Set([
-      ...policy.backupCommands,
       ...validation.commandSpecs.map((spec) => spec.command),
       ...(addressListPlan ? [addressListPlan.check, addressListPlan.add, addressListPlan.update] : [])
     ]);
@@ -609,35 +600,17 @@ export const mikrotikSshConnector: DeviceConnector = {
     await audit?.("policy_guard_passed", "MikroTik catalog validation passed.", {
       actionType: actionPlan.actionType,
       target: validation.normalizedParameters,
-      commandCount: validation.commandSpecs.length
+      commandCount: validation.commandSpecs.length,
+      backupEnabled: false
     });
 
     return withSshWithCredential(device, credential, async (client) => {
       await audit?.("connection_attempt", "MikroTik SSH execution connection is ready.", {
         host: device.host,
         port: device.managementPort,
-        actionType: actionPlan.actionType
+        actionType: actionPlan.actionType,
+        backupEnabled: false
       });
-
-      for (const backupCommand of policy.backupCommands) {
-        const result = await exec(client, backupCommand, env.sshCommandTimeoutMs, allowedCommands);
-        commands.push({
-          template: backupCommand.startsWith("/system backup") ? "/system backup save name=<preflight>" : "/export hide-sensitive file=<preflight>",
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode
-        });
-        await audit?.("backup_export_created", "MikroTik preflight backup/export command executed.", {
-          backupName: policy.backupName,
-          template: backupCommand.startsWith("/system backup") ? "/system backup save" : "/export hide-sensitive",
-          exitCode: result.exitCode,
-          stdout: result.stdout.slice(0, 2000),
-          stderr: result.stderr.slice(0, 2000)
-        });
-        if (result.exitCode !== 0) {
-          throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || "MikroTik backup/export preflight failed.", 502);
-        }
-      }
 
       if (addressListPlan && idempotentAddressList) {
         const checkResult = await exec(client, addressListPlan.check, env.sshCommandTimeoutMs, allowedCommands);

@@ -487,7 +487,7 @@ function buildFortiGateVpnPreview(context: GuidedActionBuildContext) {
           blueprintId: context.blueprintId,
           executionTemplateRef: "fortigate_guided_vpn_setup",
           semanticResultParser: "fortigate_ipsec_site_to_site_vpn",
-          precheck: ["FortiGate config backup/export", "Interface discovery compatibility", "PolicyGuard validation"],
+          precheck: ["Interface discovery compatibility", "PolicyGuard validation"],
           postVerification: verificationPlan,
           structuredPreview,
           verificationPlan,
@@ -563,7 +563,6 @@ function buildFortiGateVpnPreview(context: GuidedActionBuildContext) {
         "end",
       ]
     : [
-        "execute backup config flash before-guided-vpn",
         "config vpn ipsec phase1-interface",
         `  edit \"${tunnelName}\"`,
         `  set interface \"${wanInterface}\"`,

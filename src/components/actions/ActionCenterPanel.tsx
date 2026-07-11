@@ -898,6 +898,12 @@ export default function ActionCenterPanel() {
                 </div>
               )}
 
+              {executionUi.canExecute && (
+                <div className="mb-4 rounded border border-yellow-900/60 bg-yellow-950/15 p-3 text-left text-xs font-medium text-yellow-100">
+                  Backup is disabled for Quick Controlled execution.
+                </div>
+              )}
+
               <ProposalDetails action={selectedAction} />
 
               {fixableFields(selectedAction).length > 0 && !["executing", "succeeded", "rolled_back"].includes(selectedAction.status) && (

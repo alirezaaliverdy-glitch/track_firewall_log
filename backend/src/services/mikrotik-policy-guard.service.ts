@@ -11,12 +11,6 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function backupName(device: Device, suffix: string) {
-  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-  const safeDevice = device.name.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 32) || "mikrotik";
-  return `firewall-log-analyzer-before-${safeDevice}-${stamp}-${suffix}`;
-}
-
 function deviceNameConfirmed(device: Device, parameters: Record<string, unknown>) {
   return text(parameters.deviceNameConfirmation) === device.name;
 }
@@ -51,7 +45,9 @@ export function evaluateMikroTikExpertPolicy(plan: ActionPlan, device: Device) {
   const warnings = [...validation.warnings];
   const breakGlass = parameters.breakGlass === true;
   const reason = text(parameters.reason);
-  const requiresBackup = validation.commandSpecs.some((spec) => spec.write) && ["high", "critical"].includes(validation.riskLevel);
+  const backupEnabled = false;
+  const wouldRequireBackup = validation.commandSpecs.some((spec) => spec.write) && ["high", "critical"].includes(validation.riskLevel);
+  const requiresBackup = false;
   const requiresBreakGlass = validation.riskLevel === AiRiskLevel.critical;
   const lockoutSensitiveActions = new Set<ActionType>([
     ActionType.mikrotik_disable_interface,
@@ -79,19 +75,18 @@ export function evaluateMikroTikExpertPolicy(plan: ActionPlan, device: Device) {
     warnings.push("Management lockout risk detected. Execution is blocked unless break-glass is enabled when required.");
   }
 
-  const backupBase = backupName(device, plan.id.slice(-6));
-  const backupCommands = requiresBackup ? [
-    `/system backup save name="${backupBase}"`,
-    `/export hide-sensitive file="${backupBase}"`
-  ] : [];
+  const backupCommands: string[] = [];
+  if (wouldRequireBackup) warnings.push("Backup is disabled for Quick Controlled execution.");
 
   return {
     valid: errors.length === 0,
     errors,
     warnings,
     validation,
+    backupEnabled,
+    wouldRequireBackup,
     requiresBackup,
-    backupName: requiresBackup ? backupBase : undefined,
+    backupName: undefined,
     backupCommands,
     requiresBreakGlass,
     breakGlass,

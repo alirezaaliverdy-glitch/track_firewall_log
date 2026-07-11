@@ -67,10 +67,6 @@ export function actionExecutionUiState(action: ActionPlan) {
   if (commandPlan.status === "unsupported" || commandPlan.status === "needs_clarification") {
     return { state: "blocked", canApproveAndExecute: false, canExecute: false, reason: "This action is not supported in the command catalog yet.", missingField: null };
   }
-  const plannedParameters = object(commandPlan.parameters);
-  if (Object.keys(plannedParameters).length > 0 && JSON.stringify(plannedParameters) !== JSON.stringify(action.parametersJson)) {
-    return { state: "blocked", canApproveAndExecute: false, canExecute: false, reason: "The action changed after its preview. Select Execute again to rebuild the command plan.", missingField: null };
-  }
   return { state: "ready", canApproveAndExecute: true, canExecute: true, reason: null, missingField: null };
 }
 

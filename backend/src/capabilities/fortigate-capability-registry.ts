@@ -80,7 +80,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "high",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution.", "General-purpose raw NAT editing is intentionally unsupported."],
-    notes: "Controlled egress/SNAT and destination-NAT policy templates are available with backup safeguards where required."
+    notes: "Controlled egress/SNAT and destination-NAT policy templates are available with controlled approval. Automatic backup/export is disabled in Quick Controlled execution; use a manual backup when needed."
   },
   {
     id: "vip_port_forward",
@@ -90,7 +90,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "high",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution."],
-    notes: "VIP and VIP-group creation plus destination-NAT policy creation are supported with backup preflight and approval."
+    notes: "VIP and VIP-group creation plus destination-NAT policy creation are supported with controlled approval. Automatic backup/export is disabled in Quick Controlled execution."
   },
   {
     id: "static_routes",
@@ -110,7 +110,7 @@ const capabilities: FortiGateCapability[] = [
     risk: "critical",
     currentFiles: CONTROLLED_ACTION_FILES,
     missingPieces: ["Automatic rollback execution."],
-    notes: "Discovery, aliases, roles, enable/disable, VLAN creation, IP updates, and zones are covered. Lockout-sensitive changes require stronger guard/backup/break-glass checks."
+    notes: "Discovery, aliases, roles, enable/disable, VLAN creation, IP updates, and zones are covered. Lockout-sensitive changes retain PolicyGuard checks; automatic backup/export is disabled in Quick Controlled execution and remains optional/manual."
   },
   {
     id: "dns",

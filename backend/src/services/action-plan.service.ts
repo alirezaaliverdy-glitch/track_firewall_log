@@ -1039,6 +1039,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
         executed: false,
         connectorInvoked: false,
+        backupEnabled: false,
         previewStale: false,
         staleReason: null,
         executionStartedAt: new Date().toISOString(),
@@ -1048,24 +1049,26 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     include: includeRelations()
   });
 
-  await audit(executing, "execution_started", "Controlled catalog execution started.", { actionType: plan.actionType });
+  await audit(executing, "execution_started", "Controlled catalog execution started.", { actionType: plan.actionType, backupEnabled: false });
 
   await audit(executing, "connection_attempt", "Connector execution connection attempt started.", {
     connector: connector.name,
     host: device.host,
-    port: device.managementPort
+    port: device.managementPort,
+    backupEnabled: false
   });
 
   try {
     await audit(executing, "preflight_check", "Execution gating passed; connector preflight starting.", {
       actionType: plan.actionType,
       approved: true,
-      dryRunPresent: true
+      dryRunPresent: true,
+      backupEnabled: false
     });
     const invoked = await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(executing.parametersJson, { connectorInvoked: true })) } });
-    await audit(invoked, "connector_invoked", "Resolved connector was invoked for real execution.", { connector: connector.name });
-    dependencies.trace?.("action_connector_invoked", { connectorInvoked: true, connectorType: connector.name });
-    dependencies.trace?.("action_remote_command_started", { connectorInvoked: true, connectorType: connector.name });
+    await audit(invoked, "connector_invoked", "Resolved connector was invoked for real execution.", { connector: connector.name, backupEnabled: false });
+    dependencies.trace?.("action_connector_invoked", { connectorInvoked: true, connectorType: connector.name, backupEnabled: false });
+    dependencies.trace?.("action_remote_command_started", { connectorInvoked: true, connectorType: connector.name, backupEnabled: false });
     const result = await connector.execute(plan, device, (eventType, message, metadata) => audit(executing, eventType, message, metadata));
     await audit(executing, "connector_result_received", "Connector returned a real execution result.", { executed: result.executed, commandCount: result.commands.length });
     if (result.executed && plan.actionType === ActionType.mikrotik_change_service_port) {
@@ -1098,6 +1101,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const resultPayload = {
       ...result,
       executed: executionSucceeded,
+      backupEnabled: false,
       executionStartedAt: startedAt,
       executionCompletedAt: completedAt,
       durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),
@@ -1116,6 +1120,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
         parametersJson: toJson(withExecutionMetadata(executing.parametersJson, {
           executed: executionSucceeded,
           connectorInvoked: true,
+          backupEnabled: false,
           executionCompletedAt: completedAt,
           exitCode: resultPayload.exitCode,
           executor: connector.name,
@@ -1128,7 +1133,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     });
 
     await audit(updated, "connection_success", "Connector execution connection succeeded.", { connector: connector.name });
-    dependencies.trace?.("action_execution_result_saved", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
+    dependencies.trace?.("action_execution_result_saved", { connectorInvoked: true, connectorType: connector.name, backupEnabled: false, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
     await audit(updated, executionSucceeded ? "execution_succeeded" : "execution_failed", executionSucceeded ? "Connector execution succeeded." : "Connector execution did not complete successfully.", resultPayload);
     return updated;
   } catch (error) {
@@ -1145,20 +1150,22 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
         parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
           executed: false,
           connectorInvoked: true,
+          backupEnabled: false,
           executionCompletedAt: new Date().toISOString(),
           lastExecutionStatus: "failed"
         })),
         resultJson: toJson({
           executed: false,
+          backupEnabled: false,
           error: connectorError.code,
           message: connectorError.message
         })
       },
       include: includeRelations()
     });
-    await audit(updated, "connection_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message });
-    await audit(updated, "command_failed", "Connector command failed or was refused.", { code: connectorError.code, message: connectorError.message });
-    await audit(updated, "execution_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message });
+    await audit(updated, "connection_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
+    await audit(updated, "command_failed", "Connector command failed or was refused.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
+    await audit(updated, "execution_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
     throw new ActionExecutionError(connectorError.code, connectorError.message, connectorError.statusCode ?? 409);
   }
 }

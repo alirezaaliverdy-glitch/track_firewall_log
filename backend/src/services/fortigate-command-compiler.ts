@@ -448,7 +448,7 @@ export function compileFortiGateAction(input: {
       requiresBreakGlass: false,
       lockoutSensitive: false,
       warnings: [
-        "FortiGate IPsec VPN changes require pre-execution config backup/export.",
+        "Backup is disabled for Quick Controlled execution; create a manual backup first if your change window requires it.",
         "PSK is resolved from an ephemeral secret reference at execution time and is redacted in preview."
       ],
       commandSpecs,
@@ -495,7 +495,7 @@ export function compileFortiGateAction(input: {
     return result({
       category: "route", riskLevel: AiRiskLevel.high, normalizedParameters: { destinationCidr, gateway, device: device ?? null },
       requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true,
-      warnings: ["Static route changes can alter the management path and require backup preflight."],
+      warnings: ["Static route changes can alter the management path. Backup is disabled for Quick Controlled execution."],
       commandSpecs: [spec({ template: "config router static/edit 0/set dst/gateway", command: block(lines), target: { destinationCidr, gateway, device: device ?? null }, rollbackSteps: ["Remove the created managed route using its audited route ID."], warnings: [] })],
       rollbackJson: { type: "remove_created_static_route", destinationCidr, gateway }
     });
@@ -569,7 +569,7 @@ export function compileFortiGateAction(input: {
     const vlanId = Number(p.vlanId);
     if (!Number.isInteger(vlanId) || vlanId < 1 || vlanId > 4094) fail("vlanId");
     const command = withVdom(block(["config system interface", `edit ${quote(name)}`, "set type vlan", `set interface ${quote(parent)}`, `set vlanid ${vlanId}`, ...(text(p, "ip") || text(p, "cidr") ? [`set ip ${subnet({ cidr: text(p, "cidr") ?? text(p, "ip") })}`] : []), `set alias ${quote(managedComment(safeText(p, "comment", "managed vlan interface")))}`, "next", "end"]), vdom);
-    return result({ category: "interface", riskLevel: AiRiskLevel.high, normalizedParameters: { name, parent, vlanId, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["VLAN interface creation is high risk and requires backup preflight."], commandSpecs: [spec({ template: "config system interface/edit <vlan>/set type vlan", command, target: { name, parent, vlanId, vdom }, rollbackSteps: [`delete VLAN interface ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vlan_interface", name, vdom } });
+    return result({ category: "interface", riskLevel: AiRiskLevel.high, normalizedParameters: { name, parent, vlanId, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["VLAN interface creation is high risk. Backup is disabled for Quick Controlled execution."], commandSpecs: [spec({ template: "config system interface/edit <vlan>/set type vlan", command, target: { name, parent, vlanId, vdom }, rollbackSteps: [`delete VLAN interface ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vlan_interface", name, vdom } });
   }
 
   if (action === "fortigate_delete_interface") {
@@ -730,7 +730,7 @@ export function compileFortiGateAction(input: {
     if (p.disabled !== undefined || text(p, "status")) lines.push(`set status ${p.disabled === true || text(p, "status") === "disabled" ? "disable" : "enable"}`);
     if (text(p, "comment")) lines.push(`set comments ${quote(managedComment(safeText(p, "comment")))}`);
     lines.push("next", "end");
-    return result({ category: "policy", riskLevel: AiRiskLevel.high, normalizedParameters: { policyId: id, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Policy updates are high risk and require backup preflight."], commandSpecs: [spec({ template: "config firewall policy/edit <id>/controlled update", command: withVdom(block(lines), vdom), target: { policyId: id, vdom }, rollbackSteps: ["Restore previous policy fields from backup/export."], warnings: [] })], rollbackJson: { type: "restore_policy_fields_manual", policyId: id, vdom } });
+    return result({ category: "policy", riskLevel: AiRiskLevel.high, normalizedParameters: { policyId: id, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Policy updates are high risk. Backup is disabled for Quick Controlled execution."], commandSpecs: [spec({ template: "config firewall policy/edit <id>/controlled update", command: withVdom(block(lines), vdom), target: { policyId: id, vdom }, rollbackSteps: ["Restore previous policy fields from backup/export."], warnings: [] })], rollbackJson: { type: "restore_policy_fields_manual", policyId: id, vdom } });
   }
 
   if (new Set<ActionType>([ActionType.fortigate_enable_policy, ActionType.fortigate_disable_policy, ActionType.fortigate_delete_managed_policy]).has(actionType) || action === "fortigate_delete_policy") {
@@ -762,7 +762,7 @@ export function compileFortiGateAction(input: {
     const command = actionType === ActionType.fortigate_create_vip
       ? withVdom(block(["config firewall vip", `edit ${quote(name)}`, `set extip ${ipv4(text(p, "externalIp") ?? fail("externalIp"), "externalIp")}`, `set mappedip ${quote(ipv4(text(p, "mappedIp") ?? fail("mappedIp"), "mappedIp"))}`, `set extport ${port(p, "externalPort")}`, `set mappedport ${port(p, "mappedPort")}`, "set portforward enable", "next", "end"]), vdom)
       : withVdom(block(["config firewall vipgrp", `edit ${quote(name)}`, `set member ${arrayNames(p, "members").map(quote).join(" ")}`, "next", "end"]), vdom);
-    return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["VIP/NAT changes are high risk and require backup preflight."], commandSpecs: [spec({ template: actionType === ActionType.fortigate_create_vip ? "config firewall vip/edit <name>" : "config firewall vipgrp/edit <name>", command, target: { name, vdom }, rollbackSteps: [`delete VIP/VIP group ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vip_artifact", name, vdom } });
+    return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["VIP/NAT changes are high risk. Backup is disabled for Quick Controlled execution."], commandSpecs: [spec({ template: actionType === ActionType.fortigate_create_vip ? "config firewall vip/edit <name>" : "config firewall vipgrp/edit <name>", command, target: { name, vdom }, rollbackSteps: [`delete VIP/VIP group ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vip_artifact", name, vdom } });
   }
 
   if (action === "fortigate_update_vip" || action === "fortigate_delete_vip") {
