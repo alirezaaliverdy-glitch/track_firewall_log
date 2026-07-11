@@ -47,6 +47,63 @@ test("FortiGate VPN setup resolves to partial guided workflow with fixed dropdow
   assert.ok(scenario?.options?.length);
 });
 
+test("Persian and English VPN chat intents create FortiGate guided ActionSessions", async (t) => {
+  const app = await buildApp({ authRequired: false });
+  const device = await prisma.device.create({
+    data: {
+      name: "Task 17.5 FortiGate Chat VPN",
+      vendor: "Fortinet",
+      type: "fortigate",
+      host: "192.0.2.178",
+      managementPort: 22,
+      protocol: "ssh",
+      environment: "lab",
+    },
+  });
+  const chatSessionIds: string[] = [];
+  t.after(async () => {
+    await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } });
+    if (chatSessionIds.length) {
+      await prisma.aiChatMessage.deleteMany({ where: { sessionId: { in: chatSessionIds } } });
+      await prisma.aiChatSession.deleteMany({ where: { id: { in: chatSessionIds } } });
+    }
+    await prisma.device.delete({ where: { id: device.id } });
+    await app.close();
+  });
+
+  for (const message of ["برام vpn بساز", "build vpn"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/chat",
+      payload: {
+        message,
+        selectedDeviceId: device.id,
+        selectedVendor: "fortigate",
+        selectedConnectorType: "fortigate-ssh",
+        selectedDeviceName: device.name,
+      },
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json();
+    if (typeof body.sessionId === "string") chatSessionIds.push(body.sessionId);
+    assert.equal(body.mode, "guided_workflow");
+    assert.equal(body.blueprintId, "fortigate_guided_vpn_setup");
+    assert.equal(body.vendor, "fortigate");
+    assert.equal(body.connectorType, "fortigate-ssh");
+    assert.equal(body.actionPlan, null);
+    assert.equal(body.shouldCreateActionPlan, false);
+    assert.equal(typeof body.actionSessionId, "string");
+    assert.equal(body.guidedActionUrl, `/guided-actions/${encodeURIComponent(body.actionSessionId)}`);
+    assert.equal(body.actionSession.sessionId, body.actionSessionId);
+    assert.equal(body.actionSession.deviceId, device.id);
+    assert.equal(body.actionSession.currentStep.id, "vpn_type");
+
+    const build = await app.inject({ method: "POST", url: `/api/action-sessions/${body.actionSessionId}/build-plan`, payload: {} });
+    assert.equal(build.statusCode, 422, build.body);
+    assert.equal(build.json().error, "VALIDATION_FAILED");
+  }
+});
+
 test("FortiGate VDOM setup resolves to guided workflow", () => {
   const resolution = resolveAiTemplate({ userText: "vdom create", selectedDevice: fortigateDevice });
   assert.equal(resolution.mode, "guided_workflow");

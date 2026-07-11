@@ -1,5 +1,18 @@
 # CODEX_HANDOFF.md
 
+## Task 17.5 Follow-up - AI Assistant Action Routing (2026-07-11)
+
+- Fixed AI Assistant action routing so actionable FortiGate VPN chat requests create a controlled guided ActionSession instead of returning only text.
+- Persian and English VPN intents, including `build vpn`, `create vpn`, `setup fortigate vpn`, and Persian VPN creation phrases, now resolve to `fortigate_guided_vpn_setup`.
+- `/api/ai/chat` now starts the backend ActionSession for guided workflows and returns `actionSessionId`, `actionSession`, and `guidedActionUrl`; it still does not create an ActionPlan or execute commands before wizard completion.
+- The frontend assistant consumes the returned session and navigates directly to `/guided-actions/:sessionId`. Missing required fields stay in the guided form; preview/build-plan remains blocked until required parameters are provided.
+- Safety boundary preserved: AI chat never emits executable raw CLI, never invokes connectors, and never bypasses Action Center confirmation, PolicyGuard, or connector execution rules.
+- Fixed FortiGate guided resolver coverage so bare English `build vpn` maps to the VPN guided workflow instead of a generic text/manual response.
+- Migrations: none.
+- Changed files for this follow-up: `backend/src/services/ai-chat.service.ts`, `backend/src/guided-actions/vendors/fortigate/fortigate-blueprints.ts`, `backend/test/task17-2-guided-actions.test.ts`, `backend/test/task17-3-support-state-i18n.test.ts`, `src/components/ai/AiSecurityAssistantPanel.tsx`, `src/lib/ai.ts`, plus the required docs.
+- Validation passed: backend `npm run build`; backend `npm run validate:command-catalog` (136 items); backend targeted `npx tsx --test test/task17-2-guided-actions.test.ts test/task17-3-support-state-i18n.test.ts` (22/22); backend `npm test` (147/147); root `pnpm build` with existing Vite dynamic-import/chunk-size warnings.
+- Known remaining work: extend the same automatic chat-to-guided-session coverage to more non-VPN guided families where product UX needs direct routing, and add browser-level navigation assertions when browser tooling is available.
+
 ## Task 17.5 - FortiGate Guided VPN Execution Blocker Fix (2026-07-11)
 
 - Fixed the broken FortiGate guided VPN execution path where `source=guided_action_wizard` could be normalized into `srcInterface` and then fail PolicyGuard as a FortiGate interface/zone.

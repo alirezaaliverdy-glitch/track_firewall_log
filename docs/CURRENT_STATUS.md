@@ -2,6 +2,17 @@
 
 Last updated: 2026-07-11
 
+## Task 17.5 Follow-up AI Assistant Action Routing
+
+- AI Assistant actionable VPN chat requests now route into the controlled guided flow instead of stopping at a text suggestion.
+- Persian and English VPN intents, including `build vpn`, `create vpn`, `setup fortigate vpn`, and Persian VPN creation phrases, resolve to `fortigate_guided_vpn_setup`.
+- `/api/ai/chat` creates a proposed ActionSession for guided workflows and returns `actionSessionId`, `actionSession`, and `guidedActionUrl`; the frontend opens `/guided-actions/:sessionId` automatically.
+- Missing required VPN parameters are collected in the Guided Action form before preview. Immediate build-plan attempts without required fields return validation errors and create no executable ActionPlan.
+- Safety boundary remains unchanged: chat creates only proposed controlled sessions, never raw CLI, never connector invocation, and never execution without explicit user confirmation, PolicyGuard, and the normal Action Center path.
+- Migrations: none.
+- Validation passed: backend build; catalog validation (136 items); targeted guided/support tests (22/22); backend full tests (147/147); frontend build with existing Vite warnings.
+- Known limitations: browser-level navigation tests still need browser tooling; additional action families can reuse this session-routing pattern as their guided UX is hardened.
+
 ## Task 17.5 FortiGate Guided VPN Execution Fix
 
 - FortiGate IPsec Site-to-Site guided VPN is now the only executable VPN mode: `fortigate_guided_vpn_setup` with `vpnType=ipsec_site_to_site`, PSK auth, canonical validated params, `fortigate-ssh`, dry-run preview, PolicyGuard, connector invocation, audit/result, and verification commands.

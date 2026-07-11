@@ -977,7 +977,7 @@ function extractNamedValue(text: string, keyword: string) {
 
 export function resolveFortiGateGuidedIntent(userText: string) {
   const text = normalize(userText);
-  if (/(vpn|ipsec|تونل|وی\s*پی\s*ان)/i.test(text) && /(بساز|راه|تنظیم|create|setup)/i.test(text)) {
+  if (/(vpn|ipsec|تونل|وی\s*پی\s*ان)/i.test(text) && /(بساز|راه|تنظیم|create|build|setup)/i.test(text)) {
     const vpnType = /ssl\s*vpn/i.test(text) ? "ssl_vpn" : /remote/i.test(text) ? "ipsec_remote_access" : /vpn|ipsec|تونل/i.test(text) ? "ipsec_site_to_site" : undefined;
     return { blueprintId: "fortigate_guided_vpn_setup", initialValues: { vpnType }, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
   }

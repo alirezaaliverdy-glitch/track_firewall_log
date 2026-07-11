@@ -9,6 +9,7 @@ import { routeCatalogIntent } from "../actions/intent-router.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
 import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
+import { startGuidedActionSession } from "../guided-actions/session-service.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -258,6 +259,16 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       : null;
   const executionSupport = resolution.executionSupport;
   const implementationState = resolution.implementationState;
+  const guidedSession = resolution.mode === "guided_workflow" && resolution.blueprintId
+    ? startGuidedActionSession({
+        blueprintId: resolution.blueprintId,
+        deviceId: selectedDevice?.id ?? null,
+        vendor: selectedDevice ? resolution.canonicalVendor : null,
+        initialRequest: message,
+        initialValues: resolution.initialValues ?? {},
+      })
+    : null;
+  const guidedSessionValue = guidedSession?.ok ? guidedSession.value : null;
   const nextStepFa = actionPlan
     ? executionSupport === "connector" ? "برای بازبینی و تأیید به مرکز عملیات بروید." : "پیشنهاد را در مرکز عملیات به‌صورت دستی بررسی کنید."
     : resolutionMissing.length ? missingFieldsMessageFa(resolutionMissing) : resolution.reasonFa;
@@ -281,6 +292,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     mode: resolution.mode,
     blueprintId: resolution.blueprintId ?? null,
     initialValues: resolution.initialValues ?? null,
+    actionSessionId: guidedSessionValue?.sessionId ?? null,
+    actionSession: guidedSessionValue,
+    guidedActionUrl: guidedSessionValue?.sessionId ? `/guided-actions/${encodeURIComponent(guidedSessionValue.sessionId)}` : null,
     vendor: resolution.canonicalVendor,
     connectorType: resolution.connectorType,
     deviceId: selectedDevice?.id ?? null,

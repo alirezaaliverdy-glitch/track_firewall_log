@@ -2,6 +2,18 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.5 Follow-up - AI Assistant Action Routing (2026-07-11)
+
+- Summary: fixed AI Assistant actionable request routing so VPN chat requests create a guided ActionSession and open the Guided Action flow instead of returning only text.
+- Routing: Persian and English VPN creation phrases, including `build vpn`, now map to `fortigate_guided_vpn_setup`; `/api/ai/chat` returns `actionSessionId`, `actionSession`, and `guidedActionUrl`.
+- Frontend: the AI panel follows `guidedActionUrl`/`actionSessionId` and navigates to `/guided-actions/:sessionId`; required VPN fields are collected there before preview/action-plan creation.
+- Safety: chat still never executes commands, never sends raw CLI, and never bypasses explicit confirmation, PolicyGuard, or connector execution. Missing fields block build-plan with validation instead of creating an executable plan.
+- Areas: AI chat service, FortiGate guided intent resolver, AI response typing, AI assistant panel routing, guided/support-state tests.
+- Changed files: `backend/src/services/ai-chat.service.ts`, `backend/src/guided-actions/vendors/fortigate/fortigate-blueprints.ts`, `backend/test/task17-2-guided-actions.test.ts`, `backend/test/task17-3-support-state-i18n.test.ts`, `src/components/ai/AiSecurityAssistantPanel.tsx`, `src/lib/ai.ts`, docs.
+- Migrations: none.
+- Validation: `cd backend && npm run build`; `cd backend && npm run validate:command-catalog` (136 items); `cd backend && npx tsx --test test/task17-2-guided-actions.test.ts test/task17-3-support-state-i18n.test.ts` (22/22); `cd backend && npm test` (147/147); root `pnpm build` passed with existing Vite dynamic-import/chunk-size warnings.
+- Follow-up: add browser-level navigation coverage when tooling is available and expand automatic chat routing for additional guided action families as they are hardened.
+
 ## Task 17.5 - FortiGate Guided VPN Parameter Mapping and Execution Fix (2026-07-11)
 
 - Summary: fixed the execution blocker where `guided_action_wizard` provenance leaked into FortiGate VPN execution parameters and was validated as an interface; added canonical guided VPN schema, normalization, validation, compiler coverage, live discovery fallback, UI interface suggestions, and clearer Action Center fix fields.

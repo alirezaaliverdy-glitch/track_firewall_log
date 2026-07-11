@@ -56,6 +56,9 @@ export type AiChatResponse = {
   mode: string;
   blueprintId: string | null;
   initialValues: Record<string, unknown> | null;
+  actionSessionId: string | null;
+  actionSession: Record<string, unknown> | null;
+  guidedActionUrl: string | null;
   vendor: string | null;
   connectorType: string | null;
   deviceId: string | null;
@@ -476,6 +479,9 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
     mode: String(source.mode ?? "manual_or_not_supported"),
     blueprintId: typeof source.blueprintId === "string" ? source.blueprintId : null,
     initialValues: source.initialValues ? normalizeObject(source.initialValues) : null,
+    actionSessionId: typeof source.actionSessionId === "string" ? source.actionSessionId : null,
+    actionSession: source.actionSession ? normalizeObject(source.actionSession) : null,
+    guidedActionUrl: typeof source.guidedActionUrl === "string" ? source.guidedActionUrl : null,
     vendor: typeof source.vendor === "string" ? source.vendor : null,
     connectorType: typeof source.connectorType === "string" ? source.connectorType : null,
     deviceId: typeof source.deviceId === "string" ? source.deviceId : null,

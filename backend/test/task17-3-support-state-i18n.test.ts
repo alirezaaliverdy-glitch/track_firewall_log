@@ -72,12 +72,16 @@ test("AI route creates structured ActionPlans without raw executable CLI", async
 test("frontend source has action-library route, dashboard shortcut, filters, and locale direction", () => {
   const app = readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8");
   const library = readFileSync(new URL("../../src/components/commands/CommandCatalogPanel.tsx", import.meta.url), "utf8");
+  const assistant = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
   const i18n = readFileSync(new URL("../../src/i18n/index.ts", import.meta.url), "utf8");
   assert.match(app, /\/action-library/);
   assert.match(app, /dashboard\.shortcuts\.library/);
   assert.match(library, /const VENDORS = \["fortigate", "mikrotik", "linux", "cisco", "pfsense", "generic"\]/);
   assert.match(library, /supportState/);
   assert.match(library, /expandedId === item\.id/);
+  assert.match(assistant, /response\.actionSessionId/);
+  assert.match(assistant, /response\.guidedActionUrl/);
+  assert.match(assistant, /window\.location\.assign\(url\)/);
   assert.match(i18n, /document\.documentElement\.dir = locale === "fa" \? "rtl" : "ltr"/);
   assert.match(i18n, /localStorage/);
 });

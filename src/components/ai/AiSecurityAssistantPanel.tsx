@@ -499,6 +499,11 @@ export default function AiSecurityAssistantPanel() {
         setExecutionState({ support: response.executionSupport, implementation: response.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate });
         setCreatedPlanId(response.actionPlan?.id ?? null);
         if (response.mode === "guided_workflow" && response.blueprintId) {
+          if (response.actionSessionId) {
+            const url = response.guidedActionUrl ?? `/guided-actions/${encodeURIComponent(response.actionSessionId)}`;
+            window.location.assign(url);
+            return;
+          }
           const guided = {
             blueprintId: response.blueprintId,
             initialValues: response.initialValues ?? {},
