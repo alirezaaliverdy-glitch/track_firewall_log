@@ -19,6 +19,7 @@ export type GuidedActionField = {
   helpFa?: string;
   secret?: boolean;
   options?: Array<{ labelFa: string; value: string; source?: string }>;
+  dynamicOptions?: { provider: string; dependsOn?: string[] };
   validation?: { allowedValues?: string[]; allowCustom?: boolean; min?: number; max?: number; pattern?: string };
   dependsOn?: Record<string, unknown>;
 };
@@ -35,6 +36,9 @@ export type CatalogItem = {
   readOnly: boolean;
   implementationState: "implemented" | "manualOnly" | "planned" | "unsupported";
   executionSupport: string;
+  supportState: "verified" | "preview_only" | "manual_only" | "unsupported";
+  supportReason: string;
+  supportReasonKey: string;
   requiredParams: CatalogParam[];
   optionalParams: CatalogParam[];
   defaultParams: Record<string, unknown>;

@@ -5,6 +5,7 @@ import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } 
 import { fortiGateSupportedActions } from "../actions/fortigate-action-catalog.js";
 import { env } from "../config/env.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
+import { resolveEphemeralSecretRef } from "../services/ephemeral-secret.service.js";
 import { compileFortiGateAction } from "../services/fortigate-command-compiler.js";
 import { evaluateFortiGatePolicy } from "../services/fortigate-policy-guard.service.js";
 import type {
@@ -73,7 +74,7 @@ const OPTIONAL_COMMANDS = [
 
 const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...DISCOVERY_COMMANDS, ...OPTIONAL_COMMANDS]);
 const FORBIDDEN_READ_PATTERN = /\b(config|edit|set|unset|delete|purge|execute\s+(factoryreset|reboot|restore|backup)|diagnose\s+debug|show\s+full-configuration\s*\|\s*grep\s+password)\b/i;
-const FORBIDDEN_EXEC_PATTERN = /\b(factoryreset|format|reboot|shutdown|show\s+full-configuration\s+.*password|set\s+password|private-key|secret)\b|;|`|\|\s*(?!grep\b)/i;
+const FORBIDDEN_EXEC_PATTERN = /\b(factoryreset|format|reboot|shutdown|show\s+full-configuration\s+.*password|set\s+password|private-key|set\s+(?!psksecret\b)[A-Za-z0-9_-]*secret)\b|;|`|\|\s*(?!grep\b)/i;
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -492,7 +493,16 @@ export const fortigateSshConnector: DeviceConnector = {
     };
   },
   async execute(actionPlan: ActionPlan, device: Device, audit?: ConnectorAudit): Promise<ConnectorExecutionResult> {
-    const policy = evaluateFortiGatePolicy(actionPlan, device);
+    const rawParams = asObject(actionPlan.parametersJson);
+    const pskSecretRef = typeof rawParams.pskSecretRef === "string" ? rawParams.pskSecretRef : undefined;
+    const pskSecretValue = pskSecretRef ? resolveEphemeralSecretRef(pskSecretRef, "fortigate_ipsec_psk") : undefined;
+    if (pskSecretRef && !pskSecretValue) {
+      throw new FortiGateConnectorError("FORTIGATE_SECRET_REF_EXPIRED", "The temporary FortiGate VPN PSK reference is missing or expired. Rebuild the ActionPlan before execution.", 409);
+    }
+    const executionPlan = pskSecretRef
+      ? { ...actionPlan, parametersJson: { ...rawParams, pskSecretValue } }
+      : actionPlan;
+    const policy = evaluateFortiGatePolicy(executionPlan as ActionPlan, device);
     const validation = policy.validation;
     if (!policy.valid) throw new FortiGateConnectorError("CONNECTOR_ACTION_UNSUPPORTED", policy.errors.join(" "), 400);
     const params = asObject(actionPlan.parametersJson);
@@ -508,8 +518,10 @@ export const fortigateSshConnector: DeviceConnector = {
       await audit?.("connection_attempt", "FortiGate SSH execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType });
       for (const command of policy.preflightCommands) {
         const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
-        commands.push({ template: command, stdout: result.stdout.slice(0, 4000), stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode });
-        await audit?.(policy.backupCommands.includes(command) ? "backup_export_created" : "preflight_object_collected", "FortiGate preflight command executed.", { template: command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
+        const isBackup = policy.backupCommands.includes(command);
+        const safeStdout = isBackup ? "[redacted-backup-output]" : result.stdout.slice(0, 4000);
+        commands.push({ template: command, stdout: safeStdout, stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode });
+        await audit?.(isBackup ? "backup_export_created" : "preflight_object_collected", "FortiGate preflight command executed.", { template: command, exitCode: result.exitCode, stdout: isBackup ? "[redacted-backup-output]" : result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
         if (result.exitCode !== 0 && policy.requiresBackup) throw new FortiGateConnectorError("FORTIGATE_BACKUP_FAILED", result.stderr || "FortiGate backup/export preflight failed.", 502);
       }
       for (const spec of validation.commandSpecs) {

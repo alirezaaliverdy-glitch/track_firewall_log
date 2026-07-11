@@ -2,6 +2,31 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.5 - FortiGate Guided VPN Parameter Mapping and Execution Fix (2026-07-11)
+
+- Summary: fixed the execution blocker where `guided_action_wizard` provenance leaked into FortiGate VPN execution parameters and was validated as an interface; added canonical guided VPN schema, normalization, validation, compiler coverage, live discovery fallback, UI interface suggestions, and clearer Action Center fix fields.
+- Executable now: FortiGate IPsec Site-to-Site guided VPN only, through `fortigate_guided_vpn_setup` and `fortigate-ssh`, when canonical required fields and PSK `secretRef` are present and PolicyGuard passes.
+- Still planned/preview-only: FortiGate SSL VPN, IPsec Remote Access, and any FortiGate VPN/catalog action without complete verified schema/template/connector/parser/precheck/post-verification.
+- Safety: raw PSK remains transient only; previews show `set psksecret ********`; ActionPlan JSON, dry-run output, audit, rollback metadata, docs, and frontend persisted state do not store the clear PSK.
+- Broken diff handling: replaced the broken preview/incomplete guided VPN execution mapping with the canonical schema + compiler + connector path; preserved the useful Task 17.3B action-library/i18n/support-state changes.
+- Areas: FortiGate guided VPN schema, ActionPlan normalization/execution discovery fallback, PolicyGuard/FortiGate policy guard, FortiGate compiler, guided blueprint fields, Guided Action Wizard interface suggestions, Action Center validation repair, and guided VPN regression tests.
+- Changed files: `backend/src/services/fortigate-guided-vpn.schema.ts`, `backend/src/services/action-plan.service.ts`, `backend/src/services/policy-guard.service.ts`, `backend/src/services/fortigate-policy-guard.service.ts`, `backend/src/services/fortigate-command-compiler.ts`, `backend/src/guided-actions/vendors/fortigate/fortigate-blueprints.ts`, `backend/test/task17-2-guided-actions.test.ts`, `src/components/guided-actions/GuidedActionWizard.tsx`, `src/components/actions/ActionCenterPanel.tsx`, `src/lib/commandCatalog.ts`, docs.
+- Migrations: none.
+- Validation: `cd backend && npm run build`; `cd backend && npm run validate:command-catalog` (136 items); `cd backend && npx tsx --test test/task17-2-guided-actions.test.ts test/task17-3-support-state-i18n.test.ts` (21/21); `cd backend && npm test` (146/146); root `npm run test:i18n` (72 keys); root `pnpm build` passed with existing Vite dynamic-import/chunk-size warnings.
+- Follow-up: replace process-local PSK refs with a vault-backed temporary secret store, implement SSL VPN/remote-access templates/parsers before execution, and run browser-level validation when tooling is available.
+
+## Task 17.3 - Safe Vendor Action Library + Global i18n (2026-07-11)
+
+- Summary: introduced authoritative support state (`verified | preview_only | manual_only | unsupported`), moved prepared actions to `/action-library`, blocked non-verified execution/dry-run generation server-side, and added global i18n plumbing with fa/en locale files and language direction switching.
+- Areas: catalog types/evaluator/validator/resolver, command-catalog and action routes, ActionPlan service execution gates, AI resolver/AI-created plan metadata, Action Library UI, app header/navigation/language selector, locale files, parity script, and regression tests.
+- Migrations: none.
+- Support-state rules: verified requires validated input schema, registered compiler/template, compatible connector/planner, semantic result parser, precheck, and post-verification; otherwise the item is preview-only/manual-only/unsupported and cannot execute.
+- Actions downgraded from executable: FortiGate full-control/write/unfinished library entries without all verified requirements, including VLAN/interface changes, zones, address/service objects, policies, VIP/IPPool, route/DNS/NTP changes, IPsec/SSL VPN changes, admin changes, VDOM, HA, and SD-WAN operations. FortiGate VPN guided wizard remains preview-only.
+- Safety: Quick Controlled still applies only after support-state verification and does not bypass selected device, validation, compatibility, environment restrictions, PolicyGuard, audit, or real connector invocation. Manual/preview-only plans never send commands to SSH.
+- Validation: `npm run validate:command-catalog` passed with 136 items; backend `npm run build` passed; backend `npm test` passed 145/145; root `npm run test:i18n` passed with 56 parity keys; root `pnpm build` passed with existing dynamic-import/chunk-size warnings.
+- Commit: not created per user instruction.
+- Follow-up: complete locale-key migration for older legacy frontend panels and add browser-level Playwright tests for RTL/LTR switching and library filtering when tooling is available.
+
 ## Task 17.2C - Guided Build-Plan Preview for FortiGate VPN (2026-07-09)
 
 - Summary: fixed completed FortiGate VPN wizard build-plan so partial/planned execution templates create a preview-only ActionPlan instead of a useless 409.
@@ -191,3 +216,15 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Validation: route-level flow verified search count 0 -> AI fallback executable `linux_list_open_ports` -> validation passed -> quick execution succeeded with `connectorInvoked=true` and visible `ss/netstat` output; `cd backend && npm run build`; `cd backend && npm run validate:command-catalog`; `cd backend && npm test` passed with 119/119 tests; root `npm run build` passed with the existing Vite large-chunk warning. `pnpm` is not available on PATH in this shell.
 - Commit: pending.
 - Follow-up: Playwright MCP browser tooling was not exposed in this session; rerun click-level browser validation when that tool is available.
+
+## Task 17.3B - Safe Vendor Action Library, Real FortiGate IPsec, Global i18n (2026-07-11)
+
+- Summary: repaired the broken Task 17.3 vendor-library/i18n/support-state attempt, moved prepared actions to `/action-library`, enforced default-deny support states, and made FortiGate IPsec Site-to-Site guided VPN executable through `fortigate-ssh`.
+- FortiGate executable mode: only `fortigate_guided_vpn_setup` with `vpnType=ipsec_site_to_site` and PSK auth is verified. It requires tunnel name, WAN interface, LAN interface, remote gateway, local and remote subnet lists, proposal, temporary PSK `secretRef`, and optional static-route/firewall-policy/NAT/logging/enable flags.
+- FortiGate planned modes: SSL VPN and IPsec Remote Access remain preview-only/planned. FortiGate catalog/guided actions without full schema/template/connector/parser/precheck/post-verification are not executable.
+- Safety: raw PSK is never stored in ActionPlan JSON, dry-run output, frontend state, audit, or docs. A process-local 30-minute temporary `pskSecretRef` is resolved only during connector execution; backup preflight output is redacted.
+- Areas: FortiGate compiler/connector/policy guard, guided FortiGate blueprints, temporary secret service, action catalog/template registry, support-state catalog gate, command catalog routes, ActionPlan service, Action Library UI, App shell i18n, Action Center readiness UX, locale files/parity script, backend tests.
+- Changed files: `backend/src/services/fortigate-command-compiler.ts`, `backend/src/services/ephemeral-secret.service.ts`, `backend/src/connectors/fortigate-ssh.connector.ts`, `backend/src/actions/fortigate-action-catalog.ts`, `backend/src/services/fortigate-policy-guard.service.ts`, `backend/src/guided-actions/vendors/fortigate/fortigate-blueprints.ts`, `backend/src/commands/execution/execution-template-registry.ts`, `backend/src/commands/catalog/*`, `backend/src/routes/actions.ts`, `backend/src/routes/command-catalog.ts`, `backend/src/services/action-plan.service.ts`, `backend/src/ai/ai-template-resolver.ts`, `backend/test/task17-2-guided-actions.test.ts`, `backend/test/task17-3-support-state-i18n.test.ts`, `src/App.tsx`, `src/components/commands/CommandCatalogPanel.tsx`, `src/components/actions/ActionCenterPanel.tsx`, `src/lib/actionApprovalState.ts`, `src/lib/commandCatalog.ts`, `src/main.tsx`, `src/i18n/**`, `scripts/check-locale-parity.mjs`, `package.json`, `pnpm-lock.yaml`, `backend/package.json`.
+- Migrations: none.
+- Validation: `cd backend && npm run build`; `cd backend && npm run validate:command-catalog` (136 items); `cd backend && npx tsx --test test/task17-2-guided-actions.test.ts test/task17-3-support-state-i18n.test.ts` (20/20); `cd backend && npm test` (145/145); `npm run test:i18n` (72 keys); `pnpm build` passed with existing Vite dynamic-import/chunk-size warnings.
+- Follow-up: replace process-local PSK refs with a persistent vault integration; implement SSL VPN and remote-access templates/parsers before making them executable; complete dedicated legacy i18n/mojibake cleanup; run browser click validation when tooling is available.

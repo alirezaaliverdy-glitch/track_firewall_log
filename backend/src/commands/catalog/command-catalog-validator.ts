@@ -2,6 +2,7 @@ import { ActionType } from "@prisma/client";
 import { getExecutionTemplate } from "../execution/execution-template-registry.js";
 import type { CommandCatalogItem, CommandVendor } from "./types.js";
 import { getDeviceConnectors, getVendorPlanners } from "../../connectors/connector-registry.service.js";
+import { evaluateCatalogSupportState } from "./support-state.js";
 
 const vendors = new Set<CommandVendor>(["linux", "mikrotik", "fortigate", "cisco", "pfsense", "juniper", "paloalto", "windows", "generic"]);
 export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
@@ -19,9 +20,12 @@ export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
     if (item.mutating && !item.requiresConfirmation) errors.push(`${prefix}: mutating command must require confirmation`);
     if (item.mutating && (!item.prechecks.length || !item.verification.length)) errors.push(`${prefix}: mutating command needs prechecks and verification`);
     if (!item.rollback.available && !item.rollback.notAvailableReasonFa.trim()) errors.push(`${prefix}: rollback unavailability needs a reason`);
-    if (item.implementationState === "implemented") {
+    const support = evaluateCatalogSupportState(item);
+    if (item.supportState !== support.supportState) errors.push(`${prefix}: supportState must be ${support.supportState}`);
+    if (item.supportReasonKey !== support.reasonKey) errors.push(`${prefix}: supportReasonKey must be ${support.reasonKey}`);
+    if (item.supportState === "verified") {
       const template = getExecutionTemplate(item.executionTemplateRef);
-      if (!template) errors.push(`${prefix}: implemented command has no registered template`);
+      if (!template) errors.push(`${prefix}: verified command has no registered template`);
       else if (template.actionType !== item.actionType || template.connectorType !== item.connectorType) errors.push(`${prefix}: template/action/connector mismatch`);
       else {
         const connectorVendor = template.connectorType === "linux-ssh" ? "linux_edge" : template.connectorType === "fortigate-ssh" ? "fortigate" : "mikrotik";
@@ -30,8 +34,9 @@ export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
         if (!connector?.supportedActions.includes(item.actionType as ActionType)) errors.push(`${prefix}: action is absent from real connector`);
         if (!planner?.supportedActions.includes(item.actionType as ActionType)) errors.push(`${prefix}: action is absent from real planner`);
       }
-      if (item.executionSupport !== "connector" || !item.uiHints.executable) errors.push(`${prefix}: implemented command must be connector executable`);
+      if (item.executionSupport !== "connector" || !item.uiHints.executable) errors.push(`${prefix}: verified command must be connector executable`);
     }
+    if (item.supportState !== "verified" && (item.uiHints.executable || item.executionSupport === "connector")) errors.push(`${prefix}: non-verified command cannot be executable`);
     if (["planned", "unsupported"].includes(item.implementationState) && (item.uiHints.executable || item.executionSupport === "connector" || item.executionTemplateRef)) errors.push(`${prefix}: planned/unsupported command cannot be executable`);
   }
   if (errors.length) throw new Error(`Invalid command catalog:\n${errors.join("\n")}`);

@@ -25,6 +25,21 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function arrayOfStrings(value: unknown) {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function fortigateInterfaceOptions(device: Device | undefined) {
+  const capabilities = object(device?.capabilities);
+  const fortigateStatus = object(capabilities.fortigateStatus);
+  const statusDiscovery = object(fortigateStatus.fortigate);
+  const directDiscovery = object(capabilities.fortigate);
+  return Array.from(new Set([
+    ...arrayOfStrings(statusDiscovery.interfaces),
+    ...arrayOfStrings(directDiscovery.interfaces),
+  ])).sort((a, b) => a.localeCompare(b));
+}
+
 function isPreviewOnly(session: GuidedSession | null) {
   const params = object(session?.actionPlan?.parametersJson);
   const metadata = object(params.metadata);
@@ -86,6 +101,9 @@ export default function GuidedActionWizard(props: {
   const currentStep = session?.currentStep ?? null;
   const stepValues = useMemo(() => ({ ...session?.answers, ...values }), [session?.answers, values]);
   const previewOnly = isPreviewOnly(session);
+  const selectedDeviceId = session?.deviceId ?? props.deviceId ?? (typeof stepValues.deviceId === "string" ? stepValues.deviceId : null);
+  const selectedDevice = devices.find((device) => device.id === selectedDeviceId);
+  const interfaceOptions = useMemo(() => fortigateInterfaceOptions(selectedDevice), [selectedDevice]);
 
   async function saveStep() {
     if (!session || !currentStep) return;
@@ -192,6 +210,22 @@ export default function GuidedActionWizard(props: {
                       onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.checked }))}
                       className="mt-3 h-4 w-4"
                     />
+                  ) : field.type === "interfaceSelect" ? (
+                    <>
+                      <input
+                        list={interfaceOptions.length ? `fortigate-interfaces-${field.key}` : undefined}
+                        type="text"
+                        value={raw}
+                        placeholder={field.placeholderFa}
+                        onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                        className="mt-1 w-full rounded border border-slate-700 bg-slate-900 p-2"
+                      />
+                      {interfaceOptions.length ? (
+                        <datalist id={`fortigate-interfaces-${field.key}`}>
+                          {interfaceOptions.map((name) => <option key={name} value={name} />)}
+                        </datalist>
+                      ) : null}
+                    </>
                   ) : (
                     <input
                       type={field.secret ? "password" : field.type === "number" ? "number" : "text"}

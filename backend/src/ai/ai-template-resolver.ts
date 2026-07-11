@@ -342,7 +342,7 @@ export function resolveAiTemplate(input: {
     const template = getExecutionTemplate(routed.executionTemplateRef);
     const mergedParams = { ...(item?.defaultParams ?? {}), ...routed.normalizedParams };
     const missingFields = Array.from(new Set([...routed.missingFields, ...missingFieldsForItem(item, mergedParams)]));
-    if (item?.implementationState === "implemented" && template) {
+    if (item?.supportState === "verified" && template) {
       return {
         mode: missingFields.length ? "needs_input" : "executable_action_plan",
         canonicalVendor: item.vendor,
@@ -391,7 +391,7 @@ export function resolveAiTemplate(input: {
   const missingFields = missingFieldsForItem(item, mergedParams);
   const template = item?.executionTemplateRef ? getExecutionTemplate(item.executionTemplateRef) : null;
 
-  if (item?.implementationState === "implemented" && template) {
+  if (item?.supportState === "verified" && template) {
     return {
       mode: missingFields.length ? "needs_input" : "executable_action_plan",
       canonicalVendor,

@@ -13,6 +13,7 @@ export function actionExecutionUiState(action: ActionPlan) {
   const executionSupport = String(metadataValue(parameters, "executionSupport") ?? "");
   const metadata = object(parameters.metadata);
   const catalogState = String(metadata.implementationState ?? "");
+  const supportState = String(metadata.supportState ?? metadataValue(parameters, "supportState") ?? (catalogState === "implemented" && executionSupport === "connector" ? "verified" : ""));
   if (metadata.source === "guided_action_wizard" && (metadata.executable === false || executionSupport === "planned_or_partial" || catalogState === "partial" || catalogState === "planned")) {
     return {
       state: "blocked",
@@ -22,7 +23,7 @@ export function actionExecutionUiState(action: ActionPlan) {
       missingField: null
     };
   }
-  if (metadata.source === "command_catalog" && (catalogState !== "implemented" || executionSupport !== "connector" || !metadata.executionTemplateRef)) {
+  if (metadata.source === "command_catalog" && (supportState !== "verified" || executionSupport !== "connector" || !metadata.executionTemplateRef)) {
     return {
       state: "blocked",
       canApproveAndExecute: false,

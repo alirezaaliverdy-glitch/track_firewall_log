@@ -41,7 +41,7 @@ test("manualOnly cannot quick execute and missing params do not create plans", a
   const manual = await app.inject({ method: "POST", url: "/api/commands/catalog/linux.enable-fail2ban/create-action-plan", payload: { deviceId: device.id, params: {} } });
   assert.equal(manual.statusCode, 201);
   const quick = await app.inject({ method: "POST", url: `/api/actions/${manual.json().id}/quick-execute`, payload: { intent: "execute" } });
-  assert.equal(quick.statusCode, 409); assert.equal(quick.json().error, "CATALOG_COMMAND_NOT_EXECUTABLE"); assert.equal(quick.json().detail, "این دستور هنوز اجرای خودکار ندارد");
+  assert.equal(quick.statusCode, 409); assert.equal(quick.json().error, "CATALOG_COMMAND_NOT_VERIFIED");
 });
 
 test("frontend publishes selection, updates URL, and Action Center opens selected plan", () => {
@@ -50,5 +50,5 @@ test("frontend publishes selection, updates URL, and Action Center opens selecte
   const uiState = readFileSync(new URL("../../src/lib/actionApprovalState.ts", import.meta.url), "utf8");
   assert.match(catalog, /searchParams\.set\("selected", plan\.id\)/); assert.match(catalog, /publishActionPlanCreated\(plan\.id\)/); assert.match(catalog, /reviewInActionCenter/);
   assert.match(center, /URLSearchParams\(window\.location\.search\)\.get\("selected"\)/); assert.match(center, /refreshActions\(id\)/); assert.match(center, /setSelectedAction\(plan\)/);
-  assert.match(uiState, /catalogState !== "implemented"/); assert.match(uiState, /executionSupport !== "connector"/);
+  assert.match(uiState, /supportState !== "verified"/); assert.match(uiState, /executionSupport !== "connector"/);
 });

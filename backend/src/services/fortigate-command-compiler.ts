@@ -2,6 +2,7 @@ import net from "node:net";
 import { ActionType, AiRiskLevel } from "@prisma/client";
 import { getFortiGateControlAction } from "../fortigate/full-control-registry.js";
 import type { FortiOsDialect } from "./fortigate-version.service.js";
+import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 
 export type FortiGateCommandSpec = {
   template: string;
@@ -101,6 +102,12 @@ function ipv4(value: string, key: string) {
   return value;
 }
 
+function ipv4OrFqdn(value: string, key: string) {
+  if (net.isIP(value) === 4) return value;
+  if (/^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/.test(value)) return value;
+  fail(key);
+}
+
 function cidrOrIp(params: Record<string, unknown>, key: string) {
   const value = text(params, key) ?? fail(key);
   const [ip, prefix] = value.split("/");
@@ -121,6 +128,46 @@ function subnet(params: Record<string, unknown>) {
   if (!Number.isInteger(bits) || bits < 0 || bits > 32) fail("cidr");
   const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
   return `${ip} ${[24, 16, 8, 0].map((shift) => (mask >>> shift) & 255).join(".")}`;
+}
+
+function cidrToSubnet(value: string, key: string) {
+  const addressMask = value.trim().split(/\s+/);
+  if (addressMask.length === 2) {
+    ipv4(addressMask[0], key);
+    ipv4(addressMask[1], key);
+    return `${addressMask[0]} ${addressMask[1]}`;
+  }
+  const [ip, prefix] = value.split("/");
+  ipv4(ip, key);
+  if (prefix === undefined) fail(key);
+  const bits = Number(prefix);
+  if (!Number.isInteger(bits) || bits < 0 || bits > 32 || String(bits) !== prefix) fail(key);
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  return `${ip} ${[24, 16, 8, 0].map((shift) => (mask >>> shift) & 255).join(".")}`;
+}
+
+function cidrList(params: Record<string, unknown>, key: string) {
+  const raw = Array.isArray(params[key]) ? params[key] : typeof params[key] === "string" ? String(params[key]).split(",") : [];
+  const values = raw.map((item) => String(item).trim()).filter(Boolean);
+  if (values.length === 0) fail(key);
+  return values.map((value) => ({ cidr: value, subnet: cidrToSubnet(value, key) }));
+}
+
+function safeProposal(params: Record<string, unknown>, key = "proposal") {
+  const value = text(params, key, "aes256-sha256") ?? "aes256-sha256";
+  if (!/^[A-Za-z0-9-]{3,80}$/.test(value)) fail(key);
+  return value;
+}
+
+function objectName(prefix: string, index: number) {
+  const safe = prefix.replace(/[^A-Za-z0-9_.:-]/g, "-").slice(0, 64);
+  return `${safe}-${index}`.slice(0, 79);
+}
+
+function secretValue(params: Record<string, unknown>, key: string) {
+  const value = typeof params[key] === "string" && String(params[key]).trim() ? String(params[key]).trim() : undefined;
+  if (value !== undefined && /[\n\r`|;]/.test(value)) throw new Error(`${key} contains unsafe characters.`);
+  return value;
 }
 
 function fqdn(params: Record<string, unknown>) {
@@ -244,6 +291,180 @@ export function compileFortiGateAction(input: {
   if (actionType === ActionType.fortigate_show_vpn_status) {
     const commands = ["get vpn ipsec tunnel summary", "diagnose vpn tunnel list", "get vpn ssl monitor", "show vpn ipsec phase1-interface", "show vpn ipsec phase2-interface", "show vpn ssl settings"];
     return result({ category: "vpn", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+  }
+  if (actionType === ActionType.fortigate_guided_vpn_setup) {
+    const vpn = normalizeFortiGateGuidedVpnParameters(p);
+    const vpnValidation = validateFortiGateGuidedVpnParameters(vpn);
+    if (vpnValidation.issues.length > 0) throw new Error(vpnValidation.issues[0]?.message ?? "FORTIGATE_GUIDED_VPN_PARAMS_INVALID");
+    if (text(vpn, "vpnType", "ipsec_site_to_site") !== "ipsec_site_to_site") throw new Error("FORTIGATE_VPN_MODE_PREVIEW_ONLY");
+    if (text(vpn, "authMethod", "psk") !== "psk") throw new Error("FORTIGATE_VPN_AUTH_PREVIEW_ONLY");
+    if (text(vpn, "psk")) throw new Error("PSK plaintext is not allowed; use pskSecretRef.");
+    const name = safeName(vpn, "vpnName");
+    const phase1Name = safeName(vpn, "phase1Name", name);
+    const phase2Name = safeName(vpn, "phase2Name", `${phase1Name}-p2`);
+    const wanInterface = safeName(vpn, "wanInterface");
+    const lanInterface = safeName(vpn, "lanInterface");
+    const remoteGateway = ipv4OrFqdn(text(vpn, "remoteGateway") ?? fail("remoteGateway"), "remoteGateway");
+    const localSubnet = { cidr: text(vpn, "localSubnet") ?? fail("localSubnet"), subnet: cidrToSubnet(text(vpn, "localSubnet") ?? "", "localSubnet") };
+    const remoteSubnet = { cidr: text(vpn, "remoteSubnet") ?? fail("remoteSubnet"), subnet: cidrToSubnet(text(vpn, "remoteSubnet") ?? "", "remoteSubnet") };
+    const pskSecretRef = text(p, "pskSecretRef") ?? fail("pskSecretRef");
+    const psk = secretValue(p, "pskSecretValue");
+    const proposal = safeProposal(vpn);
+    const dhGroup = safeName(vpn, "dhGroup", "14");
+    const ikeVersion = safeName(vpn, "ikeVersion", "2");
+    const natTraversal = vpn.natTraversal !== false;
+    const createFirewallPolicy = vpn.createFirewallPolicy !== false;
+    const createStaticRoute = vpn.createStaticRoute !== false;
+    const natEnabled = vpn.natEnabled === true;
+    const logTraffic = vpn.logTraffic === true;
+    const enableAfterCreate = vpn.enableAfterCreate !== false;
+    const statusLines = enableAfterCreate ? [] : ["set status disable"];
+    const pskLine = psk ? `set psksecret ${quote(psk)}` : "set psksecret ********";
+    const phase2Names = [phase2Name];
+    const phase2Lines = [
+      "config vpn ipsec phase2-interface",
+      `edit ${quote(phase2Name)}`,
+      `set phase1name ${quote(phase1Name)}`,
+      `set proposal ${proposal}`,
+      `set src-subnet ${localSubnet.subnet}`,
+      `set dst-subnet ${remoteSubnet.subnet}`,
+      ...statusLines,
+      "next",
+      "end"
+    ];
+    const phase1Command = block([
+      "config vpn ipsec phase1-interface",
+      `edit ${quote(phase1Name)}`,
+      `set interface ${quote(wanInterface)}`,
+      `set ike-version ${ikeVersion}`,
+      "set peertype any",
+      "set net-device disable",
+      `set proposal ${proposal}`,
+      `set dhgrp ${dhGroup}`,
+      `set remote-gw ${remoteGateway}`,
+      pskLine,
+      `set nattraversal ${natTraversal ? "enable" : "disable"}`,
+      ...statusLines,
+      "next",
+      "end"
+    ]);
+    const routeCommand = block([
+      "config router static",
+      "edit 0",
+      `set dst ${remoteSubnet.subnet}`,
+      `set device ${quote(phase1Name)}`,
+      ...(vpn.routeDistance !== undefined ? [`set distance ${Number(vpn.routeDistance)}`] : []),
+      "next",
+      "end"
+    ]);
+    const localAddressNames = [safeOptionalName(vpn, "localAddressObjectName") ?? objectName(`${MANAGED_PREFIX}-${name}-local`, 1)];
+    const remoteAddressNames = [safeOptionalName(vpn, "remoteAddressObjectName") ?? objectName(`${MANAGED_PREFIX}-${name}-remote`, 1)];
+    const policyBaseName = safeOptionalName(vpn, "policyName") ?? name;
+    const addressCommand = block([
+      "config firewall address",
+      `edit ${quote(localAddressNames[0])}`,
+      `set subnet ${localSubnet.subnet}`,
+      `set comment ${quote(managedComment(`guided vpn ${name} local ${localSubnet.cidr}`))}`,
+      "next",
+      `edit ${quote(remoteAddressNames[0])}`,
+      `set subnet ${remoteSubnet.subnet}`,
+      `set comment ${quote(managedComment(`guided vpn ${name} remote ${remoteSubnet.cidr}`))}`,
+      "next",
+      "end"
+    ]);
+    const policyCommand = block([
+      "config firewall policy",
+      "edit 0",
+      `set name ${quote(objectName(`${policyBaseName}-lan-to-vpn`, 0))}`,
+      `set srcintf ${quote(lanInterface)}`,
+      `set dstintf ${quote(phase1Name)}`,
+      `set srcaddr ${localAddressNames.map(quote).join(" ")}`,
+      `set dstaddr ${remoteAddressNames.map(quote).join(" ")}`,
+      "set action accept",
+      "set schedule \"always\"",
+      "set service \"ALL\"",
+      `set nat ${natEnabled ? "enable" : "disable"}`,
+      `set logtraffic ${logTraffic ? "all" : "disable"}`,
+      ...statusLines,
+      "next",
+      "edit 0",
+      `set name ${quote(objectName(`${policyBaseName}-vpn-to-lan`, 0))}`,
+      `set srcintf ${quote(phase1Name)}`,
+      `set dstintf ${quote(lanInterface)}`,
+      `set srcaddr ${remoteAddressNames.map(quote).join(" ")}`,
+      `set dstaddr ${localAddressNames.map(quote).join(" ")}`,
+      "set action accept",
+      "set schedule \"always\"",
+      "set service \"ALL\"",
+      "set nat disable",
+      `set logtraffic ${logTraffic ? "all" : "disable"}`,
+      ...statusLines,
+      "next",
+      "end"
+    ]);
+    const verificationCommands = [
+      "get vpn ipsec tunnel summary",
+      `diagnose vpn tunnel list name ${phase1Name}`,
+      "show vpn ipsec phase1-interface",
+      "show vpn ipsec phase2-interface",
+      ...(createFirewallPolicy ? ["show firewall policy"] : [])
+    ];
+    const commandSpecs = [
+      spec({ template: "config vpn ipsec phase1-interface/edit <phase1Name>", command: withVdom(phase1Command, vdom), target: { vpnName: name, phase1Name, wanInterface, remoteGateway, vdom }, rollbackSteps: [`delete phase1-interface ${phase1Name}`], warnings: [] }),
+      spec({ template: "config vpn ipsec phase2-interface/edit <phase2Name>", command: withVdom(block(phase2Lines), vdom), target: { vpnName: name, phase1Name, phase2Name, localSubnet: localSubnet.cidr, remoteSubnet: remoteSubnet.cidr, vdom }, rollbackSteps: [`delete phase2-interface ${phase2Name}`], warnings: [] }),
+      ...(createStaticRoute ? [spec({ template: "config router static/edit 0 remote VPN route", command: withVdom(routeCommand, vdom), target: { vpnName: name, phase1Name, remoteSubnet: remoteSubnet.cidr, vdom }, rollbackSteps: ["Remove created static route for the remote VPN subnet by route ID from config snapshot."], warnings: [] })] : []),
+      ...(createFirewallPolicy ? [
+        spec({ template: "config firewall address/edit managed VPN address objects", command: withVdom(addressCommand, vdom), target: { localAddressNames, remoteAddressNames, vdom }, rollbackSteps: [...localAddressNames, ...remoteAddressNames].map((item) => `delete firewall address ${item}`), warnings: [] }),
+        spec({ template: "config firewall policy/edit 0 guided VPN policies", command: withVdom(policyCommand, vdom), target: { lanInterface, tunnelInterface: phase1Name, natEnabled, logTraffic, vdom }, rollbackSteps: ["Delete created firewall policies by name from config snapshot."], warnings: [] })
+      ] : []),
+      ...verificationCommands.map((command) => spec({ template: `verify ${command}`, command: withVdom(command, vdom), write: false, target: { vpnName: name, phase1Name, vdom }, rollbackSteps: [], warnings: [] }))
+    ];
+    return result({
+      category: "vpn",
+      riskLevel: AiRiskLevel.high,
+      normalizedParameters: {
+        vpnType: "ipsec_site_to_site",
+        vpnName: name,
+        phase1Name,
+        phase2Name,
+        wanInterface,
+        lanInterface,
+        remoteGateway,
+        localSubnet: localSubnet.cidr,
+        remoteSubnet: remoteSubnet.cidr,
+        proposal,
+        dhGroup,
+        ikeVersion,
+        natTraversal,
+        pskSecretRef,
+        createFirewallPolicy,
+        createStaticRoute,
+        natEnabled,
+        logTraffic,
+        enableAfterCreate,
+        vdom
+      },
+      requiresBackup: true,
+      requiresBreakGlass: false,
+      lockoutSensitive: false,
+      warnings: [
+        "FortiGate IPsec VPN changes require pre-execution config backup/export.",
+        "PSK is resolved from an ephemeral secret reference at execution time and is redacted in preview."
+      ],
+      commandSpecs,
+      rollbackJson: {
+        type: "fortigate_guided_ipsec_site_to_site_manual",
+        vpnName: name,
+        phase1Name,
+        phase2Names,
+        localAddressNames: createFirewallPolicy ? localAddressNames : [],
+        remoteAddressNames: createFirewallPolicy ? remoteAddressNames : [],
+        routeRemoval: createStaticRoute ? "Remove created static routes for remote subnets using the pre-change snapshot to identify route IDs." : "not_created",
+        policyRemoval: createFirewallPolicy ? "Delete created policies by displayed names from the pre/post snapshot." : "not_created",
+        secretStored: false,
+        vdom
+      }
+    });
   }
   if (actionType === ActionType.fortigate_show_ha_vdom_zone) {
     const commands = ["get system ha status", "show system ha", "show system vdom", "show system zone"];

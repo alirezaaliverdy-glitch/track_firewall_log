@@ -27,6 +27,7 @@ import { resolveCatalogAction } from "../commands/catalog/catalog-action-resolve
 import { COMMAND_CATALOG, COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
 import { buildDailyCheckResult } from "../daily-check/daily-check-engine.js";
 import { buildFortiGateDailyCheck, parseFortiGateReadOnlyResult } from "../fortigate/readonly-result-parser.js";
+import { normalizeFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -113,10 +114,14 @@ function timeoutFromDuration(value: unknown) {
 export function normalizeParameters(actionType: ActionType, parameters: Record<string, unknown>) {
   const canonical = normalizeIntent({ ...parameters, actionType });
   delete canonical.actionType;
-  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
+  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
     delete canonical.sourceIp;
+    delete canonical.srcInterface;
   }
   const normalized = { ...parameters, ...canonical };
+  if (actionType === ActionType.fortigate_guided_vpn_setup) {
+    return normalizeFortiGateGuidedVpnParameters(normalized);
+  }
   if (actionType === ActionType.mikrotik_block_ip_temporary || actionType === ActionType.mikrotik_block_ip || actionType === ActionType.mikrotik_add_address_list_entry) {
     const address = firstText(normalized, ["address", "srcIP", "srcIp", "sourceIp", "sourceIP", "ipAddress", "ip"]);
     if (address) normalized.address = address;
@@ -385,6 +390,10 @@ async function ensureControlledCatalogAction(plan: ActionPlan) {
     if (!productCatalog.valid) throw new ActionExecutionError(productCatalog.code, productCatalog.messageFa, 409);
     return { controlled: true, catalogCommandId: productCatalog.item.id, source: "command_catalog", executionTemplateRef: productCatalog.item.executionTemplateRef, connectorType: productCatalog.item.connectorType, vendor: productCatalog.item.vendor };
   }
+  const productEntries = COMMAND_CATALOG.filter((item) => item.actionType === plan.actionType);
+  if (productEntries.length > 0 && !productEntries.some((item) => item.supportState === "verified")) {
+    throw new ActionExecutionError("CATALOG_COMMAND_NOT_VERIFIED", "This action is not verified for execution.", 409);
+  }
   const legacyControlled = Boolean(getActionCatalogEntry(plan.actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if (!legacyControlled) throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "این عملیات در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.", 409);
   return { controlled: true, catalogCommandId: null, source: "legacy_catalog", executionTemplateRef: null, connectorType: null, vendor: vendorFromActionType(plan.actionType) ?? "unknown" };
@@ -414,7 +423,7 @@ export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "st
   if (metadata.source === "guided_action_wizard" && (metadata.executable === false || executionSupport === "planned_or_partial")) {
     return new ActionExecutionError("PREVIEW_ONLY_GUIDED_ACTION", "این اکشن هنوز اجرای واقعی کامل ندارد.");
   }
-  const productCatalogControlled = ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(String(metadata.source)) && metadata.implementationState === "implemented" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
+  const productCatalogControlled = ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(String(metadata.source)) && metadata.supportState === "verified" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
   const controlled = productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
@@ -542,7 +551,7 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   const catalogVendor = vendor === "mikrotik" || vendor === "fortigate" ? vendor : null;
   const catalog = getActionCatalogEntry(actionType, catalogVendor);
   if (catalog) riskLevel = catalog.riskLevel;
-  const productMatches = COMMAND_CATALOG.filter((item) => item.implementationState === "implemented" && item.executionSupport === "connector" && item.actionType === actionType);
+  const productMatches = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.executionSupport === "connector" && item.actionType === actionType);
   if (productMatches.length === 1 && asObject(parameters.metadata).source !== "command_catalog") {
     const item = productMatches[0];
     const normalizedParams = executionParametersOnly(parameters);
@@ -554,7 +563,7 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
       metadata: {
         ...asObject(parameters.metadata), source: mappedSource, catalogCommandId: item.id, catalogVersion: COMMAND_CATALOG_VERSION,
         catalogTitleFa: item.titleFa, vendor: item.vendor, actionType: item.actionType, implementationState: "implemented",
-        executionSupport: "connector", executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType,
+        executionSupport: "connector", supportState: item.supportState, supportReasonKey: item.supportReasonKey, executable: true, executionTemplateRef: item.executionTemplateRef, connectorType: item.connectorType,
         normalizedParams, requiredParamsSatisfied: item.requiredParams.every((field) => normalizedParams[field.key] !== undefined && normalizedParams[field.key] !== ""),
         previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started"
       }
@@ -667,6 +676,35 @@ export async function dryRunActionPlan(id: string) {
   let plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
   plan = await prepareActionPlan(plan);
+  const initialMetadata = asObject(asObject(plan.parametersJson).metadata);
+  if (["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard"].includes(String(initialMetadata.source)) && initialMetadata.supportState !== "verified") {
+    const device = plan.deviceId ? await prisma.device.findUnique({ where: { id: plan.deviceId } }) : null;
+    const resolved = resolveCatalogAction(plan, device);
+    if (resolved.matched && resolved.valid) {
+      plan = await prisma.actionPlan.update({
+        where: { id },
+        data: { parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { supportState: "verified", supportReasonKey: resolved.item.supportReasonKey, executionTemplateRef: resolved.item.executionTemplateRef, connectorType: resolved.item.connectorType, executable: true })) }
+      });
+    } else {
+    const blocked = await prisma.actionPlan.update({
+      where: { id },
+      data: {
+        status: ActionPlanStatus.validation_failed,
+        validationJson: toJson({
+          valid: false,
+          code: "CATALOG_COMMAND_NOT_VERIFIED",
+          messageKey: initialMetadata.supportReasonKey ?? "support.reason.missingRequirements",
+          supportState: initialMetadata.supportState ?? "preview_only",
+          userMessage: "This ActionPlan is available for review only and cannot generate an executable command preview."
+        }),
+        dryRunJson: Prisma.JsonNull
+      },
+      include: includeRelations()
+    });
+    await audit(blocked, "action.command_plan_blocked", "Command preview refused because support state is not verified.", { code: "CATALOG_COMMAND_NOT_VERIFIED", supportState: initialMetadata.supportState });
+    return blocked;
+    }
+  }
 
   let preflight: Awaited<ReturnType<typeof preflightActionPlan>> | null = null;
   if (plan.deviceId) {
@@ -935,7 +973,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     throw new ActionExecutionError("DEVICE_REQUIRED", "ActionPlan requires a target device.");
   }
 
-  const device = await prisma.device.findUnique({ where: { id: plan.deviceId } });
+  let device = await prisma.device.findUnique({ where: { id: plan.deviceId } });
   if (!device) {
     await audit(plan, "execution_failed", "Execution refused because target device was not found.", { code: "DEVICE_REQUIRED" });
     throw new ActionExecutionError("DEVICE_REQUIRED", "Target device was not found.", 404);
@@ -950,6 +988,34 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   if (!connector.supportedActions.includes(plan.actionType)) {
     await audit(plan, "execution_failed", "Execution refused because connector does not support this action.", { code: "CONNECTOR_ACTION_UNSUPPORTED", actionType: plan.actionType });
     throw new ActionExecutionError("CONNECTOR_ACTION_UNSUPPORTED", "Connector does not support this action.");
+  }
+
+  if (plan.actionType === ActionType.fortigate_guided_vpn_setup && connector.name === "fortigate") {
+    const capabilities = asObject(device.capabilities);
+    const discovery = asObject(asObject(capabilities.fortigateStatus).fortigate);
+    const cachedInterfaces = Array.isArray(discovery.interfaces) ? discovery.interfaces.map(String).filter(Boolean) : [];
+    if (cachedInterfaces.length === 0) {
+      await audit(plan, "fortigate_discovery_started", "FortiGate interface discovery cache was empty; running safe read-only discovery before execution.", { commands: ["show system interface", "get system interface"] });
+      let status: unknown;
+      try {
+        status = await connector.collectStatus(device);
+      } catch (error) {
+        await audit(plan, "execution_failed", "FortiGate read-only discovery failed before execution.", { code: "FORTIGATE_CONNECTOR_NOT_CONFIGURED", error: error instanceof Error ? error.message : "discovery failed" });
+        throw new ActionExecutionError("FORTIGATE_CONNECTOR_NOT_CONFIGURED", "Cannot execute: FortiGate SSH connector is not configured for this device.", 409);
+      }
+      const statusObject = asObject(status);
+      const statusDiscovery = asObject(statusObject.fortigate);
+      const liveInterfaces = Array.isArray(statusDiscovery.interfaces) ? statusDiscovery.interfaces.map(String).filter(Boolean) : [];
+      if (statusObject.connected === false || liveInterfaces.length === 0) {
+        await audit(plan, "execution_failed", "FortiGate read-only discovery did not return interface names.", { code: "FORTIGATE_DISCOVERY_FAILED", errorCode: statusObject.errorCode ?? null });
+        throw new ActionExecutionError("FORTIGATE_DISCOVERY_FAILED", "Cannot execute: FortiGate interface discovery did not return interface names.", 409);
+      }
+      device = await prisma.device.update({
+        where: { id: device.id },
+        data: { capabilities: toJson({ ...capabilities, fortigateStatus: statusObject }) }
+      });
+      await audit(plan, "fortigate_discovery_completed", "FortiGate interface discovery refreshed before execution.", { interfaceCount: liveInterfaces.length });
+    }
   }
 
   const validation = await validateActionPlan(plan);

@@ -43,6 +43,7 @@ const LEGACY_FORTIGATE_ACTIONS = [
   ActionType.fortigate_export_sanitized_config,
   ActionType.fortigate_show_logs,
   ActionType.fortigate_show_sessions,
+  ActionType.fortigate_guided_vpn_setup,
   ActionType.fortigate_create_zone,
   ActionType.fortigate_add_interface_to_zone,
   ActionType.fortigate_remove_interface_from_zone,

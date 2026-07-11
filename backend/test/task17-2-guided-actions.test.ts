@@ -4,6 +4,8 @@ import { resolveAiTemplate } from "../src/ai/ai-template-resolver.js";
 import { buildApp } from "../src/app.js";
 import { getGuidedActionBlueprint } from "../src/guided-actions/registry.js";
 import { startGuidedActionSession, answerGuidedActionStep, buildGuidedActionPlan } from "../src/guided-actions/session-service.js";
+import { validateFortiGateAction } from "../src/actions/fortigate-action-catalog.js";
+import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "../src/services/fortigate-guided-vpn.schema.js";
 import { prisma } from "../src/db/prisma.js";
 
 const linuxDevice = { id: "linux-guided-1", vendor: "Linux", type: "linux_edge", protocol: "ssh" } as const;
@@ -112,7 +114,7 @@ test("ActionSession rejects invalid enum in Persian and does not build an Action
   assert.equal(built.ok, false);
 });
 
-test("Complete FortiGate VPN guided session builds preview-only ActionPlan without 409", async (t) => {
+test("Complete FortiGate IPsec site-to-site guided session builds executable redacted ActionPlan", async (t) => {
   const device = await prisma.device.create({
     data: {
       name: "Task 17.2C FortiGate VPN Preview",
@@ -134,7 +136,7 @@ test("Complete FortiGate VPN guided session builds preview-only ActionPlan witho
     deviceId: device.id,
     vendor: "fortigate",
     initialRequest: "vpn create",
-    initialValues: { vpnType: "ipsec_site_to_site", name: "vpn1", localSubnets: "10.0.0.0/24", remoteSubnets: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "manual", psk: "super-secret-psk", createFirewallPolicy: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "test-vpn", localSubnet: "192.168.1.0/24", remoteSubnet: "10.10.10.0/24", allowedSubnets: "192.168.1.0/24", wanInterface: "port2", lanInterface: "port1", remoteGateway: "185.238.45.165", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, createFirewallPolicy: true, createStaticRoute: true, natEnabled: false, logTraffic: true, enableAfterCreate: false },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");
@@ -145,19 +147,86 @@ test("Complete FortiGate VPN guided session builds preview-only ActionPlan witho
   const params = built.value.actionPlan.parametersJson as Record<string, unknown>;
   const metadata = params.metadata as Record<string, unknown>;
   assert.equal(params.vendor, "fortigate");
-  assert.equal(params.executionSupport, "planned_or_partial");
-  assert.equal(params.implementationState, "partial");
-  assert.equal(params.executable, false);
+  assert.equal(params.executionSupport, "connector");
+  assert.equal(params.implementationState, "implemented");
+  assert.equal(params.executable, true);
+  assert.equal(params.supportState, "verified");
+  assert.equal(params.executionTemplateRef, "fortigate_guided_vpn_setup");
+  assert.equal(typeof params.pskSecretRef, "string");
+  assert.equal(params.psk, undefined);
+  assert.equal(params.vpnName, "test-vpn");
+  assert.equal(params.phase1Name, "test-vpn");
+  assert.equal(params.phase2Name, "test-vpn-p2");
+  assert.equal(params.wanInterface, "port2");
+  assert.equal(params.lanInterface, "port1");
+  assert.equal(params.srcInterface, undefined);
+  assert.equal(params.dstInterface, undefined);
+  assert.equal(params.sourceIp, undefined);
   assert.equal(metadata.actionType, "fortigate.guided_vpn_setup");
   assert.equal(metadata.connectorType, "fortigate-ssh");
   assert.equal(metadata.source, "guided_action_wizard");
-  assert.ok(Array.isArray(params.missingTemplates));
-  assert.notEqual(JSON.stringify(built.value), "super-secret-psk");
-  assert.doesNotMatch(JSON.stringify(built.value), /super-secret-psk/);
-  assert.doesNotMatch(JSON.stringify(built.value.actionPlan.dryRunJson), /super-secret-psk/);
+  assert.equal(metadata.supportState, "verified");
+  assert.equal(metadata.executable, true);
+  assert.notEqual(JSON.stringify(built.value), "redaction-test-value");
+  assert.doesNotMatch(JSON.stringify(built.value), /redaction-test-value/);
+  assert.doesNotMatch(JSON.stringify(built.value.actionPlan.dryRunJson), /redaction-test-value/);
+  const validation = validateFortiGateAction({
+    actionType: built.value.actionPlan.actionType,
+    riskLevel: built.value.actionPlan.riskLevel,
+    parametersJson: built.value.actionPlan.parametersJson,
+  });
+  assert.equal(validation.valid, true, validation.errors.join(", "));
+  const commands = validation.commandSpecs.map((spec) => spec.command).join("\n");
+  assert.match(commands, /config vpn ipsec phase1-interface/);
+  assert.match(commands, /config vpn ipsec phase2-interface/);
+  assert.match(commands, /config router static/);
+  assert.match(commands, /config firewall policy/);
+  assert.match(commands, /set interface "port2"/);
+  assert.match(commands, /set remote-gw 185\.238\.45\.165/);
+  assert.match(commands, /set ike-version 2/);
+  assert.match(commands, /set dhgrp 14/);
+  assert.match(commands, /set src-subnet 192\.168\.1\.0 255\.255\.255\.0/);
+  assert.match(commands, /set dst-subnet 10\.10\.10\.0 255\.255\.255\.0/);
+  assert.match(commands, /set psksecret \*\*\*\*\*\*\*\*/);
+  assert.doesNotMatch(commands, /redaction-test-value/);
+  assert.notEqual(params.wanInterface, "guided_action_wizard");
+  assert.notEqual(params.lanInterface, "guided_action_wizard");
+  assert.doesNotMatch(commands, /guided_action_wizard/);
   const blueprint = getGuidedActionBlueprint("fortigate_guided_vpn_setup");
   assert.ok(blueprint);
   assert.equal(blueprint.implementationState, "partial");
+});
+
+test("FortiGate guided VPN parameter schema maps canonical interfaces and rejects placeholders", () => {
+  const normalized = normalizeFortiGateGuidedVpnParameters({
+    vpnName: "test-vpn",
+    wanInterface: "port2",
+    lanInterface: "port1",
+    remoteGateway: "185.238.45.165",
+    localSubnet: "192.168.1.0/24",
+    remoteSubnet: "10.10.10.0/24",
+    pskSecretRef: "secret-ref",
+    source: "guided_action_wizard",
+  });
+  assert.equal(normalized.lanInterface, "port1");
+  assert.equal(normalized.wanInterface, "port2");
+  assert.equal(normalized.srcInterface, undefined);
+  assert.equal(normalized.dstInterface, undefined);
+  assert.doesNotMatch(JSON.stringify(normalized), /"lanInterface":"guided_action_wizard"/);
+
+  const bad = validateFortiGateGuidedVpnParameters({
+    vpnName: "bad-vpn",
+    wanInterface: "guided_action_wizard",
+    lanInterface: "",
+    remoteGateway: "185.238.45.165",
+    localSubnet: "192.168.1.0/33",
+    remoteSubnet: "10.10.10.0/24",
+  }, new Set(["port1", "port2"]));
+  assert.ok(bad.issues.some((issue) => issue.field === "wanInterface"));
+  assert.ok(bad.issues.some((issue) => issue.field === "lanInterface"));
+  assert.ok(bad.issues.some((issue) => issue.field === "localSubnet"));
+  assert.ok(bad.issues.some((issue) => issue.field === "pskSecretRef"));
+  assert.equal(bad.issues.some((issue) => issue.field === "srcInterface"), false);
 });
 
 test("FortiGate VPN guided build rejects invalid CIDR before ActionPlan creation", async (t) => {
@@ -182,7 +251,7 @@ test("FortiGate VPN guided build rejects invalid CIDR before ActionPlan creation
     deviceId: device.id,
     vendor: "fortigate",
     initialRequest: "vpn create",
-    initialValues: { vpnType: "ipsec_site_to_site", name: "vpn_bad", localSubnets: "10.0.0.0/33", remoteSubnets: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "generate" },
+    initialValues: { vpnType: "ipsec_site_to_site", vpnName: "vpn_bad", localSubnet: "10.0.0.0/33", remoteSubnet: "10.1.0.0/24", allowedSubnets: "10.0.0.0/24", wanInterface: "wan1", lanInterface: "port2", remoteGateway: "203.0.113.5", authMethod: "psk", pskMode: "manual", psk: "redaction-test-value" },
   });
   assert.equal(session.ok, true);
   const built = await buildGuidedActionPlan(session.ok ? session.value.sessionId : "");

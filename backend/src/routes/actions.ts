@@ -18,9 +18,11 @@ import { commandCatalogForVendor, VENDOR_COMMAND_CATALOG } from "../actions/cata
 import { routeCatalogIntent } from "../actions/intent-router.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
+  const actor = (request: { authUser?: { username: string; role: string } }) => request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined;
+
   app.post<{ Body: Record<string, unknown> }>("/api/actions/propose", async (request, reply) => {
     try {
-      return reply.code(201).send(await proposeActionPlan(request.body ?? {}));
+      return reply.code(201).send(await proposeActionPlan({ ...(request.body ?? {}), requestedBy: actor(request) }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to propose action plan";
       return reply.code(400).send({ error: "Failed to propose action plan", detail: message });
@@ -73,7 +75,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/approve", async (request, reply) => {
     try {
-      const plan = await approveActionPlan(request.params.id, request.body ?? {});
+      const plan = await approveActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
     } catch (error) {
@@ -85,7 +87,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/reject", async (request, reply) => {
-    const plan = await rejectActionPlan(request.params.id, request.body ?? {});
+    const plan = await rejectActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) });
     if (!plan) return reply.code(404).send({ error: "Action plan not found" });
     return plan;
   });
@@ -109,7 +111,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/quick-execute", async (request, reply) => {
     try {
-      const plan = await quickExecuteActionPlan(request.params.id, request.body ?? {}, {
+      const plan = await quickExecuteActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) }, {
         trace: (stage, payload) => request.log.info({ ...payload, stage }, stage)
       });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });

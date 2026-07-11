@@ -1,6 +1,38 @@
 # Current Project Status
 
-Last updated: 2026-07-09
+Last updated: 2026-07-11
+
+## Task 17.5 FortiGate Guided VPN Execution Fix
+
+- FortiGate IPsec Site-to-Site guided VPN is now the only executable VPN mode: `fortigate_guided_vpn_setup` with `vpnType=ipsec_site_to_site`, PSK auth, canonical validated params, `fortigate-ssh`, dry-run preview, PolicyGuard, connector invocation, audit/result, and verification commands.
+- Fixed the blocker where `guided_action_wizard` provenance leaked into execution parameters and was treated as `srcInterface`. The canonical fields are now `wanInterface` and `lanInterface`; internal UI/action tokens are rejected as FortiGate interfaces.
+- The guided VPN compiler emits controlled FortiOS CLI for phase1-interface, phase2-interface, optional static route, optional managed address objects, LAN-to-VPN and VPN-to-LAN policies, verification commands, and rollback metadata.
+- UI VPN fields are examples/placeholders only and support any valid customer values. Discovered FortiGate interfaces are offered as suggestions when available; manual entry remains allowed and is validated before execution.
+- If cached FortiGate interface discovery is missing at execution time, the backend performs safe read-only discovery through `fortigate-ssh` before final PolicyGuard and before any write command.
+- PSK is handled with a process-local temporary `pskSecretRef`. Raw PSK is not persisted in ActionPlan JSON, dry-run output, frontend persisted state, audit, rollback metadata, or docs. Preview redacts `set psksecret` as `********`.
+- Action Center validation repair now presents `wanInterface`/`lanInterface` instead of generic `srcInterface` for guided VPN failures.
+- Still planned/preview-only: FortiGate SSL VPN, IPsec Remote Access, and any FortiGate catalog/guided VPN action that lacks schema/template/connector/parser/precheck/post-verification.
+- Migrations: none.
+- Validation passed: backend build; catalog validation (136 items); targeted guided/support tests (21/21); backend full tests (146/146); fa/en key parity (72 keys); frontend build with existing Vite warnings.
+- Known limitations: temporary PSK refs are process-local and expire; SSL VPN/remote-access execution still needs real templates/parsers; legacy i18n/mojibake cleanup remains a separate task.
+
+## Task 17.3 Safe Vendor Action Library + Global i18n
+
+- Added a catalog support-state contract: `verified`, `preview_only`, `manual_only`, `unsupported`. `implemented` is now implementation progress only, not execution permission.
+- Verified execution requires all six requirements: validated input schema, registered compiler/template, compatible connector/planner, semantic result parser, precheck, and post-verification. Missing any requirement downgrades the item to `preview_only` or `manual_only`.
+- Backend execution and dry-run preview generation reject non-verified catalog/guided ActionPlans. The primary rejection code is `CATALOG_COMMAND_NOT_VERIFIED` with stable `messageKey` metadata for frontend translation.
+- Quick Controlled still removes only extra approval friction. It does not bypass support state, authorization, validation, device/vendor compatibility, environment restrictions, PolicyGuard, audit, or connector invocation.
+- `/action-library` is the prepared-action surface. The dashboard no longer renders the full prepared-command catalog; it shows compact operational shortcuts/status instead.
+- The Action Library is vendor-first: FortiGate, MikroTik, Linux, Cisco, pfSense, Generic. It includes device/search/category/risk/support-state/read-only/verified-only filters, device vendor override, compact cards, single-card expansion for params, and no raw CLI rendering.
+- Added global i18n foundation using `i18next`/`react-i18next`, `src/i18n/locales/fa/common.json`, `src/i18n/locales/en/common.json`, localStorage language persistence, and `<html lang>`/`dir` switching. `npm run test:i18n` checks fa/en key parity.
+- Actor identity for action routes now comes from authenticated request context (`request.authUser`) instead of request body.
+- FortiGate VPN wizard remains preview-only. FortiGate write/full-control catalog entries without complete semantic parser/precheck/post-verification are downgraded to `preview_only`.
+- Current verified actions: Linux catalog actions, MikroTik daily/check/block/backup actions, and FortiGate read-only/parser-backed actions (`daily-check`, interface/status/routing/license/admin/policy/VPN/HA-VDOM-zone show paths, plus verified show interfaces/firewall policies).
+- Current preview-only actions: FortiGate full-control/write or unfinished action library entries including VLAN/interface changes, zones, address/service objects, policies, VIP/IPPool, routing/DNS/NTP changes, IPsec/SSL VPN changes, admins, VDOM, HA, and SD-WAN entries.
+- Current manual-only actions: Linux restrict SSH/fail2ban review, MikroTik restrict management, Cisco/pfSense daily/manual reviews, FortiGate manual review items, and Generic security review. `mikrotik.change-ssh-port` remains `unsupported`.
+- Migrations: none.
+- Validation passed: `npm run validate:command-catalog`, backend `npm run build`, backend `npm test` (145/145), root `npm run test:i18n`, root `pnpm build` with existing Vite warnings.
+- Known remaining work: finish migrating all legacy panel text to locale keys, add browser-level RTL/LTR and route tests when Playwright is available, and promote preview-only vendor actions only after the verified requirements are implemented.
 
 ## Task 17.2C Guided VPN Build-Plan Preview
 
@@ -46,6 +78,40 @@ Last updated: 2026-07-09
 - Command Catalog Ask AI now returns the new modes: `executable_action_plan`, `needs_input`, `guided_workflow`, `clarification`, and `manual_or_not_supported`.
 - Frontend Command Catalog opens a Persian guided action wizard for `guided_workflow` and hands built plans back to Action Center.
 - Validation passed: command catalog validation, backend build, backend tests (133/133), frontend `pnpm build`.
+
+## Task 17.3B Current Status (2026-07-11)
+
+Product state: `/action-library` is now the prepared vendor-action surface; `/` remains a compact operational dashboard. The global header has Dashboard / Action Library navigation and a persisted language selector (`fa` RTL, `en` LTR).
+
+Execution truth:
+
+- Only `supportState=verified` can execute. `implemented` by itself is not enough.
+- Verified requires validated params, registered compiler/template, compatible connector, semantic parser/result contract, precheck, and post-verification.
+- Backend execution rejects non-verified catalog/guided plans even if an old client calls the API directly.
+- Actor identity remains request-context driven; request bodies are not trusted for actor role/identity.
+
+FortiGate VPN:
+
+- Executable now: FortiGate IPsec Site-to-Site via guided action `fortigate_guided_vpn_setup` with `fortigate-ssh`.
+- Required executable fields: tunnel name, WAN interface, LAN interface, remote gateway, local subnets, remote subnets, PSK secret reference, proposal, and optional policy/static-route/NAT/logging/enable-after-create flags.
+- Compiler emits controlled FortiOS blocks for phase1-interface, phase2-interface, optional static routes, optional address objects, optional firewall policies in both directions, verification commands, and rollback metadata.
+- PSK handling uses an in-memory temporary `pskSecretRef` with a 30-minute TTL. Raw PSK is not persisted in ActionPlan JSON, dry-run output, frontend state, audit logs, or docs. Preview redacts `set psksecret`.
+- Still planned/preview-only: FortiGate SSL VPN and IPsec Remote Access. They are not executable until templates and verification parsers are implemented.
+
+Known limitations:
+
+- Temporary PSK refs are process-local and expire; rebuilding the ActionPlan is required after restart/expiry.
+- Some legacy UI panels still have older hardcoded/mojibake strings and need a dedicated cleanup beyond this task.
+- Frontend build still emits the existing Vite dynamic-import/chunk-size warnings.
+
+Validation status:
+
+- `cd backend && npm run build`: passed.
+- `cd backend && npm run validate:command-catalog`: passed, 136 items.
+- `cd backend && npx tsx --test test/task17-2-guided-actions.test.ts test/task17-3-support-state-i18n.test.ts`: passed, 20/20.
+- `cd backend && npm test`: passed, 145/145.
+- `npm run test:i18n`: passed, 72 keys.
+- `pnpm build`: passed with existing Vite warnings.
 
 ## Task 17.0 FortiGate Read-only Intelligence
 

@@ -9,6 +9,7 @@ import { EXPECTED_FORMATS, validateCanonicalFieldShapes, validationError, type S
 import { normalizeIntent } from "../actions/intent-normalizer.js";
 import { resolveTrustedManagementSource } from "./action-preflight.service.js";
 import { env } from "../config/env.js";
+import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
@@ -57,7 +58,7 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function isActionPlanControlSource(value: unknown) {
-  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(value);
+  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard"].includes(value);
 }
 
 function numberParam(parameters: Record<string, unknown>, key: string) {
@@ -212,8 +213,11 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   delete canonical.actionType;
   if (isActionPlanControlSource(originalParameters.source) && canonical.sourceIp === originalParameters.source) {
     delete canonical.sourceIp;
+    delete canonical.srcInterface;
   }
-  const parameters = { ...originalParameters, ...canonical };
+  const parameters = plan.actionType === ActionType.fortigate_guided_vpn_setup
+    ? normalizeFortiGateGuidedVpnParameters({ ...originalParameters, ...canonical })
+    : { ...originalParameters, ...canonical };
   const normalizedPlan = { ...plan, parametersJson: JSON.parse(JSON.stringify(parameters)) } as ActionPlan;
   const catalog = getActionCatalogEntry(plan.actionType);
   const catalogValidation = catalog ? validateCatalogParameters(catalog, parameters) : { valid: true, errors: [], fieldErrors: [] };
@@ -298,9 +302,24 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     } else if (device.protocol !== "ssh") {
       errors.push(`${plan.actionType} requires FortiGate SSH protocol.`);
     }
-    if (device && !await credentialExists(device)) errors.push(`${plan.actionType} requires an existing credential for the target device.`);
+    if (device && !await credentialExists(device)) {
+      errors.push(plan.actionType === ActionType.fortigate_guided_vpn_setup
+        ? "Cannot execute: FortiGate SSH connector is not configured for this device."
+        : `${plan.actionType} requires an existing credential for the target device.`);
+    }
     if (device && !connectorExists(device, "fortigate")) errors.push(`${plan.actionType} requires a registered FortiGate connector.`);
 
+    if (plan.actionType === ActionType.fortigate_guided_vpn_setup) {
+      const capabilities = asObject(device?.capabilities);
+      const status = asObject(capabilities.fortigateStatus);
+      const discovery = asObject(status.fortigate);
+      const discoveredInterfaces = new Set(Array.isArray(discovery.interfaces) ? discovery.interfaces.map(String) : []);
+      const vpnValidation = validateFortiGateGuidedVpnParameters(parameters, discoveredInterfaces);
+      Object.assign(parameters, vpnValidation.normalized);
+      normalizedPlan.parametersJson = JSON.parse(JSON.stringify(parameters));
+      fieldErrors.push(...vpnValidation.issues);
+      errors.push(...vpnValidation.issues.map((issue) => issue.message));
+    }
     const expert = device ? evaluateFortiGatePolicy(normalizedPlan, device) : null;
     const fortigateValidation = expert?.validation ?? validateFortiGateAction(normalizedPlan);
     errors.push(...(expert?.errors ?? fortigateValidation.errors));

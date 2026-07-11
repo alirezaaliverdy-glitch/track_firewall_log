@@ -10,10 +10,10 @@ const vendorOf = (device: Device) => device.type === "linux_edge" ? "linux" : de
 export function resolveCatalogAction(plan: Pick<ActionPlan, "actionType" | "parametersJson">, device: Device | null): Resolution {
   const parameters = object(plan.parametersJson); const metadata = object(parameters.metadata);
   const commandId = typeof metadata.catalogCommandId === "string" ? metadata.catalogCommandId : null;
-  const fallback = COMMAND_CATALOG.filter((item) => item.implementationState === "implemented" && item.actionType === plan.actionType);
+  const fallback = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.actionType === plan.actionType);
   const item = commandId ? findCatalogItem(commandId) : fallback.length === 1 ? fallback[0] : undefined;
   if (!item) return commandId ? { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_FOUND", messageFa: "این دستور هنوز اجرای خودکار ندارد" } : { matched: false };
-  if (item.implementationState !== "implemented" || item.executionSupport !== "connector") return { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_EXECUTABLE", messageFa: "این دستور هنوز اجرای خودکار ندارد" };
+  if (item.supportState !== "verified" || item.executionSupport !== "connector") return { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_VERIFIED", messageFa: "این دستور هنوز اجرای خودکار ندارد" };
   if (plan.actionType !== item.actionType) return { matched: true, valid: false, code: "CATALOG_ACTION_TYPE_MISMATCH", messageFa: "این دستور هنوز اجرای خودکار ندارد" };
   const template = getExecutionTemplate(item.executionTemplateRef);
   if (!template || template.actionType !== plan.actionType || template.connectorType !== item.connectorType) return { matched: true, valid: false, code: "CATALOG_TEMPLATE_MISSING", messageFa: "قالب اجرای این دستور پیدا نشد" };

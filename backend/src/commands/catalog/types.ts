@@ -2,6 +2,7 @@ export type CommandVendor = "linux" | "mikrotik" | "fortigate" | "cisco" | "pfse
 export type CommandRiskLevel = "low" | "medium" | "high" | "critical";
 export type ImplementationState = "implemented" | "manualOnly" | "planned" | "unsupported";
 export type ExecutionSupport = "connector" | "manual" | "ai_proposed" | "not_implemented";
+export type SupportState = "verified" | "preview_only" | "manual_only" | "unsupported";
 
 export type CommandParam = {
   key: string;
@@ -21,6 +22,9 @@ export type CommandCatalogItem = {
   category: string;
   implementationState: ImplementationState;
   executionSupport: ExecutionSupport;
+  supportState: SupportState;
+  supportReason: string;
+  supportReasonKey: string;
   actionType: string;
   connectorType: string | null;
   riskLevel: CommandRiskLevel;

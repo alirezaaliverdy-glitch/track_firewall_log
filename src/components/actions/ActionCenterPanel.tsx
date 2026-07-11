@@ -93,7 +93,7 @@ function textArray(value: unknown): string[] {
   return value.map((item) => String(item)).filter(Boolean);
 }
 
-const EDITABLE_FIX_FIELDS = new Set(["sourceIp", "sourceCidr", "destinationIp", "destinationCidr", "trustedSource", "trustedSourceCidr", "srcInterface", "dstInterface", "srcZone", "dstZone", "serviceName", "services", "username", "port", "newPort", "protocol", "schedule", "nat", "logTraffic", "comment"]);
+const EDITABLE_FIX_FIELDS = new Set(["sourceIp", "sourceCidr", "destinationIp", "destinationCidr", "trustedSource", "trustedSourceCidr", "wanInterface", "lanInterface", "srcInterface", "dstInterface", "srcZone", "dstZone", "serviceName", "services", "username", "port", "newPort", "protocol", "schedule", "nat", "logTraffic", "comment"]);
 
 function structuredFieldErrors(action: ActionPlan): StructuredValidationError[] {
   return normalizeArray<Record<string, unknown>>(normalizeObject(action.validationJson).fieldErrors)
@@ -121,6 +121,8 @@ function initialFixValues(action: ActionPlan) {
 }
 
 function fieldLabel(field: string) {
+  if (field === "wanInterface") return "WAN/Gateway Interface";
+  if (field === "lanInterface") return "LAN/Internal Interface";
   if (field === "trustedSourceCidr" || field === "trustedSource" || field === "allowedSource") return "شبکه مجاز مدیریتی";
   if (field === "sourceIp" || field === "sourceCidr" || field === "srcIp" || field === "ipAddress") return "آدرس IP یا شبکه";
   if (field === "serviceName" || field === "service") return "نام سرویس";
@@ -131,6 +133,8 @@ function fieldLabel(field: string) {
 }
 
 function fieldExample(field: string) {
+  if (field === "wanInterface") return "port2, wan1, wan2";
+  if (field === "lanInterface") return "port1, internal, lan";
   if (["sourceIp", "srcIp", "ipAddress"].includes(field)) return "مثال: 203.0.113.10";
   if (["sourceCidr", "trustedSourceCidr", "trustedSource", "allowedSource"].includes(field)) return "مثال: 192.0.2.0/24";
   if (field === "serviceName" || field === "service") return "مثال: nginx یا sshd";
@@ -148,6 +152,15 @@ function friendlyActionReason(action: ActionPlan) {
   if (/not supported|not in .*catalog|unsupported/i.test(text)) return "This action is not supported yet.";
   if (/reserved|blocked.*port|newPort/i.test(text)) return "Port is blocked by policy or has an invalid value.";
   return "This action cannot execute with its current values.";
+}
+
+function isVerifiedGuidedConnectorPlan(action: ActionPlan) {
+  const parameters = normalizeObject(action.parametersJson);
+  const metadata = normalizeObject(parameters.metadata);
+  return metadata.source === "guided_action_wizard"
+    && String(metadata.supportState ?? parameters.supportState) === "verified"
+    && String(metadata.executionSupport ?? parameters.executionSupport) === "connector"
+    && metadata.executable === true;
 }
 
 function VendorPlanView({ dryRunJson }: { dryRunJson: Record<string, unknown> }) {
@@ -876,6 +889,12 @@ export default function ActionCenterPanel() {
               {!executionUi.canExecute && executionUi.reason && selectedAction.status !== "validation_failed" && (
                 <div className="mb-4 rounded border border-yellow-900/70 bg-yellow-950/20 p-3 text-left text-sm font-semibold text-yellow-100">
                   {executionUi.reason}
+                </div>
+              )}
+
+              {executionUi.canExecute && isVerifiedGuidedConnectorPlan(selectedAction) && (
+                <div className="mb-4 rounded border border-emerald-900/70 bg-emerald-950/20 p-3 text-left text-sm font-semibold text-emerald-100">
+                  Ready for real connector execution after Quick Controlled confirmation and PolicyGuard validation.
                 </div>
               )}
 

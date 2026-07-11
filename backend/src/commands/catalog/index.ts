@@ -1,5 +1,6 @@
 import { FORTIGATE_FULL_CONTROL_REGISTRY } from "../../fortigate/full-control-registry.js";
 import type { CommandCatalogItem, CommandParam, CommandRiskLevel, CommandVendor, ImplementationState } from "./types.js";
+import { evaluateCatalogSupportState } from "./support-state.js";
 
 const param = (key: string, labelFa: string, helpFa: string, type: CommandParam["type"], placeholderFa?: string): CommandParam => ({ key, labelFa, helpFa, type, placeholderFa });
 const ipAddress = param("ipAddress", "آدرس IP", "یک آدرس IPv4 یا IPv6 معتبر برای مسدودسازی وارد کنید.", "ip", "192.0.2.10");
@@ -20,6 +21,9 @@ function item(vendor: CommandVendor, slug: string, titleFa: string, titleEn: str
     descriptionFa: options.descriptionFa ?? `${titleFa} برای دستگاه انتخاب‌شده، با ثبت شواهد و بازبینی نتیجه.`,
     implementationState,
     executionSupport: executable ? "connector" : manual ? "manual" : "not_implemented",
+    supportState: executable ? "verified" : manual ? "manual_only" : "unsupported",
+    supportReason: "",
+    supportReasonKey: "support.reason.unsupported",
     connectorType: executable ? (vendor === "linux" ? "linux-ssh" : vendor === "fortigate" ? "fortigate-ssh" : "mikrotik-ssh") : null,
     riskLevel: options.riskLevel ?? (mutating ? "high" : "low") as CommandRiskLevel,
     privilegeLevel: options.privilegeLevel ?? (mutating ? "admin" : "read"),
@@ -44,6 +48,21 @@ function item(vendor: CommandVendor, slug: string, titleFa: string, titleEn: str
 const implemented = (template: string, extra: Options = {}): Options => ({ ...extra, state: "implemented", template });
 const manual = (extra: Options = {}): Options => ({ ...extra, state: "manualOnly", mutates: extra.mutates ?? true });
 const planned = (extra: Options = {}): Options => ({ ...extra, state: "planned" });
+function applySupportState(entry: CommandCatalogItem): CommandCatalogItem {
+  const support = evaluateCatalogSupportState(entry);
+  const executable = support.supportState === "verified";
+  const badgeFa = support.supportState === "verified" ? "تأییدشده" : support.supportState === "preview_only" ? "فقط پیش‌نمایش" : support.supportState === "manual_only" ? "بررسی دستی" : "پشتیبانی نمی‌شود";
+  return {
+    ...entry,
+    executionSupport: executable ? "connector" : support.supportState === "manual_only" ? "manual" : "not_implemented",
+    supportState: support.supportState,
+    supportReason: support.reason,
+    supportReasonKey: support.reasonKey,
+    supportedConnectors: executable ? entry.supportedConnectors : [],
+    disabledReasonFa: executable || support.supportState === "manual_only" ? entry.disabledReasonFa : support.reason,
+    uiHints: { executable, badgeFa }
+  };
+}
 const fortiParam = (key: string): CommandParam => param(key, key, `مقدار ${key} را وارد کنید.`, key.toLowerCase().includes("ip") || key.toLowerCase().includes("gateway") ? "ip" : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("trusthost") ? "cidr" : key.toLowerCase().includes("port") || key.toLowerCase().includes("vlan") || key.toLowerCase().includes("priority") ? "number" : "string");
 const fullControlFortiGateItems = FORTIGATE_FULL_CONTROL_REGISTRY.map((entry) => item("fortigate", entry.actionType.replace(/^fortigate_/, "").replace(/_/g, "-"), entry.titleFa, entry.actionType, entry.category, entry.actionType, implemented(entry.executionTemplateRef, {
   mutates: !entry.actionType.startsWith("fortigate_show_") && entry.actionType !== "fortigate_ha_precheck",
@@ -56,7 +75,7 @@ const fullControlFortiGateItems = FORTIGATE_FULL_CONTROL_REGISTRY.map((entry) =>
   uiHints: { executable: true, badgeFa: "اجراپذیر" },
 })));
 
-export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
+const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("linux", "daily-check", "چک روزانه", "Daily check", "daily-check", "linux_daily_check", implemented("linux_daily_check", { searchKeywordsFa: ["چک روزانه سرور", "بررسی روزانه"] })),
   item("linux", "open-port", "باز کردن پورت", "Open port", "firewall", "linux_open_port", implemented("linux_open_port", { mutates: true, required: [param("port", "شماره پورت", "شماره پورت TCP/UDP معتبر را وارد کنید.", "number", "55000")], defaultParams: { protocol: "tcp" } })),
   item("linux", "open-ports", "نمایش پورت‌های باز", "Show open ports", "network", "linux_list_open_ports", implemented("linux_list_open_ports")),
@@ -123,7 +142,9 @@ export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze([
   item("pfsense", "vpn-failures", "بررسی خطاهای OpenVPN/IPsec", "Review VPN failures", "vpn", "generic_security_action", manual({ mutates: false })),
   item("pfsense", "sshguard", "بررسی لاگ‌های sshguard", "Review sshguard logs", "authentication", "generic_security_action", manual({ mutates: false })),
   item("generic", "security-review", "بررسی امنیت عمومی دستگاه", "Generic security review", "assessment", "generic_security_action", manual({ mutates: false }))
-]);
+];
+
+export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze(RAW_COMMAND_CATALOG.map(applySupportState));
 
 export const COMMAND_CATALOG_VERSION = "2026.07.05.1";
 
@@ -133,7 +154,7 @@ export function searchCatalog(filters: { q?: string; vendor?: string; category?:
   return COMMAND_CATALOG.filter((entry) => {
     if (!filters.includePlanned && (entry.implementationState === "planned" || entry.implementationState === "unsupported")) return false;
     const haystack = [entry.titleFa, entry.titleEn, entry.descriptionFa, entry.vendor, entry.category, ...entry.tagsFa, ...entry.searchKeywordsFa].join(" ").toLocaleLowerCase("fa");
-    return (!q || haystack.includes(q)) && (!filters.vendor || entry.vendor === filters.vendor) && (!filters.category || entry.category === filters.category) && (!filters.riskLevel || entry.riskLevel === filters.riskLevel) && (filters.readOnly === undefined || entry.readOnly === filters.readOnly) && (filters.executable === undefined || entry.implementationState === "implemented" === filters.executable);
+    return (!q || haystack.includes(q)) && (!filters.vendor || entry.vendor === filters.vendor) && (!filters.category || entry.category === filters.category) && (!filters.riskLevel || entry.riskLevel === filters.riskLevel) && (filters.readOnly === undefined || entry.readOnly === filters.readOnly) && (filters.executable === undefined || (entry.supportState === "verified") === filters.executable);
   });
 }
 export type { CommandCatalogItem } from "./types.js";

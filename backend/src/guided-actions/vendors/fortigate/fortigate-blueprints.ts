@@ -1,4 +1,5 @@
 import type { GuidedActionBlueprint, GuidedActionBuildContext, GuidedActionField } from "../../types.js";
+import { createEphemeralSecretRef } from "../../../services/ephemeral-secret.service.js";
 import {
   FORTIGATE_ADDRESS_TYPE_OPTIONS,
   FORTIGATE_ALLOWACCESS_OPTIONS,
@@ -263,15 +264,15 @@ const guidedVpnSteps = [
     titleFa: "نوع VPN",
     fields: [
       field("vpnType", "نوع VPN", "select", true, { options: guidedVpnTypeOptions, validation: { allowedValues: guidedVpnTypeOptions.map((item) => item.value) } }),
-      field("name", "نام تونل", "text", false, { validation: nameValidation }),
+      field("vpnName", "VPN Name", "text", true, { placeholderFa: "branch-office-vpn", validation: nameValidation }),
     ],
   },
   {
     id: "vpn_networks",
     titleFa: "شبکه‌ها و مسیرها",
     fields: [
-      field("localSubnets", "شبکه‌های محلی", "cidrList", true),
-      field("remoteSubnets", "شبکه‌های سمت مقابل", "cidrList", true, { dependsOn: { vpnType: "ipsec_site_to_site" } }),
+      field("localSubnet", "Local Subnet", "cidr", true, { placeholderFa: "192.168.7.0/24" }),
+      field("remoteSubnet", "Remote Subnet", "cidr", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "10.20.30.0/24" }),
       field("vpnPoolCidr", "Pool VPN", "cidr", true, { dependsOn: { vpnType: "ssl_vpn" } }),
       field("allowedSubnets", "شبکه‌های مجاز", "cidrList", true),
     ],
@@ -280,8 +281,9 @@ const guidedVpnSteps = [
     id: "vpn_gateway",
     titleFa: "اینترفیس و Gateway",
     fields: [
-      field("wanInterface", "اینترفیس WAN", "interfaceSelect", true, { dynamicOptions: { provider: "fortigate_interfaces" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
-      field("remoteGateway", "Remote Gateway", "text", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, validation: { pattern: "^[A-Za-z0-9_.:-]{1,253}$" } }),
+      field("wanInterface", "WAN/Gateway Interface", "interfaceSelect", true, { placeholderFa: "port2", dynamicOptions: { provider: "fortigate_interfaces" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
+      field("lanInterface", "LAN/Internal Interface", "interfaceSelect", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "port1", dynamicOptions: { provider: "fortigate_interfaces" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
+      field("remoteGateway", "Remote Gateway", "text", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "185.238.45.165", validation: { pattern: "^[A-Za-z0-9_.:-]{1,253}$" } }),
     ],
   },
   {
@@ -289,9 +291,11 @@ const guidedVpnSteps = [
     titleFa: "احراز هویت و امنیت",
     fields: [
       field("authMethod", "روش احراز هویت", "select", true, { options: guidedAuthOptions, validation: { allowedValues: guidedAuthOptions.map((item) => item.value) } }),
-      field("pskMode", "روش PSK", "select", true, { dependsOn: { authMethod: "psk" }, options: guidedPskOptions, validation: { allowedValues: guidedPskOptions.map((item) => item.value) } }),
-      field("psk", "PSK", "password", true, { secret: true, dependsOn: { pskMode: "manual" } }),
+      field("pskMode", "روش PSK", "select", false, { dependsOn: { authMethod: "psk" }, options: guidedPskOptions, validation: { allowedValues: guidedPskOptions.map((item) => item.value) } }),
+      field("psk", "Pre-shared Key", "password", true, { secret: true, dependsOn: { authMethod: "psk" } }),
       field("proposal", "Proposal", "select", false, { options: guidedProposalOptions, validation: { allowedValues: guidedProposalOptions.map((item) => item.value) } }),
+      field("dhGroup", "DH Group", "select", false, { options: [{ labelFa: "14", value: "14", source: "existing_template" }, { labelFa: "5", value: "5", source: "existing_template" }, { labelFa: "19", value: "19", source: "existing_template" }, { labelFa: "20", value: "20", source: "existing_template" }], validation: { allowedValues: ["5", "14", "19", "20"] } }),
+      field("ikeVersion", "IKE Version", "select", false, { options: [{ labelFa: "2", value: "2", source: "existing_template" }, { labelFa: "1", value: "1", source: "existing_template" }], validation: { allowedValues: ["1", "2"] } }),
     ],
   },
   {
@@ -299,6 +303,8 @@ const guidedVpnSteps = [
     titleFa: "Policy و دسترسی",
     fields: [
       field("createFirewallPolicy", "Policy هم ساخته شود", "checkbox", false),
+      field("createStaticRoute", "Route سمت مقابل ساخته شود", "checkbox", false),
+      field("natTraversal", "NAT Traversal", "checkbox", false),
       field("natEnabled", "NAT فعال باشد", "checkbox", false),
       field("logTraffic", "لاگ ترافیک فعال باشد", "checkbox", false),
       field("enableAfterCreate", "بعد از ساخت فعال شود", "checkbox", false),
@@ -368,15 +374,174 @@ function buildFortiGateVpnPreview(context: GuidedActionBuildContext) {
   if (missingFields.length) return { ok: false as const, status: "needs_input" as const, reasonFa: "برای ساخت پیش‌نمایش VPN چند مقدار لازم هنوز کامل نیست.", missingFields };
 
   const vpnType = textValue(context, "vpnType", "ipsec_site_to_site");
-  const tunnelName = textValue(context, "name", `guided-${vpnType}-vpn`);
-  const localSubnets = listValue(context, "localSubnets");
-  const remoteSubnets = listValue(context, "remoteSubnets");
+  const vpnName = textValue(context, "vpnName", textValue(context, "name", `guided-${vpnType}-vpn`));
+  const phase1Name = textValue(context, "phase1Name", vpnName);
+  const phase2Name = textValue(context, "phase2Name", `${phase1Name}-p2`);
+  const localSubnet = textValue(context, "localSubnet") || listValue(context, "localSubnets")[0] || "";
+  const remoteSubnet = textValue(context, "remoteSubnet") || listValue(context, "remoteSubnets")[0] || "";
+  const tunnelName = vpnName;
+  const localSubnets = localSubnet ? [localSubnet] : listValue(context, "localSubnets");
+  const remoteSubnets = remoteSubnet ? [remoteSubnet] : listValue(context, "remoteSubnets");
   const allowedSubnets = listValue(context, "allowedSubnets");
   const wanInterface = textValue(context, "wanInterface");
   const remoteGateway = textValue(context, "remoteGateway");
+  const lanInterface = textValue(context, "lanInterface");
   const authMethod = textValue(context, "authMethod", "psk");
-  const pskMode = textValue(context, "pskMode", "generate");
+  const pskMode = textValue(context, "pskMode", "manual");
   const proposal = textValue(context, "proposal", "aes256-sha256");
+  const dhGroup = textValue(context, "dhGroup", "14");
+  const ikeVersion = textValue(context, "ikeVersion", "2");
+  const createFirewallPolicy = context.values.createFirewallPolicy === true;
+  const createStaticRoute = context.values.createStaticRoute !== false;
+  const natTraversal = context.values.natTraversal !== false;
+  const natEnabled = context.values.natEnabled === true;
+  const logTraffic = context.values.logTraffic === true;
+  const enableAfterCreate = context.values.enableAfterCreate !== false;
+
+  if (vpnType === "ipsec_site_to_site" && authMethod === "psk") {
+    const pskSecretRef = createEphemeralSecretRef(String(context.values.psk ?? ""), "fortigate_ipsec_psk");
+    const verificationPlan = ["get vpn ipsec tunnel summary", "diagnose vpn tunnel list name <tunnel>", "show vpn ipsec phase1-interface", "show vpn ipsec phase2-interface", ...(createFirewallPolicy ? ["show firewall policy"] : [])];
+    const rollbackPlan = [
+      "Delete created phase2 selectors, then phase1-interface.",
+      "Remove created static routes by route ID from the config snapshot when route creation was enabled.",
+      "Delete managed address objects and firewall policies by generated names when policy creation was enabled.",
+      "PSK material is never persisted in rollback metadata.",
+    ];
+    const structuredPreview = {
+      summaryFa: "ActionPlan اجرایی IPsec Site-to-Site آماده شد. اجرای واقعی فقط بعد از تایید Quick Controlled و PolicyGuard انجام می‌شود.",
+      fieldsFa: {
+        "نوع VPN": vpnType,
+        "نام تونل": vpnName,
+        "Phase1": phase1Name,
+        "Phase2": phase2Name,
+        "WAN interface": wanInterface,
+        "LAN interface": lanInterface,
+        "Remote Gateway": remoteGateway,
+        "شبکه محلی": localSubnet,
+        "شبکه سمت مقابل": remoteSubnet,
+        "Proposal": proposal,
+        "DH Group": dhGroup,
+        "IKE Version": ikeVersion,
+        "Secret": "PSK با secretRef موقت نگهداری شده و در preview/audit نمایش داده نمی‌شود.",
+        "Policy/NAT/Logging choices": {
+          createFirewallPolicy: enabledLabel(createFirewallPolicy),
+          createStaticRoute: enabledLabel(createStaticRoute),
+          natTraversal: enabledLabel(natTraversal),
+          natEnabled: enabledLabel(natEnabled),
+          logTraffic: enabledLabel(logTraffic),
+          enableAfterCreate: enabledLabel(enableAfterCreate),
+        },
+        "برنامه verification": verificationPlan,
+        "برنامه rollback": rollbackPlan,
+      },
+      verificationPlan,
+      rollbackPlan,
+      supportState: "verified",
+      supportReasonKey: "actions.support.verified.fortigateIpsecSiteToSite",
+    };
+    return {
+      ok: true as const,
+      actionPlanInput: {
+        source: "ai" as const,
+        deviceId: context.deviceId,
+        vendor: "fortigate" as const,
+        actionType: "fortigate_guided_vpn_setup",
+        riskLevel: "high" as const,
+        requestedBy: context.requestedBy,
+        parametersJson: {
+          vendor: "fortigate",
+          vpnType,
+          vpnName,
+          phase1Name,
+          phase2Name,
+          name: vpnName,
+          localSubnet,
+          remoteSubnet,
+          localSubnets: [localSubnet],
+          remoteSubnets: [remoteSubnet],
+          allowedSubnets,
+          wanInterface,
+          lanInterface,
+          remoteGateway,
+          authMethod,
+          pskMode,
+          pskSecretRef,
+          pskProvided: true,
+          proposal,
+          dhGroup,
+          ikeVersion,
+          createFirewallPolicy,
+          createStaticRoute,
+          natTraversal,
+          natEnabled,
+          logTraffic,
+          enableAfterCreate,
+          source: "guided_action_wizard",
+          implementationState: "implemented",
+          executionSupport: "connector",
+          executable: true,
+          supportState: "verified",
+          supportReasonKey: "actions.support.verified.fortigateIpsecSiteToSite",
+          connectorType: "fortigate-ssh",
+          operationCategory: "vpn",
+          blueprintId: context.blueprintId,
+          executionTemplateRef: "fortigate_guided_vpn_setup",
+          semanticResultParser: "fortigate_ipsec_site_to_site_vpn",
+          precheck: ["FortiGate config backup/export", "Interface discovery compatibility", "PolicyGuard validation"],
+          postVerification: verificationPlan,
+          structuredPreview,
+          verificationPlan,
+          rollbackPlan,
+          metadata: {
+            source: "guided_action_wizard",
+            blueprintId: context.blueprintId,
+            initialRequest: context.initialRequest,
+            vendor: "fortigate",
+            actionType: "fortigate.guided_vpn_setup",
+            storedActionType: "fortigate_guided_vpn_setup",
+            operationCategory: "vpn",
+            executionSupport: "connector",
+            implementationState: "implemented",
+            executable: true,
+            supportState: "verified",
+            supportReasonKey: "actions.support.verified.fortigateIpsecSiteToSite",
+            connectorType: "fortigate-ssh",
+            executionTemplateRef: "fortigate_guided_vpn_setup",
+            semanticResultParser: "fortigate_ipsec_site_to_site_vpn",
+            normalizedParams: {
+              vpnType,
+              vpnName,
+              phase1Name,
+              phase2Name,
+              localSubnet,
+              remoteSubnet,
+              allowedSubnets,
+              wanInterface,
+              lanInterface,
+              remoteGateway,
+              authMethod,
+              pskMode,
+              proposal,
+              dhGroup,
+              ikeVersion,
+              createFirewallPolicy,
+              createStaticRoute,
+              natTraversal,
+              natEnabled,
+              logTraffic,
+              enableAfterCreate,
+            },
+            requiredParamsSatisfied: true,
+            previewGenerated: true,
+            executed: false,
+            connectorInvoked: false,
+            lastExecutionStatus: "ready_for_execution",
+          },
+        },
+      },
+      preview: structuredPreview,
+    };
+  }
   const missingTemplates = vpnType === "ssl_vpn"
     ? ["fortigate.guided_ssl_vpn_settings_template", "fortigate.guided_ssl_vpn_policy_template", "fortigate.guided_ssl_vpn_verification_parser"]
     : ["fortigate.create_ipsec_site_to_site_vpn", "fortigate.guided_ipsec_phase1_template", "fortigate.guided_ipsec_phase2_template", "fortigate.guided_ipsec_policy_route_template", "fortigate.guided_ipsec_verification_parser"];
@@ -549,7 +714,7 @@ export const FORTIGATE_GUIDED_BLUEPRINTS = Object.freeze([
     supportedConnectors: ["fortigate-ssh"],
     requiredCapabilities: ["fortigate_create_ipsec_tunnel", "fortigate_update_ssl_vpn_settings"],
     fixedOptionSources: { vpnType: "project_default", authMethod: "project_default", pskMode: "project_default", proposal: "existing_template" },
-    dynamicOptionSources: { wanInterface: "fortigate_interfaces" },
+    dynamicOptionSources: { wanInterface: "fortigate_interfaces", lanInterface: "fortigate_interfaces" },
     prerequisites: [{ id: "vpn_design_review", titleFa: "بازبینی طراحی VPN و Secret", required: true }],
     steps: guidedVpnSteps,
     buildActionPlan: buildFortiGateVpnPreview,

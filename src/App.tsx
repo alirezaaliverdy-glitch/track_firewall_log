@@ -1,6 +1,7 @@
 import "./App.css";
 import { Suspense } from "react";
-import { LogOut } from "lucide-react";
+import { Library, LogOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { LogProvider } from "@/context/LogContext";
 import CsvUploader from "./components/csv-uploader";
@@ -37,6 +38,7 @@ import GuidedActionWizard from "./components/guided-actions/GuidedActionWizard";
 
 function App() {
   const { user, logout } = useAuth();
+  const { t, i18n } = useTranslation();
   const resultMatch = window.location.pathname.match(/^\/actions\/([^/]+)\/result\/?$/);
   if (resultMatch) return <div className="authenticated-app"><AppBackground /><ActionResultView actionPlanId={decodeURIComponent(resultMatch[1])} /></div>;
   const guidedMatch = window.location.pathname.match(/^\/guided-actions\/([^/]+)\/?$/);
@@ -49,6 +51,7 @@ function App() {
       </main>
     </div>
   );
+  const isActionLibrary = window.location.pathname === "/action-library";
   return (
     <Suspense fallback={<h1>loading logs ...</h1>}>
       <LogProvider>
@@ -58,75 +61,95 @@ function App() {
           <div className="app-command-header mb-5 overflow-hidden rounded-2xl">
             <div className="app-command-header__edge" />
             <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h1 className="text-left text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
-                  مرکز فرمان شبکه و امنیت
-                </h1>
-                <p className="mt-1 text-left text-sm text-slate-400">
-                  عملیات ساده، فارسی و کنترل‌شده برای دستگاه‌های شبکه و امنیت
-                </p>
+	              <div>
+	                <div className="mb-2 text-left">
+	                  <div className="text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">{t("app.title")}</div>
+	                  <div className="mt-1 text-sm text-slate-400">{t("app.subtitle")}</div>
+	                </div>
+	                <nav className="mb-3 flex flex-wrap gap-2 text-sm">
+	                  <a className={`rounded-md border px-3 py-1.5 ${!isActionLibrary ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/">{t("nav.dashboard")}</a>
+	                  <a className={`rounded-md border px-3 py-1.5 ${isActionLibrary ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/action-library">{t("nav.actionLibrary")}</a>
+	                </nav>
               </div>
-              <div className="flex items-center gap-2" dir="rtl">
+	              <div className="flex items-center gap-2">
+	                <select value={i18n.language} onChange={(event) => void i18n.changeLanguage(event.target.value)} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-slate-200">
+	                  <option value="fa">{t("language.fa")}</option>
+	                  <option value="en">{t("language.en")}</option>
+	                </select>
                 <div className="text-right leading-tight">
                   <div className="text-sm font-medium text-slate-100">{user?.displayName || user?.username}</div>
                   <div className="text-[11px] uppercase tracking-wider text-cyan-400">{user?.role}</div>
                 </div>
                 <button onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 transition hover:border-cyan-700 hover:text-white">
-                  <LogOut className="h-3.5 w-3.5" /> خروج
+	                  <LogOut className="h-3.5 w-3.5" /> {t("auth.logout")}
                 </button>
               </div>
             </div>
           </div>
 
-          <ErrorBoundary title="کاتالوگ دستورات در دسترس نیست">
-            <CommandCatalogPanel />
+          <ErrorBoundary title={t("error.actionLibrary")}>
+	            {isActionLibrary ? (
+	              <CommandCatalogPanel />
+	            ) : (
+	              <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-slate-100">
+	                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	                  <div>
+	                    <h2 className="text-lg font-semibold">{t("dashboard.shortcuts.title")}</h2>
+	                    <p className="text-sm text-slate-400">{t("dashboard.shortcuts.libraryDesc")}</p>
+	                  </div>
+	                  <a href="/action-library" className="inline-flex items-center gap-2 rounded-md bg-cyan-700 px-3 py-2 text-sm text-white hover:bg-cyan-600">
+	                    <Library className="h-4 w-4" /> {t("dashboard.shortcuts.library")}
+	                  </a>
+	                </div>
+	              </section>
+	            )}
           </ErrorBoundary>
 
-          <ErrorBoundary title="AI Security Assistant unavailable">
+          <ErrorBoundary title={t("error.dailyCheck")}>
             <DailyCheckPanel />
           </ErrorBoundary>
-          <ErrorBoundary title="Linux Service Health unavailable">
+          <ErrorBoundary title={t("error.serviceHealth")}>
             <LinuxServiceHealthPanel />
           </ErrorBoundary>
-          <ErrorBoundary title="AI Security Assistant unavailable">
+          <ErrorBoundary title={t("error.aiAssistant")}>
             <AiSecurityAssistantPanel />
           </ErrorBoundary>
-          <ErrorBoundary title="Action Center unavailable">
+          <ErrorBoundary title={t("error.actionCenter")}>
             <ActionCenterPanel />
           </ErrorBoundary>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100" dir="rtl">افزودن و مدیریت دستگاه</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">{t("sections.devices")}</summary>
             <div className="mt-4">
-              <ErrorBoundary title="Device Registry unavailable">
+              <ErrorBoundary title={t("error.deviceRegistry")}>
                 <DeviceRegistryPanel />
               </ErrorBoundary>
             </div>
           </details>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100" dir="rtl">پایش دستگاه</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">{t("sections.monitoring")}</summary>
             <div className="mt-4">
-              <ErrorBoundary title="Linux Telemetry unavailable">
+              <ErrorBoundary title={t("error.telemetry")}>
                 <LinuxTelemetryPanel />
               </ErrorBoundary>
             </div>
           </details>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100" dir="rtl">رویدادها، رخدادها و لاگ‌ها</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">{t("sections.events")}</summary>
             <div className="mt-4">
-              <ErrorBoundary title="Upload panel unavailable">
+              <ErrorBoundary title={t("error.upload")}>
                 <div id="log-upload" className="scroll-mt-4">
                   <FirewallTypeSelector />
                   <CsvUploader />
                 </div>
               </ErrorBoundary>
-              <ErrorBoundary title="Security Events unavailable">
+              <ErrorBoundary title={t("error.securityEvents")}>
                 <SecurityEventsPanel />
               </ErrorBoundary>
-              <ErrorBoundary title="Incidents unavailable">
+              <ErrorBoundary title={t("error.incidents")}>
                 <IncidentsPanel />
               </ErrorBoundary>
               <details className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Import Diagnostics</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-zinc-100">{t("sections.importDiagnostics")}</summary>
                 <div className="mt-4">
                   <DataQualityPanel />
                 </div>
@@ -154,9 +177,9 @@ function App() {
           <SensitivePortsExplorer />
           <ExportButtons />
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Vendor Readiness / Admin</summary>
+            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">{t("sections.vendorReadiness")}</summary>
             <div className="mt-4">
-              <ErrorBoundary title="FortiGate Capability Matrix unavailable">
+              <ErrorBoundary title={t("error.fortigateMatrix")}>
                 <FortiGateCapabilityMatrixPanel />
               </ErrorBoundary>
             </div>

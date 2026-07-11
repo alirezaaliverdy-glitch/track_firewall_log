@@ -39,6 +39,7 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "fortigate_show_firewall_policies", actionType: "fortigate_show_firewall_policies", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_vpn_status", actionType: "fortigate_show_vpn_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_ha_vdom_zone", actionType: "fortigate_show_ha_vdom_zone", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_guided_vpn_setup", actionType: "fortigate_guided_vpn_setup", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,...FORTIGATE_FULL_CONTROL_ACTION_TYPES.map((actionType) => ({ id: actionType, actionType, connectorType: "fortigate-ssh" as const, handler: "fortigatePlanner" }))
 ];
 

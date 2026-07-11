@@ -1,5 +1,6 @@
 import { ActionType, AiRiskLevel, type ActionPlan, type Device } from "@prisma/client";
 import { validateFortiGateAction } from "../actions/fortigate-action-catalog.js";
+import { normalizeFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -16,8 +17,10 @@ function backupName(device: Device, suffix: string) {
 }
 
 export function evaluateFortiGatePolicy(plan: ActionPlan, device: Device) {
-  const parameters = asObject(plan.parametersJson);
-  const validation = validateFortiGateAction(plan);
+  const parameters = plan.actionType === ActionType.fortigate_guided_vpn_setup
+    ? normalizeFortiGateGuidedVpnParameters(asObject(plan.parametersJson))
+    : asObject(plan.parametersJson);
+  const validation = validateFortiGateAction({ ...plan, parametersJson: parameters });
   const errors = [...validation.errors];
   const warnings = [...validation.warnings];
   const breakGlass = parameters.breakGlass === true;
@@ -60,14 +63,18 @@ export function evaluateFortiGatePolicy(plan: ActionPlan, device: Device) {
   const interfaceParameters = [
     text(parameters.interfaceName),
     text(parameters.name && directInterfaceActions.has(plan.actionType) ? parameters.name : undefined),
+    text(parameters.wanInterface),
+    text(parameters.lanInterface),
     text(parameters.parent),
     text(parameters.parentInterface)
   ].filter(Boolean) as string[];
   const policyTargets = [
-    text(parameters.srcintf),
-    text(parameters.dstintf),
-    text(parameters.srcInterface),
-    text(parameters.dstInterface)
+    ...(plan.actionType === ActionType.fortigate_guided_vpn_setup ? [] : [
+      text(parameters.srcintf),
+      text(parameters.dstintf),
+      text(parameters.srcInterface),
+      text(parameters.dstInterface)
+    ])
   ].filter(Boolean) as string[];
 
   if (vdomMode === "enabled" && !configuredVdom) errors.push("FORTIGATE_VDOM_REQUIRED");
