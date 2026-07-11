@@ -95,6 +95,8 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
     const result = normalizeObject(action.resultJson);
     const commands = normalizeArray<Record<string, unknown>>(result.commands);
     const rollback = normalizeObject(result.rollbackJson);
+    const verification = normalizeObject(parsed.verification ?? rollback.verification);
+    const verificationChecks = normalizeArray<Record<string, unknown>>(verification.checks);
     const connectorSucceeded = action.status === "succeeded" && result.executed === true && normalizeObject(normalizeObject(action.parametersJson).metadata).connectorInvoked === true;
     return {
       summaryFa: connectorSucceeded
@@ -118,6 +120,13 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
             value: `exitCode=${String(command.exitCode ?? "-")}\n${String(command.stdout ?? command.stderr ?? "").slice(0, 800) || "بدون خروجی"}`,
           })),
         },
+        ...(verificationChecks.length > 0 ? [{
+          title: "Post-execution verification",
+          rows: verificationChecks.map((check) => ({
+            label: String(check.label ?? check.id ?? "verification"),
+            value: `${check.ok === true ? "passed" : "failed"}\nExpected: ${String(check.expected ?? "-")}\nEvidence: ${String(check.evidence ?? "-").slice(0, 900)}`,
+          })),
+        }] : []),
       ],
       rawOutput,
     };

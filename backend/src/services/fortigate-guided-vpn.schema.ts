@@ -12,6 +12,15 @@ const CONTROL_TOKENS = new Set([
 
 const SAFE_NAME = /^[A-Za-z0-9_.:-]{1,79}$/;
 const SAFE_FQDN = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
+const WEAK_PROPOSAL_PATTERN = /(?:^|-)(?:des|3des|md5|sha1)(?:-|$)/i;
+const STRONG_PROPOSALS = new Set([
+  "aes256-sha256",
+  "aes256-sha384",
+  "aes256-sha512",
+  "aes128-sha256",
+  "aes128-sha384",
+  "aes128-sha512",
+]);
 
 function text(input: Record<string, unknown>, keys: string[], fallback?: string) {
   for (const key of keys) {
@@ -113,6 +122,14 @@ export function validateFortiGateGuidedVpnParameters(parameters: Record<string, 
   if (p.remoteGateway !== undefined && !validGateway(p.remoteGateway)) issues.push(validationError("remoteGateway", "remoteGateway must be a valid IPv4 address or FQDN.", p.remoteGateway, "IPv4 address or FQDN"));
   if (p.localSubnet !== undefined && !validSubnet(p.localSubnet)) issues.push(validationError("localSubnet", "localSubnet must be a valid IPv4 CIDR or address/mask.", p.localSubnet, "IPv4 CIDR or address/mask"));
   if (p.remoteSubnet !== undefined && !validSubnet(p.remoteSubnet)) issues.push(validationError("remoteSubnet", "remoteSubnet must be a valid IPv4 CIDR or address/mask.", p.remoteSubnet, "IPv4 CIDR or address/mask"));
+  const proposal = typeof p.proposal === "string" ? p.proposal.trim().toLowerCase() : "";
+  if (!proposal || !/^[a-z0-9-]{3,80}$/.test(proposal)) {
+    issues.push(validationError("proposal", "proposal must be a FortiOS proposal token.", p.proposal, "aes256-sha256"));
+  } else if (WEAK_PROPOSAL_PATTERN.test(proposal) && p.allowWeakProposal !== true) {
+    issues.push(validationError("proposal", "Weak FortiGate VPN proposals are blocked unless allowWeakProposal=true.", p.proposal, "aes256-sha256 or another approved AES/SHA2 proposal"));
+  } else if (!STRONG_PROPOSALS.has(proposal) && p.allowWeakProposal !== true) {
+    issues.push(validationError("proposal", "Only approved AES/SHA2 FortiGate VPN proposals are allowed by default.", p.proposal, "aes256-sha256"));
+  }
   if (discoveredInterfaces && discoveredInterfaces.size > 0) {
     for (const field of ["wanInterface", "lanInterface"] as const) {
       const value = String(p[field] ?? "");

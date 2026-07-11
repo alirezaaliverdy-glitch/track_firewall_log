@@ -326,8 +326,23 @@ function withExecutionMetadata(parametersJson: unknown, patch: Record<string, un
   return { ...parameters, metadata: { ...asObject(parameters.metadata), ...patch } };
 }
 
-function parseExecutionResult(actionType: ActionType, stdout: string, commands: Array<{ template: string }> = []) {
+function parseExecutionResult(actionType: ActionType, stdout: string, commands: Array<{ template: string }> = [], verificationOverride?: unknown) {
   if (actionType.toString().startsWith("fortigate_")) {
+    if (actionType === ActionType.fortigate_guided_vpn_setup) {
+      const verification = asObject(verificationOverride);
+      const checks = Array.isArray(verification.checks) ? verification.checks as Array<{ label?: string; ok?: boolean }> : [];
+      const ok = verification.ok === true;
+      return {
+        status: ok ? "safe" : "critical",
+        summaryFa: ok ? "Verification FortiGate VPN با موفقیت انجام شد." : "Verification FortiGate VPN شکست خورد.",
+        verification,
+        evidence: checks.map((check) => `${check.label ?? "verification"}: ${check.ok ? "ok" : "failed"}`),
+        recommendationsFa: ok ? [] : ["موارد failed را در خروجی verification و تنظیمات FortiGate بررسی کنید."],
+        commands: commands.map((command) => command.template),
+        rawOutput: stdout,
+        confidence: ok ? 0.95 : 0.5
+      };
+    }
     const lower = stdout.toLowerCase();
     const evidence = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 40);
     let status: "safe" | "needs_review" | "critical" | "not_checked" | "not_supported" = evidence.length ? "safe" : "not_checked";
@@ -1109,7 +1124,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
-      parsedResult: dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands),
+      parsedResult: dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands, asObject(result.rollbackJson).verification),
       resultUrl: `/actions/${id}/result`
     };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });

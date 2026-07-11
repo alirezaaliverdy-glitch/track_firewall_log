@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-11
 
+## Task 17.7 - FortiGate Execution Verification Hardening
+
+- FortiGate guided IPsec VPN now keeps selected AES/SHA2 proposals intact (`aes256-sha256` remains `set proposal aes256-sha256`) and rejects DES/3DES/MD5/SHA1 proposals by default.
+- FortiGate connector success is no longer enough for guided VPN success. The connector scans stdout/stderr for FortiOS CLI errors and requires semantic verification of phase1, phase2, static route when enabled, both VPN firewall policies when enabled, NAT/logging expectations, and tunnel summary output.
+- Mandatory VPN verification uses targeted `show vpn ipsec phase1-interface <phase1Name>`, `show vpn ipsec phase2-interface <phase2Name>`, `show firewall policy | grep -f <vpnName>`, `get router info routing-table all | grep <remoteSubnet>`, and `get vpn ipsec tunnel summary`. Version-sensitive debug is not mandatory.
+- Action Result formatting now shows FortiGate post-execution verification checks when present.
+- Action Library support states remain honest: FortiGate actions are executable only when the shared verified requirements are present; unsupported or incomplete write actions stay preview/manual/non-executable.
+- Live lab checklist is documented in the handoff; cleanup remains explicit-confirmation-only.
+- Validation passed: focused Task 17.7 tests; backend catalog validation (136 items); backend build; backend full tests (158/158); locale parity (73 keys); frontend build with the existing large-chunk warning.
+
 ## Task 17.6C - Standard Guided Parameter Flow
 
 - Parameterized catalog actions now route through a standard guided ActionSession flow using generated `catalog:<commandId>` blueprints. This applies across FortiGate, MikroTik, Linux, and future catalog vendors.

@@ -8,6 +8,7 @@ import { resolveCredentialById, resolveCredentialByName } from "../services/cred
 import { resolveEphemeralSecretRef } from "../services/ephemeral-secret.service.js";
 import { compileFortiGateAction } from "../services/fortigate-command-compiler.js";
 import { evaluateFortiGatePolicy } from "../services/fortigate-policy-guard.service.js";
+import { assertNoFortiGateCliFailure, verifyFortiGateExecution } from "../fortigate/execution-verifier.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -516,17 +517,26 @@ export const fortigateSshConnector: DeviceConnector = {
       await audit?.("connection_attempt", "FortiGate SSH execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType, backupEnabled: false });
       for (const command of policy.preflightCommands) {
         const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
-        commands.push({ template: command, stdout: result.stdout.slice(0, 4000), stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode });
+        const commandResult = { template: command, stdout: result.stdout.slice(0, 4000), stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode };
+        assertNoFortiGateCliFailure(commandResult);
+        commands.push(commandResult);
         await audit?.("preflight_object_collected", "FortiGate lightweight preflight command executed.", { template: command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000), backupEnabled: false });
       }
       for (const spec of validation.commandSpecs) {
         const result = await exec(client, spec.command, env.sshCommandTimeoutMs, allowedCommands);
-        commands.push({ template: spec.template, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode });
+        const commandResult = { template: spec.template, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+        assertNoFortiGateCliFailure(commandResult);
+        commands.push(commandResult);
         await audit?.("command_executed", `FortiGate template executed: ${spec.template}`, { template: spec.template, write: spec.write, target: spec.target, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
         if (result.exitCode !== 0) throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || result.stdout || `FortiGate command failed: ${spec.template}`, 502);
       }
+      const verification = verifyFortiGateExecution(actionPlan.actionType, validation.normalizedParameters, commands);
+      await audit?.(verification.ok ? "post_verification_passed" : "post_verification_failed", verification.summary, verification);
+      if (!verification.ok) {
+        throw new FortiGateConnectorError("FORTIGATE_POST_VERIFICATION_FAILED", verification.summary, 502);
+      }
       await audit?.("rollback_available", "Rollback metadata is available for this FortiGate action.", validation.rollbackJson);
-      return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: policy.warnings, rollbackJson: { ...validation.rollbackJson, backupEnabled: false, requiresBackup: false } };
+      return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: policy.warnings, rollbackJson: { ...validation.rollbackJson, backupEnabled: false, requiresBackup: false, verification } };
     });
   },
   async rollback(): Promise<ConnectorExecutionResult> {

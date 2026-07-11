@@ -1,5 +1,18 @@
 # CODEX_HANDOFF.md
 
+## Task 17.7 - FortiGate Execution Verification Hardening (2026-07-11)
+
+- FortiGate guided IPsec site-to-site VPN now preserves approved AES/SHA2 proposals such as `aes256-sha256` in phase1 and phase2 CLI; weak DES/3DES/MD5/SHA1 proposals are rejected unless explicitly marked with `allowWeakProposal=true`.
+- Mandatory VPN post-checks now use targeted FortiGate commands: `show vpn ipsec phase1-interface <phase1Name>`, `show vpn ipsec phase2-interface <phase2Name>`, `show firewall policy | grep -f <vpnName>`, `get router info routing-table all | grep <remoteSubnet>`, and `get vpn ipsec tunnel summary`. Fixed `diagnose vpn tunnel list name ...` is no longer mandatory.
+- Added `backend/src/fortigate/execution-verifier.ts` to detect FortiOS stdout/stderr failures (`command parse error`, invalid value, object not found, duplicate/object validation, permission errors) even when SSH returns exit code 0.
+- FortiGate SSH execution now requires semantic post-execution verification before returning success. Guided VPN verification proves phase1, phase2, route, LAN-to-VPN policy, VPN-to-LAN policy, NAT/logging expectations, and tunnel summary evidence; missing route/policy verification fails execution.
+- Action results now carry and display FortiGate post-execution verification checks in the result formatter.
+- FortiGate catalog support-state evaluation no longer has a hard-coded guided-VPN preview-only override; verified status is based on the shared schema/template/connector/parser/precheck/post-verification requirements.
+- Added focused Task 17.7 regression tests for AES proposal preservation, weak proposal rejection, missing route/policy verification failure, FortiOS CLI error detection, and FortiGate catalog inventory honesty.
+- Live FortiGate smoke checklist: create address object; create service object; create zone; create firewall policy; create static route; create VIP/port-forward; create IPsec VPN; run read-only checks; verify every item with FortiGate `show`/`get`; perform cleanup only after explicit operator confirmation.
+- Migrations: none.
+- Validation passed: focused Task 17.7 tests (6/6); backend catalog validation (136 items); backend build; backend full test suite (158/158); root i18n parity (73 keys); root `pnpm build` with the existing Vite large-chunk warning.
+
 ## Task 17.6C - Standard Guided Parameter Flow (2026-07-11)
 
 - Added a generic catalog-backed guided blueprint path (`catalog:<commandId>`) so parameterized FortiGate, MikroTik, Linux, and future catalog actions use the same ActionSession wizard instead of raw inline preview cards.

@@ -2,6 +2,17 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.7 - FortiGate Full Action Library Execution Coverage and Real CLI Verification (2026-07-11)
+
+- Summary: hardened FortiGate guided IPsec execution so real connector success must be followed by semantic FortiGate verification before the ActionPlan can succeed.
+- VPN fixes: preserved `aes256-sha256` proposal generation, blocked DES/3DES/MD5/SHA1 proposals by default, changed mandatory verification to targeted FortiGate `show`/`get` commands, and removed fixed debug/diagnose syntax from the required path.
+- Connector: added FortiOS stdout/stderr failure detection and post-execution verification for phase1, phase2, static route, bidirectional firewall policies, NAT/logging, and tunnel summary evidence.
+- Catalog/UI: support-state remains default-deny and no longer uses a hard-coded VPN preview-only override; result formatting shows post-execution verification checks.
+- Tests: added `task17-7-fortigate-execution-coverage.test.ts` for proposal regression, weak proposal blocking, route/policy verification failure, CLI failure detection, and FortiGate catalog inventory honesty; included it in `npm test`.
+- Live smoke checklist: create address object, service object, zone, firewall policy, static route, VIP/port-forward, IPsec VPN, run read-only checks, verify with FortiGate `show`/`get`, and clean up only after explicit confirmation.
+- Migrations: none.
+- Validation: focused Task 17.7 tests (6/6); `npm run validate:command-catalog` (136 items); backend `npm run build`; backend `npm test` (158/158); root `npm run test:i18n` (73 keys); root `pnpm build` passed with the existing Vite large-chunk warning.
+
 ## Task 17.6C - Standard Guided Parameter Flow for Parameterized Actions (2026-07-11)
 
 - Summary: standardized parameterized action handling so catalog-backed FortiGate, MikroTik, Linux, and future vendor actions open a guided ActionSession instead of staying as inline/raw preview cards.

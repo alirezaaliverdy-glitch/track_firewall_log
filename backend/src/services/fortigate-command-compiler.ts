@@ -31,6 +31,8 @@ const SAFE_TEXT = /^[A-Za-z0-9_.:\/,@#() +*-]{1,180}$/;
 const SAFE_ID = /^[0-9]{1,10}$/;
 const RAW_KEYS = new Set(["command", "cmd", "shell", "script", "exec", "args", "cli", "rawCli"]);
 const BUILT_IN_SERVICES = new Set(["ALL", "HTTP", "HTTPS", "SSH", "DNS", "PING", "FTP", "SMTP", "POP3", "IMAP", "LDAP", "RDP", "TELNET", "SNMP"]);
+const WEAK_IPSEC_PROPOSAL = /(?:^|-)(?:des|3des|md5|sha1)(?:-|$)/i;
+const APPROVED_IPSEC_PROPOSALS = new Set(["aes256-sha256", "aes256-sha384", "aes256-sha512", "aes128-sha256", "aes128-sha384", "aes128-sha512"]);
 
 function fail(name: string): never {
   throw new Error(`${name} is invalid or missing.`);
@@ -154,8 +156,10 @@ function cidrList(params: Record<string, unknown>, key: string) {
 }
 
 function safeProposal(params: Record<string, unknown>, key = "proposal") {
-  const value = text(params, key, "aes256-sha256") ?? "aes256-sha256";
+  const value = (text(params, key, "aes256-sha256") ?? "aes256-sha256").toLowerCase();
   if (!/^[A-Za-z0-9-]{3,80}$/.test(value)) fail(key);
+  if (WEAK_IPSEC_PROPOSAL.test(value) && params.allowWeakProposal !== true) throw new Error("Weak FortiGate VPN proposals are blocked unless allowWeakProposal=true.");
+  if (!APPROVED_IPSEC_PROPOSALS.has(value) && params.allowWeakProposal !== true) throw new Error("Only approved AES/SHA2 FortiGate VPN proposals are allowed by default.");
   return value;
 }
 
@@ -403,11 +407,11 @@ export function compileFortiGateAction(input: {
       "end"
     ]);
     const verificationCommands = [
-      "get vpn ipsec tunnel summary",
-      `diagnose vpn tunnel list name ${phase1Name}`,
-      "show vpn ipsec phase1-interface",
-      "show vpn ipsec phase2-interface",
-      ...(createFirewallPolicy ? ["show firewall policy"] : [])
+      `show vpn ipsec phase1-interface ${phase1Name}`,
+      `show vpn ipsec phase2-interface ${phase2Name}`,
+      ...(createFirewallPolicy ? [`show firewall policy | grep -f ${name}`] : []),
+      ...(createStaticRoute ? [`get router info routing-table all | grep ${remoteSubnet.cidr}`] : []),
+      "get vpn ipsec tunnel summary"
     ];
     const commandSpecs = [
       spec({ template: "config vpn ipsec phase1-interface/edit <phase1Name>", command: withVdom(phase1Command, vdom), target: { vpnName: name, phase1Name, wanInterface, remoteGateway, vdom }, rollbackSteps: [`delete phase1-interface ${phase1Name}`], warnings: [] }),

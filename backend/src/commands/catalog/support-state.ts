@@ -48,10 +48,7 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "fortigate_show_admin_access",
   "fortigate_show_firewall_policies",
   "fortigate_show_vpn_status",
-  "fortigate_show_ha_vdom_zone"
-]);
-
-const PREVIEW_ONLY_ACTIONS = new Set<string>([
+  "fortigate_show_ha_vdom_zone",
   "fortigate_guided_vpn_setup"
 ]);
 
@@ -89,10 +86,6 @@ export function evaluateCatalogSupportState(item: CommandCatalogItem): SupportSt
   if (item.implementationState === "planned" || item.implementationState === "unsupported") {
     return { supportState: "unsupported", reason: item.disabledReasonFa ?? "No verified implementation is available.", reasonKey: "support.reason.unsupported", missing: [] };
   }
-  if (PREVIEW_ONLY_ACTIONS.has(item.actionType)) {
-    return { supportState: "preview_only", reason: "Preview-only workflow; full compiler and verification are not verified.", reasonKey: "support.reason.previewOnly", missing: ["template", "semantic_result_parser", "post_verification"] };
-  }
-
   const missing = missingChecks(item);
   if (missing.length > 0) {
     return { supportState: "preview_only", reason: `Missing verified execution requirements: ${missing.join(", ")}.`, reasonKey: "support.reason.missingRequirements", missing };
