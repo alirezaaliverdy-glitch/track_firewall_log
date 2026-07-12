@@ -21,3 +21,7 @@ The app header now includes:
 ## Future Scope
 
 Future views should stay operator-focused: dense enough for repeated daily use, grouped by workflow, and careful not to blur preview/review/execution states.
+
+## Task 18.1 IA Update
+
+Milestone A expands the IA from compact `/assets` and `/security` pages to a grouped platform shell. Implemented routes are active; future routes show planned state. Mock integrations are moved into `/integrations` and `/assets/sync` surfaces with explicit mock labeling.

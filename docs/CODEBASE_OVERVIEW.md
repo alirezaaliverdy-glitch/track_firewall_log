@@ -55,3 +55,13 @@ Prisma domains include auth; upload/job/analysis; devices/credentials/capabiliti
 ## Non-Negotiable Boundary
 
 Catalog or AI may create a reviewed plan. Execution requires stable preview inputs, explicit `intent=execute`, confirmation, PolicyGuard, registered template/connector, real invocation, persisted audit/result, and `connectorInvoked=true` before success. Protected lab mode removes repeated policy confirmations for supported Linux/MikroTik templates; it does not remove this boundary.
+
+## Task 18.1 Frontend IA Update
+
+- `src/routes/appRoutes.tsx`: lightweight route registry and route matcher.
+- `src/components/layout/AppShell.tsx`: grouped sidebar, topbar, mobile bottom nav.
+- `src/design-system/`: replaceable token foundation for later Figma work.
+- `src/features/assets/`: asset overview/list/detail/sync pages, hooks, summary/table components.
+- `src/features/security/`: security overview/findings/detail/rules pages, hooks, finding table.
+
+The old platform panel remains available but the routed experience is now page-based.

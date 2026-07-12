@@ -311,3 +311,14 @@
 - Verified result: `actionType=linux_list_open_ports`, `executionTemplateRef=linux_list_open_ports`, `executionSupport=connector`, `connectorType=linux-ssh`, no missing params, quick execution after confirmation, `connectorInvoked=true`, and visible `ss/netstat` output.
 - Action Center execute buttons now use the exact Persian label `تایید و اجرا`.
 - Playwright MCP browser tools were not exposed in this session, so browser-click validation was approximated with route-level execution plus UI source/build verification.
+
+## Task 18.1 Milestone A - Platform IA and App Shell (2026-07-12)
+
+- Added a lightweight frontend route registry for `/dashboard`, grouped asset/security/monitoring/action/assistant/integration/settings routes, planned-route badges, and backward compatibility for `/action-library`, `/guided-actions/:sessionId`, and `/actions/:id/result`.
+- Added a real app shell with desktop sidebar, topbar search/language/user controls, and mobile bottom navigation for Dashboard, Assets, Security, and Actions.
+- Split the compact platform UI into feature folders under `src/features/assets` and `src/features/security` with page modules, hooks, summary cards, and tables connected to existing APIs.
+- Added design-system foundations in `src/design-system`: tokens, semantic tokens, typography, motion, breakpoints, and theme constants.
+- Added `docs/TASK_18_1_DISCOVERY.md` with route/data-flow/coupling/blocker discovery.
+- Safety boundary unchanged: no ActionPlan execution behavior, PolicyGuard behavior, protected lab settings, connector invocation semantics, or secrets were changed.
+- Browser MCP pre-check reached the app but all requested authenticated routes showed the login gate without a valid session; screenshots were captured under `.playwright-mcp/` and only expected `/api/auth/me` 401 console errors appeared.
+- Validation: root frontend `npx pnpm@10 build` passed with the existing Vite large-chunk warning after escalation for npm cache access.

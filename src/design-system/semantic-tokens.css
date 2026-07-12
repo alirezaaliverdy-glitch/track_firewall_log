@@ -1,0 +1,23 @@
+:root {
+  --app-bg: var(--color-background);
+  --app-panel: var(--color-surface);
+  --app-panel-strong: var(--color-surface-strong);
+  --app-border: var(--color-border);
+  --app-border-active: var(--color-border-strong);
+  --app-text: var(--color-text);
+  --app-muted: var(--color-muted);
+  --app-accent: var(--color-primary);
+  --app-danger: var(--color-danger);
+  --app-warning: var(--color-warning);
+  --app-success: var(--color-success);
+}
+
+[data-theme="light"] {
+  --app-bg: #f6f8fb;
+  --app-panel: rgba(255, 255, 255, 0.92);
+  --app-panel-strong: #ffffff;
+  --app-border: rgba(30, 65, 90, 0.14);
+  --app-border-active: rgba(8, 145, 178, 0.32);
+  --app-text: #10202f;
+  --app-muted: #5f7182;
+}

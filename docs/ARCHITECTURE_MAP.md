@@ -54,3 +54,7 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 | Daily Check | Vendor profile selection and grouped results | `components/daily-check/DailyCheckPanel.tsx` | `/api/daily-check/*`, actions | Linux/MikroTik executable; others manual |
 | Service health | Backend/provider availability indicators | app/header and API helpers | `/api/health`, `/api/ai/provider/status` | Basic/partial |
 | Telemetry/events | Linux stream, findings, event/incident review | `components/telemetry/`, `events/`, `findings/`, `incidents/` | telemetry, findings, events, incidents APIs | Implemented foundation; vendor ingestion partial |
+
+## Task 18.1 IA Update
+
+Frontend routing now uses `src/routes/appRoutes.tsx` plus `AppShell`. Asset and security pages live under `src/features/assets` and `src/features/security` instead of relying on one combined `SecurityPlatformPanel`. Planned routes are explicit and marked planned. The protected execution flow and backend service ownership are unchanged.

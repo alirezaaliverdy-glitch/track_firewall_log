@@ -299,3 +299,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Action Center execute buttons now show the exact Persian label `تایید و اجرا`.
 - Top-level ActionPlan control metadata such as `source=ai_mapped_template` must not be canonicalized into network fields such as `sourceIp`.
 - Additional validation: `cd backend && npm run build`; `cd backend && npm run validate:command-catalog`; `cd backend && npm test` passed with 119/119 tests; root `npm run build` passed with the existing Vite large-chunk warning. `pnpm` is not available on PATH in this shell.
+
+## Task 18.1 Milestone A - Platform IA and App Shell
+
+- The app now has a route registry and grouped shell for the Security Platform IA. `/dashboard`, `/assets`, `/assets/devices`, `/assets/devices/:assetId`, `/assets/sync`, `/security`, `/security/findings`, `/security/findings/:findingId`, `/security/rules`, `/monitoring`, `/actions`, `/assistant`, `/integrations`, and `/settings` are routable surfaces.
+- Future pages are shown with planned badges instead of fake functionality.
+- Asset and Security platform views are split into feature folders with hooks/components/pages. The old combined panel remains in the tree for compatibility but is no longer the main route surface.
+- Design tokens were added for later Figma implementation without changing execution policy.
+- MCP browser inspection before changes was limited by the auth gate; unauthenticated routes showed the login screen and expected 401 `/api/auth/me` errors.

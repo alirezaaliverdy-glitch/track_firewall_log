@@ -325,3 +325,13 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Migrations: none.
 - Validation: `cd backend && npm run build`; `cd backend && npm run validate:command-catalog` (136 items); `cd backend && npx tsx --test test/task17-2-guided-actions.test.ts test/task17-3-support-state-i18n.test.ts` (20/20); `cd backend && npm test` (145/145); `npm run test:i18n` (72 keys); `pnpm build` passed with existing Vite dynamic-import/chunk-size warnings.
 - Follow-up: replace process-local PSK refs with a persistent vault integration; implement SSL VPN and remote-access templates/parsers before making them executable; complete dedicated legacy i18n/mojibake cleanup; run browser click validation when tooling is available.
+
+## Task 18.1 Milestone A - Product IA, Routing, App Shell, Feature Split (2026-07-12)
+
+- Summary: completed Milestone A scope from `TASK_18_1_PLATFORM_UX_ARCHITECTURE.md`: discovery, lightweight routing, app shell/navigation, feature folder split, and design tokens.
+- Frontend: added `src/routes/appRoutes.tsx`, `src/components/layout/AppShell.tsx`, `src/design-system/*`, `src/features/assets/*`, `src/features/security/*`, and route pages for dashboard, monitoring, actions, assistant, integrations, and settings.
+- Backward compatibility: `/action-library`, `/guided-actions/:sessionId`, and `/actions/:id/result` continue to work.
+- Safety: no backend execution policy, ActionPlan lifecycle, connector, PolicyGuard, lab mode, or secrets changed.
+- Browser MCP: inspected requested routes with the MCP browser before implementation; auth gate prevented authenticated page inspection without credentials, and the only console errors were expected 401 auth checks. Screenshots were saved in `.playwright-mcp/`.
+- Validation: `npx pnpm@10 build` passed with the existing large-chunk warning after npm cache escalation. Backend validation was not required because backend/package code was not changed.
+- Commit: pending.
