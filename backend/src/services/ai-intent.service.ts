@@ -114,9 +114,9 @@ function durationTimeoutFromText(text: string, nums: number[]) {
   if (containsAny(text, ["\u0646\u06cc\u0645 \u0633\u0627\u0639\u062a", "\u0646\u064a\u0645 \u0633\u0627\u0639\u062a"])) return "30m";
   const amount = nums.find((num) => num > 0 && num <= 3650) ?? persianNumber(text);
   if (!amount) return durationText(text, nums);
-  if (containsAny(text, ["hour", "Ø³Ø§Ø¹Øª", "\u0633\u0627\u0639\u062a"])) return `${amount}h`;
-  if (containsAny(text, ["day", "Ø±ÙˆØ²", "\u0631\u0648\u0632"])) return `${amount}d`;
-  if (containsAny(text, ["week", "Ù‡ÙØªÙ‡", "\u0647\u0641\u062a\u0647"])) return `${amount}w`;
+  if (containsAny(text, ["hour", "ساعت", "\u0633\u0627\u0639\u062a"])) return `${amount}h`;
+  if (containsAny(text, ["day", "روز", "\u0631\u0648\u0632"])) return `${amount}d`;
+  if (containsAny(text, ["week", "هفته", "\u0647\u0641\u062a\u0647"])) return `${amount}w`;
   return `${amount}m`;
 }
 

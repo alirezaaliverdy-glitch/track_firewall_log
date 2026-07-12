@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "docs:snapshot": "powershell -ExecutionPolicy Bypass -File scripts/project-snapshot.ps1",
     "docs:check": "powershell -ExecutionPolicy Bypass -File scripts/check-project-memory.ps1",
-    "test:i18n": "node scripts/check-locale-parity.mjs"
+    "test:i18n": "node scripts/check-locale-parity.mjs",
+    "test:utf8": "node scripts/check-utf8-mojibake.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

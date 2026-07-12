@@ -94,7 +94,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
     if (!authRequired || !path.startsWith("/api/") || publicPaths.has(path)) return;
     const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
     if (!user) {
-      return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "Ø¨Ø±Ø§ÛŒ Ø¯Ø³ØªØ±Ø³ÛŒ Ø¨Ø§ÛŒØ¯ ÙˆØ§Ø±Ø¯ Ø­Ø³Ø§Ø¨ Ú©Ø§Ø±Ø¨Ø±ÛŒ Ø´ÙˆÛŒØ¯." });
+      return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
     }
     request.authUser = user;
   });

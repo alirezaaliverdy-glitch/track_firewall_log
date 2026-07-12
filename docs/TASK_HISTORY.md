@@ -2,6 +2,12 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Encoding Repair - Persian UTF-8/Mojibake Guard (2026-07-12)
+
+- Summary: repaired Persian mojibake introduced by trusting legacy PowerShell-rendered output and added a permanent validation guard.
+- Areas: app route/sidebar labels, shell search/language text, backend Persian auth response, AI duration aliases, Persian command catalog product documentation, `.editorconfig`, and UTF-8/mojibake validation script.
+- Validation: `npm run test:utf8`; `npm run test:i18n`; backend `npm run build`; backend `npm test` passed 186/186; root `npx pnpm@10 build` passed with the existing Vite large-chunk warning; `git diff --check` passed with line-ending warnings only; Playwright MCP desktop/mobile encoding verification passed.
+- Commit: separate encoding repair commit.
 ## Task 18.2A - Cisco IOS-XE Read-only Foundation and Linux Observability (2026-07-12)
 
 - Summary: implemented Milestone 18.2A only: vendor/platform/capability framework, Cisco IOS-XE read-only foundation, parser fixtures, capability APIs/UI, Linux health metrics schema/APIs/UI, migration, tests, docs, and MCP browser evidence.

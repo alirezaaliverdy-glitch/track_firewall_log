@@ -49,12 +49,12 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
         <header className="platform-topbar">
           <div className="platform-search" role="search">
             <Search className="h-4 w-4" aria-hidden="true" />
-            <input placeholder={isFa ? "Ø¬Ø³Øª ÙˆØ¬Ùˆ Ø¯Ø± Ø¯Ø§Ø±Ø§ÛŒÛŒØŒ ÛŒØ§ÙØªÙ‡ØŒ Ø§Ù‚Ø¯Ø§Ù…..." : "Search assets, findings, actions..."} />
+            <input placeholder={isFa ? "جست‌وجو در دارایی، یافته، اقدام..." : "Search assets, findings, actions..."} />
           </div>
           <div className="platform-topbar__actions">
             <button type="button" className="icon-button" aria-label="Notifications"><Bell className="h-4 w-4" /></button>
             <select value={i18n.language} onChange={(event) => void i18n.changeLanguage(event.target.value)} className="platform-language">
-              <option value="fa">ÙØ§Ø±Ø³ÛŒ</option>
+              <option value="fa">فارسی</option>
               <option value="en">English</option>
             </select>
             <div className="platform-user">

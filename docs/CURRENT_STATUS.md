@@ -2,6 +2,13 @@
 
 Last updated: 2026-07-12
 
+## Encoding Repair - Persian UTF-8/Mojibake Guard
+
+- Persian UTF-8 repair is now the active stabilization change after Milestone 18.2A.
+- Repaired corrupted Persian labels in the app shell/route registry, backend auth message, AI duration aliases, and the Persian command catalog product doc.
+- Added `npm run test:utf8` to fail on known mojibake markers in `src`, `backend/src`, `docs`, and root Markdown task files.
+- `.editorconfig` now enforces UTF-8, LF, and final newline for the project.
+- Validation and Playwright MCP verification passed: Persian dashboard/sidebar/topbar text renders readably, no replacement character was found, and English mode switches through the UI language selector.
 ## Task 18.2A - Cisco IOS-XE Read-only Foundation and Linux Observability
 
 - Milestone 18.2A is implemented as a narrow foundation: vendor/platform/capability framework, conservative Cisco platform-family detection, IOS-XE read-only capability metadata, parser fixtures, Cisco capability APIs/UI, Linux health metric schema, and Linux monitoring APIs/UI.

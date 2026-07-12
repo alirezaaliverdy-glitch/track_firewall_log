@@ -1,5 +1,14 @@
 # CODEX_HANDOFF.md
 
+## Encoding Repair - Persian UTF-8/Mojibake Guard (2026-07-12)
+
+- Paused Milestone implementation to repair Persian UTF-8 handling and prevent future mojibake from entering source/docs.
+- Configured the PowerShell session for UTF-8 and re-read Persian task/memory docs with explicit `Get-Content -Raw -Encoding UTF8` before trusting text.
+- Repaired mojibake in `src/routes/appRoutes.tsx`, `src/components/layout/AppShell.tsx`, `backend/src/app.ts`, `backend/src/services/ai-intent.service.ts`, and `docs/PERSIAN_COMMAND_CATALOG_PRODUCT.md`.
+- Added `.editorconfig` with UTF-8/LF/final-newline settings and `scripts/check-utf8-mojibake.mjs`, exposed as `npm run test:utf8`.
+- `index.html` already contained `<meta charset="UTF-8" />`.
+- Validation passed: `npm run test:utf8`, `npm run test:i18n`, backend `npm run build`, backend `npm test` (186/186), root `npx pnpm@10 build` with the existing Vite large-chunk warning, and Playwright MCP desktop/mobile browser checks for Persian/English rendering.
+- Safety boundary unchanged: no ActionPlan, connector, PolicyGuard, lab mode, secret handling, or Cisco/Linux capability behavior changed.
 ## Task 18.2A - Cisco IOS-XE Read-only Foundation and Linux Observability Schema (2026-07-12)
 
 - Implemented Milestone 18.2A only: vendor/platform/capability registry, Cisco platform-family detection, IOS-XE SSH connector foundation, safe read-only Cisco capability metadata, parsers/fixtures, capability APIs/UI, Linux health metric schema/collector APIs, database migration, tests, docs, and MCP browser evidence.
