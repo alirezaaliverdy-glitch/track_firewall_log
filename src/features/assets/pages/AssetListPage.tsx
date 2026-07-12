@@ -14,8 +14,8 @@ export default function AssetListPage() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   return (
     <section className="page-stack">
-      <PageHeader title="تجهیزات" eyebrow="Assets / Devices" description="جدول دارایی های متصل به API با جست وجوی سبک و مسیر جزئیات." />
-      <div className="filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="جست وجو بر اساس نام، IP، vendor یا site" /></div>
+      <PageHeader title="تجهیزات" eyebrow="دارایی ها / تجهیزات" description="جدول دارایی های متصل به API با جست وجوی سبک و مسیر جزئیات." />
+      <div className="filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="جست وجو بر اساس نام، IP، وندور یا سایت" /></div>
       {filtered.length ? <AssetTable assets={filtered} /> : <EmptyState title="دارایی پیدا نشد" description="فیلترها را تغییر دهید یا sync را اجرا کنید." />}
     </section>
   );

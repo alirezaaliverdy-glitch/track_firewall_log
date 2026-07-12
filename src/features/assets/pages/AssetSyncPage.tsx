@@ -19,7 +19,7 @@ export default function AssetSyncPage() {
   };
   return (
     <section className="page-stack">
-      <PageHeader title="همگام سازی دارایی" eyebrow="Preview first" description="Sync باید ابتدا preview شود و mutation مستقیم بدون تایید انجام نشود." />
+      <PageHeader title="همگام سازی دارایی" eyebrow="پیش نمایش قبل از تغییر" description="همگام سازی باید ابتدا preview شود و تغییر مستقیم بدون تایید انجام نشود." />
       <div className="content-grid">
         <section className="content-panel"><h2>NetBox <span className="status-badge status-badge--warning">آزمایشی / Mock</span></h2><p>فقط پیش‌نمایش امن فعال است؛ Apply تولیدی نیازمند تنظیم اتصال واقعی است.</p><button className="primary-button" onClick={() => run("NetBox preview", "/integrations/netbox/sync-preview")}>پیش‌نمایش NetBox</button></section>
         <section className="content-panel"><h2>Wazuh <span className="status-badge status-badge--warning">آزمایشی / Mock</span></h2><p>فقط پیش‌نمایش امن فعال است؛ Apply تولیدی نیازمند تنظیم اتصال واقعی است.</p><button className="primary-button" onClick={() => run("Wazuh preview", "/integrations/wazuh/sync-preview")}>پیش‌نمایش Wazuh</button></section>

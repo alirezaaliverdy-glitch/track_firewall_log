@@ -89,7 +89,7 @@ export default function LinuxMonitoringPage({ params }: { params?: Record<string
                     <td><span className={`status-badge ${healthTone(state)}`}>{stateFa[state] ?? state}</span></td>
                     <td>{device.latestHealth?.score ?? "-"}</td>
                     <td>{formatDate(device.latestHealth?.collectedAt)}</td>
-                    <td><button className="text-button" type="button" disabled={workingId === device.id} onClick={() => refresh(device.id)}>{workingId === device.id ? "در حال جمع‌آوری" : "Refresh"}</button></td>
+                    <td><button className="text-button" type="button" disabled={workingId === device.id} onClick={() => refresh(device.id)}>{workingId === device.id ? "در حال جمع‌آوری" : "به روزرسانی"}</button></td>
                   </tr>
                 );
               })}</tbody>

@@ -11,7 +11,7 @@ export default function AssetsOverviewPage() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   return (
     <section className="page-stack">
-      <PageHeader title="دارایی ها" eyebrow="Asset Intelligence" description="نمای فشرده دارایی های شناخته شده، وضعیت سلامت و آخرین همگام سازی." />
+      <PageHeader title="دارایی ها" eyebrow="دید عملیاتی دارایی" description="نمای فشرده دارایی های شناخته شده، وضعیت سلامت و آخرین همگام سازی." />
       <AssetSummaryCards stats={stats} />
       <div className="content-grid">
         <section className="content-panel">
@@ -23,11 +23,11 @@ export default function AssetsOverviewPage() {
           {assets.filter((asset) => !["online", "healthy"].includes(asset.healthState)).slice(0, 5).map((asset) => (
             <a key={asset.id} href={`/assets/devices/${asset.id}`} className="list-row">{asset.name}<span>{asset.healthState}</span></a>
           ))}
-          {!stats.needsReview ? <EmptyState title="مورد فوری وجود ندارد" description="بعد از sync یا ورود رویداد، موارد نیازمند بررسی اینجا دیده می شوند." /> : null}
+          {!stats.needsReview ? <EmptyState title="مورد فوری وجود ندارد" description="بعد از همگام سازی یا ورود رویداد، موارد نیازمند بررسی اینجا دیده می شوند." /> : null}
         </section>
         <section className="content-panel">
-          <h2>آخرین تغییرات یا Sync</h2>
-          <p>همگام سازی های Mock فقط با برچسب آزمایشی در بخش یکپارچه سازی و Sync اجرا می شوند.</p>
+          <h2>آخرین تغییرات یا همگام سازی</h2>
+          <p>همگام سازی های آزمایشی فقط با برچسب Mock در بخش یکپارچه سازی و همگام سازی نمایش داده می شوند.</p>
           <a href="/assets/sync" className="primary-link">رفتن به همگام سازی</a>
         </section>
       </div>

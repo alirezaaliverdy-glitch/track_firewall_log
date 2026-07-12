@@ -15,12 +15,12 @@ export function AssetTable({ assets }: { assets: PlatformAsset[] }) {
         <thead>
           <tr>
             <th>نام</th>
-            <th>Vendor</th>
-            <th>Site</th>
-            <th>Management IP</th>
-            <th>Managed</th>
-            <th>Health</th>
-            <th>Last Seen</th>
+            <th>وندور</th>
+            <th>سایت</th>
+            <th>IP مدیریت</th>
+            <th>مدیریت</th>
+            <th>سلامت</th>
+            <th>آخرین مشاهده</th>
             <th>عملیات</th>
           </tr>
         </thead>

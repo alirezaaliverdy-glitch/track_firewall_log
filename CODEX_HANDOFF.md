@@ -1,5 +1,17 @@
 # CODEX_HANDOFF.md
 
+## Task 18.2 Safe Autonomous H1-H6 (2026-07-13)
+
+- Executed the safe autonomous instructions from `TASK_18_2_SAFE_AUTONOMOUS_MODE.txt` from the current repository state without restarting completed 18.1/18.2A work.
+- H1 baseline completed with Playwright MCP on authenticated desktop/mobile routes. Planned/dead/mock states were inventoried before feature hardening.
+- H2 Prisma recovery remains blocked by the required backup gate: `pg_dump` was available, but the local backup attempt could not produce a verified nonzero dump without credentials. No migration-history write, `migrate resolve`, `migrate deploy`, reset, truncate, drop, or destructive SQL was executed.
+- H3 vendor/navigation hardening committed as `b84891e`: planned-only routes were removed from primary navigation, vendor copy was made honest, and Cisco pages now expose supported read-only scope without broad mutation claims.
+- H4 integration hardening committed as `aabf035`: NetBox/Wazuh routes now label mock data clearly, removed fake apply controls, and keep only safe previews.
+- H5 Linux observability UX committed as `87ceb22`: dashboard and `/monitoring/linux` now present Persian-first Linux health summaries and read-only refresh paths.
+- H6 UI/RTL polish tightened asset copy and table labels, then updated project memory docs. Safety boundary unchanged: no ActionPlan execution flow, PolicyGuard, connector, secret handling, or `connectorInvoked=true` success rule changed.
+- Playwright MCP verified `/dashboard`, `/assets`, `/assets/sync`, `/assets/vendors`, `/assets/vendors/cisco`, `/assets/vendors/cisco/devices`, `/monitoring/linux`, `/integrations`, `/integrations/netbox`, and `/integrations/wazuh` on desktop and mobile. No visible mojibake, replacement character, dead controls, fake mock apply button, or horizontal overflow remained on the checked surfaces.
+- Validation passed where not blocked: Prisma validate/generate, backend build, command catalog validation, frontend build, i18n parity, UTF-8/mojibake guard, and git whitespace check. `npx prisma migrate status` still reports the known unapplied migration-history baseline, and root lint still fails on pre-existing lint debt outside this safe-mode change.
+
 ## Encoding Repair - Persian UTF-8/Mojibake Guard (2026-07-12)
 
 - Paused Milestone implementation to repair Persian UTF-8 handling and prevent future mojibake from entering source/docs.

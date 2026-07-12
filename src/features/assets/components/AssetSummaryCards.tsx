@@ -6,7 +6,7 @@ export function AssetSummaryCards({ stats }: { stats: { total: number; managed: 
     { label: "مدیریت شده", value: stats.managed, icon: CheckCircle2 },
     { label: "خارج از دسترس", value: stats.unreachable, icon: WifiOff },
     { label: "نیازمند بررسی", value: stats.needsReview, icon: TriangleAlert },
-    { label: "بدون Site", value: stats.withoutSite, icon: MapPin }
+    { label: "بدون سایت", value: stats.withoutSite, icon: MapPin }
   ];
   return (
     <div className="summary-grid">

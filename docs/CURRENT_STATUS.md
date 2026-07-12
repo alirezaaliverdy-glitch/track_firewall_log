@@ -1,6 +1,16 @@
 # Current Project Status
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
+
+## Task 18.2 Safe Autonomous H1-H6
+
+- Safe milestones H1, H3, H4, H5, and H6 are complete. H2 Prisma recovery is intentionally blocked until a verified nonzero database backup exists and migration-history writes are explicitly safe.
+- Prisma baseline analysis found the database schema physically represented through `20260712180000_platform_asset_security_milestone`; `20260712192000_task18_2a_vendor_linux_observability` remains the pending migration. No `migrate resolve`, `migrate deploy`, reset, drop, truncate, or destructive migration command has been run in this safe-mode pass.
+- Vendor UX is now honest in primary navigation and Cisco surfaces: read-only IOS-XE capability work is visible, broad Cisco mutations remain planned/non-executable, and planned-only pages are not advertised as primary destinations.
+- NetBox and Wazuh integration routes are mock/preview-only and no longer expose fake apply controls.
+- Dashboard and Linux monitoring now summarize Linux health in Persian-first operational language while keeping refresh read-only and connector-backed.
+- Playwright MCP desktop/mobile checks passed on the hardened dashboard, asset, vendor, Linux monitoring, and integration routes with no visible mojibake, replacement character, dead controls, or horizontal overflow.
+- Production blockers: complete a real database backup before H2 migration recovery, apply migration history safely after approval, keep Cisco mutations disabled until verified templates/parsers/prechecks/post-checks exist, and reduce pre-existing lint debt.
 
 ## Encoding Repair - Persian UTF-8/Mojibake Guard
 
