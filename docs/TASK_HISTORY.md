@@ -2,6 +2,17 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.8B - Simplify Device Telemetry UX and Fix Analyze/Windows Storage (2026-07-12)
+
+- Summary: simplified Device Telemetry for non-technical operators, made Analyze deterministic-first and AI-optional, and hardened Windows telemetry writes against EPERM/EBUSY rename locks.
+- Backend: `/api/devices/:deviceId/telemetry/linux/analyze` now reads stored JSONL telemetry, rebuilds findings with the vendor finding engine, returns finding counts and `lastAnalyzedAt`, and exposes `aiSummary`, `aiAvailable`, and `aiError` without depending on `/api/ai/chat`.
+- Storage: per-device queueing remains in place; temp files now follow `<deviceId>.<timestamp>.<random>.jsonl.tmp`, rename retries EPERM/EBUSY with backoff, and locked rename fallback appends the current event safely so monitoring continues.
+- Frontend: `LinuxTelemetryPanel` now presents Connection, Live Monitoring, and Results as the primary flow. Raw logs, advanced sources, backend counters, storage warnings, detected SSH service details, and raw evidence are behind Advanced diagnostics or Show technical evidence.
+- UX: Analyze no longer fails completely when AI is unavailable. The UI shows `AI explanation is unavailable. Local analysis is still available.` for optional AI absence and `Backend is not reachable. Check API server.` for real API reachability failure.
+- Tests: added focused coverage for deterministic analyze without AI, findings from stored events, Windows EPERM retry, locked-rename append fallback, simplified three-step UI, hidden raw evidence, Advanced diagnostics, and Persian/English label presence.
+- Migrations: none.
+- Validation: focused Task 17.8 tests (14/14); backend `npm run build`; backend `npm test` (172/172); root `pnpm build` passed with the existing Vite large-chunk warning.
+
 ## Task 17.8 Follow-up - Windows-Safe Telemetry Storage Runtime Fix (2026-07-12)
 
 - Summary: fixed the Windows live-monitoring persistence bug where JSONL rotation could fail with `ENOENT` during rename and leak raw storage errors into the monitoring experience.

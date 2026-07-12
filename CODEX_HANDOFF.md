@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 17.8B - Simplified Device Telemetry UX, Deterministic Analyze, and Windows EPERM Storage Fix (2026-07-12)
+
+- Reworked Device Telemetry into a simple three-step flow for non-technical users: `Connection`, `Live Monitoring`, and `Results`. The main page now explains connected state, device IP/SSH port, monitoring status, log collection, analysis results, and recommended next steps in plain English/Persian.
+- Moved raw event stream, source presets, advanced source selection, storage warnings, backend counters, detected SSH service details, and raw technical evidence behind an `Advanced diagnostics` section. Finding cards now show problem, why it matters, short evidence, count, recommended fix, and `Create ActionPlan`; raw evidence is hidden behind `Show technical evidence`.
+- `Analyze` no longer calls `/api/ai/chat` from the telemetry UI. It first calls the deterministic Linux telemetry analyze endpoint and continues to work when AI is unavailable. The UI shows `AI explanation is unavailable. Local analysis is still available.` as a small non-blocking message and maps network failures to `Backend is not reachable. Check API server.`
+- Extended `/api/devices/:deviceId/telemetry/linux/analyze` to rebuild findings from stored JSONL telemetry using the vendor finding engine, return finding counts and `lastAnalyzedAt`, and include explicit `aiSummary`, `aiAvailable`, and `aiError` fields without blocking local analysis on AI.
+- Hardened Windows telemetry writes again: temp files now use `<deviceId>.<timestamp>.<random>.jsonl.tmp`, rename has EPERM/EBUSY retry/backoff, and if Windows keeps the file locked the store safely appends the new event and removes the temp file so monitoring continues without losing the current event.
+- Added focused regressions for deterministic analyze without AI, stored-event finding generation, Windows EPERM retry, locked-rename append fallback, simplified UI flow, hidden technical evidence, Advanced diagnostics, backend-unreachable copy, and Persian/English label presence.
+- Migrations: none.
+- Validation passed: focused Task 17.8 tests (14/14); backend build; backend full test suite (172/172); root `pnpm build` with the existing Vite large-chunk warning.
+
 ## Task 17.8 Follow-up - Windows-Safe Telemetry Storage Runtime Fix (2026-07-12)
 
 - Fixed the Windows telemetry persistence failure where concurrent live events could race on the shared `<deviceId>.jsonl.tmp` file and surface `ENOENT` during rename.

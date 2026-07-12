@@ -16,6 +16,7 @@ export type LinuxLiveEvent = { streamId: string; deviceId: string; source: strin
 export type VendorFinding = { id: string; deviceId: string; vendor: string; title: string; severity: TelemetrySeverity; category: string; status: string; confidence: number; summary: string; evidence: string[]; source: string; firstSeen: string; lastSeen: string; count: number; mitreTags: string[]; recommendedActions: Array<{ intent: string; label: string }>; fingerprint: string };
 export type LinuxTelemetryOptions = { deviceId: string; connectionStatus: string; connection: { host: string; connectionPort: number }; connectionPort: number; detectedSshServicePort: number | null; privilegeLevel: string; sudoAvailable: boolean | "unknown"; lastSnapshotAt: string | null; availableLogSources: string[]; logSourcesAvailable: string[]; warnings: string[]; readOnly: boolean; suggestions: Array<{ title: string; severity: string }> };
 export type LinuxTelemetryStorageStatus = { deviceId: string; bytesUsed: number; maxBytesPerDevice: number; eventCount: number; maxEventCountPerDevice: number; maxAgeDays: number; oldestEventTime: string | null; newestEventTime: string | null };
+export type LinuxTelemetryAnalysis = { deterministic: boolean; findings: VendorFinding[]; counts: { storedEvents: number; analyzedEvents: number; findings: number; bySeverity: Record<string, number> }; lastAnalyzedAt: string; aiSummary: string | null; aiAvailable: boolean; aiError: string | null; snapshot: LinuxSnapshot | null; analysis?: { findings: LinuxFinding[]; riskSummary: LinuxSnapshot["riskSummary"] } };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include", headers: init?.body ? { "Content-Type": "application/json" } : undefined, ...init });
@@ -25,7 +26,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 export const collectLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/snapshot`, { method: "POST" });
 export const latestLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/snapshot/latest`);
-export const analyzeLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/analyze`, { method: "POST" });
+export const analyzeLinuxSnapshot = (deviceId: string) => request<LinuxTelemetryAnalysis>(`/devices/${deviceId}/telemetry/linux/analyze`, { method: "POST" });
 export const linuxTelemetryOptions = (deviceId: string) => request<LinuxTelemetryOptions>(`/devices/${deviceId}/telemetry/linux/options`);
 export const linuxTelemetryStorageStatus = (deviceId: string) => request<LinuxTelemetryStorageStatus>(`/devices/${deviceId}/telemetry/linux/storage/status`);
 export const startLinuxStream = (deviceId: string, sources: string[]) => request<{ streamId: string; status: string; warnings: string[] }>(`/devices/${deviceId}/telemetry/linux/stream/start`, { method: "POST", body: JSON.stringify({ sources }) });

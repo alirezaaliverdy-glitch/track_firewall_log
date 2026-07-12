@@ -4,6 +4,10 @@ Last updated: 2026-07-12
 
 ## Task 17.8 - Linux Monitoring and Service Status Reliability
 
+- Task 17.8B simplified the Device Telemetry page into a non-technical three-step flow: Connection, Live Monitoring, and Results. The main screen now shows connected state, device IP/SSH port, last checked time, monitoring status, event count, last event, simple storage usage, and finding cards with problem/impact/evidence/recommended fix.
+- Raw event streams, source presets, advanced source selection, storage warnings, backend counters, confidence/parser details, and technical evidence are now behind Advanced diagnostics or Show technical evidence.
+- Analyze now works without AI. The Linux telemetry analyze endpoint rebuilds findings from stored telemetry with the deterministic vendor finding engine, returns counts and `lastAnalyzedAt`, and exposes `aiSummary`, `aiAvailable`, and `aiError` without blocking local analysis. The UI no longer calls `/api/ai/chat` for telemetry Analyze and shows a small AI-unavailable note instead of a scary network error.
+- Windows storage handling now retries EPERM/EBUSY rename failures with backoff, uses `<deviceId>.<timestamp>.<random>.jsonl.tmp` temp names, and falls back to safe append when a locked rename cannot complete so monitoring keeps running.
 - Follow-up runtime fix: telemetry persistence is now Windows-safe. The store recreates `backend/storage/telemetry` recursively before every append/read/status path, serializes writes per device, and uses unique same-directory temp files before atomic rename so first writes and concurrent stream events do not race on a shared `.tmp` file.
 - Storage errors are separated from security evidence. Backend logs keep storage failure details under `[linux-telemetry-storage]`, while live monitoring surfaces only a clean telemetry warning and continues generating findings from live events.
 - Device Monitoring storage counters now read as `used ... of ...` for bytes and event count. Incoming stream events update live event count, last event time, and stored event count immediately, followed by a backend storage-status refresh.
@@ -13,7 +17,7 @@ Last updated: 2026-07-12
 - `linux_check_service_status` now uses structured service detection and parsing. Inactive, failed, missing, and unknown services are successful read results when SSH execution succeeded; only SSH/template/validation failures fail the ActionPlan. Result UI shows normalized state, exit code, confidence, explanation, systemd fields, and raw evidence.
 - Device Telemetry UI now exposes live event count, stream state, active sources, last event time, bounded storage bytes/count, source/severity filters, grouped findings/evidence, and suggested ActionPlan creation.
 - External repo `hiddent3rminal/SSH-Automation-For-Multiple-Servers` was evaluated and rejected as a dependency. It is MIT Python/Paramiko with useful fan-out/retry/result-collection ideas, but has hardcoded sample passwords, insecure host-key auto-add, sudo password shell piping, unbounded logs, and incompatible architecture.
-- Validation passed: focused Task 17.8 tests 10/10 with separate per-device byte-limit/count-limit retention and Windows storage regressions; backend build; backend full tests 168/168; frontend build with the existing large-chunk warning.
+- Validation passed: focused Task 17.8/17.8B tests 14/14 with byte/count retention, Windows storage retry/fallback, deterministic analyze, and simplified UI source coverage; backend build; backend full tests 172/172; frontend build with the existing large-chunk warning.
 
 ## Task 17.7 - FortiGate Execution Verification Hardening
 

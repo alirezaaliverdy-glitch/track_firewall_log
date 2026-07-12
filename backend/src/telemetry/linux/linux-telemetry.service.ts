@@ -3,7 +3,8 @@ import { prisma } from "../../db/prisma.js";
 import { ConnectorError, isLinuxSshCapable, LINUX_TELEMETRY_COMMANDS, resolveLinuxConnectionPort, runLinuxTelemetryCommands } from "../../connectors/linux-ssh.connector.js";
 import { analyzeLinuxSecuritySnapshot } from "./linux-security-analyzer.service.js";
 import type { LinuxSecuritySnapshot } from "./linux-telemetry.types.js";
-import { processVendorTelemetry } from "../vendor-finding-engine.js";
+import { processVendorTelemetry, type RawTelemetryEvent } from "../vendor-finding-engine.js";
+import { boundedTelemetryStore, type StoredTelemetryEvent } from "../bounded-telemetry-store.js";
 
 const SECRET_PATTERNS = [
   /(password|passwd|token|api[_-]?key|secret|authorization)\s*[:=]\s*[^\s,;]+/gi,
@@ -138,9 +139,55 @@ export async function getLatestLinuxSecuritySnapshot(deviceId: string) {
 }
 
 export async function analyzeLinuxTelemetry(deviceId: string) {
+  const device = await prisma.device.findUnique({ where: { id: deviceId } });
+  if (!device) throw new LinuxTelemetryError("DEVICE_NOT_FOUND", "Selected Linux device does not exist.", 404);
   const latest = await getLatestLinuxSecuritySnapshot(deviceId);
-  if (!latest) throw new Error("No Linux telemetry snapshot is available.");
-  return { ...latest, analysis: analyzeLinuxSecuritySnapshot(latest.snapshot) };
+  const storedEvents = await boundedTelemetryStore.readEvents(deviceId).catch(() => [] as StoredTelemetryEvent[]);
+  const rawEvents = storedEvents.map(storedTelemetryToRawEvent);
+  const snapshotAnalysis = latest ? analyzeLinuxSecuritySnapshot(latest.snapshot) : { findings: [], riskSummary: { score: 0, severity: "info" as const, topFindings: [] } };
+  const liveAnalysis = await processVendorTelemetry({ device, events: rawEvents, snapshot: latest?.snapshot, now: new Date() });
+  const findings = liveAnalysis.findings;
+  const countsBySeverity = findings.reduce<Record<string, number>>((acc, finding) => {
+    acc[finding.severity] = (acc[finding.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+  return {
+    id: latest?.id ?? null,
+    collectedAt: latest?.collectedAt ?? null,
+    snapshot: latest?.snapshot ?? null,
+    analysis: snapshotAnalysis,
+    deterministic: true,
+    findings,
+    counts: {
+      storedEvents: storedEvents.length,
+      analyzedEvents: rawEvents.length,
+      findings: findings.length,
+      bySeverity: countsBySeverity
+    },
+    lastAnalyzedAt: new Date().toISOString(),
+    aiSummary: null,
+    aiAvailable: false,
+    aiError: null
+  };
+}
+
+function storedTelemetryToRawEvent(event: StoredTelemetryEvent): RawTelemetryEvent {
+  const parsed = event.parsedFields ?? {};
+  return {
+    id: event.id,
+    timestamp: event.timestamp,
+    source: event.source,
+    raw: event.rawMessage,
+    message: event.normalizedMessage,
+    summary: event.normalizedMessage,
+    severity: event.severity,
+    srcIp: typeof parsed.sourceIp === "string" ? parsed.sourceIp : undefined,
+    dstIp: typeof parsed.destinationIp === "string" ? parsed.destinationIp : undefined,
+    dstPort: typeof parsed.port === "number" ? parsed.port : undefined,
+    username: typeof parsed.username === "string" ? parsed.username : undefined,
+    affectedObject: typeof parsed.service === "string" ? parsed.service : undefined,
+    ...parsed
+  };
 }
 
 export async function getLinuxTelemetryOptions(deviceId: string) {

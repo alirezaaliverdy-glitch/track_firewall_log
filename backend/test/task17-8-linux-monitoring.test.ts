@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { appendFile, mkdtemp, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readFileSync } from "node:fs";
-import { BoundedTelemetryStore } from "../src/telemetry/bounded-telemetry-store.js";
+import { BoundedTelemetryStore, boundedTelemetryStore } from "../src/telemetry/bounded-telemetry-store.js";
 import { parseLinuxLiveLogLine, telemetryStorageWarning } from "../src/telemetry/linux/linux-log-stream.service.js";
 import { evaluateVendorTelemetry, resetFindingEngineWindows } from "../src/telemetry/vendor-finding-engine.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../src/linux/service-status.js";
+import { buildApp } from "../src/app.js";
+import { prisma } from "../src/db/prisma.js";
 
 function telemetryEvent(index: number, rawPadding = 80) {
   return {
@@ -92,6 +94,57 @@ test("bounded telemetry store uses Windows path-safe unique temp writes", async 
   }
 });
 
+test("bounded telemetry store retries Windows EPERM rename before succeeding", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "fla-telemetry-eperm-"));
+  let attempts = 0;
+  const store = new BoundedTelemetryStore(dir, { maxBytesPerDevice: 50_000, maxEventCountPerDevice: 20, maxAgeDays: 30 }, {
+    writeFile,
+    appendFile,
+    unlink,
+    rename: async (source, target) => {
+      attempts += 1;
+      if (attempts < 3) {
+        const error = new Error("EPERM: operation not permitted, rename") as NodeJS.ErrnoException;
+        error.code = "EPERM";
+        throw error;
+      }
+      return rename(source, target);
+    }
+  });
+  try {
+    await store.append(telemetryEvent(1));
+    const events = await store.readEvents("linux-1");
+    assert.equal(attempts, 3);
+    assert.equal(events.length, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("bounded telemetry store appends safely when Windows rename remains locked", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "fla-telemetry-fallback-"));
+  const store = new BoundedTelemetryStore(dir, { maxBytesPerDevice: 50_000, maxEventCountPerDevice: 20, maxAgeDays: 30 }, {
+    writeFile,
+    appendFile,
+    unlink,
+    rename: async () => {
+      const error = new Error("EPERM: operation not permitted, rename") as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    }
+  });
+  try {
+    await store.append(telemetryEvent(1));
+    const events = await store.readEvents("linux-1");
+    const files = await readdir(dir);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].id, "event-1");
+    assert.equal(files.filter((file) => file.endsWith(".tmp")).length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("live stream parser classifies Linux auth, sudo, service, web, and fail2ban events", () => {
   const samples = [
     parseLinuxLiveLogLine("auth", "sshd[10]: Failed password for invalid user admin from 203.0.113.9 port 55123 ssh2"),
@@ -132,6 +185,46 @@ test("storage failure warning is clean and does not block monitoring findings", 
     now: new Date("2026-01-01T00:00:00Z")
   });
   assert.ok(result.findings.some((finding) => finding.title === "Repeated SSH authentication failures"));
+});
+
+test("Linux telemetry analyze endpoint rebuilds findings from stored events without AI", async (t) => {
+  resetFindingEngineWindows();
+  const app = await buildApp({ authRequired: false });
+  t.after(() => app.close());
+  const device = await prisma.device.create({ data: { id: "task17-8b-analyze", name: "Task 17.8B Linux", vendor: "Linux", type: "linux_edge", host: "192.0.2.178", managementPort: 22, protocol: "ssh", environment: "lab", status: "online" } });
+  await rm(path.join(process.cwd(), "storage", "telemetry", `${device.id}.jsonl`), { force: true });
+  t.after(async () => {
+    await prisma.finding.deleteMany({ where: { deviceId: device.id } });
+    await prisma.device.deleteMany({ where: { id: device.id } });
+    await rm(path.join(process.cwd(), "storage", "telemetry", `${device.id}.jsonl`), { force: true });
+  });
+  for (let index = 0; index < 5; index += 1) {
+    await boundedTelemetryStore.append({ ...telemetryEvent(index), id: `stored-${index}`, deviceId: device.id, rawMessage: `Failed password for root from 203.0.113.88 port ${5000 + index}`, normalizedMessage: "Failed SSH authentication", parsedFields: { sourceIp: "203.0.113.88" } });
+  }
+  const response = await app.inject({ method: "POST", url: `/api/devices/${device.id}/telemetry/linux/analyze` });
+  assert.equal(response.statusCode, 200);
+  const payload = response.json();
+  assert.equal(payload.deterministic, true);
+  assert.equal(payload.aiAvailable, false);
+  assert.equal(payload.aiError, null);
+  assert.equal(payload.counts.storedEvents, 5);
+  assert.ok(payload.findings.some((finding: { title: string }) => finding.title === "Repeated SSH authentication failures"));
+});
+
+test("Device Telemetry UI exposes simple flow and hides technical evidence by default", () => {
+  const source = readFileSync(new URL("../../src/components/telemetry/LinuxTelemetryPanel.tsx", import.meta.url), "utf8");
+  assert.match(source, /1\. Connection/);
+  assert.match(source, /2\. Live Monitoring/);
+  assert.match(source, /3\. Results/);
+  assert.match(source, /Monitoring is running/);
+  assert.match(source, /Logs? .* collected|Collecting logs from system, SSH, firewall, and selected services/);
+  assert.match(source, /Show technical evidence/);
+  assert.match(source, /<details/);
+  assert.match(source, /Advanced diagnostics/);
+  assert.match(source, /AI explanation is unavailable\. Local analysis is still available\./);
+  assert.match(source, /Backend is not reachable\. Check API server\./);
+  assert.match(source, /پایش در حال اجراست/);
+  assert.doesNotMatch(source, /sendAiMessage/);
 });
 
 test("service status parser normalizes active, inactive, failed, not_found, and systemctl-unavailable states", () => {
