@@ -33,6 +33,26 @@ export type LinuxSecuritySnapshot = {
   rawCommandResultsMetadata: Array<{ commandId: string; ok: boolean; skipped: boolean; outputLines: number; warning?: string }>;
 };
 
+export type LinuxServerOverview = {
+  deviceId: string;
+  collectedAt: string;
+  connection: { host: string; connectionPort: number; status: "online" | "partial" | "error" };
+  health: { status: "healthy" | "warning" | "critical"; summary: string; reasons: string[] };
+  host: { hostname: string; os: string; kernel: string; uptime: string };
+  cpu: { status: "normal" | "warning" | "critical" | "unknown"; usagePercent: number | null; loadAverage: number[]; coreCount: number | null; summary: string };
+  memory: { status: "normal" | "warning" | "critical" | "unknown"; totalMb: number | null; usedMb: number | null; usedPercent: number | null; swapUsedPercent: number | null; summary: string };
+  disks: Array<{ filesystem: string; mount: string; type: string; size: string; used: string; available: string; usedPercent: number | null; status: "normal" | "warning" | "critical" | "unknown" }>;
+  diskIo: { summary: string; devices: string[] };
+  network: { interfaces: Array<{ name: string; ips: string[]; rxBytes?: number; txBytes?: number; errors?: number }>; summary: string };
+  topProcesses: Array<{ pid: number | null; command: string; cpuPercent: number | null; memoryPercent: number | null }>;
+  services: Array<{ name: string; state: "active" | "inactive" | "failed" | "not_found" | "unknown"; summary: string }>;
+  listeningPorts: Array<{ protocol: string; localAddress: string; port: number | null; process: string | null }>;
+  securitySignals: { status: "normal" | "warning" | "critical"; summary: string; recentWarnings: string[] };
+  recentProblems: string[];
+  warnings: string[];
+  rawSections?: Record<string, string>;
+};
+
 export type LinuxLiveLogEvent = {
   streamId: string;
   deviceId: string;

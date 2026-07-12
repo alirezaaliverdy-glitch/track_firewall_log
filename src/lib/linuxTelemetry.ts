@@ -17,6 +17,21 @@ export type VendorFinding = { id: string; deviceId: string; vendor: string; titl
 export type LinuxTelemetryOptions = { deviceId: string; connectionStatus: string; connection: { host: string; connectionPort: number }; connectionPort: number; detectedSshServicePort: number | null; privilegeLevel: string; sudoAvailable: boolean | "unknown"; lastSnapshotAt: string | null; availableLogSources: string[]; logSourcesAvailable: string[]; warnings: string[]; readOnly: boolean; suggestions: Array<{ title: string; severity: string }> };
 export type LinuxTelemetryStorageStatus = { deviceId: string; bytesUsed: number; maxBytesPerDevice: number; eventCount: number; maxEventCountPerDevice: number; maxAgeDays: number; oldestEventTime: string | null; newestEventTime: string | null };
 export type LinuxTelemetryAnalysis = { deterministic: boolean; findings: VendorFinding[]; counts: { storedEvents: number; analyzedEvents: number; findings: number; bySeverity: Record<string, number> }; lastAnalyzedAt: string; aiSummary: string | null; aiAvailable: boolean; aiError: string | null; snapshot: LinuxSnapshot | null; analysis?: { findings: LinuxFinding[]; riskSummary: LinuxSnapshot["riskSummary"] } };
+export type LinuxServerOverview = {
+  deviceId: string; collectedAt: string; connection: { host: string; connectionPort: number; status: "online" | "partial" | "error" };
+  health: { status: "healthy" | "warning" | "critical"; summary: string; reasons: string[] };
+  host: { hostname: string; os: string; kernel: string; uptime: string };
+  cpu: { status: "normal" | "warning" | "critical" | "unknown"; usagePercent: number | null; loadAverage: number[]; coreCount: number | null; summary: string };
+  memory: { status: "normal" | "warning" | "critical" | "unknown"; totalMb: number | null; usedMb: number | null; usedPercent: number | null; swapUsedPercent: number | null; summary: string };
+  disks: Array<{ filesystem: string; mount: string; type: string; size: string; used: string; available: string; usedPercent: number | null; status: "normal" | "warning" | "critical" | "unknown" }>;
+  diskIo: { summary: string; devices: string[] };
+  network: { interfaces: Array<{ name: string; ips: string[]; rxBytes?: number; txBytes?: number; errors?: number }>; summary: string };
+  topProcesses: Array<{ pid: number | null; command: string; cpuPercent: number | null; memoryPercent: number | null }>;
+  services: Array<{ name: string; state: "active" | "inactive" | "failed" | "not_found" | "unknown"; summary: string }>;
+  listeningPorts: Array<{ protocol: string; localAddress: string; port: number | null; process: string | null }>;
+  securitySignals: { status: "normal" | "warning" | "critical"; summary: string; recentWarnings: string[] };
+  recentProblems: string[]; warnings: string[]; rawSections?: Record<string, string>;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include", headers: init?.body ? { "Content-Type": "application/json" } : undefined, ...init });
@@ -26,6 +41,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 export const collectLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/snapshot`, { method: "POST" });
 export const latestLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/snapshot/latest`);
+export const linuxServerOverview = (deviceId: string) => request<LinuxServerOverview>(`/devices/${deviceId}/telemetry/linux/overview`);
 export const analyzeLinuxSnapshot = (deviceId: string) => request<LinuxTelemetryAnalysis>(`/devices/${deviceId}/telemetry/linux/analyze`, { method: "POST" });
 export const linuxTelemetryOptions = (deviceId: string) => request<LinuxTelemetryOptions>(`/devices/${deviceId}/telemetry/linux/options`);
 export const linuxTelemetryStorageStatus = (deviceId: string) => request<LinuxTelemetryStorageStatus>(`/devices/${deviceId}/telemetry/linux/storage/status`);

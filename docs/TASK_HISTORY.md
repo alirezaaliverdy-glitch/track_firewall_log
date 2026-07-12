@@ -2,6 +2,17 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.8C - Linux Server Overview First Screen (2026-07-12)
+
+- Summary: added a plain-language Server Overview as the default Device Monitoring screen so non-technical users see server health before logs/findings/advanced telemetry.
+- Backend: added `/api/devices/:deviceId/telemetry/linux/overview` through the existing SSH connector. The read-only overview command collects host/OS/kernel/uptime, CPU/load/core count, memory/swap, disk usage, disk I/O hints, network interfaces, top processes, important service states, listening ports, and recent auth/security warnings.
+- Parsing: added Ubuntu/Debian/RHEL-like overview parsing with partial command failure warnings, health summaries, service state normalization, security signals, and recent problem extraction. Missing optional commands do not fail the whole overview. Follow-up hardening makes missing/undefined stdout and missing sections return partial data with warnings instead of crashing.
+- Frontend: `LinuxTelemetryPanel` now defaults to a Server Overview tab with cards for Overall Health, CPU, Memory, Disk, Network, Important Services, Security Signals, and Recent Problems. Live Monitoring and Results remain secondary tabs, and raw logs/storage internals/event IDs stay under Advanced diagnostics.
+- UX: new labels are present in English and Persian; the existing deterministic Analyze behavior remains AI-optional and shows only a small AI-unavailable message.
+- Tests: added focused source/parser coverage for the overview endpoint, missing command output, partial command failure handling, active/inactive/not_found service status parsing, default Server Overview tab, English/Persian labels, and AI-unavailable Analyze copy.
+- Migrations: none.
+- Validation: focused Task 17.8 tests (18/18); backend `npm test` (176/176); backend `npm run build`; backend `npm run validate:command-catalog` (136 items); root frontend build via `npx pnpm@10 build` passed with the existing Vite large-chunk warning. Local `pnpm` was unavailable, Corepack pnpm failed with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`, and `npx pnpm@11.10.0` requires newer Node than local `v20.19.5`.
+
 ## Task 17.8B - Simplify Device Telemetry UX and Fix Analyze/Windows Storage (2026-07-12)
 
 - Summary: simplified Device Telemetry for non-technical operators, made Analyze deterministic-first and AI-optional, and hardened Windows telemetry writes against EPERM/EBUSY rename locks.

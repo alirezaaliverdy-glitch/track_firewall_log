@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 17.8C - Linux Server Overview First Screen (2026-07-12)
+
+- Added a read-only Linux overview API at `/api/devices/:deviceId/telemetry/linux/overview`. It runs through the existing SSH connector and collects host identity, OS/kernel/uptime, CPU load/core data, memory/swap, mounted disk usage, disk I/O hints, network interfaces, top processes, important service states, listening ports, and recent auth/security warnings.
+- Overview collection is partial-failure tolerant. Missing commands add warnings and unavailable sections instead of failing the whole response; SSH/device credential failures remain clean endpoint failures. The parser now also handles missing/undefined stdout and missing overview sections without calling string helpers on undefined.
+- Added structured overview parsing in `backend/src/telemetry/linux/linux-telemetry.service.ts` for Ubuntu/Debian/RHEL-like command output, including health summaries, service state normalization, security signals, and recent-problem extraction.
+- Device Monitoring now opens on a `Server Overview` tab by default before live logs/findings. The first screen shows plain-language cards for Overall Health, CPU, Memory, Disk, Network, Important Services, Security Signals, and Recent Problems, with English/Persian labels and RTL-compatible layout.
+- Live Monitoring and Results remain available as secondary tabs. Raw logs, source filters, storage internals, backend counters, event IDs, and technical evidence stay in Advanced diagnostics or technical evidence details. Analyze remains deterministic-first and does not depend on `/api/ai/chat`; AI unavailability is shown as a small non-blocking note.
+- Added focused regression coverage for the Linux overview parser, missing command output, partial command failure behavior, service-status state coverage, overview endpoint wiring, default Server Overview tab, Persian/English label presence, and AI-unavailable Analyze copy.
+- Migrations: none.
+- Validation passed: focused Task 17.8 tests (18/18); backend `npm test` (176/176); backend `npm run build`; backend `npm run validate:command-catalog` (136 items); root frontend build via `npx pnpm@10 build` with the existing Vite large-chunk warning. Local `pnpm` was not on PATH, Corepack pnpm failed with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`, and `npx pnpm@11.10.0` requires newer Node than the local `v20.19.5`.
+
 ## Task 17.8B - Simplified Device Telemetry UX, Deterministic Analyze, and Windows EPERM Storage Fix (2026-07-12)
 
 - Reworked Device Telemetry into a simple three-step flow for non-technical users: `Connection`, `Live Monitoring`, and `Results`. The main page now explains connected state, device IP/SSH port, monitoring status, log collection, analysis results, and recommended next steps in plain English/Persian.

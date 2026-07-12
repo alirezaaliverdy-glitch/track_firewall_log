@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, AlertTriangle, Bot, CheckCircle2, ChevronDown, Play, Square, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, Bot, CheckCircle2, ChevronDown, Cpu, HardDrive, MemoryStick, Network, Play, Server, ShieldAlert, Square, Wrench } from "lucide-react";
 import { proposeAction } from "@/lib/actions";
 import { publishActionPlanCreated } from "@/lib/actionPlanHandoff";
 import { listDevices, type Device } from "@/lib/devices";
-import { analyzeLinuxSnapshot, collectLinuxSnapshot, createFindingActionPlan, latestLinuxSnapshot, listDeviceFindings, linuxStreamStatus, linuxTelemetryOptions, linuxTelemetryStorageStatus, startLinuxStream, stopLinuxStream, subscribeLinuxStream, type LinuxLiveEvent, type LinuxSnapshot, type LinuxTelemetryAnalysis, type LinuxTelemetryOptions, type LinuxTelemetryStorageStatus, type VendorFinding } from "@/lib/linuxTelemetry";
+import { analyzeLinuxSnapshot, collectLinuxSnapshot, createFindingActionPlan, latestLinuxSnapshot, listDeviceFindings, linuxServerOverview, linuxStreamStatus, linuxTelemetryOptions, linuxTelemetryStorageStatus, startLinuxStream, stopLinuxStream, subscribeLinuxStream, type LinuxLiveEvent, type LinuxServerOverview, type LinuxSnapshot, type LinuxTelemetryAnalysis, type LinuxTelemetryOptions, type LinuxTelemetryStorageStatus, type VendorFinding } from "@/lib/linuxTelemetry";
 import { buildFixActionProposal, buildLiveFindings, sourcesForPreset, type LiveFinding, type SourcePreset } from "@/lib/linuxTelemetryFindings";
 
 const allSources = ["auth", "system", "kernel", "firewall", "nginx", "apache", "fail2ban", "docker"];
@@ -44,7 +44,7 @@ const copy = {
     analyze: "Analyze",
     analyzing: "Analyzing...",
     analyzed: "Local analysis completed.",
-    aiUnavailable: "AI explanation is unavailable. Local analysis is still available.",
+    aiUnavailable: "AI explanation is unavailable. Local analysis is still working.",
     backendDown: "Backend is not reachable. Check API server.",
     problem: "Problem",
     matters: "Why it matters",
@@ -59,7 +59,29 @@ const copy = {
     warnings: "Storage and stream warnings",
     sourcePreset: "Source presets",
     selectedSources: "Selected sources",
-    debug: "Backend counters"
+    debug: "Backend counters",
+    overviewTab: "Server Overview",
+    monitoringTab: "Live Monitoring",
+    resultsTab: "Results",
+    overviewTitle: "Server Overview",
+    overviewSubtitle: "A quick read of this Linux server right now.",
+    refreshOverview: "Refresh overview",
+    loadingOverview: "Collecting server overview...",
+    overallHealth: "Overall Health",
+    cpu: "CPU",
+    memory: "Memory",
+    disk: "Disk",
+    network: "Network",
+    servicesCard: "Important Services",
+    securitySignals: "Security Signals",
+    recentProblems: "Recent Problems",
+    serverOnline: "Server is online",
+    noProblems: "No recent problems found",
+    normal: "Normal",
+    warning: "Warning",
+    critical: "Critical",
+    healthy: "Healthy",
+    partial: "Partial data"
   },
   fa: {
     title: "پایش دستگاه",
@@ -92,7 +114,7 @@ const copy = {
     analyze: "تحلیل",
     analyzing: "در حال تحلیل...",
     analyzed: "تحلیل محلی انجام شد.",
-    aiUnavailable: "توضیح AI در دسترس نیست. تحلیل محلی همچنان آماده است.",
+    aiUnavailable: "توضیح AI در دسترس نیست. تحلیل محلی همچنان کار می‌کند.",
     backendDown: "Backend در دسترس نیست. API server را بررسی کنید.",
     problem: "مشکل",
     matters: "چرا مهم است",
@@ -107,7 +129,29 @@ const copy = {
     warnings: "هشدارهای ذخیره‌سازی و جریان",
     sourcePreset: "الگوی منابع",
     selectedSources: "منابع انتخاب‌شده",
-    debug: "شمارنده‌های Backend"
+    debug: "شمارنده‌های Backend",
+    overviewTab: "نمای کلی سرور",
+    monitoringTab: "پایش زنده",
+    resultsTab: "نتایج",
+    overviewTitle: "نمای کلی سرور",
+    overviewSubtitle: "وضعیت ساده و فعلی این سرور Linux.",
+    refreshOverview: "به‌روزرسانی نمای کلی",
+    loadingOverview: "در حال دریافت نمای کلی سرور...",
+    overallHealth: "سلامت کلی",
+    cpu: "CPU",
+    memory: "Memory",
+    disk: "Disk",
+    network: "Network",
+    servicesCard: "سرویس‌های مهم",
+    securitySignals: "نشانه‌های امنیتی",
+    recentProblems: "مشکلات اخیر",
+    serverOnline: "سرور آنلاین است",
+    noProblems: "مشکل تازه‌ای پیدا نشد",
+    normal: "عادی",
+    warning: "هشدار",
+    critical: "بحرانی",
+    healthy: "سالم",
+    partial: "داده ناقص"
   }
 };
 
@@ -154,6 +198,8 @@ export default function LinuxTelemetryPanel() {
   const [vendorFindings, setVendorFindings] = useState<VendorFinding[]>([]);
   const [storageStatus, setStorageStatus] = useState<LinuxTelemetryStorageStatus | null>(null);
   const [analysis, setAnalysis] = useState<LinuxTelemetryAnalysis | null>(null);
+  const [overview, setOverview] = useState<LinuxServerOverview | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "monitoring" | "results">("overview");
   const [createdActions, setCreatedActions] = useState<Record<string, string>>({});
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
@@ -177,12 +223,15 @@ export default function LinuxTelemetryPanel() {
     setEvents([]);
     setWarnings([]);
     setAnalysis(null);
-    Promise.allSettled([linuxTelemetryOptions(deviceId), latestLinuxSnapshot(deviceId), linuxStreamStatus(deviceId), listDeviceFindings(deviceId), linuxTelemetryStorageStatus(deviceId)]).then(([optionResult, snapshotResult, statusResult, findingResult, storageResult]) => {
+    setOverview(null);
+    Promise.allSettled([linuxTelemetryOptions(deviceId), latestLinuxSnapshot(deviceId), linuxStreamStatus(deviceId), listDeviceFindings(deviceId), linuxTelemetryStorageStatus(deviceId), linuxServerOverview(deviceId)]).then(([optionResult, snapshotResult, statusResult, findingResult, storageResult, overviewResult]) => {
       if (currentDeviceRef.current !== deviceId) return;
       if (optionResult.status === "fulfilled") setOptions(optionResult.value);
       if (snapshotResult.status === "fulfilled") setSnapshot(snapshotResult.value.snapshot);
       if (findingResult.status === "fulfilled") setVendorFindings(findingResult.value);
       if (storageResult.status === "fulfilled") setStorageStatus(storageResult.value);
+      if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
+      if (overviewResult.status === "rejected") setMessage(overviewResult.reason instanceof Error ? overviewResult.reason.message : "Server overview failed");
       if (statusResult.status === "fulfilled" && statusResult.value.status === "running" && statusResult.value.streamId) {
         setStreamId(statusResult.value.streamId);
         setSelectedSources(statusResult.value.sources);
@@ -240,6 +289,17 @@ export default function LinuxTelemetryPanel() {
     const result = await collectLinuxSnapshot(deviceId);
     setSnapshot(result.snapshot);
     setOptions(await linuxTelemetryOptions(deviceId));
+  };
+  const refreshOverview = async () => {
+    setWorking("overview");
+    setMessage("");
+    try {
+      setOverview(await linuxServerOverview(deviceId));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Server overview failed");
+    } finally {
+      setWorking("");
+    }
   };
   const startMonitoring = async () => {
     setWorking("monitor");
@@ -314,6 +374,13 @@ export default function LinuxTelemetryPanel() {
   if (!deviceId) return <section className="text-left"><h2 className="text-lg font-semibold text-zinc-100">{text.title}</h2><p className="mt-4 border-y border-zinc-800 py-8 text-center text-sm text-zinc-500">{text.noDevice}</p></section>;
   return <section className="text-left">
     <div className="mb-5 flex items-start gap-3"><Activity className="mt-0.5 h-5 w-5 text-cyan-300"/><div><h2 className="text-lg font-semibold text-zinc-100">{text.title}</h2><p className="max-w-3xl text-sm text-zinc-400">{text.subtitle}</p></div></div>
+    <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Device telemetry views">
+      <TabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")} label={text.overviewTab}/>
+      <TabButton active={activeTab === "monitoring"} onClick={() => setActiveTab("monitoring")} label={text.monitoringTab}/>
+      <TabButton active={activeTab === "results"} onClick={() => setActiveTab("results")} label={text.resultsTab}/>
+    </div>
+    {activeTab === "overview" && <ServerOverviewDashboard overview={overview} labels={text} loading={working === "overview" || (!overview && !message)} onRefresh={refreshOverview}/>}
+    <div className={activeTab === "overview" ? "hidden" : ""}>
     <div className="grid gap-4 lg:grid-cols-3">
       <StepCard title={text.connection} tone={connected ? "good" : "warn"} icon={connected ? CheckCircle2 : AlertTriangle}>
         <label className="block text-xs text-zinc-500">{text.device}<select value={deviceId} onChange={(event) => { setStreamId(""); setDeviceId(event.target.value); }} className="mt-1 h-10 w-full rounded border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100">{devices.map((device) => <option key={device.id} value={device.id}>{device.name} ({device.host})</option>)}</select></label>
@@ -346,7 +413,44 @@ export default function LinuxTelemetryPanel() {
         <div className="border-t border-zinc-800 pt-3"><h4 className="text-xs font-semibold uppercase text-zinc-500">{text.rawStream}</h4><div className="mt-2 max-h-80 overflow-auto border-y border-zinc-800 font-mono text-xs">{events.length ? events.slice(-80).map((event, index) => <div key={`${event.timestamp}-${index}`} className={`border-b border-zinc-900 px-2 py-2 ${event.suspicious ? "bg-red-950/10" : ""}`}><div className="flex flex-wrap gap-2"><span className="text-zinc-600">{new Date(event.timestamp).toLocaleTimeString()}</span><span className="text-cyan-300">{event.source}</span><span className={severityClass[event.severity]?.split(" ").at(-1)}>{event.severity}</span></div><p className="mt-1 text-zinc-300">{event.summary}</p><details className="mt-1"><summary className="cursor-pointer text-zinc-600">{text.technical}</summary><pre className="mt-1 whitespace-pre-wrap break-words text-zinc-500">{event.raw}</pre></details></div>) : <p className="px-3 py-8 text-center text-zinc-600">{text.noFindings}</p>}</div></div>
       </div>
     </details>
+    </div>
   </section>;
+}
+
+function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return <button type="button" role="tab" aria-selected={active} onClick={onClick} className={`h-9 rounded border px-3 text-sm ${active ? "border-cyan-700 bg-cyan-950/30 text-cyan-100" : "border-zinc-800 text-zinc-400"}`}>{label}</button>;
+}
+
+function ServerOverviewDashboard({ overview, labels, loading, onRefresh }: { overview: LinuxServerOverview | null; labels: typeof copy.en; loading: boolean; onRefresh: () => void }) {
+  if (!overview) {
+    return <section className="border-t border-zinc-800 py-10 text-center"><Server className="mx-auto h-8 w-8 text-cyan-300"/><p className="mt-3 text-sm text-zinc-400">{loading ? labels.loadingOverview : labels.overviewSubtitle}</p><button type="button" onClick={onRefresh} className="mt-4 h-9 rounded border border-cyan-900 px-3 text-sm text-cyan-100">{labels.refreshOverview}</button></section>;
+  }
+  const mainDisk = overview.disks.find((disk) => disk.mount === "/") ?? overview.disks[0];
+  const activeServices = overview.services.filter((service) => service.state === "active").length;
+  const problemCount = overview.recentProblems.length;
+  return <section>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4"><div><h3 className="text-base font-semibold text-zinc-100">{labels.overviewTitle}</h3><p className="text-sm text-zinc-400">{labels.serverOnline}: {overview.host.hostname} - {overview.host.os}</p></div><button type="button" onClick={onRefresh} className="h-9 rounded border border-cyan-900 px-3 text-sm text-cyan-100">{labels.refreshOverview}</button></div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <OverviewCard title={labels.overallHealth} icon={ShieldAlert} tone={overview.health.status === "critical" ? "bad" : overview.health.status === "warning" ? "warn" : "good"} value={overview.health.status === "healthy" ? labels.healthy : overview.health.status === "critical" ? labels.critical : labels.warning} detail={overview.health.summary} lines={overview.health.reasons}/>
+      <OverviewCard title={labels.cpu} icon={Cpu} tone={toneFor(overview.cpu.status)} value={overview.cpu.summary} detail={[overview.cpu.usagePercent !== null ? `${overview.cpu.usagePercent}% used` : null, overview.cpu.coreCount ? `${overview.cpu.coreCount} cores` : null, overview.cpu.loadAverage.length ? `load ${overview.cpu.loadAverage.join(", ")}` : null].filter(Boolean).join(" - ")}/>
+      <OverviewCard title={labels.memory} icon={MemoryStick} tone={toneFor(overview.memory.status)} value={overview.memory.summary} detail={overview.memory.usedPercent !== null ? `${overview.memory.usedPercent}% used${overview.memory.swapUsedPercent ? ` - swap ${overview.memory.swapUsedPercent}%` : ""}` : labels.partial}/>
+      <OverviewCard title={labels.disk} icon={HardDrive} tone={toneFor(mainDisk?.status ?? "unknown")} value={mainDisk?.status === "critical" ? "Disk is almost full" : mainDisk?.status === "warning" ? "Disk usage is high" : "Disk usage is normal"} detail={mainDisk ? `${mainDisk.mount}: ${mainDisk.usedPercent ?? "?"}% used - ${mainDisk.available} free` : labels.partial}/>
+      <OverviewCard title={labels.network} icon={Network} tone="neutral" value={overview.network.summary} detail={overview.network.interfaces.slice(0, 3).map((item) => `${item.name}: ${item.ips.join(", ") || "no IP"}`).join(" - ") || labels.partial}/>
+      <OverviewCard title={labels.servicesCard} icon={Server} tone={overview.services.some((service) => service.state === "failed") ? "bad" : overview.services.some((service) => service.state === "inactive") ? "warn" : "good"} value={`${activeServices} services running`} detail={overview.services.slice(0, 8).map((service) => `${service.name}: ${service.state}`).join(" - ") || labels.partial}/>
+      <OverviewCard title={labels.securitySignals} icon={AlertTriangle} tone={overview.securitySignals.status === "critical" ? "bad" : overview.securitySignals.status === "warning" ? "warn" : "good"} value={overview.securitySignals.summary} detail={overview.listeningPorts.some((port) => port.port === 22) ? "SSH is exposed" : ""} lines={overview.securitySignals.recentWarnings.slice(0, 2)}/>
+      <OverviewCard title={labels.recentProblems} icon={Activity} tone={problemCount ? "warn" : "good"} value={problemCount ? `${problemCount} ${labels.issues}` : labels.noProblems} detail={overview.recentProblems.slice(0, 3).join(" - ")}/>
+    </div>
+  </section>;
+}
+
+function toneFor(status: string): "good" | "warn" | "bad" | "neutral" {
+  return status === "critical" || status === "failed" ? "bad" : status === "warning" ? "warn" : status === "normal" || status === "healthy" ? "good" : "neutral";
+}
+
+function OverviewCard({ title, icon: Icon, tone, value, detail, lines = [] }: { title: string; icon: typeof Activity; tone: "good" | "warn" | "bad" | "neutral"; value: string; detail?: string; lines?: string[] }) {
+  const color = tone === "good" ? "border-green-900/70 text-green-100" : tone === "bad" ? "border-red-900/70 text-red-100" : tone === "warn" ? "border-yellow-900/70 text-yellow-100" : "border-zinc-800 text-zinc-100";
+  const textColor = tone === "good" ? "text-green-100" : tone === "bad" ? "text-red-100" : tone === "warn" ? "text-yellow-100" : "text-zinc-100";
+  return <article className={`min-h-40 border-t ${color} pt-4`}><div className="flex items-center gap-2"><Icon className="h-4 w-4 text-cyan-300"/><h4 className="text-sm font-semibold text-zinc-200">{title}</h4></div><p className={`mt-3 text-lg font-semibold ${textColor}`}>{value}</p>{detail && <p className="mt-2 text-sm leading-5 text-zinc-400">{detail}</p>}{lines.length > 0 && <ul className="mt-2 space-y-1 text-xs text-zinc-500">{lines.map((line) => <li key={line}>{line}</li>)}</ul>}</article>;
 }
 
 function humanExplanation(title: string, fallback: string) {
