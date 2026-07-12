@@ -148,10 +148,14 @@ export const linuxEdgePlanner: VendorPlanner = {
     if (input.actionType === ActionType.linux_check_service_status) {
       const service = str(input.parameters.serviceName) ?? str(input.parameters.service);
       if (!service) return needs(input, ["serviceName"], ["نام سرویس موردنظر چیست؟"]);
+      if (!/^[a-zA-Z0-9_.@:-]+$/.test(service)) return needs(input, ["serviceName"], ["Service name may contain only letters, numbers, dot, underscore, @, colon, or dash."]);
       const plan = base(input);
       plan.commands = [
+        `systemctl show ${service} --no-pager --property=Id,LoadState,ActiveState,SubState,UnitFileState,Description,MainPID,ExecMainStatus`,
         `systemctl is-active ${service}`,
-        `systemctl status ${service} --no-pager -l`
+        `systemctl is-enabled ${service}`,
+        `service ${service} status`,
+        `pgrep -a ${service}`
       ];
       plan.warnings.push("Read-only service status check. No service restart or config change is planned.");
       return plan;

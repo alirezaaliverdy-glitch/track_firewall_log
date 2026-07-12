@@ -1104,7 +1104,12 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const completedAt = new Date().toISOString();
     const startedAt = String(asObject(asObject(executing.parametersJson).metadata).executionStartedAt ?? completedAt);
     const exitCodes = result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
-    const executionSucceeded = result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0);
+    const serviceStatus = asObject(result.rollbackJson).serviceStatus;
+    const serviceStatusReadSucceeded = plan.actionType === ActionType.linux_check_service_status &&
+      result.executed &&
+      result.commands.length > 0 &&
+      ["active", "inactive", "failed", "not_found", "unknown"].includes(String(asObject(serviceStatus).state));
+    const executionSucceeded = serviceStatusReadSucceeded || (result.executed && result.commands.length > 0 && exitCodes.every((code) => code === 0));
     const dailyCheck = plan.actionType === ActionType.linux_daily_check || plan.actionType === ActionType.mikrotik_daily_check || plan.actionType === ActionType.fortigate_daily_check
       ? plan.actionType === ActionType.fortigate_daily_check
         ? buildFortiGateDailyCheck(device.id, result.commands)
@@ -1124,7 +1129,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
-      parsedResult: dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands, asObject(result.rollbackJson).verification),
+      parsedResult: serviceStatusReadSucceeded ? serviceStatus : dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands, asObject(result.rollbackJson).verification),
       resultUrl: `/actions/${id}/result`
     };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });

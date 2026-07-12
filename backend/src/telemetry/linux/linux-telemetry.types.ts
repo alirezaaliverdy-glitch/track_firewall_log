@@ -36,7 +36,7 @@ export type LinuxSecuritySnapshot = {
 export type LinuxLiveLogEvent = {
   streamId: string;
   deviceId: string;
-  source: "auth" | "system" | "kernel" | "firewall" | "nginx" | "docker" | "journal" | "unknown";
+  source: "auth" | "system" | "kernel" | "firewall" | "nginx" | "apache" | "fail2ban" | "docker" | "journal" | "unknown";
   timestamp: string;
   raw: string;
   parsed: Record<string, unknown>;

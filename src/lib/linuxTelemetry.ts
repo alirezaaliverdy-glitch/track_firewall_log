@@ -15,6 +15,7 @@ export type LinuxSnapshot = {
 export type LinuxLiveEvent = { streamId: string; deviceId: string; source: string; timestamp: string; raw: string; parsed: Record<string, unknown>; severity: TelemetrySeverity; tags: string[]; suspicious: boolean; summary: string };
 export type VendorFinding = { id: string; deviceId: string; vendor: string; title: string; severity: TelemetrySeverity; category: string; status: string; confidence: number; summary: string; evidence: string[]; source: string; firstSeen: string; lastSeen: string; count: number; mitreTags: string[]; recommendedActions: Array<{ intent: string; label: string }>; fingerprint: string };
 export type LinuxTelemetryOptions = { deviceId: string; connectionStatus: string; connection: { host: string; connectionPort: number }; connectionPort: number; detectedSshServicePort: number | null; privilegeLevel: string; sudoAvailable: boolean | "unknown"; lastSnapshotAt: string | null; availableLogSources: string[]; logSourcesAvailable: string[]; warnings: string[]; readOnly: boolean; suggestions: Array<{ title: string; severity: string }> };
+export type LinuxTelemetryStorageStatus = { deviceId: string; bytesUsed: number; maxBytesPerDevice: number; eventCount: number; maxEventCountPerDevice: number; maxAgeDays: number; oldestEventTime: string | null; newestEventTime: string | null };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include", headers: init?.body ? { "Content-Type": "application/json" } : undefined, ...init });
@@ -26,6 +27,7 @@ export const collectLinuxSnapshot = (deviceId: string) => request<{ snapshot: Li
 export const latestLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/snapshot/latest`);
 export const analyzeLinuxSnapshot = (deviceId: string) => request<{ snapshot: LinuxSnapshot }>(`/devices/${deviceId}/telemetry/linux/analyze`, { method: "POST" });
 export const linuxTelemetryOptions = (deviceId: string) => request<LinuxTelemetryOptions>(`/devices/${deviceId}/telemetry/linux/options`);
+export const linuxTelemetryStorageStatus = (deviceId: string) => request<LinuxTelemetryStorageStatus>(`/devices/${deviceId}/telemetry/linux/storage/status`);
 export const startLinuxStream = (deviceId: string, sources: string[]) => request<{ streamId: string; status: string; warnings: string[] }>(`/devices/${deviceId}/telemetry/linux/stream/start`, { method: "POST", body: JSON.stringify({ sources }) });
 export const stopLinuxStream = (deviceId: string, streamId: string) => request(`/devices/${deviceId}/telemetry/linux/stream/stop`, { method: "POST", body: JSON.stringify({ streamId }) });
 export const linuxStreamStatus = (deviceId: string) => request<{ streamId: string | null; status: string; sources: string[]; warnings: string[] }>(`/devices/${deviceId}/telemetry/linux/stream/status`);

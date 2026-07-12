@@ -3,6 +3,7 @@ import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
 import { env } from "../config/env.js";
+import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import type {
   ConnectorAudit,
@@ -52,6 +53,8 @@ export const LINUX_STREAM_COMMANDS = Object.freeze({
   kernel: "journalctl -f -n 0 -k -o short-iso --since now --no-pager 2>/dev/null",
   firewall: "tail -n 0 -F /var/log/ufw.log 2>/dev/null || journalctl -f -n 0 -k -o short-iso --since now --no-pager 2>/dev/null",
   nginx: "tail -n 0 -F /var/log/nginx/access.log /var/log/nginx/error.log 2>/dev/null",
+  apache: "tail -n 0 -F /var/log/apache2/access.log /var/log/apache2/error.log /var/log/httpd/access_log /var/log/httpd/error_log 2>/dev/null",
+  fail2ban: "tail -n 0 -F /var/log/fail2ban.log 2>/dev/null || journalctl -f -n 0 -u fail2ban -o short-iso --since now --no-pager 2>/dev/null",
   docker: "journalctl -f -n 0 -u docker -o short-iso --since now --no-pager 2>/dev/null"
 } as const);
 
@@ -171,11 +174,11 @@ function ipParam(value: unknown) {
 }
 
 function serviceParam(value: unknown) {
-  const service = text(value) ?? "nginx";
-  if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) {
-    throw new ConnectorError("INVALID_SERVICE", "Service name must contain only letters, numbers, dot, underscore, dash, or @.");
+  try {
+    return validateLinuxServiceName(text(value) ?? "nginx");
+  } catch {
+    throw new ConnectorError("INVALID_SERVICE", "Service name must contain only letters, numbers, dot, underscore, @, colon, or dash.");
   }
-  return service;
 }
 
 function usernameParam(value: unknown) {
@@ -654,7 +657,13 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   } else if (plan.actionType === ActionType.linux_check_service_status) {
     const service = serviceParam(parameters.serviceName ?? parameters.service);
     affectedServices.push(service);
-    plannedCommands = [`systemctl status ${service} --no-pager || service ${service} status`];
+    plannedCommands = [
+      `systemctl show ${service} --no-pager --property=Id,LoadState,ActiveState,SubState,UnitFileState,Description,MainPID,ExecMainStatus`,
+      `systemctl is-active ${service}`,
+      `systemctl is-enabled ${service}`,
+      `service ${service} status`,
+      `pgrep -a ${service}`
+    ];
     validationWarnings.push("Read-only service status check. No service restart or config change is planned.");
   } else if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
     const username = usernameParam(parameters.username);
@@ -789,10 +798,13 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.steps = [`${sudo}ufw deny from ${srcIp}`];
     } else if (plan.actionType === ActionType.linux_check_service_status) {
       const service = serviceParam(parameters.serviceName ?? parameters.service);
-      const status = await exec(client, `systemctl status ${service} --no-pager || service ${service} status`);
+      const status = await exec(client, buildLinuxServiceStatusCommand(service));
+      const parsed = parseLinuxServiceStatus(service, status.stdout, status.stderr);
       commands.push({ template: `service status ${service}`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
       rollbackJson.readOnly = true;
-      warnings.push(status.exitCode === 0 ? "SERVICE_AVAILABLE" : "SERVICE_NOT_AVAILABLE");
+      rollbackJson.serviceStatus = parsed;
+      warnings.push(`SERVICE_STATE_${parsed.state.toUpperCase()}`);
+      if (parsed.state === "failed" || parsed.state === "unknown") warnings.push("SERVICE_STATUS_WARNING");
     } else if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
       const username = usernameParam(parameters.username);
       if (plan.actionType === ActionType.linux_remove_user_from_sudo) { await pushCommand("remove user from sudo", `${sudo}gpasswd -d ${username} sudo || ${sudo}deluser ${username} sudo`); rollbackJson.steps = [`${sudo}usermod -aG sudo ${username}`]; }

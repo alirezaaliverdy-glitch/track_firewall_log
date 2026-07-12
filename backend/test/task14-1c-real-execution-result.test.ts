@@ -20,7 +20,7 @@ test("Linux prepared commands use real controlled SSH templates", () => {
   assert.match(connector, /journalctl -u ssh -u sshd --since '24 hours ago'.*auth\.log/);
   assert.match(connector, /getent group sudo; getent group wheel; awk -F:/);
   assert.match(connector, /ufw status verbose \|\| .*nft list ruleset \|\| .*iptables -S/);
-  assert.match(connector, /systemctl status \$\{service\} --no-pager \|\| service \$\{service\} status/);
+  assert.match(connector, /buildLinuxServiceStatusCommand\(service\)/);
 });
 
 test("dry_run_ready remains a preview and never counts as execution", () => {
@@ -44,7 +44,7 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
 
 test("backend stores actual connector result before succeeded", () => {
   const service = read("../src/services/action-plan.service.ts");
-  assert.match(service, /executionSucceeded = result\.executed && result\.commands\.length > 0/);
+  assert.match(service, /serviceStatusReadSucceeded \|\| \(result\.executed && result\.commands\.length > 0/);
   assert.match(service, /status: executionSucceeded \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/);
   assert.match(service, /stdout: result\.commands\.map/);
   assert.match(service, /executor: connector\.name/);

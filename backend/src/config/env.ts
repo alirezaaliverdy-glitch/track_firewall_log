@@ -27,6 +27,9 @@ const DEFAULT_EVENT_RETENTION_RUN_INTERVAL_MINUTES = 60;
 const DEFAULT_SSH_CONNECT_TIMEOUT_MS = 15000;
 const DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS = 15000;
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 10000;
+const DEFAULT_TELEMETRY_MAX_BYTES_PER_DEVICE = 10 * 1024 * 1024;
+const DEFAULT_TELEMETRY_MAX_EVENTS_PER_DEVICE = 5000;
+const DEFAULT_TELEMETRY_MAX_AGE_DAYS = 30;
 const DEFAULT_OPENAI_MODEL = "openrouter/free";
 const DEFAULT_OPENAI_FALLBACK_MODELS = [
   "nvidia/nemotron-3-super:free",
@@ -156,6 +159,10 @@ export const env = {
   sshConnectTimeoutMs: parsePositiveInteger(process.env.SSH_CONNECT_TIMEOUT_MS, DEFAULT_SSH_CONNECT_TIMEOUT_MS),
   sshHandshakeTimeoutMs: parsePositiveInteger(process.env.SSH_HANDSHAKE_TIMEOUT_MS, DEFAULT_SSH_HANDSHAKE_TIMEOUT_MS),
   sshCommandTimeoutMs: parsePositiveInteger(process.env.SSH_COMMAND_TIMEOUT_MS, DEFAULT_SSH_COMMAND_TIMEOUT_MS),
+  telemetryStoreDir: process.env.TELEMETRY_STORE_DIR ?? "./storage/telemetry",
+  telemetryMaxBytesPerDevice: parsePositiveInteger(process.env.TELEMETRY_MAX_BYTES_PER_DEVICE, DEFAULT_TELEMETRY_MAX_BYTES_PER_DEVICE),
+  telemetryMaxEventsPerDevice: parsePositiveInteger(process.env.TELEMETRY_MAX_EVENTS_PER_DEVICE, DEFAULT_TELEMETRY_MAX_EVENTS_PER_DEVICE),
+  telemetryMaxAgeDays: parsePositiveInteger(process.env.TELEMETRY_MAX_AGE_DAYS, DEFAULT_TELEMETRY_MAX_AGE_DAYS),
   actionExecutionMode: parseActionExecutionMode(process.env.ACTION_EXECUTION_MODE, appProfile),
   actionRequireManagementSource: parseBoolean(firstEnv(process.env.ACTION_REQUIRE_MANAGEMENT_SOURCE, process.env.ACTION_REQUIRE_MANAGED_SOURCE), false),
   actionDefaultTrustedSource: process.env.ACTION_DEFAULT_TRUSTED_SOURCE?.trim() || "auto",

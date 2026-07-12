@@ -6,10 +6,11 @@ import { isLinuxSshCapable, openLinuxTelemetryStream, resolveLinuxConnectionPort
 import { redactLinuxTelemetry } from "./linux-telemetry.service.js";
 import type { LinuxLiveLogEvent, LinuxTelemetrySeverity } from "./linux-telemetry.types.js";
 import { processVendorTelemetry, type NormalizedFinding } from "../vendor-finding-engine.js";
+import { boundedTelemetryStore, type StoredTelemetryEvent } from "../bounded-telemetry-store.js";
 
 const MAX_BUFFER = 500;
 const MAX_RUNTIME_MS = 30 * 60 * 1000;
-const allowedSources = new Set<LinuxStreamSource>(["auth", "system", "kernel", "firewall", "nginx", "docker"]);
+const allowedSources = new Set<LinuxStreamSource>(["auth", "system", "kernel", "firewall", "nginx", "apache", "fail2ban", "docker"]);
 type StreamHandle = { close: () => void };
 type Session = { id: string; deviceId: string; sources: LinuxStreamSource[]; startedAt: Date; status: "starting" | "running" | "stopped"; warnings: string[]; events: LinuxLiveLogEvent[]; emitter: EventEmitter; handles: StreamHandle[]; timer: NodeJS.Timeout; counters: Map<string, number[]> };
 const sessions = new Map<string, Session>();
@@ -18,7 +19,15 @@ function ip(line: string) { return line.match(/\b(?:from|SRC=)\s*=?\s*((?:\d{1,3
 function username(line: string) { return line.match(/(?:for|user)\s+(?:invalid user\s+)?([^\s]+)/i)?.[1]; }
 function port(line: string) { const value = Number(line.match(/(?:port|DPT=)\s*=?\s*(\d{1,5})/i)?.[1]); return value > 0 && value <= 65535 ? value : undefined; }
 function severityFor(line: string): LinuxTelemetrySeverity {
-  return /accepted password.*root|out of memory|oom killer|segfault/i.test(line) ? "high" : /failed password|invalid user|authentication failure|ufw block|\b403\b|\b500\b/i.test(line) ? "medium" : "info";
+  return /accepted password.*root|out of memory|oom killer|segfault|service.*failed|failed with result/i.test(line) ? "high" : /failed password|invalid user|authentication failure|sudo|ufw block|\b403\b|\b500\b|fail2ban.*ban|error/i.test(line) ? "medium" : "info";
+}
+
+function categoryFor(tags: string[]) {
+  if (tags.some((tag) => /auth|sudo|invalid_user|root_login/.test(tag))) return "authentication";
+  if (tags.some((tag) => /web/.test(tag))) return "web";
+  if (tags.some((tag) => /firewall|fail2ban/.test(tag))) return "firewall";
+  if (tags.some((tag) => /service|system|docker/.test(tag))) return "system";
+  return "telemetry";
 }
 
 export function parseLinuxLiveLogLine(source: LinuxStreamSource, line: string, context?: { repeated?: number }): Omit<LinuxLiveLogEvent, "streamId" | "deviceId"> {
@@ -28,19 +37,40 @@ export function parseLinuxLiveLogLine(source: LinuxStreamSource, line: string, c
   let summary = `${source} log event`;
   const tags: string[] = [source];
   let suspicious = false;
-  if (/failed password|authentication failure/.test(lower)) { summary = "Failed SSH authentication"; tags.push("auth_failure"); suspicious = true; }
+  if (/sudo.*authentication failure|sudo:|incorrect password/.test(lower)) { summary = "Sudo authentication failure"; tags.push("sudo_failure"); suspicious = true; }
+  else if (/failed password|authentication failure/.test(lower)) { summary = "Failed SSH authentication"; tags.push("auth_failure"); suspicious = true; }
   else if (/invalid user/.test(lower)) { summary = "Invalid SSH user attempt"; tags.push("invalid_user"); suspicious = true; }
   else if (/accepted password|accepted publickey/.test(lower)) { summary = "Successful SSH login"; tags.push("auth_success"); }
-  else if (/sudo.*authentication failure|incorrect password/.test(lower)) { summary = "Sudo authentication failure"; tags.push("sudo_failure"); suspicious = true; }
   else if (/ufw block|iptables.*drop|nft.*drop/.test(lower)) { summary = "Firewall blocked traffic"; tags.push("firewall_block"); suspicious = true; }
   else if (source === "nginx" && /\s(?:401|403|404)\s/.test(raw)) { summary = "Nginx denied/not-found response"; tags.push("web_denied"); suspicious = (context?.repeated ?? 0) >= 10; }
   else if (source === "nginx" && /\s5\d\d\s/.test(raw)) { summary = "Nginx server error"; tags.push("web_error"); suspicious = (context?.repeated ?? 0) >= 5; }
+  else if (source === "apache" && /\s(?:401|403|404)\s/.test(raw)) { summary = "Apache denied/not-found response"; tags.push("web_denied"); suspicious = (context?.repeated ?? 0) >= 10; }
+  else if (source === "apache" && /\s5\d\d\s|AH\d+.*error|crit|emerg/i.test(raw)) { summary = "Apache server error"; tags.push("web_error"); suspicious = true; }
+  else if (source === "fail2ban" && /\bBan\b|\bFound\b|\bUnban\b/i.test(raw)) { summary = "fail2ban security event"; tags.push("fail2ban_event"); suspicious = /\bBan\b|\bFound\b/i.test(raw); }
+  else if (/systemd.*failed|failed with result|main process exited|service hold-off|start request repeated too quickly/i.test(raw)) { summary = "Service failure or restart loop"; tags.push("service_failure"); suspicious = true; }
   else if (/oom|out of memory|segfault/.test(lower)) { summary = "Kernel/process stability warning"; tags.push("system_warning"); suspicious = true; }
   else if (source === "docker" && /error|failed|fatal/.test(lower)) { summary = "Docker daemon error"; tags.push("docker_error"); suspicious = true; }
   if ((context?.repeated ?? 0) >= 10) { suspicious = true; tags.push("repeated"); summary = `${summary} (${context?.repeated} recent)`; }
   const affectedUser = username(raw); const affectedPort = port(raw);
   if (/for root|invalid user root|accepted password for root/i.test(lower)) { tags.push("root_login"); suspicious = true; }
   return { source, timestamp: new Date().toISOString(), raw, parsed: { ...(sourceIp ? { sourceIp } : {}), ...(affectedUser ? { username: affectedUser } : {}), ...(affectedPort ? { port: affectedPort } : {}), repeated: context?.repeated ?? 0 }, severity: suspicious && (context?.repeated ?? 0) >= 20 ? "high" : severityFor(raw), tags, suspicious, summary };
+}
+
+function toStoredEvent(event: LinuxLiveLogEvent, findingId?: string): StoredTelemetryEvent {
+  return {
+    id: crypto.createHash("sha256").update(`${event.deviceId}|${event.timestamp}|${event.source}|${event.raw}`).digest("hex").slice(0, 24),
+    deviceId: event.deviceId,
+    vendor: "linux",
+    type: "linux",
+    source: event.source,
+    timestamp: event.timestamp,
+    severity: event.severity,
+    category: categoryFor(event.tags),
+    rawMessage: event.raw,
+    normalizedMessage: event.summary,
+    parsedFields: event.parsed,
+    ...(findingId ? { findingId } : {})
+  };
 }
 
 function recentCount(session: Session, key: string) {
@@ -84,6 +114,11 @@ export async function startLinuxLogStream(deviceId: string, requestedSources: st
         session.events.push(event);
         if (session.events.length > MAX_BUFFER) session.events.shift();
         session.emitter.emit("event", event);
+        void boundedTelemetryStore.append(toStoredEvent(event)).catch((error) => {
+          const safe = redactLinuxTelemetry(error instanceof Error ? error.message : "telemetry store write failed").slice(0, 300);
+          session.warnings.push(safe);
+          session.emitter.emit("warning", { streamId: id, deviceId, source, warning: safe, timestamp: new Date().toISOString() });
+        });
         void storeSignal(event);
         void processVendorTelemetry({ device, events: [{ id: crypto.randomUUID(), timestamp: event.timestamp, source: event.source, raw: event.raw, summary: event.summary, srcIp: typeof event.parsed.sourceIp === "string" ? event.parsed.sourceIp : undefined, dstPort: typeof event.parsed.port === "number" ? event.parsed.port : undefined }] }).then(result => result.findings.forEach(finding => session.emitter.emit("finding", finding))).catch(() => undefined);
       }, (warning) => { if (warning) { const safe = redactLinuxTelemetry(warning).slice(0, 300); session.warnings.push(safe); session.emitter.emit("warning", { streamId: id, deviceId, source, warning: safe, timestamp: new Date().toISOString() }); } });
@@ -103,6 +138,7 @@ export async function startLinuxLogStream(deviceId: string, requestedSources: st
 
 function streamStatus(session: Session) { return { streamId: session.id, deviceId: session.deviceId, sources: session.sources, startedAt: session.startedAt, status: session.status, warnings: session.warnings.slice(-20), bufferedEvents: session.events.length, maxRuntimeMinutes: MAX_RUNTIME_MS / 60000 }; }
 export function getLinuxTelemetryStatus(deviceId: string) { const session = Array.from(sessions.values()).find((item) => item.deviceId === deviceId && item.status !== "stopped"); return session ? streamStatus(session) : { deviceId, status: "stopped", streamId: null, sources: [], warnings: [], bufferedEvents: 0 }; }
+export function getLinuxTelemetryStorageStatus(deviceId: string) { return boundedTelemetryStore.status(deviceId); }
 export function getLinuxLogStream(streamId: string) { return sessions.get(streamId) ?? null; }
 export function subscribeLinuxLogStream(streamId: string, listener: (event: LinuxLiveLogEvent) => void) { const session = sessions.get(streamId); if (!session) return null; session.emitter.on("event", listener); return () => session.emitter.off("event", listener); }
 export function subscribeLinuxLogWarnings(streamId: string, listener: (warning: Record<string, unknown>) => void) { const session = sessions.get(streamId); if (!session) return null; session.emitter.on("warning", listener); return () => session.emitter.off("warning", listener); }

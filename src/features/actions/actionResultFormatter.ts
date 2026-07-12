@@ -150,13 +150,23 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
 
   if (action.actionType === "linux_check_service_status") {
     const serviceName = String(params.serviceName ?? params.service ?? "-");
+    const result = normalizeObject(action.resultJson);
+    const parsedService = normalizeObject(result.parsedResult);
+    const command = normalizeArray<Record<string, unknown>>(result.commands)[0] ?? {};
+    const normalizedState = String(parsedService.state ?? "unknown");
+    const confidence = Number(parsedService.confidence ?? 0);
     return {
-      summaryFa: `وضعیت سرویس ${serviceName} جمع‌آوری شد.`,
+      summaryFa: `وضعیت سرویس ${serviceName}: ${normalizedState}.`,
       nextActionsFa: ["اگر سرویس inactive یا failed است، لاگ و وابستگی‌های همان سرویس را بررسی کنید."],
       structuredSections: mapRows("وضعیت سرویس", [
         { label: "سرویس", value: serviceName },
+        { label: "وضعیت نرمال‌شده", value: normalizedState },
         { label: "وضعیت اجرا", value: executionStateFa(action) },
-        { label: "خلاصه", value: rawOutput.split(/\r?\n/).slice(0, 8).join("\n") || "بدون خروجی" },
+        { label: "Exit code", value: String(command.exitCode ?? result.exitCode ?? "-") },
+        { label: "Parser confidence", value: `${Math.round(confidence * 100)}%` },
+        { label: "Explanation", value: String(parsedService.explanation ?? "No parser explanation was recorded.") },
+        { label: "Systemd fields", value: Object.entries(normalizeObject(parsedService.fields)).map(([key, value]) => `${key}=${String(value)}`).join("\n") || "No systemd fields available" },
+        { label: "Raw evidence", value: String(parsedService.rawEvidence ?? rawOutput).split(/\r?\n/).slice(0, 12).join("\n") || "بدون خروجی" },
       ]),
       rawOutput,
     };

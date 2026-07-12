@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { analyzeLinuxTelemetry, collectLinuxSecuritySnapshot, getLatestLinuxSecuritySnapshot, getLinuxTelemetryOptions, LinuxTelemetryError } from "../telemetry/linux/linux-telemetry.service.js";
-import { getLinuxLogStream, getLinuxTelemetryStatus, startLinuxLogStream, stopLinuxLogStream, subscribeLinuxFindings, subscribeLinuxLogStream, subscribeLinuxLogWarnings } from "../telemetry/linux/linux-log-stream.service.js";
+import { getLinuxLogStream, getLinuxTelemetryStatus, getLinuxTelemetryStorageStatus, startLinuxLogStream, stopLinuxLogStream, subscribeLinuxFindings, subscribeLinuxLogStream, subscribeLinuxLogWarnings } from "../telemetry/linux/linux-log-stream.service.js";
 
 export const linuxTelemetryRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { deviceId: string } }>("/api/devices/:deviceId/telemetry/linux/snapshot", async (request, reply) => {
@@ -12,6 +12,7 @@ export const linuxTelemetryRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { deviceId: string } }>("/api/devices/:deviceId/telemetry/linux/options", async (request, reply) => { try { return await getLinuxTelemetryOptions(request.params.deviceId); } catch (error) { const status = error instanceof LinuxTelemetryError ? error.statusCode : 400; return reply.code(status).send({ error: error instanceof Error ? error.message : "Options failed", code: error instanceof LinuxTelemetryError ? error.code : "LINUX_TELEMETRY_FAILED" }); } });
   app.post<{ Params: { deviceId: string }; Body: { sources?: string[] } }>("/api/devices/:deviceId/telemetry/linux/stream/start", async (request, reply) => { try { return await startLinuxLogStream(request.params.deviceId, request.body?.sources ?? ["auth"]); } catch (error) { const message = error instanceof Error ? error.message : "Unknown error"; return reply.code(/does not exist|not Linux\/SSH capable/.test(message) ? 404 : 400).send({ error: "Stream start failed", detail: message }); } });
   app.get<{ Params: { deviceId: string } }>("/api/devices/:deviceId/telemetry/linux/stream/status", async (request) => getLinuxTelemetryStatus(request.params.deviceId));
+  app.get<{ Params: { deviceId: string } }>("/api/devices/:deviceId/telemetry/linux/storage/status", async (request) => getLinuxTelemetryStorageStatus(request.params.deviceId));
   app.post<{ Params: { deviceId: string }; Body: { streamId?: string } }>("/api/devices/:deviceId/telemetry/linux/stream/stop", async (request, reply) => { const streamId = request.body?.streamId; const session = streamId ? getLinuxLogStream(streamId) : null; if (!session || session.deviceId !== request.params.deviceId) return reply.code(404).send({ error: "Stream not found" }); return stopLinuxLogStream(streamId!); });
   app.get<{ Params: { deviceId: string }; Querystring: { streamId?: string } }>("/api/devices/:deviceId/telemetry/linux/stream/events", async (request, reply) => {
     const streamId = request.query.streamId; const session = streamId ? getLinuxLogStream(streamId) : null;

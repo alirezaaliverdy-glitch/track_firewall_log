@@ -2,6 +2,17 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.8 - Production-Grade Linux Device Monitoring and Service Status Reliability (2026-07-12)
+
+- Summary: added bounded Linux telemetry storage, expanded live stream parsing/sources, fixed service-status read semantics, and evaluated the external SSH automation repo without adopting it as a dependency.
+- Backend: added `BoundedTelemetryStore` with configurable per-device byte/count/age retention, `TELEMETRY_*` env settings, storage status API, structured live event persistence, apache/fail2ban stream sources, and parser coverage for auth/sudo/service/web/fail2ban/kernel/docker signals.
+- Linux service status: added strict service-name validation, structured systemd `show`/`is-active`/`is-enabled`, SysV fallback, weak `pgrep` fallback, normalized states, parser confidence/explanation/evidence, and ActionPlan success semantics that treat inactive/failed/not_found/unknown as successful read results when SSH ran successfully.
+- Frontend: Device Telemetry now shows stream state, event count, active sources, last event time, storage usage/count limits, expanded source filters, grouped findings/evidence, and service-status result details.
+- External repo: `SSH-Automation-For-Multiple-Servers` is MIT Python/Paramiko. Useful ideas are bounded fan-out, retry/backoff, timeouts, and structured per-host results. Rejected as dependency/code source due to hardcoded sample passwords, insecure `AutoAddPolicy`, sudo password shell piping, unbounded local logging, and mismatch with Node/Fastify connector-controlled ActionPlan architecture.
+- Tests: added `task17-8-linux-monitoring.test.ts` for bounded store rotation, stream parser coverage, finding dedupe/severity, service parser states, service-name safety, no placeholder command leakage, and connector/read-success semantics. Updated older static Linux connector expectations.
+- Migrations: none.
+- Validation: focused Task 17.8 tests (6/6); `npm run validate:command-catalog` (136 items); backend `npm run build`; backend `npm test` (164/164); root `npm run test:i18n` (73 keys); root `pnpm build` passed with the existing Vite large-chunk warning.
+
 ## Task 17.7 - FortiGate Full Action Library Execution Coverage and Real CLI Verification (2026-07-11)
 
 - Summary: hardened FortiGate guided IPsec execution so real connector success must be followed by semantic FortiGate verification before the ActionPlan can succeed.
