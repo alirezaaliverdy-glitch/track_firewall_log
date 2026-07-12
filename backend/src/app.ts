@@ -28,6 +28,8 @@ import { actionSessionRoutes } from "./routes/action-sessions.js";
 import { dailyCheckRoutes } from "./routes/daily-check.js";
 import { assetRoutes } from "./routes/assets.js";
 import { securityPlatformRoutes } from "./routes/security-platform.js";
+import { vendorRoutes } from "./routes/vendors.js";
+import { linuxHealthRoutes } from "./routes/linux-health.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
@@ -92,7 +94,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
     if (!authRequired || !path.startsWith("/api/") || publicPaths.has(path)) return;
     const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
     if (!user) {
-      return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
+      return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "Ø¨Ø±Ø§ÛŒ Ø¯Ø³ØªØ±Ø³ÛŒ Ø¨Ø§ÛŒØ¯ ÙˆØ§Ø±Ø¯ Ø­Ø³Ø§Ø¨ Ú©Ø§Ø±Ø¨Ø±ÛŒ Ø´ÙˆÛŒØ¯." });
     }
     request.authUser = user;
   });
@@ -115,6 +117,8 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(dailyCheckRoutes);
   await app.register(assetRoutes);
   await app.register(securityPlatformRoutes);
+  await app.register(vendorRoutes);
+  await app.register(linuxHealthRoutes);
   await app.register(eventRoutes);
   await app.register(detectionRoutes);
   await app.register(incidentRoutes);

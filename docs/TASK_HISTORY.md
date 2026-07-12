@@ -2,6 +2,17 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 18.2A - Cisco IOS-XE Read-only Foundation and Linux Observability (2026-07-12)
+
+- Summary: implemented Milestone 18.2A only: vendor/platform/capability framework, Cisco IOS-XE read-only foundation, parser fixtures, capability APIs/UI, Linux health metrics schema/APIs/UI, migration, tests, docs, and MCP browser evidence.
+- Backend: added vendor registries, Cisco platform detection, Cisco IOS-XE parser/template/connector foundation, capability discovery/cache APIs, Linux health parser/scorer/collector/service/routes, and migration `20260712192000_task18_2a_vendor_linux_observability`.
+- Frontend: added Cisco vendor capability pages and Linux health pages under the Milestone 18.1 app shell without replacing existing execution routes.
+- Safety: Cisco mutations are planned/non-executable only; no arbitrary AI CLI, no `.env` access, no secret exposure, and no success semantics without connector invocation.
+- Docs/browser: added Task 18.2 discovery, baseline, final browser results, Cisco source/architecture/capability/lab docs, vendor framework docs, Linux observability docs, and desktop/mobile MCP screenshots under `docs/evidence/task-18-2/`.
+- Validation: `npx prisma validate`; `npx prisma generate`; backend `npm run build`; backend `npm test` passed 186/186; backend `npm run validate:command-catalog` passed 136 items; root `npm run test:i18n` passed 73 keys; root `npx pnpm@10 build` passed with the existing Vite large-chunk warning.
+- Playwright MCP: authenticated desktop/mobile verification passed for dashboard, assets, devices, monitoring, Linux monitoring, actions, assistant, integrations, and Cisco vendor routes; no console/network errors or horizontal overflow remained.
+- Commit: pending.
+
 ## Task 18.0 - Security Platform Minimum Tangible Milestone (2026-07-12)
 
 - Summary: implemented the first usable asset/security platform slice instead of attempting the full master roadmap at once.

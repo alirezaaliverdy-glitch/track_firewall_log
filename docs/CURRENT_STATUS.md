@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-12
 
+## Task 18.2A - Cisco IOS-XE Read-only Foundation and Linux Observability
+
+- Milestone 18.2A is implemented as a narrow foundation: vendor/platform/capability framework, conservative Cisco platform-family detection, IOS-XE read-only capability metadata, parser fixtures, Cisco capability APIs/UI, Linux health metric schema, and Linux monitoring APIs/UI.
+- Cisco status: IOS-XE read-only only. Implemented reads cover version/platform, inventory, CPU/memory, interface status/counters, IP interface brief, VLANs, trunks, EtherChannel, STP, routing table, and ACL inspection. Cisco writes remain planned/non-executable.
+- Linux observability status: new metric/health tables and read APIs are available; refresh persists connector-backed metric samples and health snapshots after migration. Read endpoints degrade to unknown/empty data if the migration is pending instead of breaking the UI.
+- New routes: `/assets/vendors`, `/assets/vendors/cisco`, `/assets/vendors/cisco/devices`, `/monitoring/linux`, and `/monitoring/linux/:deviceId`.
+- New APIs: `/api/vendors*`, `/api/devices/:id/capabilities`, `/api/devices/:deviceId/capabilities/refresh`, and `/api/monitoring/linux*`.
+- Playwright MCP final verification passed on authenticated desktop/mobile routes with RTL intact, no overflow, no console errors, and no failed/high-status network requests.
+- Validation passed: Prisma validate/generate, backend build, backend full tests 186/186, command catalog validation 136 items, i18n parity 73 keys, and root `npx pnpm@10 build` with the existing chunk warning.
+
 ## Task 17.8 - Linux Monitoring and Service Status Reliability
 
 - Task 18.0 adds the first compact Security Platform milestone. The app now has `/assets` and `/security` views backed by asset inventory models, idempotent import/sync, seeded security detection, asset-linked findings, and finding-to-reviewed-ActionPlan handoff.

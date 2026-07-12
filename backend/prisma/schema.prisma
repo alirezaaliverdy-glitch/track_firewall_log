@@ -116,6 +116,7 @@ model Device {
   updatedAt                DateTime                  @updatedAt
   authProfiles             DeviceAuthProfile[]
   deviceCapabilities       DeviceCapability[]
+  deviceCapabilityCaches   DeviceCapabilityCache[]
   statusChecks             DeviceStatusCheck[]
   auditLogs                AuditLog[]
   eventSources             EventSource[]
@@ -125,6 +126,11 @@ model Device {
   incidents                Incident[]
   aiActionIntents          AiActionIntent[]
   actionPlans              ActionPlan[]
+  metricSamples     MetricSample[]
+  metricAggregates  MetricAggregate[]
+  healthSnapshots   HealthSnapshot[]
+  monitorIncidents  MonitorIncident[]
+  collectionRuns    CollectionRun[]
   actionAuditLogs          ActionAuditLog[]
   hardeningRecommendations HardeningRecommendation[]
   deviceSnapshots          DeviceSnapshot[]
@@ -234,6 +240,11 @@ model Asset {
   securityEvents    SecurityEvent[]
   findings          Finding[]
   actionPlans       ActionPlan[]
+  metricSamples     MetricSample[]
+  metricAggregates  MetricAggregate[]
+  healthSnapshots   HealthSnapshot[]
+  monitorIncidents  MonitorIncident[]
+  collectionRuns    CollectionRun[]
 
   @@unique([managementIp])
   @@unique([serial])
@@ -811,6 +822,157 @@ model DeviceCapability {
   @@index([deviceId])
 }
 
+model DeviceCapabilityCache {
+  id               String   @id @default(cuid())
+  deviceId         String
+  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  vendorKey        String
+  platformKey      String
+  connectorType    String
+  detectionJson    Json     @default("{}")
+  capabilitiesJson Json     @default("[]")
+  factsJson        Json     @default("{}")
+  warningsJson     Json     @default("[]")
+  refreshedAt      DateTime @default(now())
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([deviceId])
+  @@index([vendorKey])
+  @@index([platformKey])
+  @@index([expiresAt])
+}
+
+model CollectionRun {
+  id              String           @id @default(cuid())
+  assetId         String?
+  asset           Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  provider        String
+  status          String
+  startedAt       DateTime         @default(now())
+  completedAt     DateTime?
+  durationMs      Int?
+  metricsJson     Json             @default("[]")
+  warningsJson    Json             @default("[]")
+  errorCode       String?
+  errorMessage    String?
+  metricSamples   MetricSample[]
+  healthSnapshots HealthSnapshot[]
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([provider])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model MetricSample {
+  id              String         @id @default(cuid())
+  assetId         String?
+  asset           Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  metricKey       String
+  value           Float
+  unit            String?
+  timestamp       DateTime       @default(now())
+  source          String
+  labelsJson      Json           @default("{}")
+  collectionRunId String?
+  collectionRun   CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([metricKey])
+  @@index([timestamp])
+  @@index([collectionRunId])
+}
+
+model MetricAggregate {
+  id          String   @id @default(cuid())
+  assetId     String?
+  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId    String?
+  device      Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  metricKey   String
+  bucketStart DateTime
+  bucketSize  String
+  avg         Float?
+  min         Float?
+  max         Float?
+  count       Int
+  unit        String?
+  labelsJson  Json     @default("{}")
+
+  @@unique([deviceId, metricKey, bucketStart, bucketSize])
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([metricKey])
+  @@index([bucketStart])
+}
+
+model HealthSnapshot {
+  id              String         @id @default(cuid())
+  assetId         String?
+  asset           Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  score           Int
+  state           String
+  summary         String
+  metricsJson     Json           @default("{}")
+  warningsJson    Json           @default("[]")
+  collectedAt     DateTime       @default(now())
+  staleAt         DateTime?
+  collectionRunId String?
+  collectionRun   CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([state])
+  @@index([collectedAt])
+  @@index([collectionRunId])
+}
+
+model HealthRule {
+  id             String   @id @default(cuid())
+  key            String   @unique
+  title          String
+  scope          String
+  enabled        Boolean  @default(true)
+  severity       String
+  expressionJson Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([scope])
+  @@index([severity])
+}
+
+model MonitorIncident {
+  id           String    @id @default(cuid())
+  assetId      String?
+  asset        Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId     String?
+  device       Device?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  state        String
+  severity     String
+  title        String
+  summary      String
+  openedAt     DateTime  @default(now())
+  resolvedAt   DateTime?
+  metadataJson Json      @default("{}")
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([state])
+  @@index([severity])
+  @@index([openedAt])
+}
 model DeviceStatusCheck {
   id        String       @id @default(cuid())
   deviceId  String

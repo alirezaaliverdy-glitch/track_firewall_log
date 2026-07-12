@@ -1,4 +1,4 @@
-﻿import "./App.css";
+import "./App.css";
 import { Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { LogProvider } from "@/context/LogContext";
@@ -21,6 +21,9 @@ function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
     </div>
   );
 }
+
+const legacyDashboardShortcutKey = "dashboard.shortcuts.library";
+void legacyDashboardShortcutKey;
 
 function App() {
   const { t } = useTranslation();

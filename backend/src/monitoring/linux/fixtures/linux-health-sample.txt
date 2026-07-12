@@ -1,0 +1,12 @@
+﻿load=0.10 0.20 0.30
+cpu_idle=82.5
+mem=8000000000 3000000000
+swap=2000000000 1900000000
+disk=39 15000000000 /
+inode=12
+net=100 200 0 0
+uptime=123456
+failed_services=0
+listening_ports=8
+firewall=active
+processes=145

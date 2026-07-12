@@ -9,7 +9,9 @@
 - `backend/src/assets/`: asset intelligence, imports, seeded security detection, and finding handoff.
 - `backend/src/services/`: lifecycle, AI, event, device, credential, assessment, and policy services.
 - `backend/src/commands/`: Persian catalog contract and execution-template registry.
-- `backend/src/connectors/`: planners plus Linux, MikroTik, and FortiGate SSH connector foundations.
+- `backend/src/connectors/`: planners plus Linux, MikroTik, FortiGate, and Cisco IOS-XE read-only connector foundations.
+- `backend/src/vendors/`: vendor/platform/capability registry and discovery cache services.
+- `backend/src/monitoring/linux/`: Linux health metrics, scoring, collection runs, and monitoring APIs.
 - `backend/src/daily-check/`: ten vendor profiles and grouped Daily Check engine.
 - `backend/src/telemetry/`: vendor profiles/finding rules and Linux snapshot/live collection.
 - `backend/prisma/schema.prisma`: 28 persistent models.
@@ -22,12 +24,14 @@
 |---|---|---|---|
 | Auth | `services/auth.service.ts`, `routes/auth.ts` | `/api/auth/login`, `/me`, `/logout` | Implemented |
 | Devices/credentials | `services/device.service.ts`, `credential*.ts`, routes | `/api/devices/*`, `/api/credentials/*` | Implemented; credentials stay referenced/encrypted |
+| Vendor capabilities | `vendors/*`, `routes/vendors.ts`, `routes/devices.ts` | `/api/vendors/*`, `/api/devices/:id/capabilities` | Task 18.2A foundation |
 | Asset intelligence | `assets/asset-intelligence.service.ts`, `routes/assets.ts` | `/api/assets/*`, `/api/integrations/netbox/*` | Minimum platform milestone |
 | Catalog | `commands/catalog/*`, `routes/command-catalog.ts` | `/api/commands/catalog*`, `/ai-propose` | 51 entries; 22 Linux/MikroTik items implemented |
 | AI | `ai/context`, `ai/prompts`, `services/ai-*.ts` | `/api/ai/*` | Compact Evidence Pack and structured intents |
 | Resolver/templates | `catalog-action-resolver.ts`, `execution-template-registry.ts` | Internal action resolution | Validated mappings; no raw AI CLI |
 | Actions | `action-plan.service.ts`, `policy-guard.service.ts`, `dry-run.service.ts`, `routes/actions.ts` | `/api/actions/*` | Preview/confirm/execute/audit; rollback partial |
-| Connectors | `connectors/*` and vendor planners | `/api/connectors/*`, `/api/actions/:id/plan` | Linux/MikroTik product-ready; FortiGate legacy foundation |
+| Connectors | `connectors/*` and vendor planners | `/api/connectors/*`, `/api/actions/:id/plan` | Linux/MikroTik/FortiGate connector-backed; Cisco IOS-XE read-only foundation |
+| Linux health | `monitoring/linux/*`, `routes/linux-health.ts` | `/api/monitoring/linux/*` | Metric/health schema and API foundation |
 | Daily Check | `daily-check/*`, `routes/daily-check.ts` | `/api/daily-check/*` | Linux/MikroTik implemented; others manual-only |
 | Telemetry/findings | `telemetry/*`, telemetry routes | `/api/devices/:id/telemetry/*`, findings APIs | Shared finding model; Linux feeds it today |
 | Security platform | `assets/asset-intelligence.service.ts`, `routes/security-platform.ts` | `/api/security/*`, `/api/integrations/wazuh/*` | Asset-linked events/findings/rules milestone |
@@ -41,10 +45,12 @@ Prisma domains include auth; upload/job/analysis; devices/credentials/capabiliti
 
 | Area | Main path | API/status |
 |---|---|---|
-| Shell/routing | `src/App.tsx`, `src/main.tsx` | Main authenticated page plus `/actions/:id/result` |
+| Shell/routing | `src/App.tsx`, `src/main.tsx`, `src/routes/appRoutes.tsx` | App shell routes plus `/actions/:id/result` |
 | Device registry | `components/devices/DeviceRegistryPanel.tsx` | Device/credential APIs; implemented |
 | Persian catalog | `components/commands/CommandCatalogPanel.tsx` | Command APIs; implemented |
-| Asset/Security platform | `components/platform/SecurityPlatformPanel.tsx` | Compact `/assets` and `/security` milestone |
+| Asset/Security platform | `features/assets/`, `features/security/` | Compact `/assets` and `/security` milestone |
+| Vendor capabilities | `features/vendors/cisco/`, `lib/vendors.ts` | `/assets/vendors`, `/assets/vendors/cisco`, `/assets/vendors/cisco/devices` |
+| Linux health | `features/monitoring/pages/LinuxMonitoringPage.tsx`, `lib/linuxMonitoring.ts` | `/monitoring/linux`, `/monitoring/linux/:deviceId` |
 | AI assistant | `components/ai/AiSecurityAssistantPanel.tsx` | AI APIs; implemented proposal flow |
 | Action center/result | `components/actions/ActionCenterPanel.tsx`, `ActionResultView.tsx` | Action APIs; implemented controlled flow |
 | Daily Check | `components/daily-check/DailyCheckPanel.tsx` | Profiles plus ActionPlan flow; vendor support varies |
@@ -65,3 +71,10 @@ Catalog or AI may create a reviewed plan. Execution requires stable preview inpu
 - `src/features/security/`: security overview/findings/detail/rules pages, hooks, finding table.
 
 The old platform panel remains available but the routed experience is now page-based.
+
+## Task 18.2A Code Pointers
+
+- Cisco read-only foundation: `backend/src/connectors/cisco/ios-xe/` and `backend/test/task18-2a-cisco-linux-observability.test.ts`.
+- Vendor/capability API layer: `backend/src/vendors/`, `backend/src/routes/vendors.ts`, and the existing device capability route in `backend/src/routes/devices.ts`.
+- Linux health observability: `backend/src/monitoring/linux/`, `backend/src/routes/linux-health.ts`, and migration `backend/prisma/migrations/20260712192000_task18_2a_vendor_linux_observability/`.
+- Frontend surfaces: `src/features/vendors/cisco/pages/CiscoOverviewPage.tsx`, `src/features/monitoring/pages/LinuxMonitoringPage.tsx`, `src/lib/vendors.ts`, and `src/lib/linuxMonitoring.ts`.

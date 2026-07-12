@@ -2,12 +2,12 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   createDevice,
   deleteDevice,
-  getDeviceCapabilities,
   getDeviceById,
   listDevices,
   testDeviceConnection,
   updateDevice
 } from "../services/device.service.js";
+import { getDeviceVendorCapabilities } from "../vendors/capability-discovery.service.js";
 
 export const deviceRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/devices", async (_request, reply) => {
@@ -82,7 +82,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get<{ Params: { id: string } }>("/api/devices/:id/capabilities", async (request, reply) => {
-    const capabilities = await getDeviceCapabilities(request.params.id);
+    const capabilities = await getDeviceVendorCapabilities(request.params.id);
 
     if (!capabilities) {
       return reply.code(404).send({ error: "Device not found", code: "DEVICE_NOT_FOUND" });
