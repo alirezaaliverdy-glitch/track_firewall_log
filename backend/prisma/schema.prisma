@@ -129,6 +129,7 @@ model Device {
   hardeningRecommendations HardeningRecommendation[]
   deviceSnapshots          DeviceSnapshot[]
   findings                 Finding[]
+  asset                    Asset?
 
   @@index([type])
   @@index([host])
@@ -137,10 +138,237 @@ model Device {
   @@index([status])
 }
 
+model AssetSite {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  slug        String          @unique
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  locations   AssetLocation[]
+  assets      Asset[]
+  prefixes    AssetPrefix[]
+}
+
+model AssetLocation {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String
+  siteId    String?
+  site      AssetSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  assets    Asset[]
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+}
+
+model AssetRole {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  slug      String          @unique
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  assets    Asset[]
+  platforms AssetPlatform[]
+}
+
+model AssetVendor {
+  id             String          @id @default(cuid())
+  name           String          @unique
+  slug           String          @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  assets         Asset[]
+  assetPlatforms AssetPlatform[]
+}
+
+model AssetPlatform {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  vendorId    String?
+  vendor      AssetVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  assets      Asset[]
+  assetRole   AssetRole?   @relation(fields: [assetRoleId], references: [id])
+  assetRoleId String?
+
+  @@index([vendorId])
+}
+
+model Asset {
+  id                String              @id @default(cuid())
+  name              String
+  hostname          String?
+  managementIp      String?
+  serial            String?
+  externalId        String?
+  managedState      String              @default("managed")
+  healthState       String              @default("unknown")
+  lastSeenAt        DateTime?
+  deviceId          String?             @unique
+  device            Device?             @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  siteId            String?
+  site              AssetSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  locationId        String?
+  location          AssetLocation?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  roleId            String?
+  role              AssetRole?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  vendorId          String?
+  vendor            AssetVendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  platformId        String?
+  platform          AssetPlatform?      @relation(fields: [platformId], references: [id], onDelete: SetNull)
+  sourceId          String?
+  source            AssetSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  tagsJson          Json                @default("[]")
+  metadataJson      Json                @default("{}")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  interfaces        AssetInterface[]
+  ipAddresses       AssetIpAddress[]
+  relationshipsFrom AssetRelationship[] @relation("AssetRelationshipFrom")
+  relationshipsTo   AssetRelationship[] @relation("AssetRelationshipTo")
+  securityEvents    SecurityEvent[]
+  findings          Finding[]
+  actionPlans       ActionPlan[]
+
+  @@unique([managementIp])
+  @@unique([serial])
+  @@unique([externalId])
+  @@index([hostname])
+  @@index([managedState])
+  @@index([healthState])
+  @@index([siteId])
+  @@index([vendorId])
+  @@index([lastSeenAt])
+}
+
+model AssetInterface {
+  id           String           @id @default(cuid())
+  assetId      String
+  asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name         String
+  macAddress   String?
+  type         String?
+  enabled      Boolean          @default(true)
+  metadataJson Json             @default("{}")
+  ipAddresses  AssetIpAddress[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([assetId, name])
+  @@index([assetId])
+}
+
+model AssetIpAddress {
+  id          String          @id @default(cuid())
+  address     String          @unique
+  assetId     String?
+  asset       Asset?          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  interfaceId String?
+  interface   AssetInterface? @relation(fields: [interfaceId], references: [id], onDelete: SetNull)
+  prefixId    String?
+  prefix      AssetPrefix?    @relation(fields: [prefixId], references: [id], onDelete: SetNull)
+  role        String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([assetId])
+  @@index([interfaceId])
+  @@index([prefixId])
+}
+
+model AssetPrefix {
+  id          String           @id @default(cuid())
+  cidr        String           @unique
+  siteId      String?
+  site        AssetSite?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  vlanId      String?
+  vlan        AssetVlan?       @relation(fields: [vlanId], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  ipAddresses AssetIpAddress[]
+
+  @@index([siteId])
+  @@index([vlanId])
+}
+
+model AssetVlan {
+  id        String        @id @default(cuid())
+  vlanId    Int
+  name      String
+  siteId    String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  prefixes  AssetPrefix[]
+
+  @@unique([siteId, vlanId])
+  @@index([siteId])
+}
+
+model AssetRelationship {
+  id           String   @id @default(cuid())
+  fromAssetId  String
+  fromAsset    Asset    @relation("AssetRelationshipFrom", fields: [fromAssetId], references: [id], onDelete: Cascade)
+  toAssetId    String
+  toAsset      Asset    @relation("AssetRelationshipTo", fields: [toAssetId], references: [id], onDelete: Cascade)
+  type         String
+  metadataJson Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@unique([fromAssetId, toAssetId, type])
+  @@index([fromAssetId])
+  @@index([toAssetId])
+}
+
+model AssetTag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AssetSource {
+  id         String         @id @default(cuid())
+  name       String         @unique
+  type       String
+  enabled    Boolean        @default(true)
+  configJson Json           @default("{}")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  assets     Asset[]
+  syncRuns   AssetSyncRun[]
+}
+
+model AssetSyncRun {
+  id             String       @id @default(cuid())
+  sourceId       String?
+  source         AssetSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  sourceType     String
+  status         String
+  idempotencyKey String?
+  previewJson    Json
+  appliedJson    Json?
+  startedAt      DateTime     @default(now())
+  completedAt    DateTime?
+
+  @@unique([sourceType, idempotencyKey])
+  @@index([sourceId])
+  @@index([sourceType])
+  @@index([status])
+}
+
 model Finding {
   id                 String   @id @default(cuid())
   deviceId           String
   device             Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  assetId            String?
+  asset              Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
   vendor             String
   title              String
   severity           String
@@ -154,7 +382,7 @@ model Finding {
   firstSeen          DateTime
   lastSeen           DateTime
   count              Int      @default(1)
-  mitreTags          String[]  @default([])
+  mitreTags          String[] @default([])
   affectedObject     String?
   actor              String?
   srcIp              String?
@@ -168,6 +396,7 @@ model Finding {
 
   @@unique([deviceId, fingerprint])
   @@index([deviceId, status])
+  @@index([assetId, status])
   @@index([vendor, severity])
   @@index([lastSeen])
 }
@@ -249,6 +478,8 @@ model ActionPlan {
   requestedBy    String?
   deviceId       String?
   device         Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  assetId        String?
+  asset          Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
   aiIntentId     String?
   aiIntent       AiActionIntent?  @relation(fields: [aiIntentId], references: [id], onDelete: SetNull)
   actionType     ActionType
@@ -267,6 +498,7 @@ model ActionPlan {
 
   @@index([source])
   @@index([deviceId])
+  @@index([assetId])
   @@index([aiIntentId])
   @@index([actionType])
   @@index([status])
@@ -418,6 +650,8 @@ model SecurityEvent {
   id             String          @id @default(cuid())
   deviceId       String?
   device         Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  assetId        String?
+  asset          Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
   sourceId       String?
   source         EventSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   batchId        String?
@@ -451,6 +685,7 @@ model SecurityEvent {
   incidentEvents IncidentEvent[]
 
   @@index([deviceId])
+  @@index([assetId])
   @@index([sourceId])
   @@index([batchId])
   @@index([timestamp])

@@ -35,6 +35,7 @@ import ActionResultView from "./components/actions/ActionResultView";
 import DailyCheckPanel from "./components/daily-check/DailyCheckPanel";
 import LinuxServiceHealthPanel from "./components/services/LinuxServiceHealthPanel";
 import GuidedActionWizard from "./components/guided-actions/GuidedActionWizard";
+import SecurityPlatformPanel from "./components/platform/SecurityPlatformPanel";
 
 function App() {
   const { user, logout } = useAuth();
@@ -51,7 +52,11 @@ function App() {
       </main>
     </div>
   );
-  const isActionLibrary = window.location.pathname === "/action-library";
+  const currentPath = window.location.pathname;
+  const isActionLibrary = currentPath === "/action-library";
+  const isAssets = currentPath === "/assets";
+  const isSecurity = currentPath === "/security";
+  const isPlatformPage = isAssets || isSecurity;
   return (
     <Suspense fallback={<h1>loading logs ...</h1>}>
       <LogProvider>
@@ -67,7 +72,9 @@ function App() {
 	                  <div className="mt-1 text-sm text-slate-400">{t("app.subtitle")}</div>
 	                </div>
 	                <nav className="mb-3 flex flex-wrap gap-2 text-sm">
-	                  <a className={`rounded-md border px-3 py-1.5 ${!isActionLibrary ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/">{t("nav.dashboard")}</a>
+	                  <a className={`rounded-md border px-3 py-1.5 ${!isActionLibrary && !isPlatformPage ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/">{t("nav.dashboard")}</a>
+	                  <a className={`rounded-md border px-3 py-1.5 ${isAssets ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/assets">دارایی‌ها</a>
+	                  <a className={`rounded-md border px-3 py-1.5 ${isSecurity ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/security">امنیت</a>
 	                  <a className={`rounded-md border px-3 py-1.5 ${isActionLibrary ? "border-cyan-600 bg-cyan-950/50 text-cyan-100" : "border-slate-700 text-slate-300"}`} href="/action-library">{t("nav.actionLibrary")}</a>
 	                </nav>
               </div>
@@ -88,7 +95,11 @@ function App() {
           </div>
 
           <ErrorBoundary title={t("error.actionLibrary")}>
-	            {isActionLibrary ? (
+	            {isAssets ? (
+	              <SecurityPlatformPanel section="assets" />
+	            ) : isSecurity ? (
+	              <SecurityPlatformPanel section="security" />
+	            ) : isActionLibrary ? (
 	              <CommandCatalogPanel />
 	            ) : (
 	              <section className="rounded-lg border border-slate-800 bg-slate-950/70 p-4 text-slate-100">
@@ -105,7 +116,7 @@ function App() {
 	            )}
           </ErrorBoundary>
 
-          <ErrorBoundary title={t("error.dailyCheck")}>
+          {!isPlatformPage && !isActionLibrary && <><ErrorBoundary title={t("error.dailyCheck")}>
             <DailyCheckPanel />
           </ErrorBoundary>
           <ErrorBoundary title={t("error.serviceHealth")}>
@@ -116,7 +127,8 @@ function App() {
           </ErrorBoundary>
           <ErrorBoundary title={t("error.actionCenter")}>
             <ActionCenterPanel />
-          </ErrorBoundary>
+          </ErrorBoundary></>}
+          {!isPlatformPage && !isActionLibrary && <>
           <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
             <summary className="cursor-pointer text-sm font-semibold text-zinc-100">{t("sections.devices")}</summary>
             <div className="mt-4">
@@ -184,6 +196,7 @@ function App() {
               </ErrorBoundary>
             </div>
           </details>
+          </>}
           </main>
         </div>
       </LogProvider>

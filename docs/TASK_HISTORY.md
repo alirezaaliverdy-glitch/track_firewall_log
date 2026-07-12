@@ -2,6 +2,17 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 18.0 - Security Platform Minimum Tangible Milestone (2026-07-12)
+
+- Summary: implemented the first usable asset/security platform slice instead of attempting the full master roadmap at once.
+- Backend: added asset intelligence models, import preview/apply, idempotent sync runs, device-to-asset linking, topology lookup, seeded detection rules, SecurityEvent ingestion, Finding correlation, and Finding-to-reviewed-ActionPlan handoff.
+- Integrations: added mock NetBox and Wazuh adapters for health checks, sync preview, and idempotent sync without external credentials.
+- Frontend: added compact grouped `/assets` and `/security` views plus header navigation entries.
+- Docs: added platform expansion, asset intelligence, detection, findings, case-management, monitoring, search/correlation, topology/impact, AI orchestration, integrations, and UX information architecture docs.
+- Safety: Finding-created ActionPlans are proposals only. No raw AI shell execution, no connector invocation from detections, no fake success, and no change to protected quick-controlled execution behavior.
+- Migration: `20260712180000_platform_asset_security_milestone`.
+- Validation: `npx prisma validate`; focused `task18-platform-milestone.test.ts` passed 5/5; backend `npm run build`; backend `npm run validate:command-catalog` (136 items); backend `npm test` passed 181/181; root `npm run test:i18n` passed 73 keys; root `npx pnpm@10 build` passed with the existing Vite large-chunk warning. Local `pnpm` was not on PATH.
+
 ## Task 17.8C - Linux Server Overview First Screen (2026-07-12)
 
 - Summary: added a plain-language Server Overview as the default Device Monitoring screen so non-technical users see server health before logs/findings/advanced telemetry.

@@ -4,6 +4,12 @@ Last updated: 2026-07-12
 
 ## Task 17.8 - Linux Monitoring and Service Status Reliability
 
+- Task 18.0 adds the first compact Security Platform milestone. The app now has `/assets` and `/security` views backed by asset inventory models, idempotent import/sync, seeded security detection, asset-linked findings, and finding-to-reviewed-ActionPlan handoff.
+- Asset intelligence now covers sites, locations, roles, vendors, platforms, assets, interfaces, IPs, prefixes, VLANs, relationships, tags, import sources, and sync runs. Existing Devices, SecurityEvents, Findings, and ActionPlans can link to an Asset.
+- Mock NetBox and Wazuh integrations are available for health, sync preview, and idempotent sync. They demonstrate the integration contract only; no live external credentials are used.
+- Security findings remain proposal-first. Creating an ActionPlan from a Finding does not execute a connector, does not mark success, and does not bypass preview, confirmation, PolicyGuard, audit, or the `connectorInvoked=true` success rule.
+- Task 18.0 validation passed: `npx prisma validate`; focused `task18-platform-milestone.test.ts` (5/5); backend `npm run build`; backend `npm run validate:command-catalog` (136 items); backend `npm test` (181/181); root `npm run test:i18n` (73 keys); root frontend build via `npx pnpm@10 build` with the existing Vite large-chunk warning. Local `pnpm` was not on PATH.
+
 - Task 17.8C adds a read-only Linux Server Overview first screen. Device Monitoring now opens on Server Overview by default and summarizes real server state before showing live monitoring, findings, raw logs, or advanced telemetry.
 - `/api/devices/:deviceId/telemetry/linux/overview` collects Linux state over the existing SSH connector: host identity, OS/kernel/uptime, CPU/load/core count, memory/swap, mounted disks, disk I/O hints, network interfaces, top processes, important services, listening ports, and recent auth/security warnings. Individual unavailable commands return warnings and partial data instead of failing the whole overview.
 - The overview UI presents plain-language cards for Overall Health, CPU, Memory, Disk, Network, Important Services, Security Signals, and Recent Problems, with English/Persian labels and RTL-friendly layout. Advanced technical details remain outside the first screen.

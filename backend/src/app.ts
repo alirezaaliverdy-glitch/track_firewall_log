@@ -26,6 +26,8 @@ import { telemetryFindingRoutes } from "./routes/telemetry-findings.js";
 import { commandCatalogRoutes } from "./routes/command-catalog.js";
 import { actionSessionRoutes } from "./routes/action-sessions.js";
 import { dailyCheckRoutes } from "./routes/daily-check.js";
+import { assetRoutes } from "./routes/assets.js";
+import { securityPlatformRoutes } from "./routes/security-platform.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
@@ -111,6 +113,8 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(commandCatalogRoutes);
   await app.register(actionSessionRoutes);
   await app.register(dailyCheckRoutes);
+  await app.register(assetRoutes);
+  await app.register(securityPlatformRoutes);
   await app.register(eventRoutes);
   await app.register(detectionRoutes);
   await app.register(incidentRoutes);

@@ -1,5 +1,18 @@
 # CODEX_HANDOFF.md
 
+## Task 18.0 - Security Platform Minimum Tangible Milestone (2026-07-12)
+
+- Implemented the first tangible platform-expansion milestone from `MASTER_SECURITY_PLATFORM_TASK.md` without starting the full roadmap at once.
+- Added asset intelligence persistence in Prisma: asset sites, locations, roles, vendors, platforms, assets, interfaces, IP addresses, prefixes, VLANs, relationships, tags, sources, and sync runs. Existing `Device`, `Finding`, `SecurityEvent`, and `ActionPlan` records can now link to an asset.
+- Added `backend/src/assets/asset-intelligence.service.ts` for asset import preview/apply, idempotent sync, device-to-asset linking, topology lookup, security event ingestion, seeded rule detection, finding listing, and finding-to-reviewed-ActionPlan handoff.
+- Added mock NetBox and Wazuh adapters plus APIs for health, sync preview, and idempotent sync. These are local/mock integrations only; no external credentials are stored or required.
+- Added compact platform routes: `/api/assets`, `/api/assets/:id`, `/api/assets/:id/topology`, `/api/assets/import/preview`, `/api/assets/import/apply`, `/api/assets/sync/devices`, `/api/security/events`, `/api/security/findings`, `/api/security/rules`, and detection/finding action endpoints.
+- Added compact frontend views at `/assets` and `/security` through `SecurityPlatformPanel`, with grouped inventory, sync, findings, and rule sections. The UI remains proposal/review oriented and does not execute connectors from detections.
+- Added platform docs: `PLATFORM_EXPANSION_ROADMAP`, `ASSET_INTELLIGENCE`, `DETECTION_ENGINE`, `SECURITY_FINDINGS`, `CASE_MANAGEMENT`, `MONITORING_ARCHITECTURE`, `SEARCH_AND_CORRELATION`, `TOPOLOGY_AND_IMPACT`, `AI_WORKFLOW_ORCHESTRATION`, `INTEGRATIONS_ARCHITECTURE`, and `UX_INFORMATION_ARCHITECTURE`.
+- Safety boundary preserved: finding-created ActionPlans are reviewed proposals only. Preview is not execution, and success still requires the existing Action Center confirmation, PolicyGuard, connector invocation, audit/result, and `connectorInvoked=true`.
+- Migration added: `backend/prisma/migrations/20260712180000_platform_asset_security_milestone`.
+- Validation passed: `npx prisma validate`; focused `npx tsx --test test/task18-platform-milestone.test.ts` (5/5); backend `npm run build`; backend `npm run validate:command-catalog` (136 items); backend `npm test` (181/181); root `npm run test:i18n` (73 keys); root frontend build via `npx pnpm@10 build` with the existing Vite large-chunk warning. Local `pnpm` was not on PATH, so the pinned `npx pnpm@10` fallback was used.
+
 ## Task 17.8C - Linux Server Overview First Screen (2026-07-12)
 
 - Added a read-only Linux overview API at `/api/devices/:deviceId/telemetry/linux/overview`. It runs through the existing SSH connector and collects host identity, OS/kernel/uptime, CPU load/core data, memory/swap, mounted disk usage, disk I/O hints, network interfaces, top processes, important service states, listening ports, and recent auth/security warnings.

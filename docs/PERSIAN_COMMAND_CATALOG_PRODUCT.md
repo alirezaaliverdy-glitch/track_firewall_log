@@ -10,6 +10,12 @@
 
 `Persian intent -> Resolver -> GuidedActionBlueprint -> ActionSession -> ActionPlan preview -> Action Center confirmation -> Connector`
 
+For the new asset/security platform milestone:
+
+`Asset or integration source -> SecurityEvent -> detection rule -> Finding -> reviewed ActionPlan -> Action Center`
+
+Findings may create reviewed ActionPlans, but they do not execute connectors, do not mark success, and do not bypass the existing catalog/guided Action Center boundary.
+
 Task 17.2B rule: multi-step creation requests such as VPN, VDOM, Zone, Policy/Rule, VIP/NAT/Port Forward, Interface/VLAN/Subinterface, and Route/Gateway must return `guided_workflow` before generic AI/manual fallback. No selected device is not a chat error. The app starts an ActionSession anyway, opens `/guided-actions/:sessionId`, and the wizard's first step is `device_selection` (`Ø§Ù†ØªØ®Ø§Ø¨ Ø¯Ø³ØªÚ¯Ø§Ù‡`). Only after the wizard has all required fields and the user builds a preview may an ActionPlan be created. These requests must never become `custom_vendor_action`, `generic_security_action`, `unsupported_vendor`, or `manual_or_not_implemented` while a guided blueprint exists.
 
 Task 17.2C rule: when the wizard has valid required fields but the executable backend template is not complete, build-plan must create a preview-only ActionPlan instead of returning a useless 409. For FortiGate VPN, the preview plan is non-executable (`executionSupport=planned_or_partial`, `executable=false`), includes Persian summary, safe CLI outline, missing templates, verification and rollback plans, and disables Action Center execution. Secrets such as PSK/password are masked and are not persisted as raw values.
