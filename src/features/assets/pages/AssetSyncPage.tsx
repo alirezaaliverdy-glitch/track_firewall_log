@@ -21,9 +21,9 @@ export default function AssetSyncPage() {
     <section className="page-stack">
       <PageHeader title="همگام سازی دارایی" eyebrow="Preview first" description="Sync باید ابتدا preview شود و mutation مستقیم بدون تایید انجام نشود." />
       <div className="content-grid">
-        <section className="content-panel"><h2>NetBox <span className="status-badge status-badge--warning">آزمایشی / Mock</span></h2><button onClick={() => run("NetBox preview", "/integrations/netbox/sync-preview")}>Preview</button><button onClick={() => run("NetBox apply", "/integrations/netbox/sync", "POST")}>Apply mock sync</button></section>
-        <section className="content-panel"><h2>Wazuh <span className="status-badge status-badge--warning">آزمایشی / Mock</span></h2><button onClick={() => run("Wazuh preview", "/integrations/wazuh/sync-preview")}>Preview</button><button onClick={() => run("Wazuh apply", "/integrations/wazuh/sync", "POST")}>Apply mock sync</button></section>
-        <section className="content-panel"><h2>Device link</h2><button onClick={() => run("Device sync", "/assets/sync/devices", "POST")}>Sync existing devices to assets</button></section>
+        <section className="content-panel"><h2>NetBox <span className="status-badge status-badge--warning">آزمایشی / Mock</span></h2><p>فقط پیش‌نمایش امن فعال است؛ Apply تولیدی نیازمند تنظیم اتصال واقعی است.</p><button className="primary-button" onClick={() => run("NetBox preview", "/integrations/netbox/sync-preview")}>پیش‌نمایش NetBox</button></section>
+        <section className="content-panel"><h2>Wazuh <span className="status-badge status-badge--warning">آزمایشی / Mock</span></h2><p>فقط پیش‌نمایش امن فعال است؛ Apply تولیدی نیازمند تنظیم اتصال واقعی است.</p><button className="primary-button" onClick={() => run("Wazuh preview", "/integrations/wazuh/sync-preview")}>پیش‌نمایش Wazuh</button></section>
+        <section className="content-panel"><h2>اتصال Device</h2><p>این مسیر Deviceهای موجود پروژه را بدون credential جدید به Asset وصل می‌کند.</p><button className="primary-button" onClick={() => run("Device sync", "/assets/sync/devices", "POST")}>همگام‌سازی Deviceهای موجود</button></section>
       </div>
       {message ? <p className="content-panel text-sm text-slate-300">{message}</p> : null}
     </section>
