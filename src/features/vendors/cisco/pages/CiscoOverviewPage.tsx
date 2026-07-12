@@ -1,35 +1,162 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { getVendorDetail, type VendorDetail } from "@/lib/vendors";
+import { getCiscoDevices, getVendorDetail, listVendors, type VendorDetail, type VendorSummary } from "@/lib/vendors";
+
+type CiscoDeviceResponse = { data: unknown[]; warnings: string[]; meta: Record<string, unknown> };
+
+const stateFa: Record<string, string> = {
+  implemented: "فعال",
+  partial: "محدود",
+  planned: "در صف توسعه",
+  unsupported: "پشتیبانی نمی‌شود"
+};
+
+const domainFa: Record<string, string> = {
+  system: "سیستم",
+  inventory: "موجودی",
+  interface: "اینترفیس",
+  switching: "سوئیچینگ",
+  routing: "مسیریابی",
+  security: "امنیت"
+};
+
+const vendorPurposeFa: Record<string, string> = {
+  linux: "سرورهای Linux با SSH خواندنی و اقدام‌های کنترل‌شده.",
+  mikrotik: "RouterOS با اقدام‌های SSH ثبت‌شده و کنترل‌شده.",
+  fortigate: "FortiGate با کشف خواندنی و بخشی از اقدام‌های مدیریت‌شده.",
+  cisco: "Cisco با تشخیص خانواده پلتفرم و خواندن امن IOS-XE.",
+  pfsense: "فعلا فقط مسیر آینده و بدون اجرای واقعی.",
+  juniper: "فعلا فقط مسیر آینده و بدون اجرای واقعی.",
+  paloalto: "فعلا فقط مسیر آینده و بدون اجرای واقعی.",
+  windows: "فعلا فقط مسیر آینده و بدون اجرای واقعی.",
+  generic: "منبع عمومی برای داده یا لاگ، بدون اقدام واقعی."
+};
 
 export default function CiscoOverviewPage() {
+  const isCiscoRoute = window.location.pathname.includes("/assets/vendors/cisco");
+  const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [vendor, setVendor] = useState<VendorDetail | null>(null);
+  const [devices, setDevices] = useState<CiscoDeviceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { getVendorDetail("cisco").then(setVendor).catch((err: Error) => setError(err.message)); }, []);
-  const implemented = vendor?.capabilities.filter((item) => item.implementationState === "implemented") ?? [];
+
+  useEffect(() => {
+    Promise.all([listVendors(), getVendorDetail("cisco"), getCiscoDevices()])
+      .then(([vendorList, ciscoDetail, ciscoDevices]) => {
+        setVendors(vendorList.vendors);
+        setVendor(ciscoDetail);
+        setDevices(ciscoDevices);
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message));
+  }, []);
+
+  const grouped = useMemo(() => {
+    const groups = new Map<string, NonNullable<VendorDetail["capabilities"]>>();
+    for (const item of vendor?.capabilities ?? []) {
+      const key = item.domain || "other";
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    return Array.from(groups.entries());
+  }, [vendor]);
+
+  const implementedReads = vendor?.capabilities.filter((item) => item.mode === "read" && item.implementationState === "implemented").length ?? 0;
+  const mutations = vendor?.capabilities.filter((item) => item.mode === "mutate") ?? [];
   const planned = vendor?.capabilities.filter((item) => item.implementationState !== "implemented") ?? [];
+  const ciscoDeviceCount = devices?.data.length ?? 0;
+
+  if (error) return <section className="page-stack"><PageHeader title="وندورها" eyebrow="Vendor management" /><div className="state-card is-error">{error}</div></section>;
+  if (!vendor) return <section className="page-stack"><PageHeader title="وندورها" eyebrow="Vendor management" /><div className="state-card">در حال دریافت وضعیت وندورها...</div></section>;
+
+  if (!isCiscoRoute) {
+    return (
+      <section className="page-stack">
+        <PageHeader title="وندورها" eyebrow="مدیریت قابلیت‌ها" description="نمای خلاصه وندورها، Connectorها و سطح آمادگی هر مسیر عملیاتی." />
+        <div className="content-grid">
+          {vendors.map((item) => (
+            <section key={item.key} className="content-panel">
+              <h2>{item.titleFa || item.titleEn}</h2>
+              <dl className="detail-list">
+                <dt>وضعیت</dt><dd>{stateFa[item.implementationState] ?? item.implementationState}</dd>
+                <dt>Connector</dt><dd>{item.connectorTypes.join("، ") || "ندارد"}</dd>
+                <dt>کاربرد</dt><dd>{vendorPurposeFa[item.key] ?? item.description}</dd>
+              </dl>
+              {item.key === "cisco" ? <a className="primary-link" href="/assets/vendors/cisco">بررسی Cisco</a> : <span className="status-badge">در مسیر فعلی فقط خلاصه نمایش داده می‌شود</span>}
+            </section>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="page-stack">
-      <PageHeader title="Cisco" eyebrow="Vendor capabilities" description="Capability matrix for Cisco platform detection and IOS-XE read-only foundation. Mutations remain planned." />
-      {error ? <div className="state-card is-error">{error}</div> : null}
-      {!vendor && !error ? <div className="state-card">Loading Cisco capabilities...</div> : null}
-      {vendor ? <>
-        <div className="summary-grid">
-          <article><span>Implemented read-only</span><strong>{implemented.length}</strong></article>
-          <article><span>Partial or planned</span><strong>{planned.length}</strong></article>
-          <article><span>Platforms</span><strong>{vendor.platforms.length}</strong></article>
-        </div>
-        <section className="panel-section">
-          <h2>Platforms</h2>
-          <div className="compact-grid">
-            {vendor.platforms.map((platform) => <article key={platform.key} className="mini-card"><strong>{platform.titleEn}</strong><span>{platform.implementationState}</span><small>{platform.notes[0]}</small></article>)}
+      <PageHeader
+        title="Cisco"
+        eyebrow="مدیریت وندور"
+        description="پایه فعلی Cisco فقط خواندنی است. تغییرات VLAN و EtherChannel تا زمان آزمایش و rollback واقعی غیرفعال می‌مانند."
+        actions={<a className="primary-link" href="/actions">باز کردن مرکز اقدام</a>}
+      />
+      <div className="summary-grid">
+        <article><span>دستگاه ثبت‌شده</span><strong>{ciscoDeviceCount}</strong></article>
+        <article><span>خواندن‌های فعال</span><strong>{implementedReads}</strong></article>
+        <article><span>تغییرات غیرفعال</span><strong>{mutations.length}</strong></article>
+        <article><span>موارد محدود/آینده</span><strong>{planned.length}</strong></article>
+      </div>
+
+      {ciscoDeviceCount === 0 ? (
+        <section className="state-card">
+          <h2>هنوز دستگاه Cisco متصل نیست</h2>
+          <p>برای فعال شدن موجودی عملیاتی، یک Device با vendor برابر Cisco، آدرس مدیریتی، پورت SSH و credential امن لازم است. تا قبل از ثبت و refresh، صفحه فقط قابلیت‌های پشتیبانی‌شده را نشان می‌دهد.</p>
+          <div className="button-row">
+            <a className="primary-link" href="/assets/devices">رفتن به تجهیزات</a>
+            <a className="primary-link" href="/assets/vendors/cisco/devices">مشاهده وضعیت دستگاه‌های Cisco</a>
           </div>
         </section>
-        <section className="panel-section">
-          <h2>Capability matrix</h2>
-          <div className="responsive-table"><table><thead><tr><th>Capability</th><th>Domain</th><th>Mode</th><th>Status</th><th>Template</th></tr></thead><tbody>{vendor.capabilities.map((cap) => <tr key={cap.key}><td>{cap.titleEn}</td><td>{cap.domain}</td><td>{cap.mode}</td><td>{cap.implementationState}</td><td>{cap.actionTemplate ?? "disabled"}</td></tr>)}</tbody></table></div>
-        </section>
-      </> : null}
+      ) : null}
+
+      <section className="panel-section">
+        <h2>خانواده‌های پلتفرم</h2>
+        <div className="compact-grid">
+          {vendor.platforms.map((platform) => (
+            <article key={platform.key} className="mini-card">
+              <strong>{platform.titleFa || platform.titleEn}</strong>
+              <span className="status-badge">{stateFa[platform.implementationState] ?? platform.implementationState}</span>
+              <small>{platform.notes[0] ?? "جزئیات بیشتری ثبت نشده است."}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel-section">
+        <h2>قابلیت‌ها بر اساس حوزه</h2>
+        <div className="content-grid">
+          {grouped.map(([domain, items]) => (
+            <article key={domain} className="content-panel">
+              <h3>{domainFa[domain] ?? domain}</h3>
+              <dl className="detail-list">
+                <dt>خواندنی فعال</dt><dd>{items.filter((item) => item.mode === "read" && item.implementationState === "implemented").length}</dd>
+                <dt>تغییر یا آینده</dt><dd>{items.filter((item) => item.mode === "mutate" || item.implementationState !== "implemented").length}</dd>
+              </dl>
+              <ul className="plain-list">
+                {items.slice(0, 5).map((item) => <li key={item.key}>{item.titleFa || item.titleEn} <span>{stateFa[item.implementationState] ?? item.implementationState}</span></li>)}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel-section">
+        <h2>جزئیات فنی</h2>
+        <details>
+          <summary>نمایش ماتریس قابلیت‌ها</summary>
+          <div className="responsive-table">
+            <table>
+              <thead><tr><th>قابلیت</th><th>حوزه</th><th>نوع</th><th>وضعیت</th><th>Connector</th></tr></thead>
+              <tbody>{vendor.capabilities.map((cap) => <tr key={cap.key}><td>{cap.titleFa || cap.titleEn}</td><td>{domainFa[cap.domain] ?? cap.domain}</td><td>{cap.mode === "read" ? "خواندن" : "تغییر"}</td><td>{stateFa[cap.implementationState] ?? cap.implementationState}</td><td>{cap.actionTemplate ? "ثبت‌شده" : "غیرفعال"}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </details>
+      </section>
     </section>
   );
 }

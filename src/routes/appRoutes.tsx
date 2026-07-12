@@ -28,6 +28,7 @@ export type AppRoute = {
   implemented: boolean;
   mobilePrimary?: boolean;
   nav?: boolean;
+  secondaryNav?: boolean;
 };
 
 const planned = (title: string, description?: string): ComponentType<RouteComponentProps> => () => <PlannedState title={title} description={description} />;
@@ -48,17 +49,17 @@ export const appRoutes: AppRoute[] = [
   { path: "/assets", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage, implemented: true, mobilePrimary: true, nav: true },
   { path: "/assets/devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage, implemented: true, nav: true },
   { path: "/assets/devices/:assetId", labelFa: "جزئیات تجهیز", labelEn: "Asset detail", group: "assets", component: AssetDetailPage, implemented: true },
-  { path: "/assets/sites", labelFa: "سایت‌ها", labelEn: "Sites", group: "assets", component: planned("سایت‌ها", "API سایت‌ها وجود دارد؛ صفحه عملیاتی در Milestone بعدی تکمیل می‌شود."), implemented: false, nav: true },
-  { path: "/assets/networks", labelFa: "شبکه‌ها و VLANها", labelEn: "Networks", group: "assets", component: planned("شبکه‌ها و VLANها"), implemented: false, nav: true },
-  { path: "/assets/topology", labelFa: "توپولوژی", labelEn: "Topology", group: "assets", component: planned("توپولوژی", "توپولوژی برای asset detail موجود است؛ نمای گراف کامل planned است."), implemented: false, nav: true },
+  { path: "/assets/sites", labelFa: "سایت‌ها", labelEn: "Sites", group: "assets", component: planned("سایت‌ها", "این مسیر تا تکمیل گردش کار سایت‌ها از ناوبری اصلی خارج شده است."), implemented: false },
+  { path: "/assets/networks", labelFa: "شبکه‌ها و VLANها", labelEn: "Networks", group: "assets", component: planned("شبکه‌ها و VLANها", "شبکه و VLAN فعلا فقط در مدل داده وجود دارد و صفحه عملیاتی ندارد."), implemented: false },
+  { path: "/assets/topology", labelFa: "توپولوژی", labelEn: "Topology", group: "assets", component: planned("توپولوژی", "توپولوژی در جزئیات دارایی قابل توسعه است؛ نمای گراف عمومی هنوز فعال نیست."), implemented: false },
   { path: "/assets/sync", labelFa: "همگام‌سازی", labelEn: "Sync", group: "assets", component: AssetSyncPage, implemented: true, nav: true },
-  { path: "/assets/vendors", labelFa: "Vendorها", labelEn: "Vendors", group: "assets", component: CiscoOverviewPage, implemented: true, nav: true },
+  { path: "/assets/vendors", labelFa: "وندورها", labelEn: "Vendors", group: "assets", component: CiscoOverviewPage, implemented: true, nav: true },
   { path: "/assets/vendors/cisco", labelFa: "Cisco", labelEn: "Cisco", group: "assets", component: CiscoOverviewPage, implemented: true, nav: true },
-  { path: "/assets/vendors/cisco/devices", labelFa: "Cisco Devices", labelEn: "Cisco Devices", group: "assets", component: CiscoOverviewPage, implemented: true, nav: true },
+  { path: "/assets/vendors/cisco/devices", labelFa: "دستگاه‌های Cisco", labelEn: "Cisco devices", group: "assets", component: CiscoOverviewPage, implemented: true },
   { path: "/security", labelFa: "نمای کلی", labelEn: "Overview", group: "security", component: SecurityOverviewPage, implemented: true, mobilePrimary: true, nav: true },
   { path: "/security/findings", labelFa: "یافته‌ها", labelEn: "Findings", group: "security", component: FindingsPage, implemented: true, nav: true },
   { path: "/security/findings/:findingId", labelFa: "جزئیات یافته", labelEn: "Finding detail", group: "security", component: FindingDetailPage, implemented: true },
-  { path: "/security/events", labelFa: "رویدادها", labelEn: "Events", group: "security", component: planned("رویدادها", "API رویدادها وجود دارد؛ جدول صفحه جدا در Milestone C تکمیل می‌شود."), implemented: false, nav: true },
+  { path: "/security/events", labelFa: "رویدادها", labelEn: "Events", group: "security", component: planned("رویدادها", "رویدادها در یافته‌ها و پایش مصرف می‌شوند؛ صفحه مستقل هنوز آماده نیست."), implemented: false },
   { path: "/security/rules", labelFa: "قوانین تشخیص", labelEn: "Rules", group: "security", component: DetectionRulesPage, implemented: true, nav: true },
   { path: "/security/rules/:ruleId", labelFa: "جزئیات قانون", labelEn: "Rule detail", group: "security", component: planned("جزئیات قانون"), implemented: false },
   { path: "/monitoring", labelFa: "وضعیت کلی", labelEn: "Overview", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
@@ -66,10 +67,10 @@ export const appRoutes: AppRoute[] = [
   { path: "/monitoring/linux/:deviceId", labelFa: "Linux detail", labelEn: "Linux detail", group: "monitoring", component: LinuxMonitoringPage, implemented: true },
   { path: "/monitoring/devices", labelFa: "مانیتورینگ تجهیزات", labelEn: "Device monitoring", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
   { path: "/monitoring/devices/:deviceId", labelFa: "جزئیات مانیتورینگ", labelEn: "Monitoring detail", group: "monitoring", component: MonitoringPage, implemented: true },
-  { path: "/monitoring/connectors", labelFa: "سلامت Connectorها", labelEn: "Connectors", group: "monitoring", component: planned("سلامت Connectorها"), implemented: false, nav: true },
-  { path: "/monitoring/daily-check", labelFa: "Daily Check", labelEn: "Daily Check", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
-  { path: "/actions", labelFa: "Action Center", labelEn: "Action Center", group: "actions", component: ActionsPage, implemented: true, mobilePrimary: true, nav: true },
-  { path: "/actions/guided", labelFa: "Guided Actions", labelEn: "Guided Actions", group: "actions", component: planned("Guided Actions", "جلسه‌های موجود با مسیر /guided-actions/:sessionId باز می‌مانند."), implemented: false, nav: true },
+  { path: "/monitoring/connectors", labelFa: "سلامت Connectorها", labelEn: "Connectors", group: "monitoring", component: planned("سلامت Connectorها", "وضعیت Connectorها فعلا در صفحات پایش و اقدام‌ها نمایش داده می‌شود."), implemented: false },
+  { path: "/monitoring/daily-check", labelFa: "چک روزانه", labelEn: "Daily Check", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
+  { path: "/actions", labelFa: "مرکز اقدام", labelEn: "Action Center", group: "actions", component: ActionsPage, implemented: true, mobilePrimary: true, nav: true },
+  { path: "/actions/guided", labelFa: "اقدام راهنما", labelEn: "Guided Actions", group: "actions", component: planned("اقدام راهنما", "جلسه‌های موجود با مسیر /guided-actions/:sessionId باز می‌مانند."), implemented: false },
   { path: "/actions/pending", labelFa: "تأییدهای منتظر", labelEn: "Pending", group: "actions", component: ActionsPage, implemented: true, nav: true },
   { path: "/actions/history", labelFa: "تاریخچه اجرا", labelEn: "History", group: "actions", component: ActionsPage, implemented: true, nav: true },
   { path: "/actions/:actionId", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage, implemented: true },
