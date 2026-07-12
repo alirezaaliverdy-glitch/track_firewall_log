@@ -73,6 +73,14 @@ function toStoredEvent(event: LinuxLiveLogEvent, findingId?: string): StoredTele
   };
 }
 
+export const TELEMETRY_STORAGE_WARNING = "Telemetry storage is temporarily unavailable; live monitoring continues.";
+
+export function telemetryStorageWarning(error: unknown, context?: Record<string, unknown>) {
+  const message = error instanceof Error ? error.message : String(error ?? "unknown storage error");
+  console.warn("[linux-telemetry-storage]", { ...context, message });
+  return TELEMETRY_STORAGE_WARNING;
+}
+
 function recentCount(session: Session, key: string) {
   const now = Date.now();
   const values = (session.counters.get(key) ?? []).filter((time) => now - time < 60_000);
@@ -115,7 +123,7 @@ export async function startLinuxLogStream(deviceId: string, requestedSources: st
         if (session.events.length > MAX_BUFFER) session.events.shift();
         session.emitter.emit("event", event);
         void boundedTelemetryStore.append(toStoredEvent(event)).catch((error) => {
-          const safe = redactLinuxTelemetry(error instanceof Error ? error.message : "telemetry store write failed").slice(0, 300);
+          const safe = telemetryStorageWarning(error, { deviceId, streamId: id, source });
           session.warnings.push(safe);
           session.emitter.emit("warning", { streamId: id, deviceId, source, warning: safe, timestamp: new Date().toISOString() });
         });

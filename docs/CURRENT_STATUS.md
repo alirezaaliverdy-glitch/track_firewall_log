@@ -4,13 +4,16 @@ Last updated: 2026-07-12
 
 ## Task 17.8 - Linux Monitoring and Service Status Reliability
 
+- Follow-up runtime fix: telemetry persistence is now Windows-safe. The store recreates `backend/storage/telemetry` recursively before every append/read/status path, serializes writes per device, and uses unique same-directory temp files before atomic rename so first writes and concurrent stream events do not race on a shared `.tmp` file.
+- Storage errors are separated from security evidence. Backend logs keep storage failure details under `[linux-telemetry-storage]`, while live monitoring surfaces only a clean telemetry warning and continues generating findings from live events.
+- Device Monitoring storage counters now read as `used ... of ...` for bytes and event count. Incoming stream events update live event count, last event time, and stored event count immediately, followed by a backend storage-status refresh.
 - Device Monitoring now has bounded per-device event storage. Live Linux events are stored as structured JSONL with max bytes/count/age retention and default 10 MB per device; old events rotate instead of growing without limit.
 - Live Linux sources now cover auth, system, kernel, firewall, nginx, apache, fail2ban, and docker. Stream status remains controlled with one active session per device, timeout, warnings, SSE, and stop handling that closes remote SSH stream handles.
 - The Linux live parser classifies authentication failures, sudo failures, service failures/restart loops, nginx/apache errors, fail2ban events, firewall blocks, kernel pressure/errors, and Docker daemon errors. Findings stay deduplicated through the vendor finding engine instead of producing one card per line.
 - `linux_check_service_status` now uses structured service detection and parsing. Inactive, failed, missing, and unknown services are successful read results when SSH execution succeeded; only SSH/template/validation failures fail the ActionPlan. Result UI shows normalized state, exit code, confidence, explanation, systemd fields, and raw evidence.
 - Device Telemetry UI now exposes live event count, stream state, active sources, last event time, bounded storage bytes/count, source/severity filters, grouped findings/evidence, and suggested ActionPlan creation.
 - External repo `hiddent3rminal/SSH-Automation-For-Multiple-Servers` was evaluated and rejected as a dependency. It is MIT Python/Paramiko with useful fan-out/retry/result-collection ideas, but has hardcoded sample passwords, insecure host-key auto-add, sudo password shell piping, unbounded logs, and incompatible architecture.
-- Validation passed: focused Task 17.8 tests 7/7 with separate per-device byte-limit and count-limit retention coverage; catalog validation; backend build; backend full tests 164/164; i18n parity; frontend build with the existing large-chunk warning.
+- Validation passed: focused Task 17.8 tests 10/10 with separate per-device byte-limit/count-limit retention and Windows storage regressions; backend build; backend full tests 168/168; frontend build with the existing large-chunk warning.
 
 ## Task 17.7 - FortiGate Execution Verification Hardening
 

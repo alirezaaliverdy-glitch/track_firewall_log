@@ -2,6 +2,16 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 17.8 Follow-up - Windows-Safe Telemetry Storage Runtime Fix (2026-07-12)
+
+- Summary: fixed the Windows live-monitoring persistence bug where JSONL rotation could fail with `ENOENT` during rename and leak raw storage errors into the monitoring experience.
+- Backend: `BoundedTelemetryStore` now recreates the telemetry directory recursively before writes/reads/status checks, handles first writes for new devices safely, serializes writes per device, and uses unique same-directory temp files before atomic rename.
+- Runtime behavior: storage write failures are logged as backend telemetry-storage warnings, live monitoring continues, and the UI receives only a clean telemetry warning instead of raw paths, rename messages, or stack details.
+- Frontend: Device Monitoring storage counters now show `used ... of ...` for bytes/events, and new stream events update live event count, last event time, and stored event count before the next backend status refresh.
+- Tests: added regressions for missing telemetry directory creation, first write for a new device, byte-limit rotation, Windows path-safe concurrent temp writes, and storage failure not breaking monitoring findings.
+- Migrations: none.
+- Validation: focused Task 17.8 tests (10/10); backend `npm run build`; backend `npm test` (168/168); root `pnpm build` passed with the existing Vite large-chunk warning.
+
 ## Task 17.8 - Production-Grade Linux Device Monitoring and Service Status Reliability (2026-07-12)
 
 - Summary: added bounded Linux telemetry storage, expanded live stream parsing/sources, fixed service-status read semantics, and evaluated the external SSH automation repo without adopting it as a dependency.

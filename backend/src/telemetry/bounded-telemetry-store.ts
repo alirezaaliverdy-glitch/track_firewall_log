@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import crypto from "node:crypto";
 import path from "node:path";
 import { env } from "../config/env.js";
 
@@ -33,6 +34,8 @@ function sizeOf(line: string) {
 }
 
 export class BoundedTelemetryStore {
+  private readonly queues = new Map<string, Promise<unknown>>();
+
   constructor(private readonly rootDir = env.telemetryStoreDir, private readonly policy: TelemetryRetentionPolicy = {
     maxBytesPerDevice: env.telemetryMaxBytesPerDevice,
     maxEventCountPerDevice: env.telemetryMaxEventsPerDevice,
@@ -40,7 +43,17 @@ export class BoundedTelemetryStore {
   }) {}
 
   async append(event: StoredTelemetryEvent) {
-    await mkdir(this.rootDir, { recursive: true });
+    const prior = this.queues.get(event.deviceId) ?? Promise.resolve();
+    const next = prior.then(() => this.appendUnlocked(event), () => this.appendUnlocked(event));
+    const queued = next.finally(() => {
+      if (this.queues.get(event.deviceId) === queued) this.queues.delete(event.deviceId);
+    });
+    this.queues.set(event.deviceId, queued);
+    return next;
+  }
+
+  private async appendUnlocked(event: StoredTelemetryEvent) {
+    await this.ensureDirectory();
     const file = safeDeviceFile(event.deviceId, this.rootDir);
     const current = await this.readEvents(event.deviceId).catch(() => []);
     const cutoff = Date.now() - this.policy.maxAgeDays * 24 * 60 * 60 * 1000;
@@ -54,13 +67,18 @@ export class BoundedTelemetryStore {
       bytes -= sizeOf(lines.shift()!);
     }
 
-    const tmp = `${file}.tmp`;
+    const tmp = `${file}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`;
     await writeFile(tmp, lines.length ? `${lines.join("\n")}\n` : "", "utf8");
     await rename(tmp, file);
     return { eventCount: lines.length, bytes };
   }
 
+  async ensureDirectory() {
+    await mkdir(this.rootDir, { recursive: true });
+  }
+
   async readEvents(deviceId: string, limit = this.policy.maxEventCountPerDevice) {
+    await this.ensureDirectory();
     const file = safeDeviceFile(deviceId, this.rootDir);
     const content = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return "";
@@ -74,6 +92,7 @@ export class BoundedTelemetryStore {
   }
 
   async status(deviceId: string) {
+    await this.ensureDirectory();
     const file = safeDeviceFile(deviceId, this.rootDir);
     const info = await stat(file).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return null;

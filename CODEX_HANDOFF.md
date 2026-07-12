@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 17.8 Follow-up - Windows-Safe Telemetry Storage Runtime Fix (2026-07-12)
+
+- Fixed the Windows telemetry persistence failure where concurrent live events could race on the shared `<deviceId>.jsonl.tmp` file and surface `ENOENT` during rename.
+- `BoundedTelemetryStore` now ensures the telemetry directory exists recursively before append, read, status, and rotation operations. First writes for new devices create the target JSONL file safely.
+- Atomic JSONL replacement now uses per-device serialized writes plus unique same-directory temp files before rename, which keeps Windows writes path-safe and avoids stale/missing tmp-file races.
+- Storage write failures are logged separately on the backend with `[linux-telemetry-storage]`, while live monitoring receives a clean warning: `Telemetry storage is temporarily unavailable; live monitoring continues.` Raw `ENOENT`, paths, rename details, and stack text are not emitted as findings/evidence.
+- Device Monitoring storage counters now display `used ... of ...` for bytes and event count. New stream events update live event count, last event time, and stored event count immediately, then refresh storage status from the backend.
+- Added regressions for missing telemetry directory creation, first write for a new device, byte-limit rotation, Windows path-safe concurrent temp writes, and storage failure not breaking monitoring findings.
+- Migrations: none.
+- Validation passed: focused Task 17.8 tests (10/10); backend build; backend full test suite (168/168); root `pnpm build` with the existing Vite large-chunk warning.
+
 ## Task 17.8 - Production Linux Monitoring and Service Status Semantics (2026-07-12)
 
 - Added a bounded file-backed telemetry store at `backend/src/telemetry/bounded-telemetry-store.ts`. It writes structured JSONL events per device with `id`, `deviceId`, vendor/type, source, timestamp, severity, category, raw/normalized message, parsed fields, and optional finding link. Retention is configurable with `TELEMETRY_MAX_BYTES_PER_DEVICE` (default 10 MB), `TELEMETRY_MAX_EVENTS_PER_DEVICE` (default 5000), `TELEMETRY_MAX_AGE_DAYS` (default 30), and `TELEMETRY_STORE_DIR` (default `./storage/telemetry`).
