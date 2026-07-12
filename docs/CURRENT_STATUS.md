@@ -10,7 +10,7 @@ Last updated: 2026-07-12
 - `linux_check_service_status` now uses structured service detection and parsing. Inactive, failed, missing, and unknown services are successful read results when SSH execution succeeded; only SSH/template/validation failures fail the ActionPlan. Result UI shows normalized state, exit code, confidence, explanation, systemd fields, and raw evidence.
 - Device Telemetry UI now exposes live event count, stream state, active sources, last event time, bounded storage bytes/count, source/severity filters, grouped findings/evidence, and suggested ActionPlan creation.
 - External repo `hiddent3rminal/SSH-Automation-For-Multiple-Servers` was evaluated and rejected as a dependency. It is MIT Python/Paramiko with useful fan-out/retry/result-collection ideas, but has hardcoded sample passwords, insecure host-key auto-add, sudo password shell piping, unbounded logs, and incompatible architecture.
-- Validation passed: focused Task 17.8 tests; catalog validation; backend build; backend full tests 164/164; i18n parity; frontend build with the existing large-chunk warning.
+- Validation passed: focused Task 17.8 tests 7/7 with separate per-device byte-limit and count-limit retention coverage; catalog validation; backend build; backend full tests 164/164; i18n parity; frontend build with the existing large-chunk warning.
 
 ## Task 17.7 - FortiGate Execution Verification Hardening
 

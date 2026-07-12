@@ -9,30 +9,52 @@ import { parseLinuxLiveLogLine } from "../src/telemetry/linux/linux-log-stream.s
 import { evaluateVendorTelemetry, resetFindingEngineWindows } from "../src/telemetry/vendor-finding-engine.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../src/linux/service-status.js";
 
-test("bounded telemetry store rotates old events after byte and count limits", async () => {
+function telemetryEvent(index: number, rawPadding = 80) {
+  return {
+    id: `event-${index}`,
+    deviceId: "linux-1",
+    vendor: "linux",
+    type: "linux",
+    source: "auth",
+    timestamp: new Date(Date.now() + index * 1000).toISOString(),
+    severity: "medium" as const,
+    category: "authentication",
+    rawMessage: `Failed password from 203.0.113.${index} ${"x".repeat(rawPadding)}`,
+    normalizedMessage: "Failed SSH authentication",
+    parsedFields: { sourceIp: `203.0.113.${index}` }
+  };
+}
+
+test("bounded telemetry store rotates old events after count limit", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "fla-telemetry-"));
-  const store = new BoundedTelemetryStore(dir, { maxBytesPerDevice: 2000, maxEventCountPerDevice: 4, maxAgeDays: 30 });
+  const store = new BoundedTelemetryStore(dir, { maxBytesPerDevice: 50_000, maxEventCountPerDevice: 4, maxAgeDays: 30 });
   try {
     for (let index = 0; index < 10; index += 1) {
-      await store.append({
-        id: `event-${index}`,
-        deviceId: "linux-1",
-        vendor: "linux",
-        type: "linux",
-        source: "auth",
-        timestamp: new Date(Date.now() + index * 1000).toISOString(),
-        severity: "medium",
-        category: "authentication",
-        rawMessage: `Failed password from 203.0.113.${index} ${"x".repeat(80)}`,
-        normalizedMessage: "Failed SSH authentication",
-        parsedFields: { sourceIp: `203.0.113.${index}` }
-      });
+      await store.append(telemetryEvent(index));
     }
     const status = await store.status("linux-1");
     const events = await store.readEvents("linux-1");
-    assert.ok(status.bytesUsed <= 2000, `bytesUsed=${status.bytesUsed}`);
-    assert.ok(events.length <= 4);
+    assert.equal(status.eventCount, 4);
+    assert.equal(events.length, 4);
     assert.equal(events.at(-1)?.id, "event-9");
+    assert.ok(!events.some((event) => event.id === "event-0"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("bounded telemetry store rotates old events after byte limit", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "fla-telemetry-"));
+  const store = new BoundedTelemetryStore(dir, { maxBytesPerDevice: 1500, maxEventCountPerDevice: 100, maxAgeDays: 30 });
+  try {
+    for (let index = 0; index < 8; index += 1) {
+      await store.append(telemetryEvent(index, 450));
+    }
+    const status = await store.status("linux-1");
+    const events = await store.readEvents("linux-1");
+    assert.ok(status.bytesUsed <= 1500, `bytesUsed=${status.bytesUsed}`);
+    assert.ok(events.length < 8);
+    assert.equal(events.at(-1)?.id, "event-7");
     assert.ok(!events.some((event) => event.id === "event-0"));
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -67,12 +89,15 @@ test("finding analyzer deduplicates repeated Linux events by fingerprint", () =>
   assert.equal(sshFindings.at(-1)?.severity, "high");
 });
 
-test("service status parser normalizes systemd, not-found, failed, inactive, and SysV fallback states", () => {
+test("service status parser normalizes active, inactive, failed, not_found, and systemctl-unavailable states", () => {
   assert.equal(parseLinuxServiceStatus("nginx", "__FLA_SYSTEMCTL__\nLoadState=loaded\nActiveState=active\n__FLA_IS_ACTIVE__\nactive\n__FLA_IS_ENABLED__\nenabled\n").state, "active");
   assert.equal(parseLinuxServiceStatus("nginx", "__FLA_SYSTEMCTL__\nLoadState=loaded\nActiveState=inactive\n__FLA_IS_ACTIVE__\ninactive\n").state, "inactive");
   assert.equal(parseLinuxServiceStatus("nginx", "__FLA_SYSTEMCTL__\nLoadState=loaded\nActiveState=failed\n__FLA_IS_ACTIVE__\nfailed\n").state, "failed");
   assert.equal(parseLinuxServiceStatus("missing", "__FLA_SYSTEMCTL__\nLoadState=not-found\nActiveState=inactive\n__FLA_IS_ACTIVE__\nunknown\n").state, "not_found");
-  assert.equal(parseLinuxServiceStatus("cron", "__FLA_SYSV__\ncron is running\n").state, "active");
+  const sysvFallback = parseLinuxServiceStatus("cron", "__FLA_SYSV__\ncron is running\n");
+  assert.equal(sysvFallback.systemctlAvailable, false);
+  assert.equal(sysvFallback.sysvAvailable, true);
+  assert.equal(sysvFallback.state, "active");
   assert.equal(parseLinuxServiceStatus("cron", "__FLA_SYSV__\ncron is not running\n").state, "inactive");
 });
 

@@ -11,7 +11,7 @@
 - External repo evaluation: cloned `https://github.com/hiddent3rminal/SSH-Automation-For-Multiple-Servers.git` to `C:\tmp\ssh-automation-eval`. It is MIT-licensed Python/Paramiko with thread-pool fan-out, ping precheck, retry/backoff, timestamped logs, and JSON result collection. It was not added as a dependency or copied because it hardcodes example passwords, uses `AutoAddPolicy` host-key trust, pipes sudo passwords into shell, stores logs without bounded retention, and does not fit this Node/Fastify/SSH-connector/ActionPlan architecture. Useful concepts retained only as architecture notes: bounded concurrency, per-host structured results, retry/backoff, and timeout handling.
 - Linux action audit outcome for this task: service-status is parser-backed read-only; existing read-only Linux inventory actions remain verified through fixed connector templates; mutating Linux user/firewall actions remain controlled executable only where schema/template/connector/parser tests exist. Broader package/service coverage can be expanded as new verified templates are added.
 - Migrations: none.
-- Validation passed: focused Task 17.8 tests (6/6); backend command catalog validation (136 items); backend build; backend full test suite (164/164); root i18n parity (73 keys); root `pnpm build` with the existing Vite large-chunk warning.
+- Validation passed: focused Task 17.8 tests (7/7, including separate per-device byte-limit and count-limit retention tests); backend command catalog validation (136 items); backend build; backend full test suite (164/164); root i18n parity (73 keys); root `pnpm build` with the existing Vite large-chunk warning.
 
 ## Task 17.7 - FortiGate Execution Verification Hardening (2026-07-11)
 
