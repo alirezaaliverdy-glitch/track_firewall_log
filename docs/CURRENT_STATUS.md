@@ -346,3 +346,14 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Asset and Security platform views are split into feature folders with hooks/components/pages. The old combined panel remains in the tree for compatibility but is no longer the main route surface.
 - Design tokens were added for later Figma implementation without changing execution policy.
 - MCP browser inspection before changes was limited by the auth gate; unauthenticated routes showed the login screen and expected 401 `/api/auth/me` errors.
+
+## Task 19.1 R-A confirmed runtime blockers (2026-07-13)
+
+- Device registration has no live route or CTA from Assets, Devices, Vendors, or the Cisco empty state.
+- Cisco exposes implemented read capability metadata without a registered usable live connector/device path.
+- Assistant exact-plan handoff is not route-based and does not preserve an ActionPlan ID.
+- The port-545 Linux ActionPlan is rejected with `COMMAND_PLAN_STALE` before connector execution; `connectorInvoked=false` and no success is claimed.
+- Repeating the same Assistant request reports `canCreateActionPlan=true` but renders manual-only and creates no second plan.
+- Persian pages currently run with `lang=en dir=ltr` and several primary workflows remain English-heavy.
+- R-A evidence is recorded in `docs/TASK_19_1_RUNTIME_BASELINE.md`, `docs/TASK_19_1_BROKEN_CONTROL_REGISTER.md`, and `docs/TASK_19_1_API_FAILURE_REGISTER.md`.
+- Next controlled milestone is R-B; R-C through R-G have not started.

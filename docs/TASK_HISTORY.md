@@ -43,6 +43,17 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Playwright MCP: authenticated desktop/mobile verification passed for dashboard, assets, devices, monitoring, Linux monitoring, actions, assistant, integrations, and Cisco vendor routes; no console/network errors or horizontal overflow remained.
 - Commit: pending.
 
+## Task 19.1 Milestone R-A - Runtime Failure Reproduction (2026-07-13)
+
+- Summary: used a new authenticated Playwright MCP context to reproduce the Task 19.1 blockers from the current committed state and recorded the required runtime, broken-control, and API failure registers.
+- Routes: `/dashboard`, `/assets`, `/assets/devices`, `/assets/vendors`, `/assets/vendors/cisco`, `/assistant`, `/actions`, `/monitoring`, `/monitoring/linux`, `/security/findings`, `/security/rules`, `/integrations`, and `/settings`.
+- Critical evidence: the controlled port-545 ActionPlan request returned 409 `COMMAND_PLAN_STALE`; plan status stayed `dry_run_ready`, and `connectorInvoked=false`.
+- Repeated request evidence: Assistant returned `canCreateActionPlan=true` and manual-only at the same time, so no second ActionPlan was created.
+- Other evidence: onboarding is unrouted, Cisco setup loops to a list without registration, Assistant cannot route to an exact plan, proposal JSON/API URLs leak into normal UI, and Persian surfaces use `lang=en dir=ltr` with extensive English copy.
+- Safety: no `.env`, credential, migration, destructive database command, device mutation, or successful connector execution.
+- Files: `docs/TASK_19_1_RUNTIME_BASELINE.md`, `docs/TASK_19_1_BROKEN_CONTROL_REGISTER.md`, `docs/TASK_19_1_API_FAILURE_REGISTER.md`, and project memory/handoff updates.
+- Validation: `git diff --check` and `npm run test:utf8` passed. The repository has no `test:memory` script. R-A is committed separately before R-B starts.
+
 ## Task 18.0 - Security Platform Minimum Tangible Milestone (2026-07-12)
 
 - Summary: implemented the first usable asset/security platform slice instead of attempting the full master roadmap at once.

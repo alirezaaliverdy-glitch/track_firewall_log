@@ -372,3 +372,14 @@
 - Safety boundary unchanged: no ActionPlan execution behavior, PolicyGuard behavior, protected lab settings, connector invocation semantics, or secrets were changed.
 - Browser MCP pre-check reached the app but all requested authenticated routes showed the login gate without a valid session; screenshots were captured under `.playwright-mcp/` and only expected `/api/auth/me` 401 console errors appeared.
 - Validation: root frontend `npx pnpm@10 build` passed with the existing Vite large-chunk warning after escalation for npm cache access.
+
+## Task 19.1 Milestone R-A — Runtime baseline (2026-07-13)
+
+- Re-read the Task 19.1 runtime specification, stale-repair contract, Playwright acceptance matrix, restored Task 18.2 specification, Task 19 product convergence specification, `AGENTS.md`, and this handoff.
+- Started a new Playwright MCP browser context and verified that the current session is authenticated; no login credential or `.env` value was used.
+- Audited every R-A route and created `docs/TASK_19_1_RUNTIME_BASELINE.md`, `docs/TASK_19_1_BROKEN_CONTROL_REGISTER.md`, and `docs/TASK_19_1_API_FAILURE_REGISTER.md`.
+- Reproduced the port-545 failure through Action Center: the quick-execute request returned flat 409 `COMMAND_PLAN_STALE`; the plan remained `dry_run_ready` and `connectorInvoked=false`.
+- Repeated `پورت 545 را ببند` for the selected Linux device. Assistant returned 200 and `canCreateActionPlan=true`, but labelled the result manual-only and created no second ActionPlan.
+- Confirmed missing device onboarding, the Cisco zero-device loop, broken exact-plan handoff, raw proposal JSON, raw API URL errors, English/Persian mixing, and `lang=en dir=ltr` on Persian surfaces.
+- No implementation fix, migration, destructive database operation, device mutation, or external integration call is part of R-A.
+- Next allowed work: R-B only — device onboarding, Product State route visibility, and device workspace foundation, followed by its own commit.
