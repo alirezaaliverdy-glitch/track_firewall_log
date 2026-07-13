@@ -2,6 +2,13 @@
 
 Date: 2026-07-13
 
+## Milestone R-E verification addendum
+
+- `/assistant` switches target selection, refresh summary, clear chat, new request, send, Safety Boundary, and AI Provider controls between Persian and English.
+- `/actions/cmrix2ddb00ao2glvh3tagbe6` keeps exactly one selected row and renders revision 1, Linux platform, `linux-ssh`, `linux_close_port`, connector verification, and `verified_no_change` in the active locale.
+- Desktop 1440x900 and mobile 390x844 passed in Persian RTL and English LTR. Page overflow and dialog overflow were false; current-navigation console errors were zero.
+- No execute request, connector invocation, device mutation, credential access, migration, or destructive database command occurred in R-E.
+
 ## Milestone R-D verification addendum
 
 - Preview resolved `linux.close-port`, `linux_close_port`, `linux-ssh`, Linux platform/vendor, canonical port 545/tcp parameters, medium risk, and revision 1 before approval.

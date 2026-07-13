@@ -1,5 +1,15 @@
 # CODEX_HANDOFF.md
 
+## Task 19.1 Milestone R-E - Action Center and Assistant UX (2026-07-13)
+
+- Action Center now follows the active Persian/English locale for its primary header, summary, filters, table, status, risk, actions, exact-plan dialog, and recovery controls.
+- The normal plan dialog exposes revision, platform, connector, execution template, target/vendor, verification state, parameters/preview, and audit details without requiring raw API output.
+- `verified_no_change` and `already_compliant` render as explicit verified/no-change states instead of vague success. A successful connector response replaces the optimistic executing state immediately and refreshes audit data.
+- Action API errors no longer expose raw backend URLs. Structured stale conflicts preserve code, retryability, recovery, current/approved revisions, and changed fields with a visible recovery action.
+- Assistant primary controls now switch between Persian and English, including target device, summary refresh, clear chat, new request, send, Safety Boundary, and AI Provider.
+- Authenticated Playwright verified `/assistant` and the exact port-545 ActionPlan on desktop/mobile in Persian RTL and English LTR: one selected plan, no page/dialog overflow, and zero console errors. No action was executed during R-E.
+- Validation passed: focused R-E tests 2/2, serial full backend tests 203/203, backend/frontend builds, Prisma validate/generate, i18n 73, UTF-8, and diff check. Read-only migration status still reports the known unapplied baseline; no migration command was run.
+
 ## Task 19.1 Milestone R-D - Canonical revision and connector repair (2026-07-13)
 
 - ActionPlan preview now resolves target, vendor/platform, capability, catalog item, execution template, connector, normalized parameters, and risk before hashing a canonical revision.

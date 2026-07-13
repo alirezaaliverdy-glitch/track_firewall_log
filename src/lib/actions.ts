@@ -270,7 +270,7 @@ function parsePayload(text: string): unknown {
   }
 }
 
-function apiErrorMessage(url: string, status: number, payload: unknown) {
+function apiErrorMessage(status: number, payload: unknown) {
   const body = normalizeObject(payload);
   const structured = normalizeObject(body.error);
   const detail = typeof body.error === "string"
@@ -280,7 +280,7 @@ function apiErrorMessage(url: string, status: number, payload: unknown) {
     : typeof body.message === "string"
       ? body.message
       : "No response details were provided.";
-  return `Action API error ${status}: ${detail} [${url}]`;
+  return `Action API error ${status}: ${detail}`;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit, options?: { allowConflict?: boolean }): Promise<T> {
@@ -295,13 +295,21 @@ async function requestJson<T>(path: string, init?: RequestInit, options?: { allo
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network request failed.";
-    throw new Error(`Action API network error: ${message} [${url}]`);
+    throw new Error(`Action API network error: ${message}`);
   }
 
   const payload = parsePayload(await response.text());
   if (!response.ok && !(options?.allowConflict && response.status === 409)) {
-    const error = new Error(apiErrorMessage(url, response.status, payload)) as QuickExecuteError;
+    const error = new Error(apiErrorMessage(response.status, payload)) as QuickExecuteError;
     const body = normalizeObject(payload);
+    const structured = normalizeObject(body.error);
+    error.status = response.status;
+    error.code = String(structured.code ?? (typeof body.error === "string" ? body.error : "ACTION_API_ERROR"));
+    error.retryable = structured.retryable === true;
+    error.recovery = typeof structured.recovery === "string" ? structured.recovery : null;
+    error.currentRevision = Number.isInteger(Number(structured.currentRevision)) ? Number(structured.currentRevision) : null;
+    error.approvedRevision = Number.isInteger(Number(structured.approvedRevision)) ? Number(structured.approvedRevision) : null;
+    error.changedFields = normalizeArray<unknown>(structured.changedFields).map(String);
     if (body.plan) error.plan = normalizeActionPlan(body.plan);
     throw error;
   }
@@ -333,7 +341,16 @@ export function normalizeActionPlan(value: unknown): ActionPlan {
   };
 }
 
-export type QuickExecuteError = Error & { plan?: ActionPlan };
+export type QuickExecuteError = Error & {
+  plan?: ActionPlan;
+  status?: number;
+  code?: string;
+  retryable?: boolean;
+  recovery?: string | null;
+  currentRevision?: number | null;
+  approvedRevision?: number | null;
+  changedFields?: string[];
+};
 
 export function normalizeActionAuditEntry(value: unknown): ActionAuditEntry {
   const source = normalizeObject(value);

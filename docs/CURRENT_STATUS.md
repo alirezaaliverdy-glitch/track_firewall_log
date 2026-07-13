@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-13
 
+## Task 19.1 R-E - Action Center and Assistant UX
+
+- Action Center primary workflow is locale-aware in Persian and English and exposes exact revision, runtime resolution, verification, preview/parameters, and audit context.
+- Verified no-change outcomes are explicit; successful execution no longer leaves the selected dialog in an optimistic running state.
+- Action API errors are URL-free and structured stale-revision recovery fields remain available to the UI.
+- Assistant target/refresh/clear/new-request/send/safety/provider controls switch with the active locale.
+- Authenticated Playwright passed desktop/mobile Persian RTL and English LTR for `/assistant` and `/actions/cmrix2ddb00ao2glvh3tagbe6` with no overflow or console errors. R-E performed no connector execution.
+- Validation passed: serial backend 203/203, backend/frontend builds, Prisma validate/generate, focused R-E 2/2, i18n 73, UTF-8, and diff check. Migration status retains the known unapplied baseline and was not mutated.
+- R-F and R-G remain. Asset charts/vendor tabs and the global control audit are not part of this commit.
+
 ## Task 19.1 R-D - Canonical ActionPlan revision and connector execution
 
 - Canonical ActionPlan resolution, revision hashing, immutable approval snapshots, and structured stale-revision conflicts are implemented without a schema migration.

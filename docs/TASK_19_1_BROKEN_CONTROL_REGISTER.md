@@ -2,6 +2,13 @@
 
 Date: 2026-07-13
 
+## Milestone R-E disposition
+
+- BC-10 is resolved: user-facing errors no longer expose raw backend URLs; structured code, retryability, recovery, revision identity, and changed fields are preserved with a recovery control.
+- BC-12 is resolved for Action Center primary controls in Persian and English, including explicit verified/no-change state.
+- BC-13 is resolved for the normal Action Center workflow: canonical runtime and parameters are human-readable; raw technical JSON remains only inside the explicit Details disclosure.
+- BC-16 is resolved on the R-E Assistant/Action Center surfaces: locale selection changes copy and document `lang`/`dir` atomically. The remaining global route audit belongs to R-G.
+
 ## Milestone R-D disposition
 
 - BC-07 is resolved: deterministic `linux.close-port` creates or reuses the exact executable ActionPlan and exposes its exact route.

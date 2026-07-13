@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   CheckCircle2,
   Eye,
@@ -18,6 +19,7 @@ import {
   quickExecuteAction,
   type ActionAuditEntry,
   type ActionPlan,
+  type QuickExecuteError,
   type StructuredValidationError,
 } from "@/lib/actions";
 import { actionPlanIdFromLocation, actionPlanPath, subscribeToActionPlanCreated } from "@/lib/actionPlanHandoff";
@@ -52,7 +54,12 @@ function badgeClass(value: string) {
   return "border-blue-800 bg-blue-950/40 text-blue-200";
 }
 
-function statusLabel(value: string) {
+function statusLabel(value: string, isFa = false, outcome?: string) {
+  if (isFa) {
+    if (value === "succeeded" && ["verified_no_change", "already_compliant"].includes(String(outcome))) return "تأییدشده بدون تغییر";
+    return ({ proposed: "پیشنهادشده", needs_input: "نیازمند اطلاعات", validation_failed: "نامعتبر", awaiting_approval: "منتظر تأیید", dry_run_ready: "پیش‌نمایش آماده", approved: "تأییدشده", running: "در حال اجرا", executing: "در حال اجرا", succeeded: "موفق", failed: "ناموفق", blocked: "مسدود", rollback_needed: "نیازمند بازگشت", rolled_back: "بازگردانی‌شده", rejected: "ردشده" } as Record<string, string>)[value] ?? value.replace(/_/g, " ");
+  }
+  if (value === "succeeded" && ["verified_no_change", "already_compliant"].includes(String(outcome))) return "verified, no change";
   return actionPlanStatusLabel(value);
 }
 
@@ -445,8 +452,16 @@ function revisionOf(action: ActionPlan) {
 }
 
 type SelectedActionError = { code: string; message: string; actionPlanId: string };
+type ActionUiError = { code: string; retryable: boolean; recovery: string | null; currentRevision: number | null; approvedRevision: number | null; changedFields: string[] };
 
 export default function ActionCenterPanel({ initialActionPlanId }: { initialActionPlanId?: string }) {
+  const { i18n } = useTranslation();
+  const isFa = i18n.language?.startsWith("fa") ?? false;
+  const copy = isFa ? {
+    eyebrow: "عملیات پاسخ", title: "مرکز اقدام", subtitle: "اقدام‌های امنیتی کنترل‌شده را بازبینی و اجرا کنید.", refresh: "تازه‌سازی", refreshing: "در حال تازه‌سازی...", clear: "پاک‌کردن نما", lastRefresh: "آخرین تازه‌سازی", plans: "برنامه‌های اقدام", activeReview: "در انتظار بازبینی", latest: "آخرین وضعیت", mode: "حالت اجرا", controlled: "قالب‌های کنترل‌شده", scope: "دامنه", topic: "موضوع", action: "اقدام", status: "وضعیت", risk: "ریسک", source: "منبع", created: "ایجاد", updated: "به‌روزرسانی", details: "جزئیات", close: "بستن", revision: "نسخه", vendor: "وندور", target: "دستگاه مقصد", connector: "کانکتور", template: "قالب", parameters: "پارامترها", verification: "راستی‌آزمایی", audit: "خط زمانی ممیزی", execute: "تأیید و اجرا", return: "بازگشت به مرکز اقدام", none: "هیچ", platform: "پلتفرم"
+  } : {
+    eyebrow: "Response operations", title: "Action Center", subtitle: "Review and execute controlled security actions.", refresh: "Refresh", refreshing: "Refreshing...", clear: "Clear view", lastRefresh: "Last refreshed", plans: "Action plans", activeReview: "Active review", latest: "Latest status", mode: "Execution mode", controlled: "Controlled templates", scope: "Scope", topic: "Topic", action: "Action", status: "Status", risk: "Risk", source: "Source", created: "Created", updated: "Updated", details: "Details", close: "Close", revision: "Revision", vendor: "Vendor", target: "Target device", connector: "Connector", template: "Template", parameters: "Parameters", verification: "Verification", audit: "Audit timeline", execute: "Confirm & Execute", return: "Return to Action Center", none: "none", platform: "Platform"
+  };
   const [actions, setActions] = useState<ActionPlan[]>([]);
   const [selectedAction, setSelectedAction] = useState<ActionPlan | null>(null);
   const [auditEntries, setAuditEntries] = useState<ActionAuditEntry[]>([]);
@@ -455,6 +470,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedError, setSelectedError] = useState<SelectedActionError | null>(null);
+  const [actionError, setActionError] = useState<ActionUiError | null>(null);
   const [resultFallbackId, setResultFallbackId] = useState<string | null>(null);
   const [fieldFixes, setFieldFixes] = useState<Record<string, string>>({});
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
@@ -478,6 +494,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
     setSelectedAction(null);
     setAuditEntries([]);
     setSelectedError(null);
+    setActionError(null);
     setLastRefreshedAt(null);
     return getActions()
       .then(async (nextActions) => {
@@ -555,10 +572,24 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
     });
   };
 
+  const showActionError = (error: unknown, fallback: string) => {
+    const apiError = error as QuickExecuteError;
+    setMessage(error instanceof Error ? error.message : fallback);
+    setActionError(apiError.code ? {
+      code: apiError.code,
+      retryable: apiError.retryable === true,
+      recovery: apiError.recovery ?? null,
+      currentRevision: apiError.currentRevision ?? null,
+      approvedRevision: apiError.approvedRevision ?? null,
+      changedFields: apiError.changedFields ?? [],
+    } : null);
+  };
+
   const openAction = (action: ActionPlan) => {
     window.history.pushState({}, "", actionPlanPath(action.id));
     setDetailsLoading(true);
     setMessage(null);
+    setActionError(null);
     setSelectedAction(null);
     setAuditEntries([]);
     reloadSelected(action.id)
@@ -600,20 +631,24 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
 
   const executeSelected = () => {
     if (!selectedAction) return;
-    setWorking("execute"); setMessage(null); setResultFallbackId(null);
+    setWorking("execute"); setMessage(null); setActionError(null); setResultFallbackId(null);
     setSelectedAction((current) => current ? { ...current, status: "executing" } : current);
     quickExecuteAction(selectedAction.id, { intent: "execute", reason: "Execute from Action Center" }).then((plan) => {
       const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
       if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) {
+        setSelectedAction(plan);
+        setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
+        void getActionAudit(plan.id).then((audit) => setAuditEntries(normalizeArray<ActionAuditEntry>(audit)));
         if (!openActionResultInNewTab(plan.id)) { setResultFallbackId(plan.id); setMessage("پاپ‌آپ مسدود شد. نتیجه را در تب جدید باز کنید."); }
       }
       else { setSelectedAction(plan); setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد.")); }
-    }).catch((error: unknown) => { void reloadSelected(selectedAction.id); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); }).finally(() => setWorking(null));
+    }).catch((error: unknown) => { void reloadSelected(selectedAction.id); showActionError(error, isFa ? "اجرای دستور ناموفق بود." : "Action execution failed."); }).finally(() => setWorking(null));
   };
 
   const executeFromList = (action: ActionPlan) => {
     setWorking(action.id);
     setMessage(null);
+    setActionError(null);
     setResultFallbackId(null);
     setActions((current) => current.map((item) => item.id === action.id ? { ...item, status: "executing" } : item));
     quickExecuteAction(action.id, { intent: "execute", reason: "Execute from Action Center" })
@@ -625,7 +660,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
         }
         else setMessage(plan.status === "dry_run_ready" || metadata.connectorInvoked !== true ? "این دستور فقط پیش‌نمایش ساخته و هنوز روی دستگاه اجرا نشده است." : String(normalizeObject(plan.resultJson).message ?? "اجرای واقعی دستور کامل نشد."));
       })
-      .catch((error: unknown) => { void getAction(action.id).then((plan) => setActions((current) => current.map((item) => item.id === plan.id ? plan : item))); setMessage(error instanceof Error ? error.message : "اجرای دستور ناموفق بود."); })
+      .catch((error: unknown) => { void getAction(action.id).then((plan) => setActions((current) => current.map((item) => item.id === plan.id ? plan : item))); showActionError(error, isFa ? "اجرای دستور ناموفق بود." : "Action execution failed."); })
       .finally(() => setWorking(null));
   };
 
@@ -674,14 +709,14 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
         : { title: "No records for the selected scope", description: "New actions will appear here when generated." };
 
   return (
-    <section id="action-center" className="action-center-panel mb-5 scroll-mt-4">
+    <section id="action-center" className="action-center-panel mb-5 scroll-mt-4" dir={isFa ? "rtl" : "ltr"}>
       <div className="action-center-header">
         <div>
-          <span className="action-center-eyebrow"><ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" /> Response operations</span>
+          <span className="action-center-eyebrow"><ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" /> {copy.eyebrow}</span>
           <h2 className="mt-2 text-left text-xl font-semibold tracking-tight text-slate-50">
-            Action Center
+            {copy.title}
           </h2>
-          <p className="mt-1 text-left text-sm text-slate-400">Review and execute controlled security actions.</p>
+          <p className="mt-1 text-left text-sm text-slate-400">{copy.subtitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
         <button
@@ -690,46 +725,46 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
           className="action-utility-button"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-          {loading ? "Refreshing..." : "Refresh"}
+          {loading ? copy.refreshing : copy.refresh}
         </button>
         <button
           type="button"
           onClick={clearActionCenterView}
           className="action-utility-button"
         >
-          Clear view
+          {copy.clear}
         </button>
         </div>
       </div>
 
       <p className="mb-3 text-left text-[11px] text-slate-500">
-        Last refreshed: {formatDateTime(lastRefreshedAt)}
+        {copy.lastRefresh}: {formatDateTime(lastRefreshedAt)}
       </p>
 
-      <InfoCallout />
+      <InfoCallout isFa={isFa} />
 
       <div className="action-summary-strip">
         <div>
-          <p className="text-xs text-zinc-500">Action plans</p>
+          <p className="text-xs text-zinc-500">{copy.plans}</p>
           <p className="mt-1 text-xl font-semibold text-blue-100">{safeNumber(safeActions.length).toLocaleString()}</p>
         </div>
         <div>
-          <p className="text-xs text-zinc-500">Active review</p>
+          <p className="text-xs text-zinc-500">{copy.activeReview}</p>
           <p className="mt-1 text-xl font-semibold text-yellow-100">{safeNumber(totalOpen).toLocaleString()}</p>
         </div>
         <div>
-          <p className="text-xs text-zinc-500">Latest status</p>
-          <div className="mt-2">{safeActions[0] ? <StatusChip status={safeActions[0].status} label={statusLabel(safeActions[0].status)} /> : <span className="text-xs text-slate-500">none</span>}</div>
+          <p className="text-xs text-zinc-500">{copy.latest}</p>
+          <div className="mt-2">{safeActions[0] ? <StatusChip status={safeActions[0].status} label={statusLabel(safeActions[0].status, isFa, String(normalizeObject(safeActions[0].resultJson).outcome ?? ""))} /> : <span className="text-xs text-slate-500">{copy.none}</span>}</div>
         </div>
         <div>
-          <p className="text-xs text-zinc-500">Execution mode</p>
-          <p className="mt-2 text-xs font-medium text-cyan-200">Controlled templates</p>
+          <p className="text-xs text-zinc-500">{copy.mode}</p>
+          <p className="mt-2 text-xs font-medium text-cyan-200">{copy.controlled}</p>
         </div>
       </div>
 
       <div className="action-toolbar">
       <div className="action-filter-group">
-        <span className="action-filter-label">Scope</span>
+        <span className="action-filter-label">{copy.scope}</span>
         {(["active", "succeeded", "failed", "history", "all"] as ActionTab[]).map((item) => (
           <button
             key={item}
@@ -737,7 +772,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
             onClick={() => setTab(item)}
             className={`action-filter-chip capitalize ${tab === item ? "is-active" : ""}`}
           >
-            {item}
+            {isFa ? ({ active: "فعال", succeeded: "موفق", failed: "ناموفق", history: "تاریخچه", all: "همه" } as Record<string, string>)[item] : item}
           </button>
         ))}
         {tab === "history" && hiddenCompletedIds.length > 0 && (
@@ -752,7 +787,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
       </div>
 
       <div className="action-filter-group">
-        <span className="action-filter-label">Topic</span>
+        <span className="action-filter-label">{copy.topic}</span>
         {["all", "fortigate", "mikrotik", "linux", "firewall", "nat", "management", "critical"].map((item) => (
           <button
             key={item}
@@ -771,11 +806,11 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
           <table className="min-w-full divide-y divide-zinc-800 text-left text-sm">
             <thead className="bg-zinc-900/70 text-xs uppercase text-zinc-500">
               <tr>
-                <th className="px-3 py-2 font-medium">Action</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Risk</th>
-                <th className="px-3 py-2 font-medium">Source</th>
-                <th className="px-3 py-2 font-medium">Created</th>
+                <th className="px-3 py-2 font-medium">{copy.action}</th>
+                <th className="px-3 py-2 font-medium">{copy.status}</th>
+                <th className="px-3 py-2 font-medium">{copy.risk}</th>
+                <th className="px-3 py-2 font-medium">{copy.source}</th>
+                <th className="px-3 py-2 font-medium">{copy.created}</th>
                 <th className="px-3 py-2 font-medium"></th>
               </tr>
             </thead>
@@ -810,13 +845,13 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <StatusChip status={action.status} label={statusLabel(action.status)} />
+                      <StatusChip status={action.status} label={statusLabel(action.status, isFa, String(normalizeObject(action.resultJson).outcome ?? ""))} />
                       {action.status === "succeeded" || action.status === "failed" ? (
                         <p className="mt-1 text-xs text-zinc-500">{formatDateTime(action.updatedAt)}</p>
                       ) : null}
                     </td>
                     <td className="px-3 py-2">
-                      <RiskChip risk={action.riskLevel} />
+                      <RiskChip risk={action.riskLevel} label={isFa ? ({ low: "کم", medium: "متوسط", high: "زیاد", critical: "بحرانی" } as Record<string, string>)[action.riskLevel] : undefined} />
                     </td>
                     <td className="px-3 py-2 text-xs text-zinc-400">{sourceLabel(action.source, action)}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">
@@ -828,13 +863,13 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
                       {actionExecutionUiState(action).canExecute && (
                         <button
                           type="button"
-                          aria-label="Confirm & Execute"
+                          aria-label={copy.execute}
                           onClick={() => executeFromList(action)}
                           disabled={Boolean(working)}
                           className="inline-flex h-8 min-w-24 items-center justify-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          تایید و اجرا
+                          {copy.execute}
                         </button>
                       )}
                       <button
@@ -843,7 +878,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
                         className="inline-flex h-8 min-w-24 items-center justify-center gap-1.5 rounded border border-zinc-700 bg-zinc-900 px-3 text-xs font-medium text-zinc-300 transition-colors hover:text-blue-200"
                       >
                         <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                        Details
+                        {copy.details}
                       </button>
                       </div>
                     </td>
@@ -862,20 +897,20 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
               <div>
                 <h3 className="text-left text-sm font-semibold text-zinc-100">{actionLabel(selectedAction)}</h3>
                 <p className="mt-0.5 text-left text-xs text-zinc-500">
-                  {selectedAction.device?.name ?? selectedAction.deviceId ?? "No device selected"} · {selectedAction.id}
+                  {selectedAction.device?.name ?? selectedAction.deviceId ?? (isFa ? "دستگاهی انتخاب نشده" : "No device selected")} · {selectedAction.id}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {executionUi.canExecute && (
                   <button
                     type="button"
-                    aria-label="Confirm & Execute"
+                    aria-label={copy.execute}
                     onClick={executeSelected}
                     disabled={Boolean(working) || detailsLoading}
                     className="inline-flex h-8 items-center gap-1.5 rounded border border-green-900/70 px-2.5 text-xs font-medium text-green-300 hover:text-green-200 disabled:opacity-60"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    تایید و اجرا
+                    {copy.execute}
                   </button>
                 )}
                 <button
@@ -883,7 +918,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
                   onClick={closeSelectedAction}
                   className="h-8 rounded border border-zinc-700 px-2 text-xs text-zinc-300 hover:text-zinc-100"
                 >
-                  Close
+                  {copy.close}
                 </button>
               </div>
             </div>
@@ -891,41 +926,57 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
             <div className="max-h-[76vh] overflow-y-auto p-4">
               <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Status</p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-100">{statusLabel(selectedAction.status)}</p>
+                  <p className="text-xs text-zinc-500">{copy.status}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{statusLabel(selectedAction.status, isFa, String(normalizeObject(selectedAction.resultJson).outcome ?? ""))}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Risk</p>
+                  <p className="text-xs text-zinc-500">{copy.risk}</p>
                   <p className="mt-1 text-sm font-semibold text-zinc-100">{selectedAction.riskLevel}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Created</p>
+                  <p className="text-xs text-zinc-500">{copy.created}</p>
                   <p className="mt-1 text-xs text-zinc-300">{formatDateTime(selectedAction.createdAt)}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Updated</p>
+                  <p className="text-xs text-zinc-500">{copy.updated}</p>
                   <p className="mt-1 text-xs text-zinc-300">{formatDateTime(selectedAction.updatedAt)}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Vendor</p>
+                  <p className="text-xs text-zinc-500">{copy.vendor}</p>
                   <p className="mt-1 text-sm font-semibold text-zinc-100">{vendorOf(selectedAction)}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Source</p>
+                  <p className="text-xs text-zinc-500">{copy.source}</p>
                   <p className="mt-1 text-sm font-semibold text-zinc-100">{sourceLabel(selectedAction.source, selectedAction)}</p>
                 </div>
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
-                  <p className="text-xs text-zinc-500">Revision</p>
-                  <p className="mt-1 text-sm font-semibold text-zinc-100">{revisionOf(selectedAction) ?? "unversioned"}</p>
+                  <p className="text-xs text-zinc-500">{copy.revision}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{revisionOf(selectedAction) ?? (isFa ? "بدون نسخه" : "unversioned")}</p>
+                </div>
+                <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                  <p className="text-xs text-zinc-500">{copy.platform}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{String(normalizeObject(normalizeObject(selectedAction.parametersJson).metadata).resolvedPlatform ?? selectedAction.device?.type ?? "-")}</p>
+                </div>
+                <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                  <p className="text-xs text-zinc-500">{copy.connector}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{String(normalizeObject(normalizeObject(selectedAction.parametersJson).metadata).connectorType ?? "-")}</p>
+                </div>
+                <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                  <p className="text-xs text-zinc-500">{copy.template}</p>
+                  <p className="mt-1 break-all text-xs font-semibold text-zinc-100">{String(normalizeObject(normalizeObject(selectedAction.parametersJson).metadata).executionTemplateRef ?? "-")}</p>
+                </div>
+                <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                  <p className="text-xs text-zinc-500">{copy.verification}</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{normalizeObject(selectedAction.resultJson).connectorInvoked === true ? (isFa ? "کانکتور اجرا و نتیجه ثبت شد" : "Connector invoked and result recorded") : (isFa ? "هنوز تأیید نشده" : "Not yet verified")}</p>
                 </div>
               </div>
 
               {(selectedAction.status === "succeeded" || selectedAction.status === "failed") && (
                 <div className={`mb-4 rounded border p-3 text-left ${selectedAction.status === "succeeded" ? "border-green-900/70 bg-green-950/20" : "border-red-900/70 bg-red-950/20"}`}>
                   <p className="text-sm font-semibold text-zinc-100">
-                    Execution {selectedAction.status === "succeeded" ? "succeeded" : "failed"} at {formatDateTime(selectedAction.updatedAt)}
+                    {isFa ? `اجرا ${selectedAction.status === "succeeded" ? "موفق" : "ناموفق"} در ${formatDateTime(selectedAction.updatedAt)}` : `Execution ${selectedAction.status === "succeeded" ? "succeeded" : "failed"} at ${formatDateTime(selectedAction.updatedAt)}`}
                   </p>
-                  <p className="mt-1 text-xs text-zinc-300">Device: {selectedAction.device?.name ?? selectedAction.deviceId ?? "unknown"} - Vendor: {vendorOf(selectedAction)}</p>
+                  <p className="mt-1 text-xs text-zinc-300">{copy.target}: {selectedAction.device?.name ?? selectedAction.deviceId ?? "unknown"} - {copy.vendor}: {vendorOf(selectedAction)}</p>
                   {commandSummary(selectedAction).length > 0 && (
                     <pre className="mt-2 max-h-32 overflow-auto rounded border border-zinc-800 bg-black/30 p-2 text-xs text-zinc-300">
                       {commandSummary(selectedAction).join("\n")}
@@ -998,7 +1049,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
               )}
 
               <details className="mb-4 rounded border border-zinc-800 bg-black/20 p-3 text-left">
-                <summary className="cursor-pointer text-sm font-semibold text-zinc-200">Details</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-zinc-200">{copy.details}</summary>
                 <div className="mt-3">
                   <CatalogExecutionDebug action={selectedAction} />
                   <ValidationSummary action={selectedAction} />
@@ -1009,7 +1060,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
                     <JsonBlock title="Rollback info" value={selectedAction.rollbackJson} />
                   </div>
                   <VendorPlanView dryRunJson={normalizeObject(selectedAction.dryRunJson)} />
-                  <h4 className="mb-2 text-left text-sm font-semibold text-zinc-100">Audit Timeline</h4>
+                  <h4 className="mb-2 text-left text-sm font-semibold text-zinc-100">{copy.audit}</h4>
                   <div className="rounded border border-zinc-800 bg-black/20">
                 {safeAudit.length === 0 ? (
                   <p className="px-3 py-6 text-center text-sm text-zinc-500">No audit entries found.</p>
@@ -1052,8 +1103,26 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
               window.history.pushState({}, "", "/actions");
             }}
           >
-            Return to Action Center
+            {copy.return}
           </button>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="mt-3 rounded border border-amber-900/70 bg-amber-950/20 p-3 text-left" role="alert" aria-live="assertive">
+          <p className="text-xs font-semibold text-amber-200">{actionError.code}</p>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-300">
+            <span>{isFa ? "قابل تلاش مجدد" : "Retryable"}: {actionError.retryable ? (isFa ? "بله" : "yes") : (isFa ? "خیر" : "no")}</span>
+            {actionError.recovery && <span>{isFa ? "راه بازیابی" : "Recovery"}: {actionError.recovery}</span>}
+            {actionError.currentRevision && <span>{isFa ? "نسخه فعلی" : "Current revision"}: {actionError.currentRevision}</span>}
+            {actionError.approvedRevision && <span>{isFa ? "نسخه تأییدشده" : "Approved revision"}: {actionError.approvedRevision}</span>}
+          </div>
+          {actionError.changedFields.length > 0 && <p className="mt-2 text-xs text-zinc-400">{isFa ? "فیلدهای تغییرکرده" : "Changed fields"}: {actionError.changedFields.join(", ")}</p>}
+          {selectedAction && actionError.recovery === "CREATE_NEW_REVISION" && (
+            <button type="button" className="mt-3 rounded border border-amber-800 px-3 py-1.5 text-xs text-amber-200" onClick={() => { setActionError(null); void reloadSelected(selectedAction.id); }}>
+              {isFa ? "بازبینی و ساخت نسخه جدید" : "Review and create a new revision"}
+            </button>
+          )}
         </div>
       )}
 

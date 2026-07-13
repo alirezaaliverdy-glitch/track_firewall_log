@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import {
   getAiProviderStatus,
@@ -84,11 +85,13 @@ function IntentCard({
   debug,
   createdPlanId,
   onCompleted,
+  isFa,
 }: {
   intent: AiActionIntent | null;
   debug: AiActionDebug | null;
   createdPlanId: string | null;
   onCompleted: (input: { actionPlanId: string | null; intent: AiActionIntent | null; message: string }) => void;
+  isFa: boolean;
 }) {
   const [missingValues, setMissingValues] = useState<Record<string, string>>({});
   const [devices, setDevices] = useState<Device[]>([]);
@@ -243,14 +246,14 @@ function IntentCard({
               className="h-8 rounded border border-yellow-700 bg-yellow-950/40 px-2 text-xs font-semibold text-yellow-100 disabled:opacity-50"
               disabled={submitting || (needsDevice && compatibleDevices.length === 0)}
             >
-              {submitting ? "Creating..." : "Create ActionPlan"}
+              {submitting ? (isFa ? "در حال ساخت..." : "Creating...") : (isFa ? "ساخت برنامه اقدام" : "Create ActionPlan")}
             </button>
           </div>
         </div>
       )}
       {clarificationQuestions.length > 0 && (
         <div className="mt-3 rounded border border-blue-900/70 bg-blue-950/20 p-2">
-          <p className="text-xs font-semibold text-blue-100">Clarification questions</p>
+          <p className="text-xs font-semibold text-blue-100">{isFa ? "پرسش‌های تکمیلی" : "Clarification questions"}</p>
           <ul className="mt-1 space-y-1 text-xs text-blue-100/80">
             {clarificationQuestions.map((question) => <li key={question}>- {question}</li>)}
           </ul>
@@ -258,13 +261,13 @@ function IntentCard({
       )}
       {createdPlanId && (
         <div className="mt-3 rounded border border-green-900/70 bg-green-950/20 p-3">
-          <p className="text-xs font-medium text-green-200">ActionPlan created. Review in Action Center.</p>
+          <p className="text-xs font-medium text-green-200">{isFa ? "برنامه اقدام ساخته شد؛ آن را در مرکز اقدام بازبینی کنید." : "ActionPlan created. Review in Action Center."}</p>
           <button
             type="button"
             onClick={() => reviewInActionCenter(createdPlanId)}
             className="mt-2 inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
           >
-            Review in Action Center
+            {isFa ? "بازبینی در مرکز اقدام" : "Review in Action Center"}
           </button>
         </div>
       )}
@@ -300,6 +303,13 @@ function ChatMessageBubble({ message }: { message: AiMessage }) {
 }
 
 export default function AiSecurityAssistantPanel() {
+  const { i18n } = useTranslation();
+  const isFa = i18n.language?.startsWith("fa") ?? false;
+  const copy = isFa ? {
+    title: "دستیار هوشمند امنیت", subtitle: "گفت‌وگوی امنیتی زمینه‌محور؛ فقط پیشنهاد و بدون اجرای مستقیم.", lastRefresh: "آخرین تازه‌سازی", refresh: "تازه‌سازی خلاصه", refreshing: "در حال تازه‌سازی...", target: "دستگاه مقصد", choose: "انتخاب دستگاه", clear: "پاک‌کردن گفت‌وگو", newRequest: "درخواست جدید", recent: "رخدادهای اخیر", devices: "دستگاه‌ها", topIp: "IP پرتکرار", ports: "پورت‌های حساس", empty: "درباره رخدادها، دستگاه‌ها یا اقدام‌های پیشنهادی بپرسید.", thinking: "دستیار در حال بررسی است...", send: "ارسال", safety: "مرز ایمنی", safetyText: "هوش مصنوعی نمی‌تواند فرمان اجرا کند، به دستگاه SSH بزند یا قانون فایروال را مستقیم تغییر دهد. درخواست‌ها فقط به پیشنهاد یا ActionPlan قابل بازبینی تبدیل می‌شوند.", provider: "ارائه‌دهنده هوش مصنوعی"
+  } : {
+    title: "AI Security Assistant", subtitle: "Context-aware security chat. Proposed intents only, no direct execution.", lastRefresh: "Last refreshed", refresh: "Refresh Summary", refreshing: "Refreshing...", target: "Target device", choose: "Choose a device", clear: "Clear Chat", newRequest: "New Request", recent: "Recent events", devices: "Devices", topIp: "Top source IP", ports: "Sensitive ports", empty: "Ask about events, incidents, devices, or proposed actions.", thinking: "Assistant is thinking...", send: "Send", safety: "Safety Boundary", safetyText: "AI cannot execute commands, SSH to devices, or change firewall rules directly. Requests become reviewable proposals or ActionPlans only.", provider: "AI Provider"
+  };
   const viewGeneration = useRef(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -545,18 +555,18 @@ export default function AiSecurityAssistantPanel() {
   };
 
   return (
-    <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+    <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]" dir={isFa ? "rtl" : "ltr"}>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-left text-lg font-semibold text-zinc-100">
             <Bot className="h-5 w-5 text-blue-300" aria-hidden="true" />
-            AI Security Assistant
+            {copy.title}
           </h2>
           <p className="mt-1 text-left text-sm text-zinc-400">
-            Context-aware security chat. Proposed intents only, no execution.
+            {copy.subtitle}
           </p>
           <p className="mt-1 text-left text-xs text-zinc-500">
-            Last refreshed: {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleString() : "-"}
+            {copy.lastRefresh}: {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleString() : "-"}
           </p>
         </div>
         <button
@@ -565,16 +575,16 @@ export default function AiSecurityAssistantPanel() {
           className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
         >
           <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-          {summaryLoading ? "Refreshing..." : "Refresh Summary"}
+          {summaryLoading ? copy.refreshing : copy.refresh}
         </button>
         <div className="flex flex-col gap-1 text-right" dir="rtl">
-          <label className="text-xs text-zinc-400">دستگاه مقصد</label>
+          <label className="text-xs text-zinc-400">{copy.target}</label>
           <select
             value={selectedDeviceId}
             onChange={(event) => setSelectedDeviceId(event.target.value)}
             className="h-9 min-w-[220px] rounded-md border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none"
           >
-            <option value="">انتخاب دستگاه</option>
+            <option value="">{copy.choose}</option>
             {devices.map((device) => (
               <option key={device.id} value={device.id}>
                 {device.name} - {vendorOfDevice(device)}
@@ -588,14 +598,14 @@ export default function AiSecurityAssistantPanel() {
           className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-red-800 hover:text-red-200"
         >
           <Trash2 className="h-4 w-4" aria-hidden="true" />
-          Clear Chat
+          {copy.clear}
         </button>
         <button
           type="button"
           onClick={clearChat}
           className="inline-flex h-9 w-fit items-center rounded-md border border-blue-800 bg-blue-950/30 px-3 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-950/50"
         >
-          New Request
+          {copy.newRequest}
         </button>
       </div>
 
@@ -723,19 +733,19 @@ export default function AiSecurityAssistantPanel() {
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-          <p className="text-xs text-zinc-500">Recent events</p>
+          <p className="text-xs text-zinc-500">{copy.recent}</p>
           <p className="mt-1 text-xl font-semibold text-blue-100">{formatNumber(summary?.events.recentCount)}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-          <p className="text-xs text-zinc-500">Devices</p>
+          <p className="text-xs text-zinc-500">{copy.devices}</p>
           <p className="mt-1 text-xl font-semibold text-blue-100">{formatNumber(summary?.devices.length)}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-          <p className="text-xs text-zinc-500">Top source IP</p>
+          <p className="text-xs text-zinc-500">{copy.topIp}</p>
           <p className="mt-2 text-xs text-zinc-300">{topSourceIps[0]?.srcIp ?? "none"}</p>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-          <p className="text-xs text-zinc-500">Sensitive ports</p>
+          <p className="text-xs text-zinc-500">{copy.ports}</p>
           <p className="mt-2 text-xs text-zinc-300">
             {sensitivePorts.slice(0, 3).map((item) => `${item.dstPort}: ${item.count}`).join(", ") || "none"}
           </p>
@@ -748,13 +758,13 @@ export default function AiSecurityAssistantPanel() {
             {safeMessages.length === 0 ? (
               <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-center text-zinc-500">
                 <Sparkles className="h-8 w-8" aria-hidden="true" />
-                <p className="text-sm">Ask about events, incidents, devices, or proposed actions.</p>
+                <p className="text-sm">{copy.empty}</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {safeMessages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}
                 {loading && (
-                  <p className="text-left text-xs text-zinc-500">Assistant is thinking...</p>
+                  <p className="text-left text-xs text-zinc-500">{copy.thinking}</p>
                 )}
               </div>
             )}
@@ -780,7 +790,7 @@ export default function AiSecurityAssistantPanel() {
                 className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
               >
                 <Send className="h-4 w-4" aria-hidden="true" />
-                Send
+                {copy.send}
               </button>
             </div>
           </form>
@@ -789,13 +799,13 @@ export default function AiSecurityAssistantPanel() {
         <aside className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
           <div className="mb-3 flex items-center gap-2 text-left text-sm font-semibold text-zinc-100">
             <ShieldAlert className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-            Safety Boundary
+            {copy.safety}
           </div>
           <p className="text-left text-xs text-zinc-400">
-            AI cannot execute commands, SSH to devices, or change firewall rules. Action requests become proposed intents only.
+            {copy.safetyText}
           </p>
           <div className="mt-3 rounded border border-zinc-800 bg-black/30 p-2 text-left">
-            <p className="text-xs font-semibold text-zinc-200">AI Provider</p>
+            <p className="text-xs font-semibold text-zinc-200">{copy.provider}</p>
             <div className="mt-2 grid gap-1 text-xs text-zinc-400">
               <p><span className="text-zinc-500">provider:</span> {providerStatus?.provider ?? "mock"}</p>
               <p><span className="text-zinc-500">model:</span> {providerStatus?.model ?? "mock-deterministic"}</p>
@@ -852,6 +862,7 @@ export default function AiSecurityAssistantPanel() {
             intent={lastIntent}
             debug={actionDebug}
             createdPlanId={createdPlanId}
+            isFa={isFa}
             onCompleted={({ actionPlanId, intent, message }) => {
               setCreatedPlanId(actionPlanId);
               if (intent) setLastIntent(intent);

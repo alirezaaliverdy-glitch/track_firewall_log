@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.1 Milestone R-E - Action Center and Assistant UX (2026-07-13)
+
+- Summary: localized the primary Action Center/Assistant workflows and made canonical revision, runtime resolution, verification, and structured recovery understandable in the normal UI.
+- Action Center: localized headers, summaries, filters, table, states, risk, controls, and plan dialog; added explicit verified-no-change state; kept exact URL/selection; refreshed selected plan/audit immediately after connector success.
+- Errors: removed raw backend URLs from user-facing action errors and retained structured stale recovery metadata and a review/new-revision recovery control.
+- Assistant: localized target selection, refresh summary, clear chat, new request, send, Safety Boundary, and AI Provider in Persian/English.
+- Browser: authenticated desktop/mobile Persian RTL and English LTR checks passed on Assistant and exact ActionPlan; one selected row, no page/dialog overflow, and zero console errors. No connector call was made in R-E.
+- Validation: focused R-E tests 2/2, serial full backend suite 203/203, backend/frontend builds, Prisma validate/generate, i18n parity 73, UTF-8 guard, and diff check passed. Read-only migration status retained the known unapplied baseline.
+
 ## Task 19.1 Milestone R-D - Canonical Revision and Connector Repair (2026-07-13)
 
 - Summary: repaired the backend-generated stale-plan failure by resolving and hashing one canonical runtime contract before preview, approval, and execution.
