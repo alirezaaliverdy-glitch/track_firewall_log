@@ -54,6 +54,18 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Files: `docs/TASK_19_1_RUNTIME_BASELINE.md`, `docs/TASK_19_1_BROKEN_CONTROL_REGISTER.md`, `docs/TASK_19_1_API_FAILURE_REGISTER.md`, and project memory/handoff updates.
 - Validation: `git diff --check` and `npm run test:utf8` passed. The repository has no `test:memory` script. R-A is committed separately before R-B starts.
 
+## Task 19.1 Milestone R-B - Device Onboarding and Workspace Foundation (2026-07-13)
+
+- Summary: restored backend-backed device onboarding, Product State route visibility, vendor/Cisco registration entry points, and the dedicated device workspace foundation.
+- Backend: added ephemeral versioned onboarding sessions, answers/test/detect/discover/commit routes, credential-reference-only validation, live bounded Cisco read-only SSH probing, and a structured workspace aggregation API.
+- Frontend: added one reusable onboarding page for all required routes, safe encrypted Credential creation via the existing API, vendor-prefilled entry points, and workspace tabs for overview/health/inventory/capabilities/findings/actions/history/configuration.
+- Database safety: no migration or destructive operation. Optional Task 18.2 tables are detected and missing sections degrade instead of returning 500.
+- Cisco safety: no target/credential was supplied, so no live success or device creation is claimed. Cisco mutation remains disabled.
+- Product State: advanced to `19B.1`; onboarding/workspace features are implemented but contextual, not extra primary-navigation noise.
+- Browser: desktop and mobile 390px routes passed with visible CTAs, correct prefill, no overflow, and no HTTP failure.
+- Validation: `npx prisma validate`; backend build; full backend tests including Task 19.1 regressions; catalog 136; frontend build; i18n 73; UTF-8; diff check.
+- Commit: separate R-B commit pending at the time of this entry.
+
 ## Task 18.0 - Security Platform Minimum Tangible Milestone (2026-07-12)
 
 - Summary: implemented the first usable asset/security platform slice instead of attempting the full master roadmap at once.

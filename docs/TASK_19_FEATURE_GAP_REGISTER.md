@@ -11,10 +11,10 @@ This register separates real capability from navigation exposure. A backend mode
 | Area | Capability present now | State | Gap or constraint | Navigation decision | Owner after 19A |
 | --- | --- | --- | --- | --- | --- |
 | Dashboard | Operational overview backed by current summary APIs | implemented | No 19A blocker | primary | existing product |
-| Assets | Inventory overview, device list/detail, vendor overview | implemented | None for current scope | primary | existing product |
+| Assets | Inventory overview, device list, reusable onboarding, and dedicated device workspace foundation | implemented | Charts and vendor-specific deep views remain for R-F | primary plus contextual onboarding/workspace | Task 19.1 R-B/R-F |
 | Asset sync | Mock NetBox/Wazuh preview | partial | No production integration | contextual only | Milestone 19H |
 | Sites/networks/topology | Backend schema/routes exist in part | planned | No complete UI contract | hidden | later convergence |
-| Cisco | IOS-XE read-only capability registry and honest empty inventory | partial/unverified | No live-device verification; mutations deliberately deferred | vendor-context only | Milestone 19C |
+| Cisco | IOS-XE read-only registry, connector-backed onboarding/test/detect/discover path, and honest empty inventory | partial | No real Cisco target/credential was supplied for live acceptance; mutations remain deliberately deferred | vendor-context only | Task 19.1 R-B plus later mutation milestone |
 | Security overview | Current finding/rule posture | implemented | Broader model convergence deferred | primary | existing product |
 | Findings | List/detail and reviewed ActionPlan handoff | implemented | Deduplication/lifecycle/evidence rewrite deferred | primary | Milestone 19E |
 | Detection rules | Seeded list/read API and UI | partial | Enable/disable/test/detail lifecycle incomplete | primary with partial contract | Milestone 19D |
@@ -58,3 +58,11 @@ The available handoff, status, history, architecture, codebase, vendor, Linux, c
 ## Scope boundary
 
 No onboarding, Cisco mutation, detection rewrite, finding rewrite, settings implementation, production integration expansion, device mutation, or database migration operation is included in this milestone.
+
+## Task 19.1 R-B update — 2026-07-13
+
+- Device onboarding is now an implemented Product State feature backed by versioned session APIs and one reusable UI engine.
+- Registration CTAs are present on Assets, Devices, Vendors, generic vendor detail, and Cisco vendor surfaces.
+- The Cisco path uses a registered safe read-only SSH probe and records `connectorInvoked=true` only after the connector actually runs; no live success is claimed without a supplied target and credential reference.
+- The device workspace foundation exposes overview, health, inventory, capabilities, findings, actions, history, and configuration routes from one structured backend contract.
+- Missing optional observability tables degrade to unavailable sections and do not require Prisma recovery or return 500.

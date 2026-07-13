@@ -383,3 +383,15 @@
 - Confirmed missing device onboarding, the Cisco zero-device loop, broken exact-plan handoff, raw proposal JSON, raw API URL errors, English/Persian mixing, and `lang=en dir=ltr` on Persian surfaces.
 - No implementation fix, migration, destructive database operation, device mutation, or external integration call is part of R-A.
 - Next allowed work: R-B only — device onboarding, Product State route visibility, and device workspace foundation, followed by its own commit.
+
+## Task 19.1 Milestone R-B — Onboarding and workspace foundation (2026-07-13)
+
+- Added one backend onboarding session engine and the required create/get/answers/test/detect/discover/commit APIs. Sessions accept credential references only and reject plaintext secrets.
+- Added a real read-only Cisco IOS-XE SSH connector probe for `show version` plus bounded inventory discovery. It never reports success unless the live connector returned `connectorInvoked=true`.
+- Added routed onboarding at `/assets/devices/new`, `/assets/onboarding`, `/assets/vendors/:vendorKey/devices/new`, and `/assets/devices/:deviceId/setup`, with CTAs from Assets, Devices, Vendors, generic vendor detail, and Cisco.
+- Added a device workspace backend contract and frontend routes for overview, health, inventory, capabilities, findings, actions, history, and configuration.
+- Optional observability tables missing from the current local database now degrade cleanly; no migration or database recovery was run.
+- Product State Contract advanced to `19B.1` and now asserts onboarding/workspace backend, API, route, UI, and test readiness together.
+- Playwright verified desktop and 390px mobile onboarding/workspace routes without overflow or HTTP errors. A live Cisco target/credential was not supplied, so no live Cisco success is claimed and no device was created.
+- Validation: Prisma schema valid; backend build, full backend tests, command catalog (136), frontend build, i18n parity (73), UTF-8 guard, and diff check passed.
+- Next allowed work after the separate R-B commit: R-C exact Assistant-to-ActionPlan navigation only.

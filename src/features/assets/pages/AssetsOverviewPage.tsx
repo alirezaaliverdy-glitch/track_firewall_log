@@ -11,7 +11,7 @@ export default function AssetsOverviewPage() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   return (
     <section className="page-stack">
-      <PageHeader title="دارایی ها" eyebrow="دید عملیاتی دارایی" description="نمای فشرده دارایی های شناخته شده، وضعیت سلامت و آخرین همگام سازی." />
+      <PageHeader title="دارایی ها" eyebrow="دید عملیاتی دارایی" description="نمای فشرده دارایی های شناخته شده، وضعیت سلامت و آخرین همگام سازی." actions={<a className="primary-link" href="/assets/devices/new">ثبت دستگاه</a>} />
       <AssetSummaryCards stats={stats} />
       <div className="content-grid">
         <section className="content-panel">
@@ -21,7 +21,7 @@ export default function AssetsOverviewPage() {
         <section className="content-panel">
           <h2>دارایی های نیازمند اقدام</h2>
           {assets.filter((asset) => !["online", "healthy"].includes(asset.healthState)).slice(0, 5).map((asset) => (
-            <a key={asset.id} href={`/assets/devices/${asset.id}`} className="list-row">{asset.name}<span>{asset.healthState}</span></a>
+            <a key={asset.id} href={`/assets/devices/${asset.device?.id ?? asset.id}`} className="list-row">{asset.name}<span>{asset.healthState}</span></a>
           ))}
           {!stats.needsReview ? <EmptyState title="مورد فوری وجود ندارد" description="بعد از همگام سازی یا ورود رویداد، موارد نیازمند بررسی اینجا دیده می شوند." /> : null}
         </section>

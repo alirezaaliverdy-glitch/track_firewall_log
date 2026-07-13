@@ -54,7 +54,7 @@ test("Task 19A product-state APIs expose one consistent contract", async () => {
     const vendors = await app.inject({ method: "GET", url: "/api/product-state/vendors" });
     const integrations = await app.inject({ method: "GET", url: "/api/product-state/integrations" });
     for (const response of [contract, navigation, features, vendors, integrations]) assert.equal(response.statusCode, 200);
-    assert.equal(contract.json().contractVersion, "19A.1");
+    assert.equal(contract.json().contractVersion, "19B.1");
     assert.deepEqual(contract.json().navigation, navigation.json().navigation);
     assert.deepEqual(contract.json().features, features.json().features);
     assert.deepEqual(contract.json().vendors, vendors.json().vendors);

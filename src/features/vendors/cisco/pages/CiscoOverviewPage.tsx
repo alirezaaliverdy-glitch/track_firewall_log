@@ -70,7 +70,7 @@ export default function CiscoOverviewPage() {
   if (!isCiscoRoute) {
     return (
       <section className="page-stack">
-        <PageHeader title="وندورها" eyebrow="مدیریت قابلیت‌ها" description="نمای خلاصه وندورها، Connectorها و سطح آمادگی هر مسیر عملیاتی." />
+        <PageHeader title="وندورها" eyebrow="مدیریت قابلیت‌ها" description="نمای خلاصه وندورها، Connectorها و سطح آمادگی هر مسیر عملیاتی." actions={<a className="primary-link" href="/assets/devices/new">ثبت دستگاه</a>} />
         <div className="content-grid">
           {vendors.map((item) => (
             <section key={item.key} className="content-panel">
@@ -80,7 +80,7 @@ export default function CiscoOverviewPage() {
                 <dt>Connector</dt><dd>{item.connectorTypes.join("، ") || "ندارد"}</dd>
                 <dt>کاربرد</dt><dd>{vendorPurposeFa[item.key] ?? item.description}</dd>
               </dl>
-              {item.key === "cisco" ? <a className="primary-link" href="/assets/vendors/cisco">بررسی Cisco</a> : <span className="status-badge">در مسیر فعلی فقط خلاصه نمایش داده می‌شود</span>}
+              <div className="button-row"><a className="secondary-link" href={`/assets/vendors/${item.key}`}>مشاهده وندور</a><a className="primary-link" href={`/assets/vendors/${item.key}/devices/new`}>ثبت دستگاه</a></div>
             </section>
           ))}
         </div>
@@ -94,7 +94,7 @@ export default function CiscoOverviewPage() {
         title="Cisco"
         eyebrow="مدیریت وندور"
         description="پایه فعلی Cisco فقط خواندنی است. تغییرات VLAN و EtherChannel تا زمان آزمایش و rollback واقعی غیرفعال می‌مانند."
-        actions={<a className="primary-link" href="/actions">باز کردن مرکز اقدام</a>}
+        actions={<><a className="secondary-link" href="/actions">مرکز اقدام</a><a className="primary-link" href="/assets/vendors/cisco/devices/new">ثبت دستگاه Cisco</a></>}
       />
       <div className="summary-grid">
         <article><span>دستگاه ثبت‌شده</span><strong>{ciscoDeviceCount}</strong></article>
@@ -108,7 +108,7 @@ export default function CiscoOverviewPage() {
           <h2>هنوز دستگاه Cisco متصل نیست</h2>
           <p>برای فعال شدن موجودی عملیاتی، یک Device با vendor برابر Cisco، آدرس مدیریتی، پورت SSH و credential امن لازم است. تا قبل از ثبت و refresh، صفحه فقط قابلیت‌های پشتیبانی‌شده را نشان می‌دهد.</p>
           <div className="button-row">
-            <a className="primary-link" href="/assets/devices">رفتن به تجهیزات</a>
+            <a className="primary-link" href="/assets/vendors/cisco/devices/new">ثبت دستگاه Cisco</a>
             <a className="primary-link" href="/assets/vendors/cisco/devices">مشاهده وضعیت دستگاه‌های Cisco</a>
           </div>
         </section>

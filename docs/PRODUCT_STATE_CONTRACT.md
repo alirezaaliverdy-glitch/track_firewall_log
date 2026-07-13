@@ -1,6 +1,6 @@
 # Product State Contract
 
-Contract version: `19A.1`
+Contract version: `19B.1`
 
 Owner: backend product-state registry
 
@@ -21,6 +21,8 @@ The contract describes capability. It does not bypass ActionPlan, Preview, user 
 - Route-to-feature identity: `src/routes/appRoutes.tsx`
 
 Frontend routes own component mapping and matching. They do not own product readiness or primary-navigation eligibility.
+
+Device onboarding is implemented through one reusable engine at `/assets/devices/new`, `/assets/onboarding`, `/assets/vendors/:vendorKey/devices/new`, and `/assets/devices/:deviceId/setup`. Device workspace routes resolve managed Device IDs and unmanaged Asset IDs without exposing credentials. A visible registration CTA requires the onboarding backend, API, route, UI, and tests to be ready together.
 
 ## States
 

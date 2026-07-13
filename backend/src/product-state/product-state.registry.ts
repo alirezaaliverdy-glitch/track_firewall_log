@@ -2,6 +2,7 @@ import { VENDOR_REGISTRY } from "../vendors/vendor.registry.js";
 import type { ProductFeature, ProductFeatureState, ProductIntegrationState, ProductNavigationGroup } from "./product-state.types.js";
 
 const VERIFIED_AT = "2026-07-13";
+export const PRODUCT_STATE_CONTRACT_VERSION = "19B.1";
 
 function feature(input: Omit<ProductFeature, "lastVerifiedAt">): ProductFeature {
   return { ...input, lastVerifiedAt: input.tested ? VERIFIED_AT : undefined };
@@ -12,11 +13,17 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
 
   feature({ key: "assets.overview", titleFa: "نمای کلی", titleEn: "Overview", route: "/assets", groupKey: "assets", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.devices", titleFa: "تجهیزات", titleEn: "Devices", route: "/assets/devices", groupKey: "assets", order: 20, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
-  feature({ key: "assets.device_detail", titleFa: "جزئیات تجهیز", titleEn: "Asset detail", route: "/assets/devices/:assetId", groupKey: "assets", order: 21, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_onboarding_new", titleFa: "ثبت دستگاه", titleEn: "Register device", route: "/assets/devices/new", groupKey: "assets", order: 21, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_onboarding", titleFa: "راه‌اندازی دستگاه", titleEn: "Device onboarding", route: "/assets/onboarding", groupKey: "assets", order: 22, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.vendor_device_onboarding", titleFa: "ثبت دستگاه وندور", titleEn: "Register vendor device", route: "/assets/vendors/:vendorKey/devices/new", groupKey: "assets", order: 23, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_setup", titleFa: "راه‌اندازی اتصال", titleEn: "Device setup", route: "/assets/devices/:deviceId/setup", groupKey: "assets", order: 24, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_detail", titleFa: "فضای کاری تجهیز", titleEn: "Device workspace", route: "/assets/devices/:deviceId", groupKey: "assets", order: 25, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_workspace_section", titleFa: "بخش فضای کاری تجهیز", titleEn: "Device workspace section", route: "/assets/devices/:deviceId/:section", groupKey: "assets", order: 26, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.sync", titleFa: "همگام‌سازی آزمایشی", titleEn: "Demo sync", route: "/assets/sync", groupKey: "assets", order: 30, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Only explicit mock NetBox and Wazuh preview workflows are available." }),
   feature({ key: "assets.vendors", titleFa: "وندورها", titleEn: "Vendors", route: "/assets/vendors", groupKey: "assets", order: 40, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.vendors.cisco", titleFa: "Cisco", titleEn: "Cisco", route: "/assets/vendors/cisco", groupKey: "assets", order: 41, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "IOS-XE read-only foundation exists; live device verification and mutations are not complete." }),
   feature({ key: "assets.vendors.cisco_devices", titleFa: "دستگاه‌های Cisco", titleEn: "Cisco devices", route: "/assets/vendors/cisco/devices", groupKey: "assets", order: 42, state: "unverified", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "The API currently returns an honest empty inventory until platform detection is refreshed." }),
+  feature({ key: "assets.vendor_detail", titleFa: "جزئیات وندور", titleEn: "Vendor detail", route: "/assets/vendors/:vendorKey", groupKey: "assets", order: 43, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.sites", titleFa: "سایت‌ها", titleEn: "Sites", route: "/assets/sites", groupKey: "assets", order: 50, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
   feature({ key: "assets.networks", titleFa: "شبکه‌ها و VLANها", titleEn: "Networks and VLANs", route: "/assets/networks", groupKey: "assets", order: 60, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
   feature({ key: "assets.topology", titleFa: "توپولوژی", titleEn: "Topology", route: "/assets/topology", groupKey: "assets", order: 70, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
@@ -112,7 +119,7 @@ export function getProductVendors() {
 export function getProductStateContract() {
   validateProductState();
   return {
-    contractVersion: "19A.1",
+    contractVersion: PRODUCT_STATE_CONTRACT_VERSION,
     verifiedAt: VERIFIED_AT,
     features: PRODUCT_FEATURES,
     navigation: getProductNavigation(),

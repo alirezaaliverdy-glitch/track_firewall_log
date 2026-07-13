@@ -12,6 +12,8 @@ Date: 2026-07-13
 | C-04 | NetBox and Wazuh appeared as primary integration children | Only explicit mock adapters exist; production apply disabled | Mock mistaken for configured integration | Fixed: `not_configured`, mock, non-executable, hidden from primary navigation. |
 | C-05 | Asset sync appeared as an ordinary destination | Workflow is an explicit mock preview | Preview could be mistaken for production sync | Fixed: `partial`, contextual access only. |
 | C-06 | Pending and history appeared as distinct Action destinations | Both routes reuse the unfiltered Action Center | Navigation labels promise missing filters | Fixed: alias routes hidden pending distinct contracts. |
+| C-07 | UI said a device/Cisco registration was required but exposed no route | Device and credential APIs existed, but there was no onboarding session contract or routed workflow | Empty-state loop and backend capability stranded from users | Fixed in Task 19.1 R-B: reusable session APIs, credential-reference-only flow, CTAs, Cisco read-only detection, and device workspace. |
+| C-08 | Device detail mixed Asset IDs and Device IDs and rendered a planned placeholder | Backend data existed across device, asset, finding, action, audit, and status records | Rows could open an incomplete or mismatched detail surface | Fixed in Task 19.1 R-B: workspace resolves either identity and returns structured partial data without optional-table 500s. |
 | C-07 | Monitoring devices/daily-check appeared as distinct destinations | Monitoring overview is reused; Daily Check has mixed vendor support | Independent feature maturity overstated | Fixed: partial alias routes hidden. |
 | C-08 | Route visibility had no executable invariant | A planned or API-incomplete item could be promoted by a boolean edit | Regression-prone navigation | Fixed: validator rejects forbidden states and any backend/API/UI/test mismatch. |
 | C-09 | Frontend and backend feature identities could drift | No stable cross-layer feature key check | Contract changes could silently orphan a route | Fixed: every app route uses `featureKey`; test asserts exact backend/frontend alignment. |
@@ -21,7 +23,7 @@ Date: 2026-07-13
 
 | ID | Gap | Reason for deferral |
 | --- | --- | --- |
-| D-01 | Full Cisco read/write capability and live verification | Milestone 19C; device mutation is outside 19A. |
+| D-01 | Full Cisco read/write capability and live-target acceptance | R-B now provides connector-backed read-only onboarding; a real Cisco target/credential was not supplied, and Cisco mutation remains outside this milestone. |
 | D-02 | Detection detail, lifecycle, enable/disable, and test flow | Milestone 19D; detection rewrite is prohibited in 19A. |
 | D-03 | Finding normalization, deduplication, evidence, and lifecycle convergence | Milestone 19E; finding rewrite is prohibited in 19A. |
 | D-04 | Functional Settings Center | Milestone 19F; settings rewrite is prohibited in 19A. |

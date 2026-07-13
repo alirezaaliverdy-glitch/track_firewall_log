@@ -357,3 +357,12 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Persian pages currently run with `lang=en dir=ltr` and several primary workflows remain English-heavy.
 - R-A evidence is recorded in `docs/TASK_19_1_RUNTIME_BASELINE.md`, `docs/TASK_19_1_BROKEN_CONTROL_REGISTER.md`, and `docs/TASK_19_1_API_FAILURE_REGISTER.md`.
 - Next controlled milestone is R-B; R-C through R-G have not started.
+
+## Task 19.1 R-B current state (2026-07-13)
+
+- Device onboarding and device workspace foundations are implemented; Product State Contract is `19B.1`.
+- Onboarding uses credential references only, rejects plaintext secrets, and requires connector-backed test, supported detection, read-only discovery, preview, and save in order.
+- Cisco IOS-XE has a bounded live read-only SSH path for onboarding. No live Cisco target was supplied, so runtime acceptance remains unverified and mutations remain disabled.
+- Required registration CTAs and routes are visible and Playwright-verified on desktop/mobile without overflow or 4xx/5xx responses.
+- Existing Linux Device IDs and Asset IDs resolve to the same structured workspace contract; missing optional observability tables degrade without a migration.
+- R-C through R-G remain unstarted. The next milestone is R-C exact-plan navigation.

@@ -31,6 +31,8 @@ import { securityPlatformRoutes } from "./routes/security-platform.js";
 import { vendorRoutes } from "./routes/vendors.js";
 import { linuxHealthRoutes } from "./routes/linux-health.js";
 import { productStateRoutes } from "./routes/product-state.js";
+import { deviceOnboardingRoutes } from "./routes/device-onboarding.js";
+import { deviceWorkspaceRoutes } from "./routes/device-workspaces.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
@@ -111,6 +113,8 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(analysisRoutes);
   await app.register(aiRoutes);
   await app.register(deviceRoutes);
+  await app.register(deviceOnboardingRoutes);
+  await app.register(deviceWorkspaceRoutes);
   await app.register(linuxTelemetryRoutes);
   await app.register(telemetryFindingRoutes);
   await app.register(commandCatalogRoutes);

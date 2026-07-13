@@ -15,6 +15,8 @@ import MonitoringPage from "@/features/monitoring/pages/MonitoringPage";
 import LinuxMonitoringPage from "@/features/monitoring/pages/LinuxMonitoringPage";
 import CiscoOverviewPage from "@/features/vendors/cisco/pages/CiscoOverviewPage";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
+import DeviceOnboardingPage from "@/features/assets/pages/DeviceOnboardingPage";
+import VendorDetailPage from "@/features/vendors/pages/VendorDetailPage";
 import { PlannedState } from "@/components/ui/PlannedState";
 
 export type RouteComponentProps = { params: Record<string, string> };
@@ -33,7 +35,12 @@ export const appRoutes: AppRoute[] = [
   { path: "/dashboard", featureKey: "dashboard.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "dashboard", component: DashboardPage },
   { path: "/assets", featureKey: "assets.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage },
   { path: "/assets/devices", featureKey: "assets.devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage },
-  { path: "/assets/devices/:assetId", featureKey: "assets.device_detail", labelFa: "جزئیات تجهیز", labelEn: "Asset detail", group: "assets", component: AssetDetailPage },
+  { path: "/assets/devices/new", featureKey: "assets.device_onboarding_new", labelFa: "ثبت دستگاه", labelEn: "Register device", group: "assets", component: DeviceOnboardingPage },
+  { path: "/assets/onboarding", featureKey: "assets.device_onboarding", labelFa: "راه‌اندازی دستگاه", labelEn: "Device onboarding", group: "assets", component: DeviceOnboardingPage },
+  { path: "/assets/vendors/:vendorKey/devices/new", featureKey: "assets.vendor_device_onboarding", labelFa: "ثبت دستگاه وندور", labelEn: "Register vendor device", group: "assets", component: DeviceOnboardingPage },
+  { path: "/assets/devices/:deviceId/setup", featureKey: "assets.device_setup", labelFa: "راه‌اندازی اتصال", labelEn: "Device setup", group: "assets", component: DeviceOnboardingPage },
+  { path: "/assets/devices/:deviceId", featureKey: "assets.device_detail", labelFa: "فضای کاری تجهیز", labelEn: "Device workspace", group: "assets", component: AssetDetailPage },
+  { path: "/assets/devices/:deviceId/:section", featureKey: "assets.device_workspace_section", labelFa: "بخش فضای کاری", labelEn: "Workspace section", group: "assets", component: AssetDetailPage },
   { path: "/assets/sites", featureKey: "assets.sites", labelFa: "سایت‌ها", labelEn: "Sites", group: "assets", component: planned("سایت‌ها", "این مسیر تا تکمیل گردش کار سایت‌ها از ناوبری اصلی خارج شده است.") },
   { path: "/assets/networks", featureKey: "assets.networks", labelFa: "شبکه‌ها و VLANها", labelEn: "Networks", group: "assets", component: planned("شبکه‌ها و VLANها", "شبکه و VLAN فعلا فقط در مدل داده وجود دارد و صفحه عملیاتی ندارد.") },
   { path: "/assets/topology", featureKey: "assets.topology", labelFa: "توپولوژی", labelEn: "Topology", group: "assets", component: planned("توپولوژی", "توپولوژی در جزئیات دارایی قابل توسعه است؛ نمای گراف عمومی هنوز فعال نیست.") },
@@ -41,6 +48,7 @@ export const appRoutes: AppRoute[] = [
   { path: "/assets/vendors", featureKey: "assets.vendors", labelFa: "وندورها", labelEn: "Vendors", group: "assets", component: CiscoOverviewPage },
   { path: "/assets/vendors/cisco", featureKey: "assets.vendors.cisco", labelFa: "Cisco", labelEn: "Cisco", group: "assets", component: CiscoOverviewPage },
   { path: "/assets/vendors/cisco/devices", featureKey: "assets.vendors.cisco_devices", labelFa: "دستگاه‌های Cisco", labelEn: "Cisco devices", group: "assets", component: CiscoOverviewPage },
+  { path: "/assets/vendors/:vendorKey", featureKey: "assets.vendor_detail", labelFa: "جزئیات وندور", labelEn: "Vendor detail", group: "assets", component: VendorDetailPage },
   { path: "/security", featureKey: "security.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "security", component: SecurityOverviewPage },
   { path: "/security/findings", featureKey: "security.findings", labelFa: "یافته‌ها", labelEn: "Findings", group: "security", component: FindingsPage },
   { path: "/security/findings/:findingId", featureKey: "security.finding_detail", labelFa: "جزئیات یافته", labelEn: "Finding detail", group: "security", component: FindingDetailPage },
