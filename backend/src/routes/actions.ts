@@ -99,6 +99,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
       return plan;
     } catch (error) {
       if (error instanceof ActionExecutionError) {
+        if (error.code === "COMMAND_PLAN_STALE") return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message, ...(error.details ?? {}) } });
         return reply.code(error.statusCode).send({
           error: error.code,
           detail: error.message
@@ -125,6 +126,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       if (error instanceof ActionExecutionError) {
+        if (error.code === "COMMAND_PLAN_STALE") return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message, ...(error.details ?? {}) } });
         return reply.code(error.statusCode).send({
           error: error.code,
           detail: error.message

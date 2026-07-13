@@ -4,6 +4,7 @@ export type ExecutionTemplate = { id: string; actionType: string; connectorType:
 
 const templates: ExecutionTemplate[] = [
   { id: "linux_open_port", actionType: "linux_open_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_close_port", actionType: "close_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_list_open_ports", actionType: "linux_list_open_ports", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_check_ssh_status", actionType: "linux_check_ssh_status", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_check_failed_logins", actionType: "linux_check_failed_logins", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },

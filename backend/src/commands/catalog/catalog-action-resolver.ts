@@ -9,7 +9,10 @@ const vendorOf = (device: Device) => device.type === "linux_edge" ? "linux" : de
 
 export function resolveCatalogAction(plan: Pick<ActionPlan, "actionType" | "parametersJson">, device: Device | null): Resolution {
   const parameters = object(plan.parametersJson); const metadata = object(parameters.metadata);
-  const commandId = typeof metadata.catalogCommandId === "string" ? metadata.catalogCommandId : null;
+  const storedCommandId = typeof metadata.catalogCommandId === "string" ? metadata.catalogCommandId : null;
+  // Legacy-controlled actions use an explicit canonical marker for revision
+  // identity, but that marker is not a product-catalog item ID.
+  const commandId = storedCommandId?.startsWith("legacy:") ? null : storedCommandId;
   const fallback = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.actionType === plan.actionType);
   const item = commandId ? findCatalogItem(commandId) : fallback.length === 1 ? fallback[0] : undefined;
   if (!item) return commandId ? { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_FOUND", messageFa: "این دستور هنوز اجرای خودکار ندارد" } : { matched: false };

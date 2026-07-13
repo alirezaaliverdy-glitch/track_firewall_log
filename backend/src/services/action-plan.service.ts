@@ -10,6 +10,7 @@ import {
   type Device,
   Prisma
 } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import { ConnectorError } from "../connectors/linux-ssh.connector.js";
 import { isMikroTikAction } from "../actions/mikrotik-action-catalog.js";
@@ -119,6 +120,9 @@ export function normalizeParameters(actionType: ActionType, parameters: Record<s
     delete canonical.srcInterface;
   }
   const normalized = { ...parameters, ...canonical };
+  if (normalized.port !== undefined && normalized.port !== "") normalized.port = Number(normalized.port);
+  if (normalized.newPort !== undefined && normalized.newPort !== "") normalized.newPort = Number(normalized.newPort);
+  if (typeof normalized.protocol === "string") normalized.protocol = normalized.protocol.trim().toLowerCase();
   if (actionType === ActionType.fortigate_guided_vpn_setup) {
     return normalizeFortiGateGuidedVpnParameters(normalized);
   }
@@ -253,21 +257,27 @@ function storedNormalizedParameters(plan: ActionPlan, normalized: Record<string,
 
 const NON_EXECUTION_PARAMETER_FIELDS = new Set([
   "metadata", "actionType", "deviceId", "vendor", "executionSupport", "missingFields", "clarificationQuestions",
-  "source", "implementationState", "connectorType", "executionTemplateRef", "normalizedParams", "requiredParamsSatisfied",
+  "source", "implementationState", "supportState", "supportReasonKey", "executable", "connectorType", "executionTemplateRef", "normalizedParams", "requiredParamsSatisfied",
   "requiresExplicitReview", "expectedImpact", "suggestedPrechecks", "suggestedVerification", "suggestedRollback"
 ]);
 
 function executionParametersOnly(parameters: Record<string, unknown>) {
-  const resolverParams = asObject(parameters.normalizedParams);
-  if (Object.keys(resolverParams).length > 0 || "normalizedParams" in parameters) return resolverParams;
-  return Object.fromEntries(Object.entries(parameters).filter(([key]) => !NON_EXECUTION_PARAMETER_FIELDS.has(key)));
+  const metadata = asObject(parameters.metadata);
+  const resolverParams = asObject(metadata.normalizedParams ?? parameters.normalizedParams);
+  const storedParams = Object.fromEntries(Object.entries(parameters).filter(([key]) => !NON_EXECUTION_PARAMETER_FIELDS.has(key)));
+  return { ...resolverParams, ...storedParams };
 }
 
 const EXECUTION_ONLY_FIELDS = new Set(["breakGlass", "executeConfirmation", "deviceNameConfirmation", "reason", "intent"]);
 
 function stableJson(value: unknown) {
   const stable = (item: unknown): unknown => {
-    if (Array.isArray(item)) return item.map(stable);
+    if (Array.isArray(item)) {
+      const values = item.map(stable);
+      return values.every((value) => value === null || ["string", "number", "boolean"].includes(typeof value))
+        ? values.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+        : values;
+    }
     if (!item || typeof item !== "object") return item;
     return Object.fromEntries(Object.entries(item as Record<string, unknown>)
       .filter(([key]) => !EXECUTION_ONLY_FIELDS.has(key))
@@ -277,22 +287,50 @@ function stableJson(value: unknown) {
   return JSON.stringify(stable(value));
 }
 
-export function actionExecutionFingerprint(plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson">) {
+function sha256(value: unknown) {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+function canonicalParameterValues(parameters: Record<string, unknown>) {
+  const canonical = { ...executionParametersOnly(parameters) };
+  if (canonical.port !== undefined) canonical.port = Number(canonical.port);
+  if (canonical.newPort !== undefined) canonical.newPort = Number(canonical.newPort);
+  if (typeof canonical.protocol === "string") canonical.protocol = canonical.protocol.trim().toLowerCase();
+  return canonical;
+}
+
+export interface CanonicalActionPlanPayload {
+  actionType: string;
+  targetDeviceId: string;
+  vendor: string;
+  platform?: string;
+  capabilityKey: string;
+  catalogCommandId: string;
+  executionTemplateRef: string;
+  connectorType: string;
+  parameters: Record<string, unknown>;
+  riskClass: string;
+}
+
+function canonicalPayloadFromStoredPlan(plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson"> & Partial<Pick<ActionPlan, "riskLevel">>): CanonicalActionPlanPayload {
   const parameters = asObject(plan.parametersJson);
   const metadata = asObject(parameters.metadata);
-  const normalizedParams = asObject(metadata.normalizedParams);
-  const fallbackParams = Object.fromEntries(Object.entries(parameters).filter(([key]) => ![
-    "metadata", "actionType", "deviceId", "vendor", "executionSupport", "requiresExplicitReview",
-    "expectedImpact", "suggestedPrechecks", "suggestedVerification", "suggestedRollback"
-  ].includes(key) && !EXECUTION_ONLY_FIELDS.has(key)));
-  return stableJson({
+  return {
     actionType: plan.actionType,
-    vendor: metadata.vendor ?? parameters.vendor ?? null,
-    deviceId: plan.deviceId,
-    params: Object.keys(normalizedParams).length > 0 ? normalizedParams : fallbackParams,
-    catalogCommandId: metadata.catalogCommandId ?? null,
-    executionTemplateRef: metadata.executionTemplateRef ?? null
-  });
+    targetDeviceId: plan.deviceId ?? "",
+    vendor: String(metadata.resolvedVendor ?? metadata.vendor ?? parameters.vendor ?? "unknown"),
+    ...(metadata.resolvedPlatform ? { platform: String(metadata.resolvedPlatform) } : {}),
+    capabilityKey: String(metadata.capabilityKey ?? metadata.catalogCommandId ?? plan.actionType),
+    catalogCommandId: String(metadata.catalogCommandId ?? `legacy:${plan.actionType}`),
+    executionTemplateRef: String(metadata.executionTemplateRef ?? plan.actionType),
+    connectorType: String(metadata.connectorType ?? "unresolved"),
+    parameters: canonicalParameterValues(parameters),
+    riskClass: String(plan.riskLevel ?? metadata.riskClass ?? "unknown")
+  };
+}
+
+export function actionExecutionFingerprint(plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson"> & Partial<Pick<ActionPlan, "riskLevel">>) {
+  return sha256(canonicalPayloadFromStoredPlan(plan));
 }
 
 type ExecutionTrace = (stage: string, payload: Record<string, unknown>) => void;
@@ -384,12 +422,14 @@ function parseExecutionResult(actionType: ActionType, stdout: string, commands: 
 export class ActionExecutionError extends Error {
   code: string;
   statusCode: number;
+  details?: Record<string, unknown>;
 
-  constructor(code: string, message: string, statusCode = 409) {
+  constructor(code: string, message: string, statusCode = 409, details?: Record<string, unknown>) {
     super(message);
     this.name = "ActionExecutionError";
     this.code = code;
     this.statusCode = statusCode;
+    this.details = details;
   }
 }
 
@@ -412,6 +452,97 @@ async function ensureControlledCatalogAction(plan: ActionPlan) {
   const legacyControlled = Boolean(getActionCatalogEntry(plan.actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if (!legacyControlled) throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "این عملیات در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.", 409);
   return { controlled: true, catalogCommandId: null, source: "legacy_catalog", executionTemplateRef: null, connectorType: null, vendor: vendorFromActionType(plan.actionType) ?? "unknown" };
+}
+
+function planRevision(metadata: Record<string, unknown>) {
+  const revision = Number(metadata.planRevision ?? 1);
+  return Number.isInteger(revision) && revision > 0 ? revision : 1;
+}
+
+async function resolveActionPlanRuntime(plan: ActionPlan) {
+  const device = plan.deviceId ? await prisma.device.findUnique({ where: { id: plan.deviceId } }) : null;
+  const resolution = await ensureControlledCatalogAction(plan);
+  const connector = device ? selectDeviceConnector(device) : null;
+  const parameters = withPlanIdentity(
+    plan.actionType,
+    normalizeParameters(plan.actionType, asObject(plan.parametersJson)),
+    plan.deviceId,
+    (resolution.vendor === "linux" ? "linux_edge" : resolution.vendor) as ActionVendor
+  ) as Record<string, unknown>;
+  const metadata = asObject(parameters.metadata);
+  const normalizedParams = canonicalParameterValues(parameters);
+  const resolvedMetadata = {
+    ...metadata,
+    planRevision: planRevision(metadata),
+    planState: metadata.planState ?? "draft",
+    resolvedVendor: resolution.vendor,
+    resolvedPlatform: String(asObject(device?.capabilities).platform ?? device?.type ?? "unknown"),
+    capabilityKey: resolution.catalogCommandId ?? String(plan.actionType),
+    catalogCommandId: resolution.catalogCommandId ?? `legacy:${plan.actionType}`,
+    executionTemplateRef: resolution.executionTemplateRef ?? String(plan.actionType),
+    connectorType: resolution.connectorType ?? connector?.name ?? "unresolved",
+    normalizedParams,
+    riskClass: plan.riskLevel
+  };
+  const nextParameters = { ...parameters, metadata: resolvedMetadata };
+  if (stableJson(nextParameters) === stableJson(plan.parametersJson)) return plan;
+  return prisma.actionPlan.update({ where: { id: plan.id }, data: { parametersJson: toJson(nextParameters) } });
+}
+
+function previewRevisionMetadata(plan: ActionPlan, dryRun: unknown) {
+  const parameters = asObject(plan.parametersJson);
+  const metadata = asObject(parameters.metadata);
+  const canonicalPayload = canonicalPayloadFromStoredPlan(plan);
+  const canonicalPayloadHash = sha256(canonicalPayload);
+  const previewHash = sha256({ canonicalPayload, dryRun });
+  return {
+    planRevision: planRevision(metadata),
+    planState: "preview_ready",
+    canonicalParameters: canonicalPayload.parameters,
+    canonicalParametersHash: sha256(canonicalPayload.parameters),
+    canonicalPayload,
+    canonicalPayloadHash,
+    previewHash,
+    previewFingerprint: canonicalPayloadHash,
+    idempotencyKey: sha256({
+      deviceId: canonicalPayload.targetDeviceId,
+      capabilityKey: canonicalPayload.capabilityKey,
+      parameters: canonicalPayload.parameters,
+      desiredState: plan.actionType === ActionType.close_port ? "port_closed" : plan.actionType
+    })
+  };
+}
+
+async function approveCurrentRevisionForExecution(plan: ActionPlan, input: Record<string, unknown>) {
+  const parameters = asObject(plan.parametersJson);
+  const metadata = asObject(parameters.metadata);
+  const revision = planRevision(metadata);
+  const approvedAt = new Date().toISOString();
+  const canonicalPayloadHash = String(metadata.canonicalPayloadHash ?? actionExecutionFingerprint(plan));
+  const previewHash = String(metadata.previewHash ?? "");
+  const approval = {
+    decision: "approved",
+    approvedBy: typeof input.approvedBy === "string" ? input.approvedBy : undefined,
+    reason: typeof input.reason === "string" ? input.reason : undefined,
+    planRevision: revision,
+    canonicalPayloadHash,
+    previewHash,
+    approvedAt
+  };
+  return prisma.actionPlan.update({
+    where: { id: plan.id },
+    data: {
+      approvalJson: toJson(approval),
+      parametersJson: toJson(withExecutionMetadata(parameters, {
+        planState: "approved",
+        approvedRevision: revision,
+        approvedCanonicalPayloadHash: canonicalPayloadHash,
+        approvedPreviewHash: previewHash,
+        approvedCanonicalPayload: metadata.canonicalPayload,
+        approvedAt
+      }))
+    }
+  });
 }
 
 export class QuickExecuteConfirmationRequiredError extends ActionExecutionError {
@@ -599,6 +730,25 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
     );
   }
 
+  if (actionType === ActionType.close_port && deviceId) {
+    const desiredParameters = canonicalParameterValues(parameters);
+    const candidates = await prisma.actionPlan.findMany({
+      where: { deviceId, actionType, status: ActionPlanStatus.succeeded },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      include: includeRelations()
+    });
+    const verified = candidates.find((candidate) => {
+      const metadata = asObject(asObject(candidate.parametersJson).metadata);
+      const result = asObject(candidate.resultJson);
+      return metadata.connectorInvoked === true && result.executed === true && ["completed", "verified_no_change", "already_compliant"].includes(String(result.outcome)) && stableJson(canonicalParameterValues(asObject(candidate.parametersJson))) === stableJson(desiredParameters);
+    });
+    if (verified) {
+      await audit(verified, "idempotent_request_reused", "Repeated desired-state request reused a connector-verified ActionPlan.", { idempotencyKey: asObject(asObject(verified.parametersJson).metadata).idempotencyKey, outcome: asObject(verified.resultJson).outcome, connectorInvoked: true });
+      return verified;
+    }
+  }
+
   const plan = await prisma.actionPlan.create({
     data: {
       source,
@@ -668,7 +818,39 @@ export async function correctAndRevalidateActionPlan(id: string, input: Record<s
     throw new ActionExecutionError("ACTION_NOT_EDITABLE", "Completed or executing ActionPlans cannot be edited.");
   }
   const corrections = asObject(input.parametersJson ?? input.fields ?? input);
-  const parametersJson = mergeCorrectedParameters(existing.actionType, asObject(existing.parametersJson), corrections);
+  const currentParameters = asObject(existing.parametersJson);
+  const correctedParameters = mergeCorrectedParameters(existing.actionType, currentParameters, corrections);
+  const currentMetadata = asObject(currentParameters.metadata);
+  const changedFields = Object.keys(corrections).filter((field) => stableJson(currentParameters[field]) !== stableJson(correctedParameters[field]));
+  if (changedFields.length === 0) return dryRunActionPlan(id);
+  const currentRevision = planRevision(currentMetadata);
+  const revisionHistory = Array.isArray(currentMetadata.revisionHistory) ? currentMetadata.revisionHistory : [];
+  const {
+    canonicalParameters: _canonicalParameters,
+    canonicalParametersHash: _canonicalParametersHash,
+    canonicalPayload: _canonicalPayload,
+    canonicalPayloadHash: _canonicalPayloadHash,
+    previewHash: _previewHash,
+    previewFingerprint: _previewFingerprint,
+    ...preservedMetadata
+  } = currentMetadata;
+  const parametersJson = {
+    ...correctedParameters,
+    metadata: {
+      ...preservedMetadata,
+      planRevision: currentRevision + 1,
+      planState: "draft",
+      previewGenerated: false,
+      previewStale: false,
+      staleReason: null,
+      revisionHistory: [...revisionHistory, {
+        revision: currentRevision,
+        state: currentMetadata.planState ?? "draft",
+        canonicalPayloadHash: currentMetadata.canonicalPayloadHash ?? null,
+        previewHash: currentMetadata.previewHash ?? null
+      }].slice(-20)
+    }
+  };
   const updated = await prisma.actionPlan.update({
     where: { id },
     data: {
@@ -681,7 +863,7 @@ export async function correctAndRevalidateActionPlan(id: string, input: Record<s
       rollbackJson: Prisma.JsonNull
     }
   });
-  await audit(updated, "action.parameters_corrected", "Canonical ActionPlan fields were corrected; the previous command plan was invalidated.", { fields: Object.keys(corrections) });
+  await audit(updated, "action.parameters_corrected", "Canonical ActionPlan fields were corrected and a new draft revision was created.", { fields: changedFields, previousRevision: currentRevision, currentRevision: currentRevision + 1 });
   const validated = await validateAndStoreActionPlan(id);
   if (validated?.status === ActionPlanStatus.awaiting_approval) return dryRunActionPlan(id);
   return validated;
@@ -720,6 +902,8 @@ export async function dryRunActionPlan(id: string) {
     return blocked;
     }
   }
+
+  plan = await resolveActionPlanRuntime(plan);
 
   let preflight: Awaited<ReturnType<typeof preflightActionPlan>> | null = null;
   if (plan.deviceId) {
@@ -822,6 +1006,11 @@ export async function dryRunActionPlan(id: string) {
     : dryRunObject.status === "unsupported"
       ? ActionPlanStatus.validation_failed
       : ActionPlanStatus.dry_run_ready;
+  const normalizedStoredParameters = storedNormalizedParameters(plan, validation.normalizedParameters);
+  const finalParameters = withExecutionMetadata(normalizedStoredParameters, {
+    normalizedParams: canonicalParameterValues(normalizedStoredParameters)
+  });
+  const revisionMetadata = previewRevisionMetadata({ ...plan, parametersJson: toJson(finalParameters) as unknown as Prisma.JsonValue }, dryRun);
   const updated = await prisma.actionPlan.update({
     where: { id },
     data: {
@@ -836,11 +1025,14 @@ export async function dryRunActionPlan(id: string) {
         unsupportedReason: dryRunObject.unsupportedReason
       }),
       dryRunJson: toJson(dryRun),
-      parametersJson: toJson(withExecutionMetadata(storedNormalizedParameters(plan, validation.normalizedParameters), {
+      parametersJson: toJson(withExecutionMetadata(finalParameters, {
         previewGenerated: true,
         executed: false,
+        connectorInvoked: false,
         lastExecutionStatus: "preview_ready",
-        previewFingerprint: actionExecutionFingerprint({ ...plan, parametersJson: storedNormalizedParameters(plan, validation.normalizedParameters) })
+        previewStale: false,
+        staleReason: null,
+        ...revisionMetadata
       })),
       rollbackJson: toJson(validation.rollbackJson)
     },
@@ -879,11 +1071,17 @@ export async function approveActionPlan(id: string, input: Record<string, unknow
     }
   });
 
+  const approvalMetadata = asObject(asObject(plan.parametersJson).metadata);
+  const approvedRevision = planRevision(approvalMetadata);
+  const approvedCanonicalPayloadHash = String(approvalMetadata.canonicalPayloadHash ?? actionExecutionFingerprint(plan));
+  const approvedPreviewHash = String(approvalMetadata.previewHash ?? "");
+
   const updated = await prisma.actionPlan.update({
     where: { id },
     data: {
       status: ActionPlanStatus.approved,
-      approvalJson: toJson({ decision: approval.decision, approvedBy: approval.approvedBy, reason: approval.reason, confirmation: typedApproval || null, breakGlass: input.breakGlass === true, createdAt: approval.createdAt })
+      approvalJson: toJson({ decision: approval.decision, approvedBy: approval.approvedBy, reason: approval.reason, confirmation: typedApproval || null, breakGlass: input.breakGlass === true, createdAt: approval.createdAt, planRevision: approvedRevision, canonicalPayloadHash: approvedCanonicalPayloadHash, previewHash: approvedPreviewHash }),
+      parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { planState: "approved", approvedRevision, approvedCanonicalPayloadHash, approvedPreviewHash, approvedCanonicalPayload: approvalMetadata.canonicalPayload, approvedAt: approval.createdAt }))
     },
     include: includeRelations()
   });
@@ -922,7 +1120,6 @@ export async function rejectActionPlan(id: string, input: Record<string, unknown
 export async function executeActionPlan(id: string, executionInput: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {
   let plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
-  plan = await prepareActionPlan(plan);
 
   try { await ensureControlledCatalogAction(plan); } catch (error) {
     await audit(plan, "controlled_execution_blocked", "Execution refused by catalog resolution.", { actionType: plan.actionType, code: error instanceof ActionExecutionError ? error.code : "CATALOG_RESOLUTION_FAILED" });
@@ -936,21 +1133,6 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     if (plan.status === ActionPlanStatus.validation_failed || plan.status === ActionPlanStatus.proposed) return plan;
   }
 
-  const executionParameters = Object.fromEntries(
-    Object.entries(executionInput).filter(([key]) => ["breakGlass", "executeConfirmation", "deviceNameConfirmation", "reason"].includes(key))
-  );
-  if (Object.keys(executionParameters).length > 0) {
-    plan = await prisma.actionPlan.update({
-      where: { id },
-      data: {
-        parametersJson: toJson({
-          ...asObject(plan.parametersJson),
-          ...executionParameters
-        })
-      }
-    });
-  }
-
   const approvalError = executionApprovalError(plan);
   if (approvalError) {
     await audit(plan, "execution_failed", "Execution refused because action is not approved.", { code: approvalError.code, status: plan.status });
@@ -961,13 +1143,23 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(plan, "execution_failed", "Execution refused because the command plan is missing.", { code: "COMMAND_PLAN_REQUIRED" });
     throw new ActionExecutionError("COMMAND_PLAN_REQUIRED", "An internal command plan is required before execution.");
   }
-  const metadata = asObject(asObject(plan.parametersJson).metadata);
+  let metadata = asObject(asObject(plan.parametersJson).metadata);
+  if (!metadata.approvedCanonicalPayloadHash) {
+    plan = await approveCurrentRevisionForExecution(plan, executionInput);
+    metadata = asObject(asObject(plan.parametersJson).metadata);
+  }
   const currentFingerprint = actionExecutionFingerprint(plan);
-  const previewFingerprint = typeof metadata.previewFingerprint === "string" ? metadata.previewFingerprint : currentFingerprint;
-  if (previewFingerprint !== currentFingerprint) {
+  const approvedFingerprint = String(metadata.approvedCanonicalPayloadHash ?? "");
+  if (approvedFingerprint !== currentFingerprint) {
+    const approvedPayload = asObject(metadata.approvedCanonicalPayload);
+    const currentPayload = canonicalPayloadFromStoredPlan(plan);
+    const approvedParameters = asObject(approvedPayload.parameters);
+    const changedFields = Array.from(new Set([...Object.keys(approvedParameters), ...Object.keys(currentPayload.parameters)]))
+      .filter((field) => stableJson(approvedParameters[field]) !== stableJson(currentPayload.parameters[field]));
     await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { previewStale: true, staleReason: "user_controlled_inputs_changed" })) } });
-    await audit(plan, "execution_failed", "Execution refused because the command plan is stale.", { code: "COMMAND_PLAN_STALE" });
-    throw new ActionExecutionError("COMMAND_PLAN_STALE", "The command plan is stale because the ActionPlan parameters changed.");
+    const conflict = { retryable: true, recovery: "CREATE_NEW_REVISION", currentRevision: planRevision(metadata), approvedRevision: Number(metadata.approvedRevision ?? 0), changedFields };
+    await audit(plan, "execution_failed", "Execution refused because user-controlled parameters differ from the approved revision.", { code: "COMMAND_PLAN_STALE", ...conflict });
+    throw new ActionExecutionError("COMMAND_PLAN_STALE", "ActionPlan parameters changed after the approved revision.", 409, conflict);
   }
   if (plan.riskLevel === AiRiskLevel.critical && env.actionExecutionMode !== "direct_controlled" && !env.actionAllowLabUnrestrictedManagement) {
     const reason = typeof executionInput.reason === "string" ? executionInput.reason.trim() : "";
@@ -1052,6 +1244,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     data: {
       status: ActionPlanStatus.executing,
       parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
+        planState: "executing",
+        executingRevision: planRevision(metadata),
         executed: false,
         connectorInvoked: false,
         backupEnabled: false,
@@ -1121,6 +1315,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const resultPayload = {
       ...result,
       executed: executionSucceeded,
+      outcome: asObject(result.rollbackJson).outcome ?? (executionSucceeded ? "completed" : "failed"),
+      connectorInvoked: true,
       backupEnabled: false,
       executionStartedAt: startedAt,
       executionCompletedAt: completedAt,
@@ -1138,6 +1334,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       data: {
         status: executionSucceeded ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
         parametersJson: toJson(withExecutionMetadata(executing.parametersJson, {
+          planState: executionSucceeded ? "completed" : "failed",
           executed: executionSucceeded,
           connectorInvoked: true,
           backupEnabled: false,
@@ -1168,6 +1365,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       data: {
         status: ActionPlanStatus.failed,
         parametersJson: toJson(withExecutionMetadata(plan.parametersJson, {
+          planState: "failed",
           executed: false,
           connectorInvoked: true,
           backupEnabled: false,

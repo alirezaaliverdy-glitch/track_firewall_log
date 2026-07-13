@@ -142,6 +142,47 @@ function linuxReadCommand(actionType: ActionType, sudo = "") {
 
 const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 
+export function parseUfwAllowRuleNumbers(output: string, port: number, protocol: string) {
+  const target = new RegExp(`\\b${port}\\/${protocol}\\b`, "i");
+  return output.split(/\r?\n/)
+    .filter((line) => target.test(line) && /\bALLOW(?: IN)?\b/i.test(line))
+    .map((line) => Number(line.match(/^\[\s*(\d+)\]/)?.[1]))
+    .filter((value) => Number.isInteger(value) && value > 0)
+    .sort((left, right) => right - left);
+}
+
+export function firewalldHasPort(output: string, port: number, protocol: string) {
+  return output.split(/\s+/).includes(`${port}/${protocol}`);
+}
+
+export function parseIptablesAllowRuleNumbers(output: string, port: number, protocol: string) {
+  return output.split(/\r?\n/).flatMap((line) => {
+    const fields = line.trim().split(/\s+/);
+    const number = Number(fields[0]);
+    return Number.isInteger(number) && fields[1] === "ACCEPT" && fields[2]?.toLowerCase() === protocol && line.includes(`dpt:${port}`) ? [number] : [];
+  }).sort((left, right) => right - left);
+}
+
+export function parseNftAllowRules(output: string, port: number, protocol: string) {
+  let family = "";
+  let table = "";
+  let chain = "";
+  const rules: Array<{ family: string; table: string; chain: string; handle: number }> = [];
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const tableMatch = line.match(/^table\s+(\S+)\s+(\S+)\s*\{/);
+    if (tableMatch) { family = tableMatch[1]; table = tableMatch[2]; chain = ""; continue; }
+    const chainMatch = line.match(/^chain\s+(\S+)\s*\{/);
+    if (chainMatch) { chain = chainMatch[1]; continue; }
+    const handle = Number(line.match(/#\s*handle\s+(\d+)/)?.[1]);
+    const portMatch = new RegExp(`\\b${protocol}\\s+dport\\s+(?:${port}\\b|\\{[^}]*\\b${port}\\b[^}]*\\})`, "i").test(line);
+    if (family && table && chain && Number.isInteger(handle) && portMatch && /\baccept\b/i.test(line) && [family, table, chain].every((value) => /^[\w.-]+$/.test(value))) {
+      rules.push({ family, table, chain, handle });
+    }
+  }
+  return rules;
+}
+
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -634,8 +675,14 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     if (DANGEROUS_CLOSE_PORTS.has(port)) {
       throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing protected port ${port} is blocked by Linux connector policy.`);
     }
-    plannedCommands = [`sudo -n ufw delete allow ${port}/${protocol}`, "sudo -n ufw status numbered"];
-    rollbackSteps = [`sudo -n ufw allow ${port}/${protocol}`];
+    plannedCommands = [
+      "detect active firewall adapter (UFW, firewalld, nftables, or iptables)",
+      `inspect effective allow rules for ${port}/${protocol}`,
+      `remove only matching allow rules for ${port}/${protocol} when present`,
+      `verify ${port}/${protocol} is not effectively allowed`
+    ];
+    rollbackSteps = [`restore the removed ${port}/${protocol} allow rule through the detected adapter after explicit review`];
+    validationWarnings.push("Idempotent execution: if no matching effective allow rule exists, return verified_no_change after connector inspection.");
   } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
     const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
     const durationMinutes = Number(parameters.durationMinutes ?? 30);
@@ -757,12 +804,62 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       if (port === sshPort) {
         throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing current SSH port ${port} is blocked.`);
       }
-      await pushCommand(`ufw delete allow ${port}/${protocol}`, `${sudo}ufw delete allow ${port}/${protocol}`);
-      if (parameters.deny === true) {
-        await pushCommand(`ufw deny ${port}/${protocol}`, `${sudo}ufw deny ${port}/${protocol} comment 'firewall-log-analyzer action ${plan.id}'`);
+      const detection = await pushCommand(
+        "firewall adapter detection",
+        `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then echo ufw; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then echo firewalld; elif command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then echo nftables; elif command -v iptables >/dev/null 2>&1; then echo iptables; else echo none; fi'`
+      );
+      const adapter = detection.stdout.trim().split(/\r?\n/).at(-1)?.trim();
+      let changed = false;
+
+      if (adapter === "ufw") {
+        const before = await pushCommand("ufw status before close", `${sudo}ufw status numbered`);
+        const rules = parseUfwAllowRuleNumbers(before.stdout, port, protocol);
+        for (const rule of rules) {
+          await pushCommand(`ufw delete allow rule ${rule}`, `${sudo}ufw --force delete ${rule}`);
+          changed = true;
+        }
+        const after = await pushCommand("ufw effective-state verification", `${sudo}ufw status numbered`);
+        if (parseUfwAllowRuleNumbers(after.stdout, port, protocol).length > 0) throw new ConnectorError("POSTCHECK_FAILED", `UFW still allows ${port}/${protocol} after execution.`);
+      } else if (adapter === "firewalld") {
+        const runtimeBefore = await pushCommand("firewalld runtime ports before close", `${sudo}firewall-cmd --list-ports`);
+        const permanentBefore = await pushCommand("firewalld permanent ports before close", `${sudo}firewall-cmd --permanent --list-ports`);
+        if (firewalldHasPort(runtimeBefore.stdout, port, protocol)) { await pushCommand(`firewalld remove runtime ${port}/${protocol}`, `${sudo}firewall-cmd --remove-port=${port}/${protocol}`); changed = true; }
+        if (firewalldHasPort(permanentBefore.stdout, port, protocol)) { await pushCommand(`firewalld remove permanent ${port}/${protocol}`, `${sudo}firewall-cmd --permanent --remove-port=${port}/${protocol}`); changed = true; }
+        const runtimeAfter = await pushCommand("firewalld runtime verification", `${sudo}firewall-cmd --list-ports`);
+        const permanentAfter = await pushCommand("firewalld permanent verification", `${sudo}firewall-cmd --permanent --list-ports`);
+        if (firewalldHasPort(runtimeAfter.stdout, port, protocol) || firewalldHasPort(permanentAfter.stdout, port, protocol)) throw new ConnectorError("POSTCHECK_FAILED", `firewalld still allows ${port}/${protocol} after execution.`);
+      } else if (adapter === "nftables") {
+        const before = await pushCommand("nftables ruleset before close", `${sudo}nft -a list ruleset`);
+        const rules = parseNftAllowRules(before.stdout, port, protocol);
+        for (const rule of rules) {
+          await pushCommand(`nftables delete handle ${rule.handle}`, `${sudo}nft delete rule ${rule.family} ${rule.table} ${rule.chain} handle ${rule.handle}`);
+          changed = true;
+        }
+        const after = await pushCommand("nftables effective-state verification", `${sudo}nft -a list ruleset`);
+        if (parseNftAllowRules(after.stdout, port, protocol).length > 0) throw new ConnectorError("POSTCHECK_FAILED", `nftables still allows ${port}/${protocol} after execution.`);
+      } else if (adapter === "iptables") {
+        const before = await pushCommand("iptables INPUT rules before close", `${sudo}iptables -L INPUT -n --line-numbers`);
+        const rules = parseIptablesAllowRuleNumbers(before.stdout, port, protocol);
+        for (const rule of rules) {
+          await pushCommand(`iptables delete INPUT rule ${rule}`, `${sudo}iptables -D INPUT ${rule}`);
+          changed = true;
+        }
+        const after = await pushCommand("iptables effective-state verification", `${sudo}iptables -L INPUT -n --line-numbers`);
+        if (parseIptablesAllowRuleNumbers(after.stdout, port, protocol).length > 0) throw new ConnectorError("POSTCHECK_FAILED", `iptables still allows ${port}/${protocol} after execution.`);
+      } else {
+        throw new ConnectorError("FIREWALL_ADAPTER_NOT_FOUND", "No supported active Linux firewall adapter was detected.");
       }
-      await pushCommand("ufw status numbered", `${sudo}ufw status numbered`);
-      rollbackJson.steps = [`${sudo}ufw allow ${port}/${protocol}`];
+
+      const outcome = changed ? "completed" : "verified_no_change";
+      warnings.push(outcome.toUpperCase());
+      rollbackJson.firewallAdapter = adapter;
+      rollbackJson.outcome = outcome;
+      rollbackJson.effectiveState = "closed";
+      rollbackJson.port = port;
+      rollbackJson.protocol = protocol;
+      rollbackJson.connectorInvoked = true;
+      rollbackJson.steps = changed ? [`Restore an allow rule for ${port}/${protocol} through the detected ${adapter} adapter after explicit review.`] : [];
+      await audit?.(changed ? "effective_state_verified" : "already_compliant", changed ? "Firewall effective state was verified after removing matching allow rules." : "Firewall effective state was inspected and was already compliant.", { adapter, port, protocol, outcome, connectorInvoked: true });
     } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
       const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
       const durationMinutes = Number(parameters.durationMinutes ?? 30);

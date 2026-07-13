@@ -183,12 +183,12 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
 
   const earlySelectedDevice = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId } }) : null;
   const earlyResolution = resolveAiTemplate({ userText: message, selectedDevice: earlySelectedDevice });
-  const deterministicGuided = earlyResolution.mode === "guided_workflow" || (earlyResolution.catalogItem && earlyResolution.missingFields.length > 0);
+  const deterministicResolved = earlyResolution.mode === "executable_action_plan" || earlyResolution.mode === "guided_workflow" || Boolean(earlyResolution.catalogItem && earlyResolution.missingFields.length > 0);
   const context = await buildSecurityOrchestratorContext();
   const catalogMatch = routeCatalogIntent(message);
-  const providerCandidate = deterministicGuided
+  const providerCandidate = deterministicResolved
     ? {
-        assistantMessage: earlyResolution.reasonFa || "این درخواست باید در فرم مرحله‌ای تکمیل شود.",
+        assistantMessage: earlyResolution.mode === "executable_action_plan" ? "درخواست به اکشن کنترل‌شده کاتالوگ نگاشت شد." : earlyResolution.reasonFa || "این درخواست باید در فرم مرحله‌ای تکمیل شود.",
         shouldCreateIntent: true,
         intent: catalogMatch.parsedIntent ? structuredFromParsed(catalogMatch.parsedIntent) : null,
         confidence: 1,
@@ -272,6 +272,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
+  const resolvedDebug = actionPlan ? { ...debug, deviceId: selectedDevice?.id ?? actionPlan.deviceId, missingFields: [], canCreateActionPlan: true, reason: null, blockedReason: null } : debug;
   const executionSupport = resolution.executionSupport;
   const implementationState = resolution.implementationState;
   const parameterizedBlueprintId = resolutionMissing.length > 0 && resolution.catalogItem ? catalogGuidedBlueprintId(resolution.catalogItem.id) : null;
@@ -323,7 +324,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     nextStepFa,
     warnings: executionSupport === "connector" ? [] : [resolution.reasonFa],
     resolution,
-    actionDebug: debug,
+    actionDebug: resolvedDebug,
     providerStatus: getAiProviderStatus(providerResponse.error),
     evidenceMetadata: context.evidencePack.metadata,
     structured: {

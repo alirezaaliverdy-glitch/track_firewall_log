@@ -2,6 +2,13 @@
 
 Date: 2026-07-13
 
+## Milestone R-D disposition
+
+- BC-07 is resolved: deterministic `linux.close-port` creates or reuses the exact executable ActionPlan and exposes its exact route.
+- BC-09 is resolved: canonical preview/approval revision 1 executed through the registered Linux SSH connector with `connectorInvoked=true`.
+- BC-10 is partially resolved: genuine stale revisions now return structured retry/recovery/revision/changed-field details. Localization and normal-workflow presentation remain assigned to R-E.
+- BC-11 is resolved: the repeated Persian request reuses the same succeeded ActionPlan and connector verification records `verified_no_change` with `connectorInvoked=true`.
+
 R-C update: BC-08 is resolved. Route identity is now the source of truth for Action Center selection, and an unknown ID produces structured, non-retryable `ACTION_PLAN_NOT_FOUND`. Other controls remain assigned to later milestones. R-C performed no connector execution or device mutation.
 
 Evidence source: authenticated Playwright MCP browser plus read-only source/API inspection.

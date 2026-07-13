@@ -15,6 +15,7 @@ export type SupportStateEvaluation = {
 const VERIFIED_RESULT_PARSERS = new Set<string>([
   "linux_daily_check",
   "linux_open_port",
+  "close_port",
   "linux_list_open_ports",
   "linux_check_ssh_status",
   "linux_check_failed_logins",

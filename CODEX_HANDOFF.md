@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 19.1 Milestone R-D - Canonical revision and connector repair (2026-07-13)
+
+- ActionPlan preview now resolves target, vendor/platform, capability, catalog item, execution template, connector, normalized parameters, and risk before hashing a canonical revision.
+- Approval binds to an immutable canonical payload and revision. Genuine controlled-input edits create the next revision; executing a changed approved revision returns structured `COMMAND_PLAN_STALE` recovery details.
+- Added the verified `linux.close-port` catalog/template/connector contract. The Linux SSH connector detects UFW, firewalld, nftables, or iptables, removes only matching allow rules, verifies effective state, and reports idempotent `verified_no_change` only after real connector inspection.
+- Repeated Assistant requests reuse the same successfully verified ActionPlan instead of creating duplicates. Deterministic executable catalog matches bypass the external AI provider.
+- Authenticated Playwright executed the reviewed port-545 plan on the selected Linux target. Initial execution and repeated verification both recorded `connectorInvoked=true`; the final stored outcome is `verified_no_change`, revision 1 remains the approved revision, and the detected adapter is UFW.
+- Playwright also verified the repeated Persian Assistant request, exact-plan handoff, revision/status rendering, desktop/mobile layouts, Persian RTL, and English LTR without horizontal overflow.
+- Validation passed: Prisma validate, backend build, serial full backend tests 201/201, catalog 137 items, frontend build, i18n parity 73 keys, UTF-8 guard, and `git diff --check`.
+- No schema migration, destructive database command, `.env` access, credential exposure, or unrelated device/integration work occurred.
+
 ## Task 19.1 Milestone R-C - Exact ActionPlan navigation (2026-07-13)
 
 - Assistant, Catalog, Daily Check, Service Health, and Guided Actions now hand off to exact `/actions/:actionPlanId` routes.

@@ -2,6 +2,13 @@
 
 Date: 2026-07-13
 
+## Milestone R-D disposition
+
+- API-01 is resolved: the same reviewed request now returns 200/succeeded, and repeated verification returns `verified_no_change`; both require `connectorInvoked=true`.
+- API-04 is resolved: deterministic executable resolution returns `linux_close_port`, `canCreateActionPlan=true`, no contradictory missing-fields blocker, and the exact reusable ActionPlan ID.
+- API-05 is resolved: preview now stores resolved vendor/platform, capability, catalog ID, template, connector, canonical parameters/payload hashes, and revision identity before execution.
+- Genuine post-approval controlled-input changes remain a 409, but the response is now nested and structured with code, retryability, recovery, current/approved revisions, and changed fields.
+
 Scope: requests observed from the new authenticated Playwright MCP context.
 
 R-C update: `GET /api/actions/:id` now returns structured, non-retryable `ACTION_PLAN_NOT_FOUND` for an unknown plan. Action Center renders the code, requested ID, and recovery control without a raw backend URL. The expected 404 remains observable and is never converted to success.

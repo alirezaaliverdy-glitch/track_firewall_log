@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-13
 
+## Task 19.1 R-D - Canonical ActionPlan revision and connector execution
+
+- Canonical ActionPlan resolution, revision hashing, immutable approval snapshots, and structured stale-revision conflicts are implemented without a schema migration.
+- `linux.close-port` is a verified catalog/template/Linux SSH connector capability with adapter-aware UFW, firewalld, nftables, and iptables inspection and effective-state verification.
+- Repeated desired-state requests reuse a single succeeded plan only when the stored result proves `executed=true`, `connectorInvoked=true`, and an allowed completed/no-change outcome.
+- The authenticated browser executed and re-verified the reviewed port-545 plan on the selected Linux device. Its current stored state is `succeeded`, revision 1, approved revision 1, UFW, `verified_no_change`, and `connectorInvoked=true`.
+- Persian Assistant resolution now returns the exact reusable ActionPlan immediately without contradictory `missing_fields` state. Exact-plan desktop/mobile Persian/English rendering has no horizontal overflow.
+- Validation is green: Prisma schema, backend build, serial backend suite 201/201, command catalog 137, frontend production build, i18n 73, UTF-8, and diff checks.
+- R-E through R-G remain. Action Center localization and optimistic post-execution refresh belong to R-E.
+
 ## Task 19.1 R-C - Exact ActionPlan navigation
 
 - Exact ActionPlan routing and selection are implemented across plan-creation entry points.

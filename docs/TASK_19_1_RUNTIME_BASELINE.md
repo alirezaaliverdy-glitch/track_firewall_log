@@ -2,6 +2,15 @@
 
 Date: 2026-07-13
 
+## Milestone R-D verification addendum
+
+- Preview resolved `linux.close-port`, `linux_close_port`, `linux-ssh`, Linux platform/vendor, canonical port 545/tcp parameters, medium risk, and revision 1 before approval.
+- The reviewed Action Center execution invoked the real Linux SSH connector on the explicitly selected Linux device. The initial required change completed and the repeat connector inspection returned `verified_no_change`; both paths recorded `connectorInvoked=true`.
+- Final stored state: `status=succeeded`, `planState=completed`, `planRevision=approvedRevision=1`, `previewStale=false`, firewall adapter UFW, effective state closed, and result `executed=true`, `connectorInvoked=true`.
+- Repeating the exact Persian Assistant request returned immediately through deterministic catalog resolution, showed `linux_close_port`, removed the contradictory `missing_fields` debug state, and routed to the same ActionPlan ID. The action list contains one matching device/action/port plan.
+- Exact-plan rendering passed at 1440x900 and 390x844 in Persian RTL and English LTR. Page and dialog horizontal overflow were both false.
+- No `.env` access, credential output, migration, destructive database operation, external integration call, or ambiguous target selection occurred.
+
 ## Milestone R-C verification addendum
 
 - `/actions/cmrix2ddb00ao2glvh3tagbe6` loads and selects only that plan; reload preserves its URL, current status, and revision.

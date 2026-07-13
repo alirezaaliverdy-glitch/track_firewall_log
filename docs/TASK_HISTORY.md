@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.1 Milestone R-D - Canonical Revision and Connector Repair (2026-07-13)
+
+- Summary: repaired the backend-generated stale-plan failure by resolving and hashing one canonical runtime contract before preview, approval, and execution.
+- Backend: added immutable revision/approval snapshots, structured genuine-stale conflicts, close-port catalog/template resolution, repeated-request reuse, and deterministic Assistant resolution without an external provider round trip.
+- Connector: Linux close-port detects the active firewall adapter, inspects matching allow rules, performs only required removals, verifies effective state, and returns `verified_no_change` only after real connector invocation.
+- Browser: the reviewed port-545 plan executed through Action Center and was then re-verified idempotently; stored evidence is revision 1, approved revision 1, status succeeded, UFW, outcome `verified_no_change`, and `connectorInvoked=true`. A repeated Persian Assistant request reused the same plan ID.
+- Tests: added canonicalization, immutable revision, structured conflict, adapter parser, capability registration, and idempotent reuse regressions. Focused backend suite passed 19/19; serial full backend suite passed 201/201; catalog validation passed 137 items; frontend build, i18n 73, UTF-8, Prisma, and diff checks passed.
+- Safety: no `.env` access, credentials, migration, destructive database command, raw AI shell execution, or unrelated mutation was introduced.
+
 ## Task 19.1 Milestone R-C - Exact Assistant-to-ActionPlan Navigation (2026-07-13)
 
 - Summary: replaced DOM-only handoff with exact `/actions/:actionPlanId` routing durable across direct load, reload, selection, focus, close, and history.

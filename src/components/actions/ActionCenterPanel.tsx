@@ -440,7 +440,7 @@ function tabForPlan(action: ActionPlan): ActionTab {
 function revisionOf(action: ActionPlan) {
   const metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
   const approval = normalizeObject(action.approvalJson);
-  const revision = Number(metadata.revision ?? approval.revision);
+  const revision = Number(metadata.planRevision ?? approval.planRevision ?? metadata.revision ?? approval.revision);
   return Number.isInteger(revision) && revision > 0 ? revision : null;
 }
 
