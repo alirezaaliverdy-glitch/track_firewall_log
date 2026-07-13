@@ -2,6 +2,14 @@
 
 Date: 2026-07-13
 
+## Milestone R-F verification addendum
+
+- `/assets/devices/cmr3dofuk0004molvx8jz0yn9` renders six chart cards and 1h/6h/24h/7d/30d controls from stored workspace series.
+- Switching to 30d exposes recorded high findings and succeeded action results. Health, connector, availability, and resource series with no stored samples remain honest no-data cards.
+- Linux vendor tabs include CPU/load, memory/swap, disk/inode, services, listening ports, firewall, and authentication. The CPU tab shows no-data reason, collection requirement, and next action.
+- Desktop/mobile Persian RTL and English LTR all measured `pageOverflow=false`; current-navigation console errors were zero.
+- No connector execution, device mutation, credential access, migration, or destructive database operation occurred.
+
 ## Milestone R-E verification addendum
 
 - `/assistant` switches target selection, refresh summary, clear chat, new request, send, Safety Boundary, and AI Provider controls between Persian and English.

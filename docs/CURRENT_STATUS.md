@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-13
 
+## Task 19.1 R-F - Asset workspace analytics and vendor tabs
+
+- Device workspaces now expose stored-data-only health, connector, availability, resource, finding, action, and change series with five time ranges.
+- Device/asset linkage uses OR semantics for related findings/actions/collections, so records linked through either identity are visible.
+- Workspace overview and health render six responsive charts; missing series remain explicit no-data states rather than fabricated trends.
+- Vendor tabs are capability-gated. Linux has seven operational views; missing data explains reason, requirement, and next action. Cisco tabs derive from verified capability-cache domains.
+- Authenticated Playwright passed desktop/mobile Persian RTL and English LTR for the Linux workspace, 30-day interaction, real finding/action points, and CPU no-data state without overflow or console errors.
+- Validation passed: serial backend 204/204, backend/frontend builds, Prisma validate, command catalog 137, i18n 73, UTF-8, and diff check.
+- R-G global route/control audit remains. R-F performed no connector/device/database mutation.
+
 ## Task 19.1 R-E - Action Center and Assistant UX
 
 - Action Center primary workflow is locale-aware in Persian and English and exposes exact revision, runtime resolution, verification, preview/parameters, and audit context.

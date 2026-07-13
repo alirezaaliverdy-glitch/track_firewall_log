@@ -1,5 +1,15 @@
 # CODEX_HANDOFF.md
 
+## Task 19.1 Milestone R-F - Asset workspace analytics and vendor tabs (2026-07-13)
+
+- Device workspace API now returns chart series derived only from stored health snapshots, status checks, metric samples, collection runs, findings, actions, and audit records. It does not synthesize telemetry.
+- Added health score, connector result, availability, CPU/memory, findings, action result, and recent-change series with 1h/6h/24h/7d/30d client filtering.
+- Fixed related-record convergence: linked assets now include records attached to either `deviceId` or `assetId`; the prior AND filter hid valid findings, actions, and collections.
+- Workspace overview/health render six responsive charts and honest no-data states. The live 30-day Linux view surfaces stored high-severity findings and succeeded actions while health/resource series remain explicitly empty.
+- Added capability-gated vendor tabs. Linux exposes CPU/load, memory/swap, disk/inode, services, listening ports, firewall, and authentication; missing data states show reason, requirement, and next action. Cisco sections derive from verified capability-cache domains; other vendors show only registered operational domains.
+- Authenticated Playwright verified the Linux workspace, time-range interaction, stored-data charts, and CPU no-data workflow at desktop/mobile in Persian RTL and English LTR with no horizontal overflow or console errors.
+- Validation passed: serial backend 204/204, backend/frontend builds, focused R-F regression, Prisma validate, catalog 137, i18n 73, UTF-8, and diff check. No connector execution, device mutation, migration, or credential access occurred.
+
 ## Task 19.1 Milestone R-E - Action Center and Assistant UX (2026-07-13)
 
 - Action Center now follows the active Persian/English locale for its primary header, summary, filters, table, status, risk, actions, exact-plan dialog, and recovery controls.

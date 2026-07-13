@@ -67,6 +67,18 @@ export type DeviceWorkspace = {
   audit: Array<Record<string, unknown>>;
   capabilities: { platformKey?: string; connectorType?: string; capabilities?: unknown; facts?: unknown; warnings?: unknown; refreshedAt?: string } | null;
   collections: Array<Record<string, unknown>>;
+  charts: {
+    healthScore: WorkspaceChartPoint[];
+    connectorResults: WorkspaceChartPoint[];
+    availability: WorkspaceChartPoint[];
+    resources: WorkspaceChartPoint[];
+    findings: WorkspaceChartPoint[];
+    actions: WorkspaceChartPoint[];
+    recentChanges: Array<{ timestamp: string; label: string }>;
+  };
+  vendor: { key: string; sections: Array<{ key: string; titleFa: string; titleEn: string; state: "available" | "no_data"; reason: string | null; requirement: string; nextAction: string }> };
 };
+
+export type WorkspaceChartPoint = { timestamp: string; value: number; label?: string; unit?: string | null };
 
 export const getDeviceWorkspace = (reference: string) => request<DeviceWorkspace>(`/device-workspaces/${encodeURIComponent(reference)}`);

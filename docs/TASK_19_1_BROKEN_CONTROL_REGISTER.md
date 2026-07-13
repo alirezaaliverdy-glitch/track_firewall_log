@@ -2,6 +2,11 @@
 
 Date: 2026-07-13
 
+## Milestone R-F disposition
+
+- BC-06 is resolved: `/assets/devices/:deviceId` is a stable workspace with operational overview, stored-data charts, time ranges, capability-gated vendor tabs, findings, exact actions, audit/history, and connection settings.
+- A newly observed device/asset contract gap was fixed: findings/actions/collections now match either linked identity instead of requiring both IDs on the same record.
+
 ## Milestone R-E disposition
 
 - BC-10 is resolved: user-facing errors no longer expose raw backend URLs; structured code, retryability, recovery, revision identity, and changed fields are preserved with a recovery control.

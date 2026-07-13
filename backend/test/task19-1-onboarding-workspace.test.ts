@@ -5,6 +5,7 @@ import test from "node:test";
 import { buildApp } from "../src/app.js";
 import { PRODUCT_FEATURES } from "../src/product-state/product-state.registry.js";
 import { resetOnboardingSessionsForTest } from "../src/services/device-onboarding.service.js";
+import { prisma } from "../src/db/prisma.js";
 
 test("Task 19.1 onboarding exposes one safe session engine for every required route", async () => {
   resetOnboardingSessionsForTest();
@@ -74,5 +75,25 @@ test("Task 19.1 workspace endpoint returns a structured not-found contract", asy
     const response = await app.inject({ method: "GET", url: "/api/device-workspaces/not-a-real-device" });
     assert.equal(response.statusCode, 404);
     assert.equal(response.json().error.code, "DEVICE_WORKSPACE_NOT_FOUND");
+  } finally { await app.close(); }
+});
+
+test("Task 19.1 R-F workspace exposes stored-data charts and capability-gated vendor sections", async (t) => {
+  const device = await prisma.device.create({ data: { name: `task19-rf-${Date.now()}`, vendor: "linux", type: "linux_edge", host: "192.0.2.219", managementPort: 22, protocol: "ssh", environment: "lab", status: "unknown", capabilities: {} } });
+  t.after(async () => { await prisma.device.deleteMany({ where: { id: device.id } }); });
+  const app = await buildApp({ authRequired: false });
+  try {
+    const response = await app.inject({ method: "GET", url: `/api/device-workspaces/${device.id}` });
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.deepEqual(Object.keys(body.charts).sort(), ["actions", "availability", "connectorResults", "findings", "healthScore", "recentChanges", "resources"]);
+    assert.equal(body.charts.healthScore.length, 0, "workspace must not invent health history");
+    assert.equal(body.vendor.key, "linux");
+    assert.ok(body.vendor.sections.some((item: { key: string; state: string; requirement: string }) => item.key === "cpu" && item.state === "no_data" && item.requirement));
+
+    const source = readFileSync(join(process.cwd(), "..", "src", "features", "assets", "pages", "AssetDetailPage.tsx"), "utf8");
+    for (const range of ["1h", "6h", "24h", "7d", "30d"]) assert.match(source, new RegExp(`\\"${range}\\"`));
+    assert.match(source, /workspace\.vendor\.sections/);
+    assert.match(source, /No verified data is stored/);
   } finally { await app.close(); }
 });

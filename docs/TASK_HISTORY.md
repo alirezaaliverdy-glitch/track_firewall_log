@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.1 Milestone R-F - Asset Workspace Analytics and Vendor Tabs (2026-07-13)
+
+- Summary: completed the read-only device workspace with stored-data chart series, time ranges, and capability-gated vendor tabs.
+- Backend: added health/connector/availability/resource/finding/action/change series and fixed related records to match either device or linked asset identity.
+- Frontend: added responsive charts, 1h/6h/24h/7d/30d controls, recent-change annotations, honest no-data cards, and vendor capability tabs with reason/requirement/next action.
+- Runtime: the Linux 30-day view shows recorded high findings and succeeded actions; absent health/resource history remains visibly empty. No data was synthesized.
+- Browser: desktop/mobile Persian RTL and English LTR passed for workspace overview, time-range change, and CPU capability state without overflow or console errors.
+- Validation: serial backend 204/204, focused R-F test, backend/frontend builds, Prisma validate, command catalog 137, i18n 73, UTF-8, and diff check passed. No connector, device, migration, or credential mutation occurred.
+
 ## Task 19.1 Milestone R-E - Action Center and Assistant UX (2026-07-13)
 
 - Summary: localized the primary Action Center/Assistant workflows and made canonical revision, runtime resolution, verification, and structured recovery understandable in the normal UI.
