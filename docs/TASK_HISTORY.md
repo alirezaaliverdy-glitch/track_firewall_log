@@ -2,6 +2,19 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Milestone 19A - Full Audit and UI/Backend Synchronization (2026-07-13)
+
+- Summary: audited the full requested browser/UI/API/backend surface, introduced Product State Contract `19A.1`, and made desktop/mobile primary navigation derive from verified backend state.
+- State fixes: removed planned Settings, mock sync/integration children, unverified Cisco, and route aliases from primary navigation without deleting their honest direct/contextual routes.
+- Backend: added product-state types, registry/validator, vendor/integration projections, and five read-only API endpoints.
+- Frontend: replaced duplicated readiness/navigation flags with stable feature keys, consumed contract-generated navigation, added fail-closed navigation behavior, and added a Vite development proxy matching the deployed `/firewall-api` boundary.
+- Docs: added browser baseline, feature gap register, UI/backend contract gap report, and Product State Contract; updated live project memory and structural maps.
+- Tests: added four regressions for forbidden-state/readiness mismatches, navigation exclusions, cross-layer feature-key alignment, and API projection consistency.
+- Browser: authenticated desktop 1440x900 and mobile 390x844 verification passed for all 16 requested routes in Persian RTL and English LTR; no console errors, failed requests, HTTP >=400 responses, or horizontal overflow were observed.
+- Safety: no device mutation, migration mutation, credential access, connector execution, or later-milestone implementation occurred. The existing execution-success invariant remains unchanged.
+- Validation: Prisma validate/generate, backend build, backend tests 190/190, catalog validation 136 items, frontend build, i18n 73 keys, UTF-8 guard, and diff check passed. Root lint retained the known pre-existing 66 errors/4 warnings; `docs:check` retained the pre-existing exact-heading mismatch.
+- Commit: separate Milestone 19A commit.
+
 ## Task 18.2 Safe Autonomous H1-H6 (2026-07-13)
 
 - Summary: executed safe autonomous hardening from `TASK_18_2_SAFE_AUTONOMOUS_MODE.txt` without restarting completed 18.1/18.2A work and without touching credentials or destructive database paths.

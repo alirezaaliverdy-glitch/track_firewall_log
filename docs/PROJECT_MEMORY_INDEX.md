@@ -6,8 +6,9 @@
 2. `CODEX_HANDOFF.md` — concise live task handoff and immediate next work.
 3. `docs/CURRENT_STATUS.md` — current capabilities, gaps, bugs, and vendor matrix.
 4. `docs/ARCHITECTURE_MAP.md` — system flows and ownership by component.
-5. `docs/PERSIAN_COMMAND_CATALOG_PRODUCT.md` — Persian-first catalog contract.
-6. `docs/TASK_HISTORY.md` — compact chronological record and known validation.
+5. `docs/PRODUCT_STATE_CONTRACT.md` — feature readiness and navigation truth.
+6. `docs/PERSIAN_COMMAND_CATALOG_PRODUCT.md` — Persian-first catalog contract.
+7. `docs/TASK_HISTORY.md` — compact chronological record and known validation.
 
 This sequence should onboard a new model in under two minutes. Read `docs/CODEBASE_OVERVIEW.md` only when file/API-level orientation is needed, and regenerate `docs/PROJECT_SNAPSHOT.md` for repository facts.
 

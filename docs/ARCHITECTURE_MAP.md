@@ -10,6 +10,8 @@
 
 `Resolver -> executable_action_plan | needs_input | guided_workflow | clarification | manual_or_not_supported`
 
+`Backend Product State registry -> validated feature readiness -> read-only Product State API -> generated desktop/mobile navigation`
+
 Creation is permissive; execution is controlled. Preview never implies execution, and success requires `connectorInvoked=true`.
 
 Task 17.2B adds a hard resolver guard before generic/manual fallback: clearly multi-step operational creation requests must route to `guided_workflow` when a blueprint exists. The guard covers VPN, VDOM, Zone, Policy/Rule, VIP/NAT/Port Forward, Interface/VLAN/Subinterface, and Route/Gateway creation phrases in Persian and English. If no selected device exists, the resolver still returns `guided_workflow`; `/api/action-sessions/start` creates a pending session and the wizard's first step is `device_selection`. These requests must not create `vendor=unknown`, `custom_vendor_action`, `generic_security_action`, `unsupported_vendor`, or any normal ActionPlan before wizard completion.
@@ -20,6 +22,7 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 
 | Area | Purpose | Main path | Route/API | Status |
 |---|---|---|---|---|
+| Product state | Versioned feature, navigation, vendor, and integration truth with fail-closed validation | `backend/src/product-state/`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented |
 | Auth | Session login/logout and route protection | `backend/src/services/auth.service.ts`, `routes/auth.ts` | `/api/auth/*` | Implemented |
 | Devices | Device inventory, discovery, capabilities | `services/device.service.ts`, `routes/devices.ts` | `/api/devices/*` | Implemented |
 | Vendor capabilities | Vendor/platform/capability registry and discovery cache | `vendors/`, `routes/vendors.ts`, `routes/devices.ts` | `/api/vendors/*`, `/api/devices/:id/capabilities` | Task 18.2A foundation |
@@ -46,7 +49,7 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 
 | Area | Purpose | Main path | Related API | Status |
 |---|---|---|---|---|
-| App shell/routing | Authenticated composition and result route | `src/App.tsx`, `src/main.tsx` | — | Implemented; mostly single-page composition |
+| App shell/routing | Authenticated composition, route matching, and contract-generated navigation | `src/App.tsx`, `src/main.tsx`, `src/routes/appRoutes.tsx`, `src/components/layout/AppShell.tsx` | `/api/product-state/navigation` | Milestone 19A synchronized |
 | Device registry | Devices, credentials, connection/capabilities | `components/devices/DeviceRegistryPanel.tsx` | `/api/devices`, `/api/credentials` | Implemented |
 | Command catalog | Persian search, parameters, plan creation | `components/commands/CommandCatalogPanel.tsx` | `/api/commands/*` | Implemented |
 | Asset/Security platform | Compact inventory, sync, findings, and detection rules | `features/assets/`, `features/security/` | `/api/assets/*`, `/api/security/*` | Minimum milestone implemented |
@@ -70,3 +73,11 @@ Frontend routing now uses `src/routes/appRoutes.tsx` plus `AppShell`. Asset and 
 - `backend/src/connectors/cisco/ios-xe/` is a Cisco IOS-XE read-only foundation with platform-family detection, fixed command templates, parsers, and fixtures. It must not be treated as broad Cisco support or as a mutation path.
 - `backend/src/monitoring/linux/` adds health scoring, metric extraction, collection-run persistence, and read APIs for Linux health. Read APIs tolerate a pending migration; refresh writes require the migration and real connector-backed collection.
 - Frontend additions live under `src/features/vendors/cisco/` and `src/features/monitoring/pages/`, routed through `src/routes/appRoutes.tsx`.
+
+## Milestone 19A Product State Update
+
+- `backend/src/product-state/` is the single source for feature state and primary-navigation eligibility.
+- `src/routes/appRoutes.tsx` maps stable feature keys to components but does not declare readiness or navigation exposure.
+- `AppShell` fetches the versioned navigation projection and fails closed to a Dashboard recovery link when the contract cannot load.
+- Vendor state derives from the vendor registry. NetBox/Wazuh are explicitly mock, not configured, and non-executable.
+- The Product State layer is read-only and does not participate in connector execution, PolicyGuard decisions, or migration operations.

@@ -1,5 +1,4 @@
 import type { ComponentType } from "react";
-import { Bot, Boxes, Gauge, LayoutDashboard, Plug, Settings, ShieldAlert, Wrench } from "lucide-react";
 import DashboardPage from "@/features/dashboard/pages/DashboardPage";
 import AssetsOverviewPage from "@/features/assets/pages/AssetsOverviewPage";
 import AssetListPage from "@/features/assets/pages/AssetListPage";
@@ -21,64 +20,50 @@ import { PlannedState } from "@/components/ui/PlannedState";
 export type RouteComponentProps = { params: Record<string, string> };
 export type AppRoute = {
   path: string;
+  featureKey: string;
   labelFa: string;
   labelEn: string;
   group: string;
   component: ComponentType<RouteComponentProps>;
-  implemented: boolean;
-  mobilePrimary?: boolean;
-  nav?: boolean;
-  secondaryNav?: boolean;
 };
 
 const planned = (title: string, description?: string): ComponentType<RouteComponentProps> => () => <PlannedState title={title} description={description} />;
 
-export const navGroups = [
-  { id: "dashboard", labelFa: "داشبورد", labelEn: "Dashboard", icon: LayoutDashboard },
-  { id: "assets", labelFa: "دارایی‌ها", labelEn: "Assets", icon: Boxes },
-  { id: "security", labelFa: "امنیت", labelEn: "Security", icon: ShieldAlert },
-  { id: "monitoring", labelFa: "پایش", labelEn: "Monitoring", icon: Gauge },
-  { id: "actions", labelFa: "اقدامات", labelEn: "Actions", icon: Wrench },
-  { id: "assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", icon: Bot },
-  { id: "integrations", labelFa: "یکپارچه‌سازی‌ها", labelEn: "Integrations", icon: Plug },
-  { id: "settings", labelFa: "تنظیمات", labelEn: "Settings", icon: Settings }
-] as const;
-
 export const appRoutes: AppRoute[] = [
-  { path: "/dashboard", labelFa: "نمای کلی", labelEn: "Overview", group: "dashboard", component: DashboardPage, implemented: true, mobilePrimary: true, nav: true },
-  { path: "/assets", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage, implemented: true, mobilePrimary: true, nav: true },
-  { path: "/assets/devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage, implemented: true, nav: true },
-  { path: "/assets/devices/:assetId", labelFa: "جزئیات تجهیز", labelEn: "Asset detail", group: "assets", component: AssetDetailPage, implemented: true },
-  { path: "/assets/sites", labelFa: "سایت‌ها", labelEn: "Sites", group: "assets", component: planned("سایت‌ها", "این مسیر تا تکمیل گردش کار سایت‌ها از ناوبری اصلی خارج شده است."), implemented: false },
-  { path: "/assets/networks", labelFa: "شبکه‌ها و VLANها", labelEn: "Networks", group: "assets", component: planned("شبکه‌ها و VLANها", "شبکه و VLAN فعلا فقط در مدل داده وجود دارد و صفحه عملیاتی ندارد."), implemented: false },
-  { path: "/assets/topology", labelFa: "توپولوژی", labelEn: "Topology", group: "assets", component: planned("توپولوژی", "توپولوژی در جزئیات دارایی قابل توسعه است؛ نمای گراف عمومی هنوز فعال نیست."), implemented: false },
-  { path: "/assets/sync", labelFa: "همگام‌سازی", labelEn: "Sync", group: "assets", component: AssetSyncPage, implemented: true, nav: true },
-  { path: "/assets/vendors", labelFa: "وندورها", labelEn: "Vendors", group: "assets", component: CiscoOverviewPage, implemented: true, nav: true },
-  { path: "/assets/vendors/cisco", labelFa: "Cisco", labelEn: "Cisco", group: "assets", component: CiscoOverviewPage, implemented: true, nav: true },
-  { path: "/assets/vendors/cisco/devices", labelFa: "دستگاه‌های Cisco", labelEn: "Cisco devices", group: "assets", component: CiscoOverviewPage, implemented: true },
-  { path: "/security", labelFa: "نمای کلی", labelEn: "Overview", group: "security", component: SecurityOverviewPage, implemented: true, mobilePrimary: true, nav: true },
-  { path: "/security/findings", labelFa: "یافته‌ها", labelEn: "Findings", group: "security", component: FindingsPage, implemented: true, nav: true },
-  { path: "/security/findings/:findingId", labelFa: "جزئیات یافته", labelEn: "Finding detail", group: "security", component: FindingDetailPage, implemented: true },
-  { path: "/security/events", labelFa: "رویدادها", labelEn: "Events", group: "security", component: planned("رویدادها", "رویدادها در یافته‌ها و پایش مصرف می‌شوند؛ صفحه مستقل هنوز آماده نیست."), implemented: false },
-  { path: "/security/rules", labelFa: "قوانین تشخیص", labelEn: "Rules", group: "security", component: DetectionRulesPage, implemented: true, nav: true },
-  { path: "/security/rules/:ruleId", labelFa: "جزئیات قانون", labelEn: "Rule detail", group: "security", component: planned("جزئیات قانون"), implemented: false },
-  { path: "/monitoring", labelFa: "وضعیت کلی", labelEn: "Overview", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
-  { path: "/monitoring/linux", labelFa: "Linux", labelEn: "Linux", group: "monitoring", component: LinuxMonitoringPage, implemented: true, nav: true },
-  { path: "/monitoring/linux/:deviceId", labelFa: "Linux detail", labelEn: "Linux detail", group: "monitoring", component: LinuxMonitoringPage, implemented: true },
-  { path: "/monitoring/devices", labelFa: "مانیتورینگ تجهیزات", labelEn: "Device monitoring", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
-  { path: "/monitoring/devices/:deviceId", labelFa: "جزئیات مانیتورینگ", labelEn: "Monitoring detail", group: "monitoring", component: MonitoringPage, implemented: true },
-  { path: "/monitoring/connectors", labelFa: "سلامت Connectorها", labelEn: "Connectors", group: "monitoring", component: planned("سلامت Connectorها", "وضعیت Connectorها فعلا در صفحات پایش و اقدام‌ها نمایش داده می‌شود."), implemented: false },
-  { path: "/monitoring/daily-check", labelFa: "چک روزانه", labelEn: "Daily Check", group: "monitoring", component: MonitoringPage, implemented: true, nav: true },
-  { path: "/actions", labelFa: "مرکز اقدام", labelEn: "Action Center", group: "actions", component: ActionsPage, implemented: true, mobilePrimary: true, nav: true },
-  { path: "/actions/guided", labelFa: "اقدام راهنما", labelEn: "Guided Actions", group: "actions", component: planned("اقدام راهنما", "جلسه‌های موجود با مسیر /guided-actions/:sessionId باز می‌مانند."), implemented: false },
-  { path: "/actions/pending", labelFa: "تأییدهای منتظر", labelEn: "Pending", group: "actions", component: ActionsPage, implemented: true, nav: true },
-  { path: "/actions/history", labelFa: "تاریخچه اجرا", labelEn: "History", group: "actions", component: ActionsPage, implemented: true, nav: true },
-  { path: "/actions/:actionId", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage, implemented: true },
-  { path: "/assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", group: "assistant", component: AssistantPage, implemented: true, nav: true },
-  { path: "/integrations", labelFa: "وضعیت کلی", labelEn: "Overview", group: "integrations", component: IntegrationsPage, implemented: true, nav: true },
-  { path: "/integrations/netbox", labelFa: "NetBox", labelEn: "NetBox", group: "integrations", component: IntegrationsPage, implemented: true, nav: true },
-  { path: "/integrations/wazuh", labelFa: "Wazuh", labelEn: "Wazuh", group: "integrations", component: IntegrationsPage, implemented: true, nav: true },
-  { path: "/settings", labelFa: "تنظیمات", labelEn: "Settings", group: "settings", component: SettingsPage, implemented: true, nav: true }
+  { path: "/dashboard", featureKey: "dashboard.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "dashboard", component: DashboardPage },
+  { path: "/assets", featureKey: "assets.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage },
+  { path: "/assets/devices", featureKey: "assets.devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage },
+  { path: "/assets/devices/:assetId", featureKey: "assets.device_detail", labelFa: "جزئیات تجهیز", labelEn: "Asset detail", group: "assets", component: AssetDetailPage },
+  { path: "/assets/sites", featureKey: "assets.sites", labelFa: "سایت‌ها", labelEn: "Sites", group: "assets", component: planned("سایت‌ها", "این مسیر تا تکمیل گردش کار سایت‌ها از ناوبری اصلی خارج شده است.") },
+  { path: "/assets/networks", featureKey: "assets.networks", labelFa: "شبکه‌ها و VLANها", labelEn: "Networks", group: "assets", component: planned("شبکه‌ها و VLANها", "شبکه و VLAN فعلا فقط در مدل داده وجود دارد و صفحه عملیاتی ندارد.") },
+  { path: "/assets/topology", featureKey: "assets.topology", labelFa: "توپولوژی", labelEn: "Topology", group: "assets", component: planned("توپولوژی", "توپولوژی در جزئیات دارایی قابل توسعه است؛ نمای گراف عمومی هنوز فعال نیست.") },
+  { path: "/assets/sync", featureKey: "assets.sync", labelFa: "همگام‌سازی", labelEn: "Sync", group: "assets", component: AssetSyncPage },
+  { path: "/assets/vendors", featureKey: "assets.vendors", labelFa: "وندورها", labelEn: "Vendors", group: "assets", component: CiscoOverviewPage },
+  { path: "/assets/vendors/cisco", featureKey: "assets.vendors.cisco", labelFa: "Cisco", labelEn: "Cisco", group: "assets", component: CiscoOverviewPage },
+  { path: "/assets/vendors/cisco/devices", featureKey: "assets.vendors.cisco_devices", labelFa: "دستگاه‌های Cisco", labelEn: "Cisco devices", group: "assets", component: CiscoOverviewPage },
+  { path: "/security", featureKey: "security.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "security", component: SecurityOverviewPage },
+  { path: "/security/findings", featureKey: "security.findings", labelFa: "یافته‌ها", labelEn: "Findings", group: "security", component: FindingsPage },
+  { path: "/security/findings/:findingId", featureKey: "security.finding_detail", labelFa: "جزئیات یافته", labelEn: "Finding detail", group: "security", component: FindingDetailPage },
+  { path: "/security/events", featureKey: "security.events", labelFa: "رویدادها", labelEn: "Events", group: "security", component: planned("رویدادها", "رویدادها در یافته‌ها و پایش مصرف می‌شوند؛ صفحه مستقل هنوز آماده نیست.") },
+  { path: "/security/rules", featureKey: "security.rules", labelFa: "قوانین تشخیص", labelEn: "Rules", group: "security", component: DetectionRulesPage },
+  { path: "/security/rules/:ruleId", featureKey: "security.rule_detail", labelFa: "جزئیات قانون", labelEn: "Rule detail", group: "security", component: planned("جزئیات قانون") },
+  { path: "/monitoring", featureKey: "monitoring.overview", labelFa: "وضعیت کلی", labelEn: "Overview", group: "monitoring", component: MonitoringPage },
+  { path: "/monitoring/linux", featureKey: "monitoring.linux", labelFa: "Linux", labelEn: "Linux", group: "monitoring", component: LinuxMonitoringPage },
+  { path: "/monitoring/linux/:deviceId", featureKey: "monitoring.linux_detail", labelFa: "Linux detail", labelEn: "Linux detail", group: "monitoring", component: LinuxMonitoringPage },
+  { path: "/monitoring/devices", featureKey: "monitoring.devices", labelFa: "مانیتورینگ تجهیزات", labelEn: "Device monitoring", group: "monitoring", component: MonitoringPage },
+  { path: "/monitoring/devices/:deviceId", featureKey: "monitoring.device_detail", labelFa: "جزئیات مانیتورینگ", labelEn: "Monitoring detail", group: "monitoring", component: MonitoringPage },
+  { path: "/monitoring/connectors", featureKey: "monitoring.connectors", labelFa: "سلامت Connectorها", labelEn: "Connectors", group: "monitoring", component: planned("سلامت Connectorها", "وضعیت Connectorها فعلا در صفحات پایش و اقدام‌ها نمایش داده می‌شود.") },
+  { path: "/monitoring/daily-check", featureKey: "monitoring.daily_check", labelFa: "چک روزانه", labelEn: "Daily Check", group: "monitoring", component: MonitoringPage },
+  { path: "/actions", featureKey: "actions.center", labelFa: "مرکز اقدام", labelEn: "Action Center", group: "actions", component: ActionsPage },
+  { path: "/actions/guided", featureKey: "actions.guided", labelFa: "اقدام راهنما", labelEn: "Guided Actions", group: "actions", component: planned("اقدام راهنما", "جلسه‌های موجود با مسیر /guided-actions/:sessionId باز می‌مانند.") },
+  { path: "/actions/pending", featureKey: "actions.pending", labelFa: "تأییدهای منتظر", labelEn: "Pending", group: "actions", component: ActionsPage },
+  { path: "/actions/history", featureKey: "actions.history", labelFa: "تاریخچه اجرا", labelEn: "History", group: "actions", component: ActionsPage },
+  { path: "/actions/:actionId", featureKey: "actions.detail", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage },
+  { path: "/assistant", featureKey: "assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", group: "assistant", component: AssistantPage },
+  { path: "/integrations", featureKey: "integrations.overview", labelFa: "وضعیت کلی", labelEn: "Overview", group: "integrations", component: IntegrationsPage },
+  { path: "/integrations/netbox", featureKey: "integrations.netbox", labelFa: "NetBox", labelEn: "NetBox", group: "integrations", component: IntegrationsPage },
+  { path: "/integrations/wazuh", featureKey: "integrations.wazuh", labelFa: "Wazuh", labelEn: "Wazuh", group: "integrations", component: IntegrationsPage },
+  { path: "/settings", featureKey: "settings", labelFa: "تنظیمات", labelEn: "Settings", group: "settings", component: SettingsPage }
 ];
 
 export function matchRoute(pathname: string) {

@@ -30,6 +30,7 @@ import { assetRoutes } from "./routes/assets.js";
 import { securityPlatformRoutes } from "./routes/security-platform.js";
 import { vendorRoutes } from "./routes/vendors.js";
 import { linuxHealthRoutes } from "./routes/linux-health.js";
+import { productStateRoutes } from "./routes/product-state.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
@@ -119,6 +120,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(securityPlatformRoutes);
   await app.register(vendorRoutes);
   await app.register(linuxHealthRoutes);
+  await app.register(productStateRoutes);
   await app.register(eventRoutes);
   await app.register(detectionRoutes);
   await app.register(incidentRoutes);

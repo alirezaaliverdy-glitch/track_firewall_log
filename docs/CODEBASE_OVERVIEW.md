@@ -6,6 +6,7 @@
 
 - `src/`: frontend application, panels, contexts, API helpers, local log analysis.
 - `backend/src/routes/`: authenticated HTTP surface registered by `backend/src/app.ts`.
+- `backend/src/product-state/`: versioned feature-state, navigation, vendor, and integration contract.
 - `backend/src/assets/`: asset intelligence, imports, seeded security detection, and finding handoff.
 - `backend/src/services/`: lifecycle, AI, event, device, credential, assessment, and policy services.
 - `backend/src/commands/`: Persian catalog contract and execution-template registry.
@@ -22,6 +23,7 @@
 
 | Area | Main files | API | Current state |
 |---|---|---|---|
+| Product state | `product-state/*`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented; navigation fail-closed |
 | Auth | `services/auth.service.ts`, `routes/auth.ts` | `/api/auth/login`, `/me`, `/logout` | Implemented |
 | Devices/credentials | `services/device.service.ts`, `credential*.ts`, routes | `/api/devices/*`, `/api/credentials/*` | Implemented; credentials stay referenced/encrypted |
 | Vendor capabilities | `vendors/*`, `routes/vendors.ts`, `routes/devices.ts` | `/api/vendors/*`, `/api/devices/:id/capabilities` | Task 18.2A foundation |
@@ -45,7 +47,7 @@ Prisma domains include auth; upload/job/analysis; devices/credentials/capabiliti
 
 | Area | Main path | API/status |
 |---|---|---|
-| Shell/routing | `src/App.tsx`, `src/main.tsx`, `src/routes/appRoutes.tsx` | App shell routes plus `/actions/:id/result` |
+| Shell/routing | `src/App.tsx`, `src/main.tsx`, `src/routes/appRoutes.tsx`, `components/layout/AppShell.tsx`, `lib/productState.ts` | Route mapping plus backend-generated desktop/mobile navigation |
 | Device registry | `components/devices/DeviceRegistryPanel.tsx` | Device/credential APIs; implemented |
 | Persian catalog | `components/commands/CommandCatalogPanel.tsx` | Command APIs; implemented |
 | Asset/Security platform | `features/assets/`, `features/security/` | Compact `/assets` and `/security` milestone |
@@ -78,3 +80,11 @@ The old platform panel remains available but the routed experience is now page-b
 - Vendor/capability API layer: `backend/src/vendors/`, `backend/src/routes/vendors.ts`, and the existing device capability route in `backend/src/routes/devices.ts`.
 - Linux health observability: `backend/src/monitoring/linux/`, `backend/src/routes/linux-health.ts`, and migration `backend/prisma/migrations/20260712192000_task18_2a_vendor_linux_observability/`.
 - Frontend surfaces: `src/features/vendors/cisco/pages/CiscoOverviewPage.tsx`, `src/features/monitoring/pages/LinuxMonitoringPage.tsx`, `src/lib/vendors.ts`, and `src/lib/linuxMonitoring.ts`.
+
+## Milestone 19A Code Pointers
+
+- Contract: `backend/src/product-state/product-state.types.ts` and `product-state.registry.ts`.
+- Read APIs: `backend/src/routes/product-state.ts`, registered by `backend/src/app.ts`.
+- Navigation consumer: `src/lib/productState.ts` and `src/components/layout/AppShell.tsx`.
+- Cross-layer route identity: `src/routes/appRoutes.tsx` and `backend/test/task19-product-state.test.ts`.
+- Development parity: `vite.config.ts` proxies `/firewall-api` to local backend `/api`, matching the deployed path contract.

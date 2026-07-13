@@ -2,6 +2,18 @@
 
 Last updated: 2026-07-13
 
+## Milestone 19A - Product State and Navigation Synchronization
+
+- Product capability state now has one backend-owned versioned contract instead of duplicated frontend `implemented`/`nav` flags.
+- Read-only APIs expose the full contract and feature, navigation, vendor, and integration projections under `/api/product-state*`.
+- Primary navigation is contract-generated and fail-closed. Every promoted route requires a real route plus backend/API/UI/test readiness; planned, unsupported, disabled, not-configured, and unverified states are rejected.
+- Primary destinations are Dashboard; Assets overview/devices/vendors; Security overview/findings/rules; Monitoring overview/Linux; Actions; Assistant; and Integrations overview.
+- Settings, mock sync, Cisco, NetBox/Wazuh children, Action aliases, and Monitoring aliases are no longer primary destinations. Their direct routes retain explicit planned, partial, unverified, or not-configured state.
+- The four requested 19A reports/contracts are present under `docs/`, and the backend regression suite checks cross-layer feature identity and unsafe navigation mismatch.
+- Authenticated Playwright acceptance passed on all 16 requested routes at desktop/mobile in Persian RTL and English LTR with no overflow or runtime/network errors. English shell/navigation is translated; full legacy feature-body translation remains deferred.
+- Current validation: Prisma validate/generate pass; backend build and 190/190 tests pass; catalog 136 items passes; frontend build, i18n 73 keys, UTF-8 guard, and whitespace check pass. Existing root lint debt and the existing brittle handoff-heading `docs:check` mismatch remain non-19A blockers.
+- Milestone 19B and all later convergence rewrites remain unstarted.
+
 ## Task 18.2 Safe Autonomous H1-H6
 
 - Safe milestones H1, H3, H4, H5, and H6 are complete. H2 Prisma recovery is intentionally blocked until a verified nonzero database backup exists and migration-history writes are explicitly safe.

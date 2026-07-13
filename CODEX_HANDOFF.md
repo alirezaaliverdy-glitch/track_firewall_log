@@ -1,5 +1,19 @@
 # CODEX_HANDOFF.md
 
+## Milestone 19A Product Convergence (2026-07-13)
+
+- Completed Milestone 19A only. No onboarding, Cisco mutation, detection rewrite, finding rewrite, Settings implementation, production integration expansion, migration mutation, or device mutation was started.
+- Added backend-owned Product State Contract `19A.1` with read-only `/api/product-state`, `/navigation`, `/features`, `/vendors`, and `/integrations` projections. It records stable feature keys, readiness evidence, honest state, requirements, and verification date.
+- Primary desktop/mobile navigation is now generated from the backend contract. The frontend route registry owns component matching only and shares stable `featureKey` values with the backend.
+- Navigation validation fails closed: planned, unsupported, disabled, not-configured, and unverified states cannot be promoted, and a navigation item must have backend, API, UI, and test readiness.
+- Removed Settings, mock asset sync, Cisco, NetBox, Wazuh, pending/history aliases, and monitoring aliases from primary navigation. Direct/contextual routes remain available with their honest state.
+- Added `docs/TASK_19_BROWSER_BASELINE.md`, `docs/TASK_19_FEATURE_GAP_REGISTER.md`, `docs/TASK_19_UI_BACKEND_CONTRACT_GAPS.md`, and `docs/PRODUCT_STATE_CONTRACT.md`.
+- Added four Product State regressions covering forbidden navigation state, readiness mismatch, frontend/backend feature-key alignment, navigation exclusions, and API projection consistency.
+- Playwright MCP verified the 16 requested routes through the authenticated session. Desktop 1440x900 and mobile 390x844 passed in Persian RTL and English LTR with no horizontal overflow, console errors, failed requests, or HTTP responses at or above 400. Existing feature-page body copy is not universally translated in English and remains a documented deferred gap.
+- Validation passed: Prisma validate/generate, backend build, full backend tests 190/190, command catalog 136 items, frontend build, i18n parity 73 keys, UTF-8 guard, and `git diff --check`. Root lint still reports the pre-existing 66 errors/4 warnings outside 19A. `docs:check` still reports the pre-existing handoff-heading hash mismatch caused by the live task-heading structure.
+- Missing referenced source files were recorded, not invented: `TASK_18_1_PLATFORM_UX_ARCHITECTURE.md`, `TASK_18_2_RECOVERY_AND_CONTINUATION.md`, and `PRISMA_BASELINE_RECOVERY_RUNBOOK.md`.
+- Stop boundary: begin no Milestone 19B work until separately requested.
+
 ## Task 18.2 Safe Autonomous H1-H6 (2026-07-13)
 
 - Executed the safe autonomous instructions from `TASK_18_2_SAFE_AUTONOMOUS_MODE.txt` from the current repository state without restarting completed 18.1/18.2A work.

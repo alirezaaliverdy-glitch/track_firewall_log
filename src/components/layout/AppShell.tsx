@@ -1,17 +1,48 @@
-﻿import { Menu, Search, Bell, LogOut } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Bell, Bot, Boxes, Gauge, LayoutDashboard, LogOut, Menu, Plug, Search, Settings, ShieldAlert, Wrench } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
-import { appRoutes, navGroups } from "@/routes/appRoutes";
+import { appRoutes } from "@/routes/appRoutes";
+import { getProductNavigation, type ProductNavigationGroup } from "@/lib/productState";
+
+const navigationIcons = {
+  dashboard: LayoutDashboard,
+  assets: Boxes,
+  security: ShieldAlert,
+  monitoring: Gauge,
+  actions: Wrench,
+  assistant: Bot,
+  integrations: Plug,
+  settings: Settings
+} as const;
 
 export function AppShell({ children, currentPath }: { children: ReactNode; currentPath: string }) {
   const { user, logout } = useAuth();
   const { i18n } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
+  const [navigation, setNavigation] = useState<ProductNavigationGroup[]>([]);
+  const [navigationError, setNavigationError] = useState(false);
   const isFa = i18n.language?.startsWith("fa");
   const direction = isFa ? "rtl" : "ltr";
   const activeGroup = appRoutes.find((route) => currentPath === route.path || currentPath.startsWith(`${route.path}/`))?.group ?? "dashboard";
-  const mobileGroups = ["dashboard", "assets", "security", "actions"];
+
+  useEffect(() => {
+    let active = true;
+    getProductNavigation()
+      .then((items) => {
+        if (active) {
+          setNavigation(items);
+          setNavigationError(false);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setNavigation([]);
+          setNavigationError(true);
+        }
+      });
+    return () => { active = false; };
+  }, []);
 
   return (
     <div className="platform-shell" dir={direction}>
@@ -20,22 +51,21 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
           <Menu className="h-4 w-4" aria-hidden="true" />
         </button>
         <nav className="platform-sidebar__nav">
-          {navGroups.map((group) => {
-            const Icon = group.icon;
-            const groupRoutes = appRoutes.filter((route) => route.group === group.id && route.nav);
-            const landing = groupRoutes.find((route) => route.implemented)?.path ?? groupRoutes[0]?.path ?? "/dashboard";
+          {navigationError ? <a href="/dashboard" className="platform-nav-group__label">{isFa ? "داشبورد" : "Dashboard"}</a> : null}
+          {!navigation.length && !navigationError ? <span className="platform-nav-group__label" aria-live="polite">{isFa ? "در حال بارگذاری ناوبری..." : "Loading navigation..."}</span> : null}
+          {navigation.map((group) => {
+            const Icon = navigationIcons[group.iconKey as keyof typeof navigationIcons] ?? LayoutDashboard;
             return (
-              <section key={group.id} className={`platform-nav-group ${activeGroup === group.id ? "is-active" : ""}`}>
-                <a href={landing} className="platform-nav-group__label">
+              <section key={group.key} className={`platform-nav-group ${activeGroup === group.key ? "is-active" : ""}`}>
+                <a href={group.route} className="platform-nav-group__label">
                   <Icon className="h-4 w-4" aria-hidden="true" />
-                  <span>{isFa ? group.labelFa : group.labelEn}</span>
+                  <span>{isFa ? group.titleFa : group.titleEn}</span>
                 </a>
-                {!collapsed && groupRoutes.length > 1 ? (
+                {!collapsed && group.items.length > 1 ? (
                   <div className="platform-nav-group__children">
-                    {groupRoutes.map((route) => (
-                      <a key={route.path} href={route.path} className={currentPath === route.path ? "is-current" : ""}>
-                        <span>{isFa ? route.labelFa : route.labelEn}</span>
-                        {!route.implemented ? <small>planned</small> : null}
+                    {group.items.map((item) => (
+                      <a key={item.key} href={item.route} className={currentPath === item.route ? "is-current" : ""}>
+                        <span>{isFa ? item.titleFa : item.titleEn}</span>
                       </a>
                     ))}
                   </div>
@@ -67,14 +97,10 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
         <main className="platform-content">{children}</main>
       </div>
       <nav className="platform-bottom-nav" aria-label="Mobile navigation">
-        {mobileGroups.map((groupId) => {
-          const group = navGroups.find((item) => item.id === groupId);
-          const route = appRoutes.find((item) => item.group === groupId && item.mobilePrimary);
-          if (!group || !route) return null;
-          return <a key={groupId} href={route.path} className={activeGroup === groupId ? "is-current" : ""}>{isFa ? group.labelFa : group.labelEn}</a>;
-        })}
+        {navigation.filter((group) => group.mobilePrimary).map((group) => (
+          <a key={group.key} href={group.route} className={activeGroup === group.key ? "is-current" : ""}>{isFa ? group.titleFa : group.titleEn}</a>
+        ))}
       </nav>
     </div>
   );
 }
-
