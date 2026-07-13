@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 19.1 Milestone R-G - Global control audit and Playwright acceptance (2026-07-13)
+
+- Added route, control, and browser acceptance evidence in `docs/TASK_19_1_ROUTE_ACCEPTANCE_MATRIX.md`, `docs/TASK_19_1_CONTROL_ACCEPTANCE_MATRIX.md`, and `docs/TASK_19_1_BROWSER_RESULTS.md`.
+- Authenticated Playwright swept all 14 requested primary/direct routes at 1440x900 Persian, 1280x800 Persian, 390x844 Persian, 1440x900 English, and 390x844 English. Exact paths, `lang`/`dir`, API responses, console state, and overflow passed.
+- Safe controls were clicked for navigation, sidebar collapse, Action Center refresh/status/topic filters, Assistant refresh/new/clear, and both mock integration previews.
+- Global search and notifications are now explicitly disabled and locally explained instead of enabled dead controls. Shell labels, Action Center fallback/topic copy, Assistant controls, and monitoring preset buttons use locale dictionaries.
+- The Persian primary-route regression guard now checks 16 required product labels and the global disabled-control contract.
+- The Linux close-port flow remains the only live device mutation in Task 19.1; its stored result proves `executed=true` and `connectorInvoked=true`. R-G performed no connector execution or device mutation.
+- Full live Add Linux and Add Cisco acceptance remains blocked by the absence of unambiguous new targets and credential references. Task 19.1 is not reported as having all five live end-to-end flows complete.
+- Validation: Prisma validate/generate, backend build, serial backend 204/204, catalog 137, frontend build, i18n/primary-copy guard, and UTF-8 pass. Migration status retains the known unapplied-history baseline without mutation. Repository-wide lint still fails on pre-existing debt outside R-G.
+
 ## Task 19.1 Milestone R-F - Asset workspace analytics and vendor tabs (2026-07-13)
 
 - Device workspace API now returns chart series derived only from stored health snapshots, status checks, metric samples, collection runs, findings, actions, and audit records. It does not synthesize telemetry.

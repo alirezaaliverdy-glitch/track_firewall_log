@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.1 Milestone R-G - Global Control Audit and Playwright Acceptance (2026-07-13)
+
+- Summary: audited all primary/direct routes and safe visible controls, completed global Persian/English and responsive acceptance, and documented the remaining live-target blockers.
+- Frontend: disabled and explained unavailable global search/notifications; localized shell accessibility, Action Center fallback/topic, Assistant disabled-send, and monitoring preset copy through dictionaries.
+- Tests: added the Persian primary-route copy/disabled-control guard to `npm run test:i18n`.
+- Browser: 14 routes passed at 1440x900 FA, 1280x800 FA, 390x844 FA, 1440x900 EN, and 390x844 EN. Safe control clicks produced no failed API response or console error.
+- Safety/blocker: no R-G device mutation, migration, credential access, or production integration call. New Linux/Cisco live onboarding remains blocked by missing explicit targets and credential references, so all five live flows are not claimed complete.
+- Validation: Prisma validate/generate; backend build; serial backend 204/204; catalog 137; frontend build; i18n/primary-copy; UTF-8; diff check. Root lint retains pre-existing failures outside this slice.
+
 ## Task 19.1 Milestone R-F - Asset Workspace Analytics and Vendor Tabs (2026-07-13)
 
 - Summary: completed the read-only device workspace with stored-data chart series, time ranges, and capability-gated vendor tabs.

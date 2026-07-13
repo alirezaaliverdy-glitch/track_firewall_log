@@ -9,7 +9,12 @@ import { analyzeLinuxSnapshot, collectLinuxSnapshot, createFindingActionPlan, la
 import { buildFixActionProposal, buildLiveFindings, sourcesForPreset, type LiveFinding, type SourcePreset } from "@/lib/linuxTelemetryFindings";
 
 const allSources = ["auth", "system", "kernel", "firewall", "nginx", "apache", "fail2ban", "docker"];
-const presetLabels: Record<SourcePreset, string> = { essential: "Essential Security", web: "Web Server", docker: "Docker Host", full: "Full Observation" };
+const presetLabelKeys: Record<SourcePreset, string> = {
+  essential: "monitoring.presets.essential",
+  web: "monitoring.presets.web",
+  docker: "monitoring.presets.docker",
+  full: "monitoring.presets.full",
+};
 const severityClass: Record<string, string> = { info: "border-cyan-900 text-cyan-200", low: "border-blue-900 text-blue-200", medium: "border-yellow-900 text-yellow-200", high: "border-red-900 text-red-200", critical: "border-red-700 bg-red-950/40 text-red-100" };
 
 const copy = {
@@ -185,8 +190,10 @@ type ResultCard = {
 };
 
 export default function LinuxTelemetryPanel() {
-  const { i18n } = useTranslation();
-  const text = i18n.language?.startsWith("fa") ? copy.fa : copy.en;
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith("fa") ? "fa" : "en";
+  const text = copy[locale];
+  const sourcePresetLabels = Object.fromEntries((Object.keys(presetLabelKeys) as SourcePreset[]).map((preset) => [preset, t(presetLabelKeys[preset])])) as Record<SourcePreset, string>;
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceId, setDeviceId] = useState("");
   const [snapshot, setSnapshot] = useState<LinuxSnapshot | null>(null);
@@ -408,7 +415,7 @@ export default function LinuxTelemetryPanel() {
     <details open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)} className="mt-5 border-t border-zinc-800 pt-4">
       <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-zinc-200"><ChevronDown className="h-4 w-4"/>{text.advanced}</summary>
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <div className="border-t border-zinc-800 pt-3"><h4 className="text-xs font-semibold uppercase text-zinc-500">{text.sources}</h4><p className="mt-2 text-xs text-zinc-500">{text.selectedSources}: {selectedSources.join(", ") || "none"}</p><div className="mt-3 grid grid-cols-2 gap-2">{(options?.logSourcesAvailable ?? allSources).map((source) => <label key={source} className="flex items-center gap-1.5 text-xs text-zinc-400"><input type="checkbox" disabled={Boolean(streamId)} checked={selectedSources.includes(source)} onChange={() => setSelectedSources((current) => current.includes(source) ? current.filter((item) => item !== source) : [...current, source])}/>{source}</label>)}</div><div className="mt-3 flex flex-wrap gap-2">{(Object.keys(presetLabels) as SourcePreset[]).map((preset) => <button key={preset} type="button" disabled={Boolean(streamId)} onClick={() => setSelectedSources(sourcesForPreset(preset, options?.logSourcesAvailable ?? allSources))} className="h-8 rounded border border-zinc-800 px-2 text-xs text-zinc-300 disabled:opacity-40">{presetLabels[preset]}</button>)}</div></div>
+        <div className="border-t border-zinc-800 pt-3"><h4 className="text-xs font-semibold uppercase text-zinc-500">{text.sources}</h4><p className="mt-2 text-xs text-zinc-500">{text.selectedSources}: {selectedSources.join(", ") || "none"}</p><div className="mt-3 grid grid-cols-2 gap-2">{(options?.logSourcesAvailable ?? allSources).map((source) => <label key={source} className="flex items-center gap-1.5 text-xs text-zinc-400"><input type="checkbox" disabled={Boolean(streamId)} checked={selectedSources.includes(source)} onChange={() => setSelectedSources((current) => current.includes(source) ? current.filter((item) => item !== source) : [...current, source])}/>{source}</label>)}</div><div className="mt-3 flex flex-wrap gap-2">{(Object.keys(sourcePresetLabels) as SourcePreset[]).map((preset) => <button key={preset} type="button" disabled={Boolean(streamId)} onClick={() => setSelectedSources(sourcesForPreset(preset, options?.logSourcesAvailable ?? allSources))} className="h-8 rounded border border-zinc-800 px-2 text-xs text-zinc-300 disabled:opacity-40">{sourcePresetLabels[preset]}</button>)}</div></div>
         <div className="border-t border-zinc-800 pt-3"><h4 className="text-xs font-semibold uppercase text-zinc-500">{text.debug}</h4><Status label={text.servicePort} value={String(options?.detectedSshServicePort ?? snapshot?.ssh.detectedSshServicePort ?? "not collected")}/><Status label="Stored events" value={storageStatus ? `${storageStatus.eventCount} of ${storageStatus.maxEventCountPerDevice}` : "unknown"}/><Status label="Oldest event" value={storageStatus?.oldestEventTime ? new Date(storageStatus.oldestEventTime).toLocaleString() : "none"}/>{warnings.length > 0 && <div className="mt-3"><h5 className="text-xs text-yellow-200">{text.warnings}</h5>{warnings.map((warning, index) => <p key={`${warning}-${index}`} className="mt-1 text-xs text-yellow-100/80">{warning}</p>)}</div>}</div>
         <div className="border-t border-zinc-800 pt-3"><h4 className="text-xs font-semibold uppercase text-zinc-500">{text.rawStream}</h4><div className="mt-2 max-h-80 overflow-auto border-y border-zinc-800 font-mono text-xs">{events.length ? events.slice(-80).map((event, index) => <div key={`${event.timestamp}-${index}`} className={`border-b border-zinc-900 px-2 py-2 ${event.suspicious ? "bg-red-950/10" : ""}`}><div className="flex flex-wrap gap-2"><span className="text-zinc-600">{new Date(event.timestamp).toLocaleTimeString()}</span><span className="text-cyan-300">{event.source}</span><span className={severityClass[event.severity]?.split(" ").at(-1)}>{event.severity}</span></div><p className="mt-1 text-zinc-300">{event.summary}</p><details className="mt-1"><summary className="cursor-pointer text-zinc-600">{text.technical}</summary><pre className="mt-1 whitespace-pre-wrap break-words text-zinc-500">{event.raw}</pre></details></div>) : <p className="px-3 py-8 text-center text-zinc-600">{text.noFindings}</p>}</div></div>
       </div>

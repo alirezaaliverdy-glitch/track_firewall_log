@@ -303,13 +303,18 @@ function ChatMessageBubble({ message }: { message: AiMessage }) {
 }
 
 export default function AiSecurityAssistantPanel() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const copy = isFa ? {
     title: "دستیار هوشمند امنیت", subtitle: "گفت‌وگوی امنیتی زمینه‌محور؛ فقط پیشنهاد و بدون اجرای مستقیم.", lastRefresh: "آخرین تازه‌سازی", refresh: "تازه‌سازی خلاصه", refreshing: "در حال تازه‌سازی...", target: "دستگاه مقصد", choose: "انتخاب دستگاه", clear: "پاک‌کردن گفت‌وگو", newRequest: "درخواست جدید", recent: "رخدادهای اخیر", devices: "دستگاه‌ها", topIp: "IP پرتکرار", ports: "پورت‌های حساس", empty: "درباره رخدادها، دستگاه‌ها یا اقدام‌های پیشنهادی بپرسید.", thinking: "دستیار در حال بررسی است...", send: "ارسال", safety: "مرز ایمنی", safetyText: "هوش مصنوعی نمی‌تواند فرمان اجرا کند، به دستگاه SSH بزند یا قانون فایروال را مستقیم تغییر دهد. درخواست‌ها فقط به پیشنهاد یا ActionPlan قابل بازبینی تبدیل می‌شوند.", provider: "ارائه‌دهنده هوش مصنوعی"
   } : {
     title: "AI Security Assistant", subtitle: "Context-aware security chat. Proposed intents only, no direct execution.", lastRefresh: "Last refreshed", refresh: "Refresh Summary", refreshing: "Refreshing...", target: "Target device", choose: "Choose a device", clear: "Clear Chat", newRequest: "New Request", recent: "Recent events", devices: "Devices", topIp: "Top source IP", ports: "Sensitive ports", empty: "Ask about events, incidents, devices, or proposed actions.", thinking: "Assistant is thinking...", send: "Send", safety: "Safety Boundary", safetyText: "AI cannot execute commands, SSH to devices, or change firewall rules directly. Requests become reviewable proposals or ActionPlans only.", provider: "AI Provider"
   };
+  copy.refresh = t("assistant.controls.refreshSummary");
+  copy.clear = t("assistant.controls.clearChat");
+  copy.newRequest = t("assistant.controls.newRequest");
+  copy.safety = t("assistant.safetyBoundary");
+  copy.provider = t("assistant.aiProvider");
   const viewGeneration = useRef(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
@@ -781,12 +786,13 @@ export default function AiSecurityAssistantPanel() {
               <input
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="امروز چه تهدیدهایی داشتیم؟"
+                placeholder={t("assistant.promptPlaceholder")}
                 className="h-10 min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-blue-700"
               />
               <button
                 type="submit"
                 disabled={loading || input.trim() === ""}
+                title={loading || input.trim() === "" ? t("assistant.sendUnavailable") : undefined}
                 className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
               >
                 <Send className="h-4 w-4" aria-hidden="true" />

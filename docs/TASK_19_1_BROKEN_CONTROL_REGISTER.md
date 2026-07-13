@@ -2,6 +2,15 @@
 
 Date: 2026-07-13
 
+## Milestone R-G disposition
+
+- BC-14 is resolved for primary monitoring controls: Persian/English state is consistent and source-preset buttons are dictionary-backed.
+- BC-15 is resolved for product chrome. Backend-provided finding/rule names remain source evidence and are not falsely translated as product status.
+- BC-16 is resolved globally across the audited routes and five required locale/viewport combinations.
+- BC-17 remains intentionally direct-only: Settings has no real workflow and is not promoted into primary navigation.
+- Two newly confirmed enabled dead controls were repaired: global search and notifications are disabled and carry localized explanations.
+- Full live Linux/Cisco onboarding acceptance is blocked by absent explicit targets and credential references; no connector success is claimed for those flows.
+
 ## Milestone R-F disposition
 
 - BC-06 is resolved: `/assets/devices/:deviceId` is a stable workspace with operational overview, stored-data charts, time ranges, capability-gated vendor tabs, findings, exact actions, audit/history, and connection settings.

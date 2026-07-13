@@ -455,13 +455,17 @@ type SelectedActionError = { code: string; message: string; actionPlanId: string
 type ActionUiError = { code: string; retryable: boolean; recovery: string | null; currentRevision: number | null; approvedRevision: number | null; changedFields: string[] };
 
 export default function ActionCenterPanel({ initialActionPlanId }: { initialActionPlanId?: string }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const copy = isFa ? {
     eyebrow: "عملیات پاسخ", title: "مرکز اقدام", subtitle: "اقدام‌های امنیتی کنترل‌شده را بازبینی و اجرا کنید.", refresh: "تازه‌سازی", refreshing: "در حال تازه‌سازی...", clear: "پاک‌کردن نما", lastRefresh: "آخرین تازه‌سازی", plans: "برنامه‌های اقدام", activeReview: "در انتظار بازبینی", latest: "آخرین وضعیت", mode: "حالت اجرا", controlled: "قالب‌های کنترل‌شده", scope: "دامنه", topic: "موضوع", action: "اقدام", status: "وضعیت", risk: "ریسک", source: "منبع", created: "ایجاد", updated: "به‌روزرسانی", details: "جزئیات", close: "بستن", revision: "نسخه", vendor: "وندور", target: "دستگاه مقصد", connector: "کانکتور", template: "قالب", parameters: "پارامترها", verification: "راستی‌آزمایی", audit: "خط زمانی ممیزی", execute: "تأیید و اجرا", return: "بازگشت به مرکز اقدام", none: "هیچ", platform: "پلتفرم"
   } : {
     eyebrow: "Response operations", title: "Action Center", subtitle: "Review and execute controlled security actions.", refresh: "Refresh", refreshing: "Refreshing...", clear: "Clear view", lastRefresh: "Last refreshed", plans: "Action plans", activeReview: "Active review", latest: "Latest status", mode: "Execution mode", controlled: "Controlled templates", scope: "Scope", topic: "Topic", action: "Action", status: "Status", risk: "Risk", source: "Source", created: "Created", updated: "Updated", details: "Details", close: "Close", revision: "Revision", vendor: "Vendor", target: "Target device", connector: "Connector", template: "Template", parameters: "Parameters", verification: "Verification", audit: "Audit timeline", execute: "Confirm & Execute", return: "Return to Action Center", none: "none", platform: "Platform"
   };
+  copy.plans = t("actionCenter.summary.plans");
+  copy.activeReview = t("actionCenter.summary.activeReview");
+  copy.latest = t("actionCenter.summary.latestStatus");
+  copy.mode = t("actionCenter.summary.executionMode");
   const [actions, setActions] = useState<ActionPlan[]>([]);
   const [selectedAction, setSelectedAction] = useState<ActionPlan | null>(null);
   const [auditEntries, setAuditEntries] = useState<ActionAuditEntry[]>([]);
@@ -795,7 +799,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
             onClick={() => setFilter(item)}
             className={`action-filter-chip ${filter === item ? "is-active" : ""}`}
           >
-            {item}
+            {item === "all" ? t("actionCenter.filters.all") : item}
           </button>
         ))}
       </div>
@@ -841,7 +845,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
                           {commandSummary(action).join("\n")}
                         </pre>
                       ) : (
-                        <p className="mt-2 text-xs text-zinc-600">Command plan is generated automatically on Execute.</p>
+                        <p className="mt-2 text-xs text-zinc-600">{t("actionCenter.commandGeneratedOnExecute")}</p>
                       )}
                     </td>
                     <td className="px-3 py-2">

@@ -2,6 +2,15 @@
 
 Last updated: 2026-07-13
 
+## Task 19.1 R-G - Global route/control acceptance
+
+- All 14 requested routes pass authenticated Playwright at the five required locale/viewport combinations with exact route identity, correct RTL/LTR, no page overflow, no unexpected API failure, and no current-navigation console error.
+- Enabled dead global controls were removed: search and notifications are disabled with localized explanations. Named Assistant/Action Center product copy and Linux monitoring presets are locale-backed; a regression guard covers 16 required Persian labels.
+- Safe navigation, Action Center, Assistant, and mock integration preview controls were exercised without errors. Production integration Apply remains disabled and honest.
+- Full live new-device onboarding is not accepted: no explicit new Linux or Cisco target plus credential reference was supplied. Cisco live connector success is therefore not claimed.
+- R-G validation is green except the known repository-wide lint baseline. Prisma migration status remains unapplied and untouched; no destructive database action occurred.
+- Separate evidence: `TASK_19_1_ROUTE_ACCEPTANCE_MATRIX.md`, `TASK_19_1_CONTROL_ACCEPTANCE_MATRIX.md`, and `TASK_19_1_BROWSER_RESULTS.md`.
+
 ## Task 19.1 R-F - Asset workspace analytics and vendor tabs
 
 - Device workspaces now expose stored-data-only health, connector, availability, resource, finding, action, and change series with five time ranges.
