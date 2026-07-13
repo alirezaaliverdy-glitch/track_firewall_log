@@ -4,6 +4,8 @@ Date: 2026-07-13
 
 Scope: requests observed from the new authenticated Playwright MCP context.
 
+R-C update: `GET /api/actions/:id` now returns structured, non-retryable `ACTION_PLAN_NOT_FOUND` for an unknown plan. Action Center renders the code, requested ID, and recovery control without a raw backend URL. The expected 404 remains observable and is never converted to success.
+
 ## Transport failures and 4xx/5xx
 
 | ID | Request | Request body | Response | Browser behavior | Connector evidence |

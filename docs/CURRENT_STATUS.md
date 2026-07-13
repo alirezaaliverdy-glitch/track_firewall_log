@@ -2,6 +2,13 @@
 
 Last updated: 2026-07-13
 
+## Task 19.1 R-C - Exact ActionPlan navigation
+
+- Exact ActionPlan routing and selection are implemented across plan-creation entry points.
+- Direct URL, reload, browser history, missing-plan recovery, desktop English, and mobile Persian RTL are Playwright-verified.
+- The backend missing-plan response is structured and non-retryable; no raw API URL is rendered in this recovery state.
+- R-D through R-G remain. The next milestone is R-D canonical ActionPlan revisioning and stale-plan repair.
+
 ## Milestone 19A - Product State and Navigation Synchronization
 
 - Product capability state now has one backend-owned versioned contract instead of duplicated frontend `implemented`/`nav` flags.

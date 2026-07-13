@@ -156,7 +156,6 @@ function IntentCard({
         });
         if (result.actionPlanId) {
           publishActionPlanCreated(result.actionPlanId);
-          reviewInActionCenter();
         }
       })
       .catch((error: unknown) => setLocalMessage(error instanceof Error ? error.message : "Failed to complete action request."))
@@ -262,7 +261,7 @@ function IntentCard({
           <p className="text-xs font-medium text-green-200">ActionPlan created. Review in Action Center.</p>
           <button
             type="button"
-            onClick={reviewInActionCenter}
+            onClick={() => reviewInActionCenter(createdPlanId)}
             className="mt-2 inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
           >
             Review in Action Center
@@ -437,7 +436,6 @@ export default function AiSecurityAssistantPanel() {
           ...current,
           recommendations: current.recommendations.map((item) => item.id === recommendationId ? { ...item, status: "action_plan_created", actionPlanId: result.actionPlan.id } : item)
         } : current);
-        reviewInActionCenter();
       })
       .catch((err: unknown) => {
         setError("ساخت برنامه اقدام انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
@@ -833,7 +831,7 @@ export default function AiSecurityAssistantPanel() {
                 {executionState.template && <code className="text-[10px] text-cyan-400">{executionState.template}</code>}
               </div>
               <p className="mt-2 text-xs text-slate-300">{executionState.nextStep}</p>
-              {createdPlanId && <button type="button" onClick={reviewInActionCenter} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">رفتن به مرکز عملیات</button>}
+              {createdPlanId && <button type="button" onClick={() => reviewInActionCenter(createdPlanId)} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">رفتن به مرکز عملیات</button>}
               {guidedStart && <button type="button" onClick={startGuidedWorkflow} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">شروع ساخت مرحله‌ای</button>}
               {!createdPlanId && executionState.missing.length > 0 && <button type="button" onClick={() => setInput(executionState.nextStep)} className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white">تکمیل اطلاعات</button>}
             </div>

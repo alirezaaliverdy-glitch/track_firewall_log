@@ -2,6 +2,8 @@
 
 Date: 2026-07-13
 
+R-C update: BC-08 is resolved. Route identity is now the source of truth for Action Center selection, and an unknown ID produces structured, non-retryable `ACTION_PLAN_NOT_FOUND`. Other controls remain assigned to later milestones. R-C performed no connector execution or device mutation.
+
 Evidence source: authenticated Playwright MCP browser plus read-only source/API inspection.
 
 | ID | Route/control | Observed behavior | Expected behavior | Severity | Planned milestone |
@@ -13,7 +15,7 @@ Evidence source: authenticated Playwright MCP browser plus read-only source/API 
 | BC-05 | Cisco `مشاهده وضعیت دستگاه‌های Cisco` | Repeats the zero-device inventory state without a way to resolve it. | Disabled with explanation or routed to a usable setup flow. | High | R-B |
 | BC-06 | Asset detail links | Existing route is summary-shaped and not a complete health/management workspace. | Stable `/assets/devices/:deviceId` workspace with health, capabilities, actions, audit, settings, and vendor tabs. | High | R-B/R-F |
 | BC-07 | Assistant reviewed action | `canCreateActionPlan=true` is followed by `فقط بررسی دستی`; no plan is created. | Create the supported registered ActionPlan or return one consistent unsupported state. | Critical | R-C/R-D |
-| BC-08 | Assistant Action Center handoff | Helper only scrolls for an element in the current page and carries no plan ID. | Navigate to the exact ActionPlan and preserve selection on reload. | Critical | R-C |
+| BC-08 | Assistant Action Center handoff | Resolved in R-C: every handoff uses `/actions/:actionPlanId`; direct load, reload, history, exact selection, focus, and mobile rendering are verified. | Navigate to the exact ActionPlan and preserve selection on reload. | Resolved | R-C |
 | BC-09 | Action Center `تایید و اجرا` for port 545 | Returns `COMMAND_PLAN_STALE` for the backend-generated preview. | Execute the exact approved canonical revision; internal normalization must not invalidate it. | Critical | R-D |
 | BC-10 | Action Center error state | Shows raw English error plus backend URL. | Localized structured error with code, retryability, recovery action, revision details, and no raw URL. | High | R-D/R-E |
 | BC-11 | Repeated close-port request | Second assistant request returns a contradictory manual proposal and creates no new/grouped revision. | Already-compliant/verified-no-change after success, or a clearly grouped latest revision before success. | Critical | R-D/R-E |

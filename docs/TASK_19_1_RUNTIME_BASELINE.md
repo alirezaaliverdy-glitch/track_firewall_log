@@ -2,6 +2,14 @@
 
 Date: 2026-07-13
 
+## Milestone R-C verification addendum
+
+- `/actions/cmrix2ddb00ao2glvh3tagbe6` loads and selects only that plan; reload preserves its URL, current status, and revision.
+- Browser back returns to `/actions`; invalid `/actions/task19-1-not-real` renders `ACTION_PLAN_NOT_FOUND` with recovery.
+- Desktop English and 390px Persian RTL were verified in the fresh authenticated Playwright context.
+- Mobile measured `viewport=375`, `scrollWidth=375`, one selected row, and one visible dialog.
+- No execution request, connector call, device mutation, database operation, or credential access occurred.
+
 Browser: new authenticated Playwright MCP context, desktop viewport
 
 Application: `http://localhost:5173` with API requests to `http://localhost:4000/api`

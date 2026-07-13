@@ -36,14 +36,8 @@ function catalogBlueprintId(item: CatalogItem) {
 }
 
 function goToActionCenter(actionPlanId: string) {
-  const url = new URL(window.location.href);
-  url.pathname = "/actions";
-  url.search = "";
-  url.searchParams.set("selected", actionPlanId);
-  url.hash = "action-center";
-  window.history.pushState({}, "", url);
   publishActionPlanCreated(actionPlanId);
-  window.setTimeout(reviewInActionCenter, 50);
+  reviewInActionCenter(actionPlanId);
 }
 
 export default function CommandCatalogPanel() {
@@ -152,12 +146,8 @@ export default function CommandCatalogPanel() {
 	      } else {
 	        setMessage(t("common.message.planCreated"));
 	      }
-      const url = new URL(window.location.href);
-      url.searchParams.set("selected", plan.id);
-      url.hash = "action-center";
-      window.history.pushState({}, "", url);
       publishActionPlanCreated(plan.id);
-      window.setTimeout(reviewInActionCenter, 50);
+      reviewInActionCenter(plan.id);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "ساخت برنامه ناموفق بود.");
     }

@@ -26,12 +26,8 @@ function commandIdForVendor(vendor: string) {
 }
 
 function openActionCenter(actionPlanId: string) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("selected", actionPlanId);
-  url.hash = "action-center";
-  window.history.pushState({}, "", url);
   publishActionPlanCreated(actionPlanId);
-  window.setTimeout(reviewInActionCenter, 50);
+  reviewInActionCenter(actionPlanId);
 }
 
 export default function DailyCheckPanel() {

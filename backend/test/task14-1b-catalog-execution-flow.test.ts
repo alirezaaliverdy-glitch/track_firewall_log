@@ -48,7 +48,7 @@ test("frontend publishes selection, updates URL, and Action Center opens selecte
   const catalog = readFileSync(new URL("../../src/components/commands/CommandCatalogPanel.tsx", import.meta.url), "utf8");
   const center = readFileSync(new URL("../../src/components/actions/ActionCenterPanel.tsx", import.meta.url), "utf8");
   const uiState = readFileSync(new URL("../../src/lib/actionApprovalState.ts", import.meta.url), "utf8");
-  assert.match(catalog, /searchParams\.set\("selected", plan\.id\)/); assert.match(catalog, /publishActionPlanCreated\(plan\.id\)/); assert.match(catalog, /reviewInActionCenter/);
-  assert.match(center, /URLSearchParams\(window\.location\.search\)\.get\("selected"\)/); assert.match(center, /refreshActions\(id\)/); assert.match(center, /setSelectedAction\(plan\)/);
+  assert.match(catalog, /publishActionPlanCreated\(plan\.id\)/); assert.match(catalog, /reviewInActionCenter\(plan\.id\)/);
+  assert.match(center, /actionPlanIdFromLocation\(\)/); assert.match(center, /refreshActions\(id\)/); assert.match(center, /setSelectedAction\(plan\)/);
   assert.match(uiState, /supportState !== "verified"/); assert.match(uiState, /executionSupport !== "connector"/);
 });

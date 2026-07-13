@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.1 Milestone R-C - Exact Assistant-to-ActionPlan Navigation (2026-07-13)
+
+- Summary: replaced DOM-only handoff with exact `/actions/:actionPlanId` routing durable across direct load, reload, selection, focus, close, and history.
+- Backend: added structured `ACTION_PLAN_NOT_FOUND` 404 semantics for direct plan lookup.
+- Frontend: unified exact-plan handoff across Assistant, Catalog, Daily Check, Linux Service Health, and Guided Actions; added status/revision details and missing-plan recovery.
+- Tests/browser: added route/API regressions and verified desktop English plus 390px Persian RTL with no overflow or duplicate selected row.
+- Safety: no action was executed; the stale plan has `connectorInvoked=false` and no success is claimed.
+- Follow-up: R-D canonical resolution, immutable approved revision, stale repair, and repeated-request behavior.
+
 ## Milestone 19A - Full Audit and UI/Backend Synchronization (2026-07-13)
 
 - Summary: audited the full requested browser/UI/API/backend surface, introduced Product State Contract `19A.1`, and made desktop/mobile primary navigation derive from verified backend state.

@@ -272,8 +272,11 @@ function parsePayload(text: string): unknown {
 
 function apiErrorMessage(url: string, status: number, payload: unknown) {
   const body = normalizeObject(payload);
+  const structured = normalizeObject(body.error);
   const detail = typeof body.error === "string"
     ? `${body.error}${typeof body.detail === "string" ? `: ${body.detail}` : ""}`
+    : typeof structured.message === "string"
+      ? `${typeof structured.code === "string" ? `${structured.code}: ` : ""}${structured.message}`
     : typeof body.message === "string"
       ? body.message
       : "No response details were provided.";

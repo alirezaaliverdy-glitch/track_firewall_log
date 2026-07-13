@@ -46,7 +46,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/api/actions/:id", async (request, reply) => {
     const plan = await getActionPlan(request.params.id);
-    if (!plan) return reply.code(404).send({ error: "Action plan not found" });
+    if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
     return plan;
   });
 

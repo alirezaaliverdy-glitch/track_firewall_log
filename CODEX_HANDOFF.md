@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Task 19.1 Milestone R-C - Exact ActionPlan navigation (2026-07-13)
+
+- Assistant, Catalog, Daily Check, Service Health, and Guided Actions now hand off to exact `/actions/:actionPlanId` routes.
+- Action Center restores selection on direct load/reload, chooses the current-status tab, prevents duplicate entries, focuses the row, and handles browser history.
+- Unknown IDs render structured `ACTION_PLAN_NOT_FOUND` without exposing a raw backend URL.
+- Playwright verified direct load, reload, back, invalid IDs, desktop English, and 390px Persian RTL without horizontal overflow.
+- No connector or device mutation was invoked. The stale port-545 plan remains `connectorInvoked=false`; R-D is next.
+
 ## Milestone 19A Product Convergence (2026-07-13)
 
 - Completed Milestone 19A only. No onboarding, Cisco mutation, detection rewrite, finding rewrite, Settings implementation, production integration expansion, migration mutation, or device mutation was started.

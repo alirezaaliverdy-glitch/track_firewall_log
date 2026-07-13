@@ -20,7 +20,7 @@ import {
   type ActionPlan,
   type StructuredValidationError,
 } from "@/lib/actions";
-import { subscribeToActionPlanCreated } from "@/lib/actionPlanHandoff";
+import { actionPlanIdFromLocation, actionPlanPath, subscribeToActionPlanCreated } from "@/lib/actionPlanHandoff";
 import { actionResultUrl, openActionResultInNewTab } from "@/lib/actionResultNavigation";
 
 const safeNumber = (value: unknown): number => {
@@ -430,7 +430,23 @@ function actionMatchesFilter(action: ActionPlan, filter: string) {
   return true;
 }
 
-export default function ActionCenterPanel() {
+function tabForPlan(action: ActionPlan): ActionTab {
+  if (action.status === "succeeded") return "succeeded";
+  if (FAILED_STATUSES.has(action.status)) return "failed";
+  if (HISTORY_STATUSES.has(action.status)) return "history";
+  return "active";
+}
+
+function revisionOf(action: ActionPlan) {
+  const metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
+  const approval = normalizeObject(action.approvalJson);
+  const revision = Number(metadata.revision ?? approval.revision);
+  return Number.isInteger(revision) && revision > 0 ? revision : null;
+}
+
+type SelectedActionError = { code: string; message: string; actionPlanId: string };
+
+export default function ActionCenterPanel({ initialActionPlanId }: { initialActionPlanId?: string }) {
   const [actions, setActions] = useState<ActionPlan[]>([]);
   const [selectedAction, setSelectedAction] = useState<ActionPlan | null>(null);
   const [auditEntries, setAuditEntries] = useState<ActionAuditEntry[]>([]);
@@ -438,6 +454,7 @@ export default function ActionCenterPanel() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedError, setSelectedError] = useState<SelectedActionError | null>(null);
   const [resultFallbackId, setResultFallbackId] = useState<string | null>(null);
   const [fieldFixes, setFieldFixes] = useState<Record<string, string>>({});
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
@@ -460,18 +477,35 @@ export default function ActionCenterPanel() {
     setActions([]);
     setSelectedAction(null);
     setAuditEntries([]);
+    setSelectedError(null);
     setLastRefreshedAt(null);
     return getActions()
       .then(async (nextActions) => {
-        setActions(normalizeArray<ActionPlan>(nextActions));
+        const normalizedActions = normalizeArray<ActionPlan>(nextActions);
+        setActions(normalizedActions);
         setLastRefreshedAt(new Date().toISOString());
         if (selectedId) {
-          const [plan, audit] = await Promise.all([getAction(selectedId), getActionAudit(selectedId)]);
-          setSelectedAction(plan);
-          setFieldFixes(initialFixValues(plan));
-          setAuditEntries(normalizeArray<ActionAuditEntry>(audit));
-          setTab("active");
-          window.setTimeout(() => document.getElementById("action-center")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20);
+          try {
+            const plan = await getAction(selectedId);
+            const audit = await getActionAudit(selectedId);
+            setActions((current) => current.some((action) => action.id === plan.id) ? current : [plan, ...current]);
+            setSelectedAction(plan);
+            setFieldFixes(initialFixValues(plan));
+            setAuditEntries(normalizeArray<ActionAuditEntry>(audit));
+            setFilter("all");
+            setTab(tabForPlan(plan));
+            window.setTimeout(() => {
+              const row = document.getElementById(`action-row-${plan.id}`);
+              row?.scrollIntoView({ behavior: "smooth", block: "center" });
+              row?.focus({ preventScroll: true });
+            }, 20);
+          } catch {
+            setSelectedError({
+              code: "ACTION_PLAN_NOT_FOUND",
+              message: "The requested ActionPlan does not exist or is no longer available.",
+              actionPlanId: selectedId,
+            });
+          }
         }
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load action plans."))
@@ -479,12 +513,20 @@ export default function ActionCenterPanel() {
   }, []);
 
   useEffect(() => {
-    const selectedId = new URLSearchParams(window.location.search).get("selected") ?? undefined;
-    void refreshActions(selectedId);
+    void refreshActions(initialActionPlanId ?? actionPlanIdFromLocation());
+  }, [initialActionPlanId, refreshActions]);
+
+  useEffect(() => {
+    const handleHistoryNavigation = () => { void refreshActions(actionPlanIdFromLocation()); };
+    window.addEventListener("popstate", handleHistoryNavigation);
+    return () => window.removeEventListener("popstate", handleHistoryNavigation);
   }, [refreshActions]);
 
   useEffect(() => {
-    return subscribeToActionPlanCreated((id) => { void refreshActions(id); });
+    return subscribeToActionPlanCreated((id) => {
+      window.history.pushState({}, "", actionPlanPath(id));
+      void refreshActions(id);
+    });
   }, [refreshActions]);
 
   const safeActions = useMemo(() => normalizeArray<ActionPlan>(actions), [actions]);
@@ -514,6 +556,7 @@ export default function ActionCenterPanel() {
   };
 
   const openAction = (action: ActionPlan) => {
+    window.history.pushState({}, "", actionPlanPath(action.id));
     setDetailsLoading(true);
     setMessage(null);
     setSelectedAction(null);
@@ -522,6 +565,12 @@ export default function ActionCenterPanel() {
       .then((plan) => setFieldFixes(initialFixValues(plan)))
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load action details."))
       .finally(() => setDetailsLoading(false));
+  };
+
+  const closeSelectedAction = () => {
+    setSelectedAction(null);
+    setAuditEntries([]);
+    window.history.pushState({}, "", "/actions");
   };
 
   const runPlanStep = (label: string, operation: (id: string) => Promise<ActionPlan>) => {
@@ -741,7 +790,13 @@ export default function ActionCenterPanel() {
                 </tr>
               ) : (
                 visibleActions.map((action) => (
-                  <tr key={action.id} className={`action-table-row text-zinc-300 ${selectedAction?.id === action.id ? "is-selected" : ""}`}>
+                  <tr
+                    key={action.id}
+                    id={`action-row-${action.id}`}
+                    tabIndex={-1}
+                    aria-selected={selectedAction?.id === action.id}
+                    className={`action-table-row text-zinc-300 ${selectedAction?.id === action.id ? "is-selected" : ""}`}
+                  >
                     <td className="min-w-72 px-3 py-2">
                       <p className="font-medium text-zinc-100">{actionLabel(action)}</p>
                       <PlanSummary plan={action} />
@@ -825,7 +880,7 @@ export default function ActionCenterPanel() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setSelectedAction(null)}
+                  onClick={closeSelectedAction}
                   className="h-8 rounded border border-zinc-700 px-2 text-xs text-zinc-300 hover:text-zinc-100"
                 >
                   Close
@@ -858,6 +913,10 @@ export default function ActionCenterPanel() {
                 <div className="rounded border border-zinc-800 bg-black/30 p-3">
                   <p className="text-xs text-zinc-500">Source</p>
                   <p className="mt-1 text-sm font-semibold text-zinc-100">{sourceLabel(selectedAction.source, selectedAction)}</p>
+                </div>
+                <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                  <p className="text-xs text-zinc-500">Revision</p>
+                  <p className="mt-1 text-sm font-semibold text-zinc-100">{revisionOf(selectedAction) ?? "unversioned"}</p>
                 </div>
               </div>
 
@@ -977,6 +1036,24 @@ export default function ActionCenterPanel() {
               </details>
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedError && (
+        <div className="mt-3 rounded border border-red-900/70 bg-red-950/20 p-3 text-left" role="alert" aria-live="assertive">
+          <p className="text-xs font-semibold text-red-200">{selectedError.code}</p>
+          <p className="mt-1 text-sm text-zinc-200">{selectedError.message}</p>
+          <p className="mt-1 break-all font-mono text-xs text-zinc-500">ActionPlan: {selectedError.actionPlanId}</p>
+          <button
+            type="button"
+            className="mt-3 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100"
+            onClick={() => {
+              setSelectedError(null);
+              window.history.pushState({}, "", "/actions");
+            }}
+          >
+            Return to Action Center
+          </button>
         </div>
       )}
 
