@@ -412,17 +412,30 @@ export async function rejectAction(id: string, input: ApprovalInput = {}) {
 }
 
 export async function executeAction(id: string, input: Record<string, unknown> = {}) {
+  const latest = await getAction(id);
   return requestJson<unknown>(`/actions/${id}/execute`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, actionPlanRevision: actionPlanRevision(latest) }),
   }).then(normalizeActionPlan);
 }
 
 export async function quickExecuteAction(id: string, input: Record<string, unknown> = {}) {
+  const latest = await getAction(id);
   return requestJson<unknown>(`/actions/${id}/quick-execute`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, actionPlanRevision: actionPlanRevision(latest) }),
   }).then(normalizeActionPlan);
+}
+
+export function actionPlanRevision(plan: ActionPlan) {
+  const metadata = normalizeObject(plan.parametersJson.metadata);
+  const approval = normalizeObject(plan.approvalJson);
+  const revision = Number(metadata.planRevision ?? approval.planRevision ?? 1);
+  return Number.isInteger(revision) && revision > 0 ? revision : 1;
+}
+
+export async function quickExecuteLatestAction(id: string, input: Record<string, unknown> = {}) {
+  return quickExecuteAction(id, input);
 }
 
 export async function getActionAudit(id: string) {

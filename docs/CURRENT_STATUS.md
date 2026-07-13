@@ -2,6 +2,15 @@
 
 Last updated: 2026-07-13
 
+## Task 19.1 - Automatic ActionPlan revision convergence
+
+- Genuine canonical input drift no longer ends execution with `COMMAND_PLAN_STALE` HTTP 409. The service regenerates and approves the newest revision, then continues through PolicyGuard and the registered connector.
+- All frontend Execute entry points resolve and reference the latest stored revision. Older quick-execute revision input is safely converged to current state and audited.
+- Assistant and Action Center share one backend-owned action contract covering plan creation, manual-only/executable state, execution support/mode, and lifecycle identity/revision/state.
+- Functional stale-plan coverage passes at revision 2 with one fake connector invocation and `connectorInvoked=true`.
+- Same-context authenticated Playwright passed Assistant -> exact Action Center -> Execute -> result for Linux port 546: quick-execute HTTP 200, status `succeeded` with verified no-change, no stale plan/409, zero console errors, and stored `connectorInvoked=true`.
+- Current validation is green: Prisma, backend build, catalog 137, backend 205/205, frontend build, i18n/primary Persian copy, UTF-8, and diff check.
+
 ## Task 19.1 R-G - Global route/control acceptance
 
 - All 14 requested routes pass authenticated Playwright at the five required locale/viewport combinations with exact route identity, correct RTL/LTR, no page overflow, no unexpected API failure, and no current-navigation console error.

@@ -11,9 +11,14 @@ import { getActionCatalogEntry } from "../actions/action-catalog.js";
 import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
 import { startGuidedActionSession } from "../guided-actions/session-service.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
+import { env } from "../config/env.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function titleFromMessage(message: string) {
@@ -272,9 +277,27 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
-  const resolvedDebug = actionPlan ? { ...debug, deviceId: selectedDevice?.id ?? actionPlan.deviceId, missingFields: [], canCreateActionPlan: true, reason: null, blockedReason: null } : debug;
   const executionSupport = resolution.executionSupport;
   const implementationState = resolution.implementationState;
+  const canCreateActionPlan = Boolean(actionPlan);
+  const manualOnly = implementationState === "manualOnly" || executionSupport !== "connector";
+  const executable = canCreateActionPlan && !manualOnly && resolution.mode === "executable_action_plan";
+  const actionPlanMetadata = actionPlan ? asObject(asObject(actionPlan.parametersJson).metadata) : {};
+  const actionContract = {
+    canCreateActionPlan,
+    manualOnly,
+    executable,
+    executionSupport,
+    implementationState,
+    executionMode: env.actionExecutionMode,
+    lifecycle: actionPlan ? {
+      actionPlanId: actionPlan.id,
+      status: actionPlan.status,
+      planRevision: Number(actionPlanMetadata.planRevision ?? 1),
+      planState: String(actionPlanMetadata.planState ?? "draft"),
+    } : null,
+  };
+  const resolvedDebug = { ...debug, deviceId: selectedDevice?.id ?? actionPlan?.deviceId ?? debug.deviceId, missingFields: actionPlan ? [] : debug.missingFields, canCreateActionPlan, reason: canCreateActionPlan ? null : debug.reason, blockedReason: canCreateActionPlan ? null : debug.blockedReason };
   const parameterizedBlueprintId = resolutionMissing.length > 0 && resolution.catalogItem ? catalogGuidedBlueprintId(resolution.catalogItem.id) : null;
   const guidedBlueprintId = resolution.mode === "guided_workflow" && resolution.blueprintId ? resolution.blueprintId : parameterizedBlueprintId;
   const guidedSession = guidedBlueprintId
@@ -303,9 +326,10 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     message: userMessage,
     assistantMessage: guidedAssistantText,
     assistantMessageRecord: assistantMessage,
-    shouldCreateActionPlan: Boolean(actionPlan),
+    shouldCreateActionPlan: actionContract.canCreateActionPlan,
     actionIntent,
     actionPlan,
+    actionContract,
     executionSupport,
     implementationState,
     mode: responseMode,

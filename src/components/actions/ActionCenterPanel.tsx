@@ -16,7 +16,7 @@ import {
   getActions,
   normalizeArray,
   normalizeObject,
-  quickExecuteAction,
+  quickExecuteLatestAction,
   type ActionAuditEntry,
   type ActionPlan,
   type QuickExecuteError,
@@ -637,7 +637,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
     if (!selectedAction) return;
     setWorking("execute"); setMessage(null); setActionError(null); setResultFallbackId(null);
     setSelectedAction((current) => current ? { ...current, status: "executing" } : current);
-    quickExecuteAction(selectedAction.id, { intent: "execute", reason: "Execute from Action Center" }).then((plan) => {
+    quickExecuteLatestAction(selectedAction.id, { intent: "execute", reason: "Execute from Action Center" }).then((plan) => {
       const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
       if (plan.status === "succeeded" && normalizeObject(plan.resultJson).executed === true && metadata.connectorInvoked === true) {
         setSelectedAction(plan);
@@ -655,7 +655,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
     setActionError(null);
     setResultFallbackId(null);
     setActions((current) => current.map((item) => item.id === action.id ? { ...item, status: "executing" } : item));
-    quickExecuteAction(action.id, { intent: "execute", reason: "Execute from Action Center" })
+    quickExecuteLatestAction(action.id, { intent: "execute", reason: "Execute from Action Center" })
       .then((plan) => {
         setActions((current) => current.map((item) => item.id === plan.id ? plan : item));
         const metadata = normalizeObject(normalizeObject(plan.parametersJson).metadata);
@@ -680,7 +680,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
     runPlanStep("save-and-execute", async (id) => {
       const corrected = await correctActionFields(id, fields);
       if (corrected.status === "validation_failed") return corrected;
-      return quickExecuteAction(id, { intent: "execute", reason: "Execute from Action Center" });
+      return quickExecuteLatestAction(id, { intent: "execute", reason: "Execute from Action Center" });
     });
   };
 

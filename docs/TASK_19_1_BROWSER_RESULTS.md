@@ -2,6 +2,15 @@
 
 Date: 2026-07-13
 
+## Runtime convergence follow-up
+
+- Reused the same authenticated Playwright browser and context; no replacement context was created.
+- Persian Assistant request `پورت 546 را ببند` created exact ActionPlan `cmrj3z0dc0009xslv1ba6moxs` at revision 1 and displayed its `quick_controlled` lifecycle contract.
+- Assistant handoff opened `/actions/cmrj3z0dc0009xslv1ba6moxs`; Execute issued `POST /api/actions/cmrj3z0dc0009xslv1ba6moxs/quick-execute` and received HTTP 200, not 409.
+- The result opened at `/actions/cmrj3z0dc0009xslv1ba6moxs/result` and visibly reported a real device execution, successful status, Linux executor, and verified no-change outcome.
+- The returned ActionPlan stored `status=succeeded`, `planState=completed`, `approvedRevision=1`, `executingRevision=1`, and `connectorInvoked=true`. No stale state or browser console error remained.
+- Automatic stale-input convergence itself is covered by the functional connector test: changed approved input regenerated revision 2 and executed revision 2 without `COMMAND_PLAN_STALE` or HTTP 409.
+
 ## Runtime and viewports
 
 - Playwright MCP used the new user-authenticated browser context throughout.

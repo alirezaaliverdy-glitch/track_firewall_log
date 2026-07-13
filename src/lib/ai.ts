@@ -63,6 +63,17 @@ export type AiChatResponse = {
   connectorType: string | null;
   deviceId: string | null;
   selectedDeviceName: string | null;
+  actionContract: AiActionContract;
+};
+
+export type AiActionContract = {
+  canCreateActionPlan: boolean;
+  manualOnly: boolean;
+  executable: boolean;
+  executionSupport: string;
+  implementationState: string;
+  executionMode: string;
+  lifecycle: { actionPlanId: string; status: string; planRevision: number; planState: string } | null;
 };
 
 export type EvidencePackMetadata = {
@@ -442,6 +453,22 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
   });
   const source = normalizeObject(payload);
   const evidence = normalizeObject(source.evidenceMetadata);
+  const contractSource = normalizeObject(source.actionContract);
+  const lifecycleSource = normalizeObject(contractSource.lifecycle);
+  const actionContract: AiActionContract = {
+    canCreateActionPlan: Boolean(contractSource.canCreateActionPlan ?? source.shouldCreateActionPlan),
+    manualOnly: Boolean(contractSource.manualOnly ?? String(source.executionSupport ?? "manual") !== "connector"),
+    executable: Boolean(contractSource.executable),
+    executionSupport: String(contractSource.executionSupport ?? source.executionSupport ?? "manual"),
+    implementationState: String(contractSource.implementationState ?? source.implementationState ?? "manualOnly"),
+    executionMode: String(contractSource.executionMode ?? "unknown"),
+    lifecycle: Object.keys(lifecycleSource).length > 0 ? {
+      actionPlanId: String(lifecycleSource.actionPlanId ?? ""),
+      status: String(lifecycleSource.status ?? "proposed"),
+      planRevision: safeNumber(lifecycleSource.planRevision) || 1,
+      planState: String(lifecycleSource.planState ?? "draft"),
+    } : null,
+  };
   const assistantRecord = source.assistantMessageRecord ?? (typeof source.assistantMessage === "object" ? source.assistantMessage : null);
   const assistantText = typeof source.assistantMessage === "string" ? source.assistantMessage : "";
   const assistantMessage = assistantRecord
@@ -469,9 +496,9 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
       includedIncidentsCount: safeNumber(evidence.includedIncidentsCount),
       includedActionPlansCount: safeNumber(evidence.includedActionPlansCount),
     } : null,
-    shouldCreateActionPlan: Boolean(source.shouldCreateActionPlan),
-    executionSupport: String(source.executionSupport ?? "manual"),
-    implementationState: String(source.implementationState ?? "manualOnly"),
+    shouldCreateActionPlan: actionContract.canCreateActionPlan,
+    executionSupport: actionContract.executionSupport,
+    implementationState: actionContract.implementationState,
     mappedTemplate: typeof source.mappedTemplate === "string" ? source.mappedTemplate : null,
     missingFields: normalizeArray<unknown>(source.missingFields).map(String),
     nextStepFa: String(source.nextStepFa ?? ""),
@@ -486,6 +513,7 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
     connectorType: typeof source.connectorType === "string" ? source.connectorType : null,
     deviceId: typeof source.deviceId === "string" ? source.deviceId : null,
     selectedDeviceName: typeof source.selectedDeviceName === "string" ? source.selectedDeviceName : null,
+    actionContract,
   } satisfies AiChatResponse;
 }
 

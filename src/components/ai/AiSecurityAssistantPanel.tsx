@@ -330,7 +330,7 @@ export default function AiSecurityAssistantPanel() {
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
   const [evidenceMetadata, setEvidenceMetadata] = useState<EvidencePackMetadata | null>(null);
-  const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null } | null>(null);
+  const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null; canCreateActionPlan: boolean; manualOnly: boolean; executable: boolean; executionMode: string; lifecycle: { actionPlanId: string; status: string; planRevision: number; planState: string } | null } | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string | null; deviceId: string | null; initialRequest: string }>(null);
@@ -509,7 +509,7 @@ export default function AiSecurityAssistantPanel() {
         setProviderStatus(response.providerStatus ?? providerStatus);
         setStructuredResponse(response.structured);
         setEvidenceMetadata(response.evidenceMetadata);
-        setExecutionState({ support: response.executionSupport, implementation: response.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate });
+        setExecutionState({ support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle });
         setCreatedPlanId(response.actionPlan?.id ?? null);
         if (response.mode === "guided_workflow" && response.blueprintId) {
           if (response.actionSessionId) {
@@ -841,12 +841,13 @@ export default function AiSecurityAssistantPanel() {
           {executionState && (
             <div className="mt-3 rounded-lg border border-cyan-900/70 bg-cyan-950/20 p-3 text-right" dir="rtl">
               <div className="flex items-center justify-between gap-2">
-                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${executionState.support === "connector" && executionState.missing.length === 0 ? "bg-emerald-950 text-emerald-300" : executionState.missing.length ? "bg-amber-950 text-amber-300" : executionState.implementation === "unsupported" ? "bg-red-950 text-red-300" : "bg-slate-800 text-slate-300"}`}>
-                  {executionState.support === "connector" && executionState.missing.length === 0 ? "قابل اجرا" : executionState.missing.length ? "نیازمند تکمیل اطلاعات" : executionState.implementation === "unsupported" ? "پشتیبانی نمی‌شود" : "فقط بررسی دستی"}
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${executionState.executable ? "bg-emerald-950 text-emerald-300" : executionState.missing.length ? "bg-amber-950 text-amber-300" : executionState.implementation === "unsupported" ? "bg-red-950 text-red-300" : "bg-slate-800 text-slate-300"}`}>
+                  {executionState.executable ? "قابل اجرا" : executionState.missing.length ? "نیازمند تکمیل اطلاعات" : executionState.implementation === "unsupported" ? "پشتیبانی نمی‌شود" : executionState.manualOnly ? "فقط بررسی دستی" : "غیرقابل اجرا"}
                 </span>
                 {executionState.template && <code className="text-[10px] text-cyan-400">{executionState.template}</code>}
               </div>
               <p className="mt-2 text-xs text-slate-300">{executionState.nextStep}</p>
+              {executionState.lifecycle && <p className="mt-2 text-[11px] text-slate-500">ActionPlan {executionState.lifecycle.actionPlanId} · revision {executionState.lifecycle.planRevision} · {executionState.lifecycle.planState} · {executionState.executionMode}</p>}
               {createdPlanId && <button type="button" onClick={() => reviewInActionCenter(createdPlanId)} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">رفتن به مرکز عملیات</button>}
               {guidedStart && <button type="button" onClick={startGuidedWorkflow} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">شروع ساخت مرحله‌ای</button>}
               {!createdPlanId && executionState.missing.length > 0 && <button type="button" onClick={() => setInput(executionState.nextStep)} className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white">تکمیل اطلاعات</button>}

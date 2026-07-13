@@ -545,6 +545,73 @@ async function approveCurrentRevisionForExecution(plan: ActionPlan, input: Recor
   });
 }
 
+async function regenerateLatestRevisionForExecution(plan: ActionPlan, input: Record<string, unknown>, changedFields: string[]) {
+  const parameters = asObject(plan.parametersJson);
+  const metadata = asObject(parameters.metadata);
+  const revision = planRevision(metadata);
+  const revisionHistory = Array.isArray(metadata.revisionHistory) ? metadata.revisionHistory : [];
+  const {
+    canonicalParameters: _canonicalParameters,
+    canonicalParametersHash: _canonicalParametersHash,
+    canonicalPayload: _canonicalPayload,
+    canonicalPayloadHash: _canonicalPayloadHash,
+    previewHash: _previewHash,
+    previewFingerprint: _previewFingerprint,
+    approvedRevision: _approvedRevision,
+    approvedCanonicalPayloadHash: _approvedCanonicalPayloadHash,
+    approvedPreviewHash: _approvedPreviewHash,
+    approvedCanonicalPayload: _approvedCanonicalPayload,
+    approvedAt: _approvedAt,
+    executingRevision: _executingRevision,
+    ...preservedMetadata
+  } = metadata;
+  const nextRevision = revision + 1;
+  const revised = await prisma.actionPlan.update({
+    where: { id: plan.id },
+    data: {
+      status: ActionPlanStatus.proposed,
+      parametersJson: toJson({
+        ...parameters,
+        metadata: {
+          ...preservedMetadata,
+          planRevision: nextRevision,
+          planState: "draft",
+          previewGenerated: false,
+          previewStale: false,
+          staleReason: null,
+          lastExecutionStatus: "revision_regenerated",
+          revisionHistory: [...revisionHistory, {
+            revision,
+            state: metadata.planState ?? plan.status,
+            canonicalPayloadHash: metadata.canonicalPayloadHash ?? null,
+            previewHash: metadata.previewHash ?? null,
+            approvedRevision: metadata.approvedRevision ?? null,
+          }].slice(-20),
+        },
+      }),
+      validationJson: Prisma.JsonNull,
+      dryRunJson: Prisma.JsonNull,
+      approvalJson: Prisma.JsonNull,
+      resultJson: Prisma.JsonNull,
+      rollbackJson: Prisma.JsonNull,
+    },
+    include: includeRelations(),
+  });
+  await audit(revised, "action_revision_regenerated", "Stale ActionPlan inputs were promoted to a new revision before execution.", { previousRevision: revision, currentRevision: nextRevision, changedFields });
+
+  const validated = await validateAndStoreActionPlan(plan.id);
+  if (!validated || validated.status === ActionPlanStatus.validation_failed || validated.status === ActionPlanStatus.proposed) {
+    throw new ActionExecutionError("REVISION_REGENERATION_FAILED", "The newest ActionPlan revision did not pass validation.", 422, { currentRevision: nextRevision, changedFields });
+  }
+  const previewed = await dryRunActionPlan(plan.id);
+  if (!previewed || previewed.status !== ActionPlanStatus.dry_run_ready || !previewed.dryRunJson) {
+    throw new ActionExecutionError("REVISION_PREVIEW_FAILED", "The newest ActionPlan revision could not produce an executable preview.", 422, { currentRevision: nextRevision, changedFields });
+  }
+  const approved = await approveCurrentRevisionForExecution(previewed, input);
+  await audit(approved, "action_revision_ready", "Newest ActionPlan revision was previewed and approved for the current Execute request.", { currentRevision: nextRevision, changedFields });
+  return approved;
+}
+
 export class QuickExecuteConfirmationRequiredError extends ActionExecutionError {
   plan: unknown;
 
@@ -1156,10 +1223,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const approvedParameters = asObject(approvedPayload.parameters);
     const changedFields = Array.from(new Set([...Object.keys(approvedParameters), ...Object.keys(currentPayload.parameters)]))
       .filter((field) => stableJson(approvedParameters[field]) !== stableJson(currentPayload.parameters[field]));
-    await prisma.actionPlan.update({ where: { id }, data: { parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { previewStale: true, staleReason: "user_controlled_inputs_changed" })) } });
-    const conflict = { retryable: true, recovery: "CREATE_NEW_REVISION", currentRevision: planRevision(metadata), approvedRevision: Number(metadata.approvedRevision ?? 0), changedFields };
-    await audit(plan, "execution_failed", "Execution refused because user-controlled parameters differ from the approved revision.", { code: "COMMAND_PLAN_STALE", ...conflict });
-    throw new ActionExecutionError("COMMAND_PLAN_STALE", "ActionPlan parameters changed after the approved revision.", 409, conflict);
+    plan = await regenerateLatestRevisionForExecution(plan, executionInput, changedFields);
+    metadata = asObject(asObject(plan.parametersJson).metadata);
   }
   if (plan.riskLevel === AiRiskLevel.critical && env.actionExecutionMode !== "direct_controlled" && !env.actionAllowLabUnrestrictedManagement) {
     const reason = typeof executionInput.reason === "string" ? executionInput.reason.trim() : "";
@@ -1413,6 +1478,12 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
   trace("action_catalog_resolved", { catalogCommandId: catalogResolution.catalogCommandId, executionTemplateRef: catalogResolution.executionTemplateRef, connectorType: catalogResolution.connectorType, vendor: catalogResolution.vendor });
   trace("action_template_resolved", { executionTemplateRef: catalogResolution.executionTemplateRef, connectorType: catalogResolution.connectorType });
   const initialMetadata = asObject(asObject(initial.parametersJson).metadata);
+  const currentRevision = planRevision(initialMetadata);
+  const requestedRevision = Number(input.actionPlanRevision);
+  if (Number.isInteger(requestedRevision) && requestedRevision > 0 && requestedRevision !== currentRevision) {
+    await audit(initial, "execution_revision_resolved", "Execute request revision was superseded by the newest stored ActionPlan revision.", { requestedRevision, currentRevision });
+    trace("action_revision_resolved", { requestedRevision, currentRevision });
+  }
   const currentInitialFingerprint = actionExecutionFingerprint(initial);
   const storedInitialFingerprint = typeof initialMetadata.previewFingerprint === "string" ? initialMetadata.previewFingerprint : null;
   if (initial.dryRunJson && storedInitialFingerprint && storedInitialFingerprint !== currentInitialFingerprint) {

@@ -1,5 +1,14 @@
 # CODEX_HANDOFF.md
 
+## Task 19.1 Runtime convergence follow-up - automatic ActionPlan revision repair (2026-07-13)
+
+- Replaced the stale approved-plan HTTP 409 path with automatic in-place revision regeneration. A changed canonical fingerprint now creates the next revision, clears prior approval/execution artifacts, validates and previews the new canonical payload, binds approval to that revision, and continues controlled execution.
+- Execute clients resolve the latest persisted ActionPlan immediately before both normal and quick execution and send its `actionPlanRevision`. The backend also resolves an older requested revision to the current stored revision and audits that convergence.
+- Assistant now returns one authoritative action contract for `canCreateActionPlan`, `manualOnly`, executability, support/implementation state, execution mode, and ActionPlan lifecycle. The UI consumes that contract and displays the exact plan ID, revision, lifecycle state, and execution mode.
+- The stale-revision regression executed a changed approved plan through a fake connector and proved revision 2, approved/executing revision 2, no stale state, no stale exception, and `connectorInvoked=true`.
+- In the existing authenticated Playwright browser/context, Persian Assistant request `پورت 546 را ببند` created plan `cmrj3z0dc0009xslv1ba6moxs`, handed it to the exact Action Center route, executed it, and opened its result route. `POST /quick-execute` returned 200, final status was `succeeded`/verified no-change, the connector ran, `connectorInvoked=true`, and the console had zero errors.
+- Validation passed: Prisma validate, backend build, command catalog 137, backend 205/205, frontend build, locale/primary-copy checks, UTF-8 guard, and diff check. No `.env`, credential, migration, destructive database operation, or unrelated connector was touched.
+
 ## Task 19.1 Milestone R-G - Global control audit and Playwright acceptance (2026-07-13)
 
 - Added route, control, and browser acceptance evidence in `docs/TASK_19_1_ROUTE_ACCEPTANCE_MATRIX.md`, `docs/TASK_19_1_CONTROL_ACCEPTANCE_MATRIX.md`, and `docs/TASK_19_1_BROWSER_RESULTS.md`.

@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.1 Runtime convergence follow-up - ActionPlan stale repair (2026-07-13)
+
+- Summary: changed stale approved ActionPlans from a terminal HTTP 409 into automatic canonical revision regeneration and continued controlled execution on the newest revision.
+- Backend: regenerates validation/preview/approval state, records revision history and convergence audits, and preserves the real connector/audit/result success boundary.
+- Contracts: Assistant publishes one authoritative creation/manual/execution/lifecycle contract; Execute clients resolve the latest plan and include its revision.
+- Tests: stale input now proves revision 2, approved/executing revision 2, completed state, no stale failure, exactly one connector invocation, and `connectorInvoked=true`; full backend suite passed 205/205.
+- Browser: in the existing authenticated Playwright context, Persian Assistant created the port-546 plan, exact Action Center Execute returned HTTP 200, the Linux connector produced a verified-no-change result, the result route opened, and console errors remained zero.
+- Validation/safety: Prisma validate, backend/frontend builds, catalog 137, i18n/primary-copy, UTF-8, and diff check passed. No secret, `.env`, migration, destructive database command, or unrelated mutation was accessed.
+
 ## Task 19.1 Milestone R-G - Global Control Audit and Playwright Acceptance (2026-07-13)
 
 - Summary: audited all primary/direct routes and safe visible controls, completed global Persian/English and responsive acceptance, and documented the remaining live-target blockers.

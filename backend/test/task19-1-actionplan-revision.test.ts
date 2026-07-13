@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ActionPlanStatus } from "@prisma/client";
+import type { DeviceConnector } from "../src/connectors/device-connector.js";
 import { buildApp } from "../src/app.js";
 import { COMMAND_CATALOG } from "../src/commands/catalog/index.js";
 import { getExecutionTemplate } from "../src/commands/execution/execution-template-registry.js";
 import { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "../src/connectors/linux-ssh.connector.js";
 import { prisma } from "../src/db/prisma.js";
-import { actionExecutionFingerprint, approveActionPlan, correctAndRevalidateActionPlan, dryRunActionPlan, proposeActionPlan } from "../src/services/action-plan.service.js";
+import { actionExecutionFingerprint, approveActionPlan, dryRunActionPlan, proposeActionPlan, quickExecuteActionPlan } from "../src/services/action-plan.service.js";
 
 test("Task 19.1 close-port capability has one verified catalog/template/connector contract", () => {
   const item = COMMAND_CATALOG.find((entry) => entry.id === "linux.close-port");
@@ -32,7 +33,7 @@ test("Task 19.1 firewall adapter parsers identify only matching effective allow 
   assert.deepEqual(parseNftAllowRules("table inet filter {\n chain input {\n tcp dport 545 accept # handle 12\n udp dport 545 accept # handle 13\n }\n}", 545, "tcp"), [{ family: "inet", table: "filter", chain: "input", handle: 12 }]);
 });
 
-test("Task 19.1 approved revisions are immutable and genuine edits return structured conflicts", async (t) => {
+test("Task 19.1 stale approved inputs automatically regenerate and execute the newest revision", async (t) => {
   const app = await buildApp({ authRequired: false });
   const device = await prisma.device.create({ data: { name: "Task 19.1 revision Linux", vendor: "Linux", type: "linux_edge", host: "192.0.2.219", managementPort: 22, protocol: "ssh", environment: "lab" } });
   t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: device.id } }); await prisma.device.delete({ where: { id: device.id } }); await app.close(); });
@@ -53,19 +54,37 @@ test("Task 19.1 approved revisions are immutable and genuine edits return struct
   assert.equal(approvedMetadata.planState, "approved");
 
   await prisma.actionPlan.update({ where: { id: approved.id }, data: { parametersJson: { ...(approved.parametersJson as object), port: 546 } } });
-  const conflict = await app.inject({ method: "POST", url: `/api/actions/${approved.id}/execute`, payload: { intent: "execute" } });
-  assert.equal(conflict.statusCode, 409, conflict.body);
-  assert.equal(conflict.json().error.code, "COMMAND_PLAN_STALE");
-  assert.equal(conflict.json().error.recovery, "CREATE_NEW_REVISION");
-  assert.equal(conflict.json().error.currentRevision, 1);
-  assert.equal(conflict.json().error.approvedRevision, 1);
-  assert.deepEqual(conflict.json().error.changedFields, ["port"]);
+  let connectorCalls = 0;
+  const fakeConnector = {
+    name: "linux-ssh",
+    supportedActions: ["close_port"],
+    supports: () => true,
+    testConnection: async () => { throw new Error("not used"); },
+    getCapabilities: async () => { throw new Error("not used"); },
+    collectStatus: async () => { throw new Error("not used"); },
+    dryRun: async () => { throw new Error("not used"); },
+    rollback: async () => { throw new Error("not used"); },
+    execute: async () => {
+      connectorCalls += 1;
+      return { executed: true, actionType: "close_port", deviceId: device.id, commands: [{ template: "close port 546", stdout: "verified closed", stderr: "", exitCode: 0 }], warnings: [], verification: { outcome: "completed" } };
+    },
+  } as unknown as DeviceConnector;
 
-  const revised = await correctAndRevalidateActionPlan(approved.id, { port: 547 });
+  const revised = await quickExecuteActionPlan(approved.id, { intent: "execute", actionPlanRevision: 1 }, { selectConnector: () => fakeConnector });
+  assert.equal(connectorCalls, 1);
+  assert.equal(revised?.status, ActionPlanStatus.succeeded);
   const revisedMetadata = (revised?.parametersJson as { metadata: Record<string, unknown> }).metadata;
   assert.equal(revisedMetadata.planRevision, 2);
-  assert.equal(revisedMetadata.approvedRevision, 1);
-  assert.equal(revisedMetadata.planState, "preview_ready");
+  assert.equal(revisedMetadata.approvedRevision, 2);
+  assert.equal(revisedMetadata.executingRevision, 2);
+  assert.equal(revisedMetadata.planState, "completed");
+  assert.equal(revisedMetadata.previewStale, false);
+  assert.equal(revisedMetadata.staleReason, null);
+  assert.equal(revisedMetadata.connectorInvoked, true);
+  const audit = await prisma.actionAuditLog.findMany({ where: { actionPlanId: approved.id }, select: { eventType: true } });
+  assert.ok(audit.some((entry) => entry.eventType === "action_revision_regenerated"));
+  assert.ok(audit.some((entry) => entry.eventType === "action_revision_ready"));
+  assert.ok(!audit.some((entry) => entry.eventType === "execution_failed"));
 });
 
 test("Task 19.1 repeated verified desired state reuses one ActionPlan", async (t) => {
