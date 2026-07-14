@@ -1,5 +1,14 @@
 # CODEX_HANDOFF.md
 
+## Master Repair Phase 1 - Normal runtime convergence (2026-07-14)
+
+- Phase 0 verified the existing custom dump at `backups/phase0_firewall_log_analyzer.dump` read-only; archive header reports `firewall_log_analyzer`, PostgreSQL 18.4, and 364 TOC entries.
+- Historical runtime is `127.0.0.1:5432/firewall_log_analyzer`, schema `public`; preserved counts are Device 3, Asset 7, DeviceCredential 4, Finding 5, and ActionPlan 124.
+- Normal runtime is one backend on 4000 and one Vite frontend on strict port 5173. Local browser API traffic now uses `/firewall-api` through the Vite proxy; stale 5174 CORS defaults were removed.
+- `/api/health/ready` now reports redacted host/port/database/schema plus `databaseReady` and `schemaReady`; 10/10 live checks passed.
+- Focused authentication lifecycle proves login and authenticated `/api/auth/me`; Playwright proves the login page identity and same-origin `/firewall-api/auth/me`. The connected browser itself remains unauthenticated because no secret was accessed.
+- Protected quick-controlled execution behavior and `connectorInvoked=true` success semantics are unchanged.
+
 ## Database Runtime Port Correction - Windows PostgreSQL (2026-07-14)
 
 - Normal backend runtime now keeps the existing dotenv database name and credentials and resolves local PostgreSQL to `127.0.0.1:5432`.

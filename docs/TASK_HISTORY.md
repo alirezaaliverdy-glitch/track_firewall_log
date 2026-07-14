@@ -1,5 +1,12 @@
 # Task History
 
+## 2026-07-14 - Master repair Phase 1
+
+- Completed the non-destructive Phase 0 identity/dump gate and normal-runtime convergence.
+- Pinned Vite to strict port 5173, forced local development API calls through `/firewall-api`, removed stale 5174 default origins, and added redacted datasource/schema readiness to health.
+- Validation: backend build; focused auth/product-state tests; frontend build; locale parity; UTF-8 guard; diff check; 10/10 readiness; Playwright login identity and same-origin proxy observation.
+- Existing database counts remained unchanged. No migration, restore, seed, destructive SQL, `.env` access, or connector execution occurred.
+
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
 ## Task 20.1A - DB/Auth Repair and Cisco Onboarding Blocker (2026-07-14)

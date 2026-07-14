@@ -1,5 +1,12 @@
 # Current Project Status
 
+## Master repair convergence - Phase 1 (2026-07-14)
+
+- Phase 0 complete with a verified, untouched custom-format database dump and preserved historical counts.
+- Phase 1 runtime convergence is implemented: backend 4000, strict Vite 5173, same-origin development proxy, one shared resolved datasource for Prisma/Pool, and redacted readiness identity with schema readiness.
+- Database remains `127.0.0.1:5432/firewall_log_analyzer` (`public`); Device 3, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124.
+- Next phase: replace the manual router with React Router and a shared route/feature manifest. Do not begin data repair before Phase 2 passes.
+
 Last updated: 2026-07-14
 
 ## Task 20 - Real Network Operations Kickoff

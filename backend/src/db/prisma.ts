@@ -113,8 +113,28 @@ export async function withDatabaseStartupRetry<T>(label: string, operation: () =
 
 export async function checkDatabaseReady() {
   try {
-    await prisma.$queryRaw`SELECT 1`;
-    return { ok: true as const };
+    const rows = await prisma.$queryRaw<Array<{
+      database: string;
+      schema: string;
+      core_tables_ready: boolean;
+    }>>`
+      SELECT
+        current_database() AS database,
+        current_schema() AS schema,
+        (
+          to_regclass('public."Device"') IS NOT NULL AND
+          to_regclass('public."Asset"') IS NOT NULL AND
+          to_regclass('public."ActionPlan"') IS NOT NULL AND
+          to_regclass('public."Finding"') IS NOT NULL
+        ) AS core_tables_ready
+    `;
+    const identity = rows[0];
+    return {
+      ok: true as const,
+      database: identity?.database ?? "unknown",
+      schema: identity?.schema ?? "public",
+      schemaReady: identity?.core_tables_ready === true
+    };
   } catch (error) {
     return { ok: false as const, reason: databaseUnavailableReason(error) };
   }

@@ -31,6 +31,15 @@ test("authentication lifecycle, bootstrap, and protected routes", async (t) => {
   assert.notEqual(admin.passwordHash, process.env.ADMIN_PASSWORD);
   assert.equal(await bcrypt.compare(process.env.ADMIN_PASSWORD!, admin.passwordHash), true);
 
+  const ready = await app.inject({ method: "GET", url: "/api/health/ready" });
+  assert.equal(ready.statusCode, 200);
+  assert.equal(ready.json().databaseReady, true);
+  assert.equal(ready.json().schemaReady, true);
+  assert.equal(ready.json().runtime.host, "127.0.0.1");
+  assert.equal(ready.json().runtime.port, 5432);
+  assert.equal(ready.json().runtime.database, "firewall_log_analyzer");
+  assert.equal(ready.json().runtime.schema, "public");
+
   const anonymousMe = await app.inject({ method: "GET", url: "/api/auth/me" });
   assert.equal(anonymousMe.statusCode, 401);
 
