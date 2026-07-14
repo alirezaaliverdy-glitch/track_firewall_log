@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createCredential, listCredentials, type CredentialInput, type DeviceCredential } from "@/lib/credentials";
@@ -8,6 +9,7 @@ import {
   detectOnboarding,
   discoverOnboarding,
   previewOnboarding,
+  registerUnverifiedOnboarding,
   startOnboarding,
   testOnboarding,
   type OnboardingDraft,
@@ -30,6 +32,7 @@ function initialVendor(params: Record<string, string>) {
 }
 
 export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
+  const navigate = useNavigate();
   const started = useRef(false);
   const [session, setSession] = useState<OnboardingSession | null>(null);
   const [form, setForm] = useState<OnboardingDraft | null>(null);
@@ -70,6 +73,9 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
 
   const change = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => setForm((current) => current ? { ...current, [key]: value } : current);
   const saveAnswers = () => run("answers", () => answerOnboarding(session.id, form));
+  const registerUnverified = () => run("unverified", () => registerUnverifiedOnboarding(session.id, form)).then((next) => {
+    if (next?.result?.verificationStatus === "unverified" && next.result.connectorInvoked === false && next.result.route) navigate(next.result.route);
+  });
   const canTest = ["answers_saved", "connection_failed"].includes(session.status);
   const canDetect = session.status === "connection_verified";
   const canDiscover = session.status === "platform_detected";
@@ -109,7 +115,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
 
   return (
     <section className="page-stack">
-      <PageHeader title={params.deviceId ? "راه‌اندازی دوباره دستگاه" : `ثبت دستگاه ${form.vendor === "cisco" ? "Cisco" : ""}`} eyebrow="Onboarding امن" description="اتصال و کشف فقط با Connector ثبت‌شده و Credential رمزگذاری‌شده انجام می‌شود؛ هیچ secret در Session ذخیره نمی‌شود." actions={<a className="secondary-link" href="/assets/devices">بازگشت به تجهیزات</a>} />
+      <PageHeader title={params.deviceId ? "راه‌اندازی دوباره دستگاه" : `ثبت دستگاه ${form.vendor === "cisco" ? "Cisco" : ""}`} eyebrow="Onboarding امن" description="اتصال و کشف فقط با Connector ثبت‌شده و Credential رمزگذاری‌شده انجام می‌شود؛ هیچ secret در Session ذخیره نمی‌شود." actions={<Link className="secondary-link" to="/assets/devices">بازگشت به تجهیزات</Link>} />
 
       <ol className="onboarding-steps" aria-label="مراحل ثبت دستگاه">
         {["Vendor", "Platform", "Connection", "Address", "Port", "Credential", "Site", "Test", "Detect", "Discover", "Preview", "Save", "Health", "Result"].map((step, index) => <li key={step} className={index <= stepIndex[session.status] ? "is-complete" : ""}><span>{index + 1}</span>{step}</li>)}
@@ -130,6 +136,11 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           <label>محیط<select value={form.environment} onChange={(event) => change("environment", event.target.value as OnboardingDraft["environment"])}><option value="lab">Lab</option><option value="staging">Staging</option><option value="production">Production</option></select></label>
         </div>
         <button type="button" onClick={() => void saveAnswers()} disabled={Boolean(busy)}>ذخیره اطلاعات</button>
+        <div className="state-card">
+          <strong>ثبت بدون تأیید اتصال</strong>
+          <p>دستگاه با وضعیت تأییدنشده و سلامت نامشخص ذخیره می‌شود و بعداً می‌توانید اتصال آن را آزمایش کنید.</p>
+          <button type="button" onClick={() => void registerUnverified()} disabled={Boolean(busy)}>ثبت اولیه بدون تست اتصال</button>
+        </div>
       </section>
 
       <details className="content-panel">

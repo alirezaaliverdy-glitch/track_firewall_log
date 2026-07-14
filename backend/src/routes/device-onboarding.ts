@@ -8,8 +8,10 @@ import {
   discoverOnboardingInventory,
   getOnboardingSession,
   previewOnboardingSession,
+  registerUnverifiedOnboardingSession,
   retryOnboardingSession,
-  testOnboardingConnection
+  testOnboardingConnection,
+  OnboardingDuplicateDeviceError
 } from "../services/device-onboarding.service.js";
 
 function statusCode(error: unknown) {
@@ -61,6 +63,15 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/commit", async (request, reply) => {
     try { return await commitOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_COMMIT_BLOCKED", message: error instanceof Error ? error.message : "Save failed." } }); }
+  });
+  app.post<{ Params: { sessionId: string }; Body: Record<string, unknown> }>("/api/device-onboarding/sessions/:sessionId/register-unverified", async (request, reply) => {
+    try { return await registerUnverifiedOnboardingSession(request.params.sessionId, request.body ?? {}); }
+    catch (error) {
+      if (error instanceof OnboardingDuplicateDeviceError) {
+        return reply.code(409).send({ error: { code: "ONBOARDING_DEVICE_DUPLICATE", message: error.message, existingDeviceId: error.deviceId, route: error.route } });
+      }
+      return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_UNVERIFIED_REGISTRATION_FAILED", message: error instanceof Error ? error.message : "Unverified registration failed.", connectorInvoked: false } });
+    }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/retry", async (request, reply) => {
     try { return retryOnboardingSession(request.params.sessionId); }

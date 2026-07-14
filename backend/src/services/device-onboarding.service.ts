@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, type Device } from "@prisma/client";
+import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, type Device, type Prisma } from "@prisma/client";
 import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { detectCiscoPlatform, parseCiscoInterfacesStatus, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
-import { syncDeviceToAsset } from "../assets/asset-intelligence.service.js";
+import { syncDeviceRecordToAsset, syncDeviceToAsset } from "../assets/asset-intelligence.service.js";
 import { createDevice, getDeviceById, updateDevice } from "./device.service.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik";
@@ -348,6 +348,137 @@ export async function previewOnboardingSession(id: string) {
 
 function slug(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g, "-").replace(/^-|-$/g, "") || "default";
+}
+
+function json(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+}
+
+export class OnboardingDuplicateDeviceError extends Error {
+  constructor(public readonly deviceId: string) {
+    super("A Device with the same vendor, host, and management port already exists.");
+  }
+
+  get route() { return `/assets/devices/${this.deviceId}`; }
+}
+
+function validateUnverifiedDraft(session: OnboardingSession, input: Record<string, unknown>) {
+  assertNoSecrets(input);
+  const vendor = input.vendor === undefined ? session.draft.vendor : normalizeVendor(input.vendor);
+  const platform = String(input.platform ?? (vendor === session.draft.vendor ? session.draft.platform : defaultPlatform(vendor))).trim();
+  const name = String(input.name ?? session.draft.name).trim();
+  const host = String(input.host ?? session.draft.host).trim();
+  const managementPort = Number(input.managementPort ?? session.draft.managementPort);
+  const environment = String(input.environment ?? session.draft.environment) as Draft["environment"];
+  const connectionMethod = String(input.connectionMethod ?? session.draft.connectionMethod) === "api" ? "api" : "ssh";
+  if (!SUPPORTED_PLATFORMS[vendor].includes(platform)) throw new Error(`Platform ${platform} is not supported for ${vendor} onboarding.`);
+  if (!name) throw new Error("Device name is required.");
+  if (!host) throw new Error("Management address is required.");
+  if (!Number.isInteger(managementPort) || managementPort < 1 || managementPort > 65535) throw new Error("Management port must be an integer between 1 and 65535.");
+  if (!(["lab", "staging", "production"] as string[]).includes(environment)) throw new Error("Environment must be lab, staging, or production.");
+  return {
+    vendor, platform, name, host, managementPort, environment, connectionMethod,
+    credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
+    site: String(input.site ?? session.draft.site).trim(),
+    location: String(input.location ?? session.draft.location).trim()
+  } satisfies Draft;
+}
+
+export async function registerUnverifiedOnboardingSession(id: string, input: Record<string, unknown> = {}) {
+  const session = activeSession(id);
+  if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
+  const draft = validateUnverifiedDraft(session, input);
+  const normalizedVendor = draft.vendor.toLowerCase();
+  const duplicate = await prisma.device.findFirst({
+    where: {
+      ...(session.deviceId ? { id: { not: session.deviceId } } : {}),
+      vendor: { equals: normalizedVendor, mode: "insensitive" },
+      host: { equals: draft.host, mode: "insensitive" },
+      managementPort: draft.managementPort
+    },
+    select: { id: true }
+  });
+  if (duplicate) throw new OnboardingDuplicateDeviceError(duplicate.id);
+
+  touch(session, "saving", "save");
+  const createdAt = now();
+  const capabilities = json({
+    onboarding: {
+      sessionId: session.id,
+      verificationStatus: "unverified",
+      connectorInvoked: false,
+      connectionVerified: false,
+      platform: draft.platform,
+      createdAt
+    }
+  });
+  try {
+    const persisted = await prisma.$transaction(async (tx) => {
+      const data = {
+        name: draft.name,
+        vendor: normalizedVendor,
+        type: deviceType(draft.vendor),
+        host: draft.host,
+        managementPort: draft.managementPort,
+        protocol: draft.connectionMethod === "api" ? DeviceProtocol.api : DeviceProtocol.ssh,
+        environment: draft.environment as DeviceEnvironment,
+        tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
+        status: DeviceStatus.unknown,
+        capabilities,
+        credentialId: draft.credentialId || null
+      };
+      const device = session.deviceId
+        ? await tx.device.update({ where: { id: session.deviceId }, data })
+        : await tx.device.create({ data });
+      const { asset } = await syncDeviceRecordToAsset(tx, device);
+      let siteId: string | undefined;
+      let locationId: string | undefined;
+      if (draft.site) {
+        const site = await tx.assetSite.upsert({
+          where: { slug: slug(draft.site) },
+          update: { name: draft.site },
+          create: { slug: slug(draft.site), name: draft.site }
+        });
+        siteId = site.id;
+        if (draft.location) {
+          const location = await tx.assetLocation.upsert({
+            where: { siteId_slug: { siteId: site.id, slug: slug(draft.location) } },
+            update: { name: draft.location },
+            create: { siteId: site.id, slug: slug(draft.location), name: draft.location }
+          });
+          locationId = location.id;
+        }
+        await tx.asset.update({ where: { id: asset.id }, data: { siteId, locationId: locationId ?? null } });
+      }
+      await tx.auditLog.create({
+        data: {
+          deviceId: device.id,
+          action: session.deviceId ? "device.onboarding_unverified_updated" : "device.onboarding_unverified_created",
+          targetType: "Device",
+          targetId: device.id,
+          dryRun: false,
+          approvalStatus: "not_required",
+          metadata: json({ verificationStatus: "unverified", connectorInvoked: false, connectionVerified: false, assetId: asset.id, siteId, locationId })
+        }
+      });
+      return { device, asset };
+    });
+    session.draft = draft;
+    session.deviceId = persisted.device.id;
+    session.test = { connected: false, connectorInvoked: false, verificationStatus: "unverified" };
+    session.result = {
+      deviceId: persisted.device.id,
+      assetId: persisted.asset.id,
+      route: `/assets/devices/${persisted.device.id}`,
+      verificationStatus: "unverified",
+      connectorInvoked: false,
+      connectionVerified: false
+    };
+    return touch(session, "completed", "result");
+  } catch (error) {
+    fail(session, "save_failed", "save", error);
+    throw error;
+  }
 }
 
 export async function commitOnboardingSession(id: string) {

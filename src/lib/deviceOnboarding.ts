@@ -40,7 +40,7 @@ export type OnboardingSession = {
   detection: Record<string, unknown> | null;
   discovery: Record<string, unknown> | null;
   preview: Record<string, unknown> | null;
-  result: { deviceId?: string; assetId?: string; route?: string; connectorInvoked?: boolean; connectionVerified?: boolean; platform?: string; initialHealth?: Record<string, unknown> } | null;
+  result: { deviceId?: string; assetId?: string; route?: string; verificationStatus?: "verified" | "unverified"; connectorInvoked?: boolean; connectionVerified?: boolean; platform?: string; initialHealth?: Record<string, unknown> } | null;
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -72,6 +72,7 @@ export const detectOnboarding = (id: string) => request<OnboardingSession>(`/dev
 export const discoverOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/discover`, { method: "POST", body: "{}" });
 export const previewOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/preview`, { method: "POST", body: "{}" });
 export const commitOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/commit`, { method: "POST", body: "{}" });
+export const registerUnverifiedOnboarding = (id: string, input: OnboardingDraft) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/register-unverified`, { method: "POST", body: JSON.stringify(input) });
 export const cancelOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/cancel`, { method: "POST", body: "{}" });
 
 export type DeviceWorkspace = {
