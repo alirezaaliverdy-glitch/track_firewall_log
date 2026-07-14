@@ -2,6 +2,16 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 20.1A - DB/Auth Repair and Cisco Onboarding Blocker (2026-07-14)
+
+- Summary: executed Milestones A-C in order: reproduced the default PostgreSQL/Prisma startup failure, repaired readiness/live/auth database failure handling, and captured MCP authentication evidence.
+- Reproduction: `postgresql-x64-18` was running but `127.0.0.1:5432` TCP failed; `prisma migrate status` returned a schema engine error; `buildApp()` failed at `bootstrapAdmin()`/`prisma.appUser.count()` with operation timeout.
+- Backend: added `/api/health/live`; aligned `/api/health/ready` to the Task 20.1A shape; moved startup DB retry to a shared helper with 5 attempts, exponential backoff and jitter; reduced Prisma startup stack noise; kept one shared pg Pool, PrismaPg adapter, and Prisma client; auth database failures now return structured 503.
+- Proof: backend built; healthy runtime on `127.0.0.1:55432/firewall_log_auth` produced 10/10 live 200 and 10/10 ready 200 over 181 seconds, plus a clean 10-sample body check with `databaseReady=true`.
+- MCP: `/login` and `/dashboard` opened in the authenticated Persian shell with `/api/auth/me` 200. Manual credential entry was not replayable because the exposed MCP tool surface lacks fill/type/click commands and the browser session was already authenticated.
+- Blocker: the active stable runtime database has no saved Credential References, so the required `cisco-f2 — admin` reference is missing. Task 20.1A stops here by its saved-Credential-Reference stop condition; Cisco onboarding, connector invocation, Device persistence, animated success, redirect, and workspace proof are not claimed.
+- Commits: `afbdd4c docs: trace postgres prisma authentication failure`; `f09bb4a fix: stabilize postgres prisma and backend readiness`; `9b55d87 fix: restore authentication after database readiness`.
+
 ## Task 20.1 - Onboarding Workspace Dashboard Trace (2026-07-14)
 
 - Summary: executed the Task 20.1 Milestone A failure trace after reading the required prompt/spec/docs, using only Playwright MCP for browser evidence.

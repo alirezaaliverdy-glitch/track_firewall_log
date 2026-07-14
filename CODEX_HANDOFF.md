@@ -1,5 +1,18 @@
 # CODEX_HANDOFF.md
 
+## Task 20.1A - DB/auth repair and Cisco onboarding blocker (2026-07-14)
+
+- Read `TASK_20_1A_DB_AUTH_CISCO_ONBOARDING_REPAIR.md` and the required project/status/architecture/task docs before editing.
+- Milestone A completed and committed: `afbdd4c docs: trace postgres prisma authentication failure`.
+- Reproduced default PostgreSQL failure without reading or printing `.env`: service `postgresql-x64-18` reports running, but `127.0.0.1:5432` TCP fails; `npx prisma migrate status` ends with schema engine error; `buildApp()` fails in `bootstrapAdmin()` at `prisma.appUser.count()` with timeout.
+- Milestone B completed and committed: `f09bb4a fix: stabilize postgres prisma and backend readiness`.
+- Backend lifecycle changes: one shared Pool/adapter/client path retained, startup retry is now 5 attempts with exponential backoff and jitter, Prisma startup logging is concise, `/api/health/live` exists, `/api/health/ready` returns the Task 20.1A shape, and auth DB failures return structured 503.
+- Readiness proof on the healthy user-owned PostgreSQL runtime `127.0.0.1:55432/firewall_log_auth`: long run covered 181 seconds with 10/10 live 200 and 10/10 ready 200; clean body sample showed 10/10 `status=live` and 10/10 `status=ready,databaseReady=true`.
+- Milestone C evidence committed: `9b55d87 fix: restore authentication after database readiness`; MCP opened `/login` and `/dashboard` and showed the authenticated Persian dashboard shell with `/api/auth/me` 200.
+- Limitation: this MCP tool surface has no fill/type/click tools, and the session was already authenticated, so manual credential entry could not be replayed from MCP.
+- Important blocker: the active stable runtime database has zero `DeviceCredential` rows; the required `cisco-f2 — admin` Credential Reference is not present. Per Task 20.1A stop condition 4, real Cisco onboarding cannot continue until that saved Credential Reference exists or the original database becomes reachable.
+- Not claimed: real Cisco connector invocation, Device persistence, animated success, redirect, workspace, dashboard charts, full route matrix, or full acceptance matrix.
+
 ## Task 20.1 - Onboarding workspace/dashboard trace (2026-07-14)
 
 - Read `CODEX_START_PROMPT.txt` and `TASK_20_1_ONBOARDING_WORKSPACE_DASHBOARD.md`; started Task 20.1 from the current checkout without starting a new task.
