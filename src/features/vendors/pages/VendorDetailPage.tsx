@@ -20,11 +20,18 @@ export default function VendorDetailPage({ params }: RouteComponentProps) {
   if (error) return <section className="page-stack"><PageHeader title={vendorKey} eyebrow="Vendor" /><div className="state-card is-error">{error}</div></section>;
   if (!vendor) return <section className="page-stack"><PageHeader title={vendorKey} eyebrow="Vendor" /><div className="state-card">در حال دریافت وضعیت وندور...</div></section>;
   const implemented = vendor.capabilities.filter((item) => item.implementationState === "implemented");
+  const vendorOnboardingLabel: Record<string, string> = {
+    cisco: "ثبت دستگاه Cisco",
+    fortigate: "ثبت دستگاه FortiGate",
+    mikrotik: "ثبت دستگاه MikroTik",
+    linux: "ثبت سرور Linux"
+  };
+  const onboardingLabel = vendorOnboardingLabel[vendorKey.toLowerCase()] ?? `ثبت دستگاه ${vendor.titleFa || vendor.titleEn}`;
   return (
     <section className="page-stack">
-      <PageHeader title={vendor.titleFa || vendor.titleEn} eyebrow="مدیریت وندور" description={vendor.description} actions={<a className="primary-link" href={`/assets/vendors/${vendorKey}/devices/new`}>ثبت دستگاه {vendor.titleFa || vendor.titleEn}</a>} />
+      <PageHeader title={vendor.titleFa || vendor.titleEn} eyebrow="مدیریت وندور" description={vendor.description} actions={<a className="primary-link" href={`/assets/vendors/${vendorKey}/devices/new`}>{onboardingLabel}</a>} />
       <div className="summary-grid"><article><span>دستگاه ثبت‌شده</span><strong>{devices.length}</strong></article><article><span>قابلیت پیاده‌شده</span><strong>{implemented.length}</strong></article><article><span>وضعیت</span><strong>{vendor.implementationState}</strong></article></div>
-      <section className="content-panel"><h2>دستگاه‌ها</h2>{devices.length ? devices.map((item) => <a key={item.id} className="list-row" href={`/assets/devices/${item.id}`}>{item.name}<span>{item.status}</span></a>) : <div className="state-card"><p>برای این وندور هنوز دستگاهی ثبت نشده است.</p><a className="primary-link" href={`/assets/vendors/${vendorKey}/devices/new`}>شروع ثبت دستگاه</a></div>}</section>
+      <section className="content-panel"><h2>دستگاه‌ها</h2>{devices.length ? devices.map((item) => <a key={item.id} className="list-row" href={`/assets/devices/${item.id}`}>{item.name}<span>{item.status}</span></a>) : <div className="state-card"><p>برای این وندور هنوز دستگاهی ثبت نشده است.</p><a className="primary-link" href={`/assets/vendors/${vendorKey}/devices/new`}>{onboardingLabel}</a></div>}</section>
       <section className="content-panel"><h2>قابلیت‌های قابل استفاده</h2><ul className="plain-list">{implemented.slice(0, 12).map((item) => <li key={item.key}>{item.titleFa || item.titleEn}<span>{item.mode === "read" ? "خواندنی" : "کنترل‌شده"}</span></li>)}</ul>{implemented.length === 0 ? <p>هیچ قابلیت اجرایی تاییدشده‌ای وجود ندارد.</p> : null}</section>
     </section>
   );

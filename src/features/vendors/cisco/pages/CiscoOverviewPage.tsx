@@ -32,6 +32,13 @@ const vendorPurposeFa: Record<string, string> = {
   generic: "منبع عمومی برای داده یا لاگ، بدون اقدام واقعی."
 };
 
+const vendorOnboardingLabelFa: Record<string, string> = {
+  cisco: "ثبت دستگاه Cisco",
+  fortigate: "ثبت دستگاه FortiGate",
+  mikrotik: "ثبت دستگاه MikroTik",
+  linux: "ثبت سرور Linux"
+};
+
 export default function CiscoOverviewPage() {
   const isCiscoRoute = window.location.pathname.includes("/assets/vendors/cisco");
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
@@ -80,7 +87,7 @@ export default function CiscoOverviewPage() {
                 <dt>Connector</dt><dd>{item.connectorTypes.join("، ") || "ندارد"}</dd>
                 <dt>کاربرد</dt><dd>{vendorPurposeFa[item.key] ?? item.description}</dd>
               </dl>
-              <div className="button-row"><a className="secondary-link" href={`/assets/vendors/${item.key}`}>مشاهده وندور</a><a className="primary-link" href={`/assets/vendors/${item.key}/devices/new`}>ثبت دستگاه</a></div>
+              <div className="button-row"><a className="secondary-link" href={`/assets/vendors/${item.key}`}>مشاهده وندور</a><a className="primary-link" href={`/assets/vendors/${item.key}/devices/new`}>{vendorOnboardingLabelFa[item.key] ?? "ثبت دستگاه"}</a></div>
             </section>
           ))}
         </div>

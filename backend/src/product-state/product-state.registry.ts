@@ -2,7 +2,7 @@ import { VENDOR_REGISTRY } from "../vendors/vendor.registry.js";
 import type { ProductFeature, ProductFeatureState, ProductIntegrationState, ProductNavigationGroup } from "./product-state.types.js";
 
 const VERIFIED_AT = "2026-07-13";
-export const PRODUCT_STATE_CONTRACT_VERSION = "19B.1";
+export const PRODUCT_STATE_CONTRACT_VERSION = "19.2-A";
 
 function feature(input: Omit<ProductFeature, "lastVerifiedAt">): ProductFeature {
   return { ...input, lastVerifiedAt: input.tested ? VERIFIED_AT : undefined };
@@ -13,7 +13,7 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
 
   feature({ key: "assets.overview", titleFa: "نمای کلی", titleEn: "Overview", route: "/assets", groupKey: "assets", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.devices", titleFa: "تجهیزات", titleEn: "Devices", route: "/assets/devices", groupKey: "assets", order: 20, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
-  feature({ key: "assets.device_onboarding_new", titleFa: "ثبت دستگاه", titleEn: "Register device", route: "/assets/devices/new", groupKey: "assets", order: 21, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_onboarding_new", titleFa: "ثبت دستگاه", titleEn: "Register device", route: "/assets/devices/new", groupKey: "assets", order: 21, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.device_onboarding", titleFa: "راه‌اندازی دستگاه", titleEn: "Device onboarding", route: "/assets/onboarding", groupKey: "assets", order: 22, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.vendor_device_onboarding", titleFa: "ثبت دستگاه وندور", titleEn: "Register vendor device", route: "/assets/vendors/:vendorKey/devices/new", groupKey: "assets", order: 23, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.device_setup", titleFa: "راه‌اندازی اتصال", titleEn: "Device setup", route: "/assets/devices/:deviceId/setup", groupKey: "assets", order: 24, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),

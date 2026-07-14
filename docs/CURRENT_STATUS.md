@@ -1,6 +1,15 @@
 # Current Project Status
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
+
+## Task 19.2-A - Visible Device Registration
+
+- Dashboard exposes `ثبت دستگاه جدید` as a primary action and quick actions now include registration, quick network test, domain/IP check, and device list access.
+- Product State Contract is `19.2-A`; implemented Add Device is no longer hidden from generated Assets navigation.
+- Assets navigation now includes Overview, Devices, Register device, and Vendors. Contextual onboarding routes remain backed by the existing reusable onboarding engine.
+- Cisco, FortiGate, MikroTik, and Linux vendor pages show vendor-specific onboarding CTAs that preselect the vendor through `/assets/vendors/:vendorKey/devices/new`.
+- No diagnostics, Check-Host, Nmap, scan authorization, monitoring, finding, connector execution, migration, destructive DB command, `.env`, or credential work was started.
+- Validation is green for the touched scope: Prisma validate, focused backend Product State/onboarding tests, backend build, frontend build, i18n/primary-copy, UTF-8, and diff check. Connected Playwright MCP was unavailable; local Playwright screenshots only reached the login gate in a fresh context.
 
 ## Task 19.1 - Automatic ActionPlan revision convergence
 

@@ -16,7 +16,21 @@ export default function DashboardPage() {
   if (findings.error) return <ErrorState message={findings.error} onRetry={findings.refresh} />;
   return (
     <section className="page-stack">
-      <PageHeader title="داشبورد" eyebrow="Command Center" description="نمای خلوت عملیاتی؛ جزئیات در صفحات تخصصی باز می شوند." />
+      <PageHeader
+        title="داشبورد"
+        eyebrow="Command Center"
+        description="نمای خلوت عملیاتی؛ جزئیات در صفحات تخصصی باز می شوند."
+        actions={<a href="/assets/devices/new" className="primary-link">ثبت دستگاه جدید</a>}
+      />
+      <section className="content-panel">
+        <h2>اقدام‌های سریع</h2>
+        <div className="button-row">
+          <a href="/assets/devices/new" className="primary-link">ثبت دستگاه جدید</a>
+          <a href="/integrations" className="secondary-link">تست سریع شبکه</a>
+          <a href="/integrations" className="secondary-link">بررسی دامنه یا IP</a>
+          <a href="/assets/devices" className="secondary-link">مشاهده دستگاه‌ها</a>
+        </div>
+      </section>
       <div className="summary-grid dashboard-summary">
         <article className="metric-panel"><span>سلامت شبکه</span><strong>{assets.stats.needsReview ? "نیازمند بررسی" : "عادی"}</strong></article>
         <article className="metric-panel"><span>دارایی های فعال</span><strong>{assets.stats.total}</strong></article>

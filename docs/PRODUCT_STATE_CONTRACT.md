@@ -1,6 +1,6 @@
 # Product State Contract
 
-Contract version: `19B.1`
+Contract version: `19.2-A`
 
 Owner: backend product-state registry
 
@@ -23,6 +23,8 @@ The contract describes capability. It does not bypass ActionPlan, Preview, user 
 Frontend routes own component mapping and matching. They do not own product readiness or primary-navigation eligibility.
 
 Device onboarding is implemented through one reusable engine at `/assets/devices/new`, `/assets/onboarding`, `/assets/vendors/:vendorKey/devices/new`, and `/assets/devices/:deviceId/setup`. Device workspace routes resolve managed Device IDs and unmanaged Asset IDs without exposing credentials. A visible registration CTA requires the onboarding backend, API, route, UI, and tests to be ready together.
+
+In contract `19.2-A`, `assets.device_onboarding_new` is promoted into generated Assets navigation because the route, API, backend service, UI, and regression tests are implemented. Product State must not hide this implemented onboarding route while keeping contextual vendor/setup routes outside primary navigation.
 
 ## States
 

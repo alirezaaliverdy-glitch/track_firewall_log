@@ -24,6 +24,7 @@ test("Task 19A product state rejects unsafe navigation mismatches", () => {
 test("Task 19A navigation excludes planned, mock-only, not-configured and unverified routes", () => {
   const routes = getProductNavigation().flatMap((group) => group.items.map((item) => item.route));
   assert.ok(routes.includes("/dashboard"));
+  assert.ok(routes.includes("/assets/devices/new"));
   assert.ok(routes.includes("/security/rules"));
   assert.ok(routes.includes("/monitoring/linux"));
   assert.ok(!routes.includes("/settings"));
@@ -54,7 +55,7 @@ test("Task 19A product-state APIs expose one consistent contract", async () => {
     const vendors = await app.inject({ method: "GET", url: "/api/product-state/vendors" });
     const integrations = await app.inject({ method: "GET", url: "/api/product-state/integrations" });
     for (const response of [contract, navigation, features, vendors, integrations]) assert.equal(response.statusCode, 200);
-    assert.equal(contract.json().contractVersion, "19B.1");
+    assert.equal(contract.json().contractVersion, "19.2-A");
     assert.deepEqual(contract.json().navigation, navigation.json().navigation);
     assert.deepEqual(contract.json().features, features.json().features);
     assert.deepEqual(contract.json().vendors, vendors.json().vendors);

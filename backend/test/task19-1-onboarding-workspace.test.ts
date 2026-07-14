@@ -46,9 +46,9 @@ test("Task 19.1 onboarding rejects plaintext secrets and unsupported targets", a
   } finally { await app.close(); }
 });
 
-test("Task 19.1 Product State makes onboarding and workspace real without primary-nav noise", () => {
+test("Task 19.2-A Product State keeps implemented onboarding visible in Assets navigation", () => {
   const required = [
-    "assets.device_onboarding_new", "assets.device_onboarding", "assets.vendor_device_onboarding", "assets.device_setup",
+    "assets.device_onboarding", "assets.vendor_device_onboarding", "assets.device_setup",
     "assets.device_detail", "assets.device_workspace_section", "assets.vendor_detail"
   ];
   for (const key of required) {
@@ -58,14 +58,25 @@ test("Task 19.1 Product State makes onboarding and workspace real without primar
     assert.equal(feature.backendReady && feature.apiReady && feature.uiReady && feature.tested, true);
     assert.equal(feature.navigationVisible, false);
   }
+  const addDevice = PRODUCT_FEATURES.find((item) => item.key === "assets.device_onboarding_new");
+  assert.ok(addDevice, "Missing Product State feature assets.device_onboarding_new");
+  assert.equal(addDevice.state, "implemented");
+  assert.equal(addDevice.backendReady && addDevice.apiReady && addDevice.uiReady && addDevice.tested, true);
+  assert.equal(addDevice.navigationVisible, true);
+  assert.equal(addDevice.route, "/assets/devices/new");
 
   const sources = [
+    "src/features/dashboard/pages/DashboardPage.tsx",
     "src/features/assets/pages/AssetsOverviewPage.tsx",
     "src/features/assets/pages/AssetListPage.tsx",
     "src/features/vendors/cisco/pages/CiscoOverviewPage.tsx",
     "src/features/vendors/pages/VendorDetailPage.tsx"
   ].map((file) => readFileSync(join(process.cwd(), "..", file), "utf8")).join("\n");
   assert.match(sources, /ثبت دستگاه/);
+  assert.match(sources, /ثبت دستگاه جدید/);
+  assert.match(sources, /ثبت دستگاه FortiGate/);
+  assert.match(sources, /ثبت دستگاه MikroTik/);
+  assert.match(sources, /ثبت سرور Linux/);
   assert.match(sources, /assets\/vendors\/cisco\/devices\/new/);
 });
 

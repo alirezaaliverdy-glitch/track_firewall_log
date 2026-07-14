@@ -1,5 +1,15 @@
 # CODEX_HANDOFF.md
 
+## Task 19.2-A - Visible device registration entry points (2026-07-14)
+
+- Completed Milestone 19.2-A only. No Integrations redesign, external diagnostics, Check-Host adapter, Nmap worker, scan authorization, monitor, finding, or ActionPlan proposal work was started.
+- Dashboard now has a visible `ثبت دستگاه جدید` primary CTA plus quick actions for network test, domain/IP check, and viewing devices. The Add Device path goes to the existing reusable onboarding engine at `/assets/devices/new`.
+- Product State Contract advanced to `19.2-A` and now keeps implemented Add Device visible in the generated Assets navigation. The Assets children are `نمای کلی`, `تجهیزات`, `ثبت دستگاه`, and `وندورها`.
+- Vendor onboarding CTAs now use explicit vendor labels for Cisco, FortiGate, MikroTik, and Linux while still routing through `/assets/vendors/:vendorKey/devices/new`.
+- Safety boundary unchanged: no device mutation, connector execution, credential access, `.env` access, migration mutation, destructive database command, external diagnostic call, or Nmap execution occurred.
+- Validation passed: Prisma validate, focused Product State/onboarding backend tests 9/9, backend build, frontend build, i18n/primary-copy guard, UTF-8 guard, and diff check. A mistaken full backend-suite run also reached 204/205 before failing only on the expected pre-update Product State version assertion; the focused rerun passed after updating the assertion.
+- Browser tooling note: the requested connected Playwright MCP tools were not exposed in this session. Local `npx playwright` using system Chrome/Edge reached the login gate in a fresh unauthenticated context, so authenticated route visual acceptance could not be completed from this tool surface.
+
 ## Task 19.1 Runtime convergence follow-up - automatic ActionPlan revision repair (2026-07-13)
 
 - Replaced the stale approved-plan HTTP 409 path with automatic in-place revision regeneration. A changed canonical fingerprint now creates the next revision, clears prior approval/execution artifacts, validates and previews the new canonical payload, binds approval to that revision, and continues controlled execution.

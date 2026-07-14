@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.2-A - Visible Device Registration Entry Points (2026-07-14)
+
+- Summary: restored obvious Add Device access without starting the diagnostics/Nmap milestones.
+- Frontend: added Dashboard `ثبت دستگاه جدید` and quick action links; added vendor-specific onboarding labels for Cisco, FortiGate, MikroTik, and Linux; preserved the single onboarding engine at `/assets/devices/new` and vendor-prefilled `/assets/vendors/:vendorKey/devices/new`.
+- Product State: advanced contract version to `19.2-A` and made `assets.device_onboarding_new` visible in generated Assets navigation because backend, API, route, UI, and tests are implemented.
+- Tests: updated Product State/onboarding regressions to assert Add Device is visible and vendor CTAs are present.
+- Browser: connected Playwright MCP tools were not exposed in this session. Local `npx playwright` with system Chrome/Edge reached only the unauthenticated login gate, so authenticated visual acceptance remains to be rerun with the connected MCP session.
+- Validation/safety: Prisma validate, focused backend tests 9/9, backend build, frontend build, i18n/primary-copy, UTF-8, and diff check passed. No `.env`, credentials, connector execution, migration mutation, external diagnostics, or Nmap work occurred.
+
 ## Task 19.1 Runtime convergence follow-up - ActionPlan stale repair (2026-07-13)
 
 - Summary: changed stale approved ActionPlans from a terminal HTTP 409 into automatic canonical revision regeneration and continued controlled execution on the newest revision.
