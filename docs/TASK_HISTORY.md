@@ -526,3 +526,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Browser MCP: inspected requested routes with the MCP browser before implementation; auth gate prevented authenticated page inspection without credentials, and the only console errors were expected 401 auth checks. Screenshots were saved in `.playwright-mcp/`.
 - Validation: `npx pnpm@10 build` passed with the existing large-chunk warning after npm cache escalation. Backend validation was not required because backend/package code was not changed.
 - Commit: pending.
+## Database/Auth Runtime Repair (2026-07-14)
+
+- Summary: fixed the normal backend dev runtime database mismatch that caused Prisma `ConnectionClosed`/timeout behavior during auth bootstrap and made the login UI report an unreachable auth server.
+- Root cause: dotenv-backed normal runtime resolved the old local PostgreSQL target instead of the reachable local service/database. Prisma config and app env now share the same resolver.
+- Areas: `backend/src/config/database-url.ts`, `backend/src/config/env.ts`, `backend/prisma.config.ts`, handoff/status docs.
+- Evidence: normal `cd backend && npm run dev` stayed running; `/api/health/ready` returned 200 ten times; direct `prisma.appUser.count()` succeeded; Playwright MCP opened the authenticated Dashboard and saw auth/assets/security/monitoring/product-state API calls return 200 with zero current console errors.
+- Validation: `cd backend && npx prisma validate`; `cd backend && npx prisma generate`; `cd backend && npm run build`; backend test matrix passed 209/209 with `npx tsx --test --test-concurrency=1 ...`; `npx pnpm@10 build` passed with the existing chunk-size warning.
+- Commit: pending.

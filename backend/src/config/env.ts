@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { resolveDatabaseUrl } from "./database-url.js";
 
 const DEFAULT_PORT = 4000;
 const DEFAULT_CORS_ORIGIN = "http://localhost:5173";
@@ -131,7 +132,7 @@ export const env = {
   port: parsePositiveInteger(process.env.PORT, DEFAULT_PORT),
   corsOrigin: process.env.CORS_ORIGIN ?? DEFAULT_CORS_ORIGIN,
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: resolveDatabaseUrl(process.env.DATABASE_URL),
   uploadDir: process.env.UPLOAD_DIR ?? DEFAULT_UPLOAD_DIR,
   maxUploadMb: parsePositiveInteger(process.env.MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB),
   aiProvider: process.env.AI_PROVIDER ?? "mock",

@@ -544,3 +544,11 @@
 - Playwright verified desktop and 390px mobile onboarding/workspace routes without overflow or HTTP errors. A live Cisco target/credential was not supplied, so no live Cisco success is claimed and no device was created.
 - Validation: Prisma schema valid; backend build, full backend tests, command catalog (136), frontend build, i18n parity (73), UTF-8 guard, and diff check passed.
 - Next allowed work after the separate R-B commit: R-C exact Assistant-to-ActionPlan navigation only.
+## Database Runtime Alignment - Auth Startup Repair (2026-07-14)
+
+- Root cause: the normal backend dotenv runtime still resolved a stale local PostgreSQL URL using `localhost:5432/firewall_log_analyzer`, while the reachable Windows PostgreSQL service is `127.0.0.1:55432/firewall_log_auth`.
+- Added one shared resolver in `backend/src/config/database-url.ts` and wired both `backend/prisma.config.ts` and `backend/src/config/env.ts` through it, so Prisma CLI, PrismaClient, PrismaPgAdapter, and pg Pool use the same normalized runtime source.
+- No `.env` value was printed, modified, or committed; no temporary shell `DATABASE_URL` override was used for the final backend runtime.
+- Normal `cd backend && npm run dev` now starts and stays listening on port 4000.
+- Evidence: `/api/health/ready` returned `200 ready` ten consecutive times; direct `prisma.appUser.count()` succeeded with count 1; MCP dashboard pass showed `/api/auth/me`, `/api/assets`, `/api/security/findings`, `/api/monitoring/linux/summary`, and `/api/product-state/navigation` all returning 200 with zero current console errors.
+- Validation: `npx prisma validate`, `npx prisma generate`, backend build, serialized backend test matrix 209/209, and frontend `npx pnpm@10 build` passed. The default parallel backend test run hit live-DB contention, then passed when rerun with Node test concurrency set to 1.

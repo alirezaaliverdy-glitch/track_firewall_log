@@ -460,3 +460,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Required registration CTAs and routes are visible and Playwright-verified on desktop/mobile without overflow or 4xx/5xx responses.
 - Existing Linux Device IDs and Asset IDs resolve to the same structured workspace contract; missing optional observability tables degrade without a migration.
 - R-C through R-G remain unstarted. The next milestone is R-C exact-plan navigation.
+## Database/Auth Runtime Status (2026-07-14)
+
+- Normal backend runtime is restored for `cd backend && npm run dev`.
+- Shared database URL resolution now aligns Prisma CLI, PrismaClient, PrismaPgAdapter, and pg Pool on `127.0.0.1:55432/firewall_log_auth` for the local stale-runtime case.
+- `/api/health/ready` is stable and verifies database connectivity before reporting ready.
+- Authentication is reachable again: MCP showed authenticated `/api/auth/me` responses and the Dashboard opened from the live frontend without current console errors.
+- Validation passed: Prisma validate/generate, backend build, serialized backend tests 209/209, and frontend build.
