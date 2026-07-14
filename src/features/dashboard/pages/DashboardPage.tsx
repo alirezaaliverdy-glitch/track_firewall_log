@@ -26,8 +26,8 @@ export default function DashboardPage() {
         <h2>اقدام‌های سریع</h2>
         <div className="button-row">
           <a href="/assets/devices/new" className="primary-link">ثبت دستگاه جدید</a>
-          <a href="/integrations" className="secondary-link">تست سریع شبکه</a>
-          <a href="/integrations" className="secondary-link">بررسی دامنه یا IP</a>
+          <a href="/tools/network-check" className="secondary-link">تست سریع شبکه</a>
+          <a href="/tools" className="secondary-link">بررسی دامنه یا IP</a>
           <a href="/assets/devices" className="secondary-link">مشاهده دستگاه‌ها</a>
         </div>
       </section>

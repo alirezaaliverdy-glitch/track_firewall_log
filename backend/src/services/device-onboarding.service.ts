@@ -4,11 +4,28 @@ import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.s
 import { detectCiscoPlatform, parseCiscoInterfacesStatus, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
-import { syncExistingDevicesToAssets } from "../assets/asset-intelligence.service.js";
+import { syncDeviceToAsset } from "../assets/asset-intelligence.service.js";
 import { createDevice, getDeviceById, updateDevice } from "./device.service.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik";
-type SessionStatus = "draft" | "tested" | "detected" | "discovered" | "preview_ready" | "committed" | "failed";
+type SessionStatus =
+  | "draft"
+  | "answers_saved"
+  | "connection_testing"
+  | "connection_verified"
+  | "connection_failed"
+  | "platform_detecting"
+  | "platform_detected"
+  | "platform_unsupported"
+  | "discovery_running"
+  | "discovery_completed"
+  | "discovery_failed"
+  | "preview_ready"
+  | "saving"
+  | "completed"
+  | "save_failed"
+  | "validation_failed"
+  | "cancelled";
 
 type Draft = {
   vendor: OnboardingVendor;
@@ -87,6 +104,15 @@ function touch(session: OnboardingSession, status: SessionStatus, step: string) 
   session.step = step;
   session.updatedAt = now();
   return publicSession(session);
+}
+
+function fail(session: OnboardingSession, status: SessionStatus, step: string, error: unknown) {
+  session.result = {
+    recoverable: true,
+    error: error instanceof Error ? error.message : "Onboarding step failed.",
+    status
+  };
+  touch(session, status, step);
 }
 
 function deviceType(vendor: OnboardingVendor) {
@@ -168,7 +194,7 @@ export function getOnboardingSession(id: string) { return publicSession(activeSe
 export function answerOnboardingSession(id: string, input: Record<string, unknown>) {
   assertNoSecrets(input);
   const session = activeSession(id);
-  if (session.status === "committed") throw new Error("Committed onboarding sessions are immutable.");
+  if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const nextVendor = input.vendor === undefined ? session.draft.vendor : normalizeVendor(input.vendor);
   const nextMethod = input.connectionMethod === undefined ? session.draft.connectionMethod : String(input.connectionMethod) === "api" ? "api" : "ssh";
   session.draft = {
@@ -183,17 +209,25 @@ export function answerOnboardingSession(id: string, input: Record<string, unknow
     location: String(input.location ?? session.draft.location).trim(),
     environment: String(input.environment ?? session.draft.environment) as Draft["environment"]
   };
+  try {
+    requireConnectionDraft(session);
+  } catch (error) {
+    fail(session, "validation_failed", "answers", error);
+    throw error;
+  }
   session.test = null;
   session.detection = null;
   session.discovery = null;
   session.preview = null;
-  return touch(session, "draft", "connection");
+  session.result = null;
+  return touch(session, "answers_saved", "connection");
 }
 
 export async function testOnboardingConnection(id: string) {
   const session = activeSession(id);
   requireConnectionDraft(session);
   const device = asDevice(session);
+  touch(session, "connection_testing", "connection");
   try {
     if (session.draft.vendor === "cisco") {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
@@ -221,10 +255,10 @@ export async function testOnboardingConnection(id: string) {
       };
     }
     if (session.test.connected !== true || session.test.connectorInvoked !== true) throw new Error("The connector did not complete a successful connection test.");
-    return touch(session, "tested", "detect");
+    return touch(session, "connection_verified", "detect");
   } catch (error) {
     session.test = { connected: false, connectorInvoked: false, error: error instanceof Error ? error.message : "Connection test failed." };
-    touch(session, "failed", "connection");
+    fail(session, "connection_failed", "connection", error);
     throw error;
   }
 }
@@ -232,11 +266,12 @@ export async function testOnboardingConnection(id: string) {
 export async function detectOnboardingPlatform(id: string) {
   const session = activeSession(id);
   if (session.test?.connected !== true || session.test?.connectorInvoked !== true) throw new Error("Run a successful connector-backed connection test first.");
+  touch(session, "platform_detecting", "platform");
   if (session.draft.vendor === "cisco") {
     const detection = detectCiscoPlatform(session.privateEvidence.showVersion ?? "");
     session.detection = detection;
     if (!detection.supported || detection.platform !== "cisco-ios-xe") {
-      touch(session, "failed", "platform");
+      fail(session, "platform_unsupported", "platform", `Detected platform ${detection.platform} is not supported by the Cisco IOS-XE onboarding path.`);
       throw new Error(`Detected platform ${detection.platform} is not supported by the Cisco IOS-XE onboarding path.`);
     }
     session.draft.platform = detection.platform;
@@ -249,34 +284,46 @@ export async function detectOnboardingPlatform(id: string) {
       evidence: ["registered connector completed its safe connection test"]
     };
   }
-  return touch(session, "detected", "discover");
+  return touch(session, "platform_detected", "discover");
 }
 
 export async function discoverOnboardingInventory(id: string) {
   const session = activeSession(id);
   if (session.detection?.supported !== true) throw new Error("A supported platform must be detected before discovery.");
-  if (session.draft.vendor === "cisco") {
-    const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session), ["inventory", "interfacesStatus", "ipInterfaceBrief", "vlanBrief"]);
-    if (!result.connectorInvoked) throw new Error("Cisco inventory connector was not invoked.");
-    const byId = Object.fromEntries(result.results.map((item) => [item.commandId, item]));
-    session.discovery = {
-      connectorInvoked: true,
-      connectorType: ciscoIosXeSshConnector.connectorType,
-      commandsVerified: result.results.map((item) => item.commandId),
-      inventoryAvailable: Boolean(byId.inventory?.stdout.trim()),
-      interfaceCount: parseCiscoInterfacesStatus(byId.interfacesStatus?.stdout ?? "").length,
-      vlanCount: parseCiscoVlans(byId.vlanBrief?.stdout ?? "").length,
-      capabilities: ["system.version.read", "system.inventory.read", "interfaces.status.read", "interfaces.ip.brief.read", "vlan.read"],
-      warnings: result.warnings
-    };
-  } else {
-    session.discovery = {
-      connectorInvoked: session.test?.connectorInvoked === true,
-      connectorType: session.test?.connectorType,
-      capabilities: session.test?.capabilities ?? {},
-      warnings: session.test?.warnings ?? []
-    };
+  touch(session, "discovery_running", "discover");
+  try {
+    if (session.draft.vendor === "cisco") {
+      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session), ["inventory", "interfacesStatus", "ipInterfaceBrief", "vlanBrief"]);
+      if (!result.connectorInvoked) throw new Error("Cisco inventory connector was not invoked.");
+      const byId = Object.fromEntries(result.results.map((item) => [item.commandId, item]));
+      session.discovery = {
+        connectorInvoked: true,
+        connectorType: ciscoIosXeSshConnector.connectorType,
+        commandsVerified: result.results.map((item) => item.commandId),
+        inventoryAvailable: Boolean(byId.inventory?.stdout.trim()),
+        interfaceCount: parseCiscoInterfacesStatus(byId.interfacesStatus?.stdout ?? "").length,
+        vlanCount: parseCiscoVlans(byId.vlanBrief?.stdout ?? "").length,
+        capabilities: ["system.version.read", "system.inventory.read", "interfaces.status.read", "interfaces.ip.brief.read", "vlan.read"],
+        warnings: result.warnings
+      };
+    } else {
+      session.discovery = {
+        connectorInvoked: session.test?.connectorInvoked === true,
+        connectorType: session.test?.connectorType,
+        capabilities: session.test?.capabilities ?? {},
+        warnings: session.test?.warnings ?? []
+      };
+    }
+    return touch(session, "discovery_completed", "preview");
+  } catch (error) {
+    fail(session, "discovery_failed", "discover", error);
+    throw error;
   }
+}
+
+export async function previewOnboardingSession(id: string) {
+  const session = activeSession(id);
+  if (session.discovery?.connectorInvoked !== true) throw new Error("Connector-backed discovery is required before preview.");
   session.preview = {
     operation: session.deviceId ? "update" : "create",
     device: { ...session.draft, credentialId: session.draft.credentialId ? "stored-reference-selected" : "missing" },
@@ -297,6 +344,7 @@ export async function commitOnboardingSession(id: string) {
   if (session.status !== "preview_ready" || session.test?.connectorInvoked !== true || session.discovery?.connectorInvoked !== true) {
     throw new Error("A connector-backed test, supported detection, discovery, and preview are required before save.");
   }
+  touch(session, "saving", "save");
   const draft = session.draft;
   const capabilities: Record<string, unknown> = {
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now() }
@@ -319,9 +367,15 @@ export async function commitOnboardingSession(id: string) {
     status: DeviceStatus.online,
     capabilities
   };
-  const device = session.deviceId ? await updateDevice(session.deviceId, input) : await createDevice(input);
-  await syncExistingDevicesToAssets();
-  const asset = await prisma.asset.findUnique({ where: { deviceId: device.id } });
+  let device;
+  let asset;
+  try {
+    device = session.deviceId ? await updateDevice(session.deviceId, input) : await createDevice(input);
+    asset = await syncDeviceToAsset(device.id);
+  } catch (error) {
+    fail(session, "save_failed", "save", error);
+    throw error;
+  }
   if (asset && draft.site) {
     const site = await prisma.assetSite.upsert({ where: { slug: slug(draft.site) }, update: { name: draft.site }, create: { slug: slug(draft.site), name: draft.site } });
     let locationId: string | undefined;
@@ -346,7 +400,12 @@ export async function commitOnboardingSession(id: string) {
     capabilityDiscovery: session.discovery,
     initialHealth: { status: "online", connectorInvoked: true }
   };
-  return touch(session, "committed", "result");
+  return touch(session, "completed", "result");
+}
+
+export function cancelOnboardingSession(id: string) {
+  const session = activeSession(id);
+  return touch(session, "cancelled", "cancelled");
 }
 
 export function resetOnboardingSessionsForTest() { sessions.clear(); }

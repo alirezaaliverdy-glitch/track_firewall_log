@@ -1,11 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   answerOnboardingSession,
+  cancelOnboardingSession,
   commitOnboardingSession,
   createOnboardingSession,
   detectOnboardingPlatform,
   discoverOnboardingInventory,
   getOnboardingSession,
+  previewOnboardingSession,
   testOnboardingConnection
 } from "../services/device-onboarding.service.js";
 
@@ -39,8 +41,16 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
     try { return await discoverOnboardingInventory(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_DISCOVERY_FAILED", message: error instanceof Error ? error.message : "Discovery failed." } }); }
   });
+  app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/preview", async (request, reply) => {
+    try { return await previewOnboardingSession(request.params.sessionId); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_PREVIEW_BLOCKED", message: error instanceof Error ? error.message : "Preview failed." } }); }
+  });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/commit", async (request, reply) => {
     try { return await commitOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_COMMIT_BLOCKED", message: error instanceof Error ? error.message : "Save failed." } }); }
+  });
+  app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/cancel", async (request, reply) => {
+    try { return cancelOnboardingSession(request.params.sessionId); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_CANCEL_FAILED", message: error instanceof Error ? error.message : "Cancel failed." } }); }
   });
 };

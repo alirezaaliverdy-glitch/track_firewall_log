@@ -1,5 +1,17 @@
 # CODEX_HANDOFF.md
 
+## Task 19.2A - Runtime repair and full audit (2026-07-14)
+
+- Completed the requested Task 19.2A runtime repair without starting external diagnostics, scan authorization, Check-Host, Nmap, production integration expansion, or unrelated device mutation work.
+- Device onboarding now uses explicit persisted transitions: `draft -> answers_saved -> connection_testing -> connection_verified -> platform_detecting -> platform_detected -> discovery_running -> discovery_completed -> preview_ready -> saving -> completed`, plus recoverable failure/cancel states.
+- Added explicit preview and cancel APIs. Saving answers no longer pretends to build a preview; preview creation is a separate connector-backed step after inventory discovery.
+- Cisco onboarding regression now proves connector invocation, IOS-XE platform detection evidence, preview readiness, final Device persistence, and completed onboarding state using a controlled connector-backed test double and real stored credential reference.
+- Dashboard diagnostic controls now route to stable implemented destinations: Add Device `/assets/devices/new`, quick network check `/tools/network-check`, domain/IP check `/tools`, and devices `/assets/devices`.
+- Added non-executing `/tools` and `/tools/network-check` routes and Product State entries so Dashboard controls do not fall into `/integrations` or a missing route while external diagnostics remain unstarted.
+- Linux monitoring now handles missing optional observability tables through a stable `not_configured` contract and a single warning instead of noisy Prisma failures; no migration recovery or schema mutation was attempted.
+- Added Task 19.2A audit/acceptance documents under `docs/TASK_19_2A_*`, including runtime baseline, onboarding failure trace, Dashboard matrix, API failure register, route/control acceptance, and browser-results limitation.
+- Connected Playwright MCP was still not exposed in this session, so authenticated MCP browser acceptance is not claimed. The source and regression tests prove the runtime/control contracts, and the remaining browser replay steps are documented in `docs/TASK_19_2A_BROWSER_RESULTS.md`.
+
 ## Task 19.2-A - Visible device registration entry points (2026-07-14)
 
 - Completed Milestone 19.2-A only. No Integrations redesign, external diagnostics, Check-Host adapter, Nmap worker, scan authorization, monitor, finding, or ActionPlan proposal work was started.

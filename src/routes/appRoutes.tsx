@@ -11,6 +11,7 @@ import DetectionRulesPage from "@/features/security/pages/DetectionRulesPage";
 import ActionsPage from "@/features/actions/pages/ActionsPage";
 import AssistantPage from "@/features/assistant/pages/AssistantPage";
 import IntegrationsPage from "@/features/integrations/pages/IntegrationsPage";
+import ToolsPage from "@/features/tools/pages/ToolsPage";
 import MonitoringPage from "@/features/monitoring/pages/MonitoringPage";
 import LinuxMonitoringPage from "@/features/monitoring/pages/LinuxMonitoringPage";
 import CiscoOverviewPage from "@/features/vendors/cisco/pages/CiscoOverviewPage";
@@ -68,6 +69,8 @@ export const appRoutes: AppRoute[] = [
   { path: "/actions/history", featureKey: "actions.history", labelFa: "تاریخچه اجرا", labelEn: "History", group: "actions", component: ActionsPage },
   { path: "/actions/:actionId", featureKey: "actions.detail", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage },
   { path: "/assistant", featureKey: "assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", group: "assistant", component: AssistantPage },
+  { path: "/tools", featureKey: "tools.overview", labelFa: "ابزارهای تشخیصی", labelEn: "Diagnostic tools", group: "integrations", component: ToolsPage },
+  { path: "/tools/network-check", featureKey: "tools.network_check", labelFa: "تست سریع شبکه", labelEn: "Network quick check", group: "integrations", component: ToolsPage },
   { path: "/integrations", featureKey: "integrations.overview", labelFa: "وضعیت کلی", labelEn: "Overview", group: "integrations", component: IntegrationsPage },
   { path: "/integrations/netbox", featureKey: "integrations.netbox", labelFa: "NetBox", labelEn: "NetBox", group: "integrations", component: IntegrationsPage },
   { path: "/integrations/wazuh", featureKey: "integrations.wazuh", labelFa: "Wazuh", labelEn: "Wazuh", group: "integrations", component: IntegrationsPage },

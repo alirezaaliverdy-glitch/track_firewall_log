@@ -172,6 +172,40 @@ export async function syncExistingDevicesToAssets() {
   return { scanned: devices.length, created, updated };
 }
 
+export async function syncDeviceToAsset(deviceId: string) {
+  const device = await prisma.device.findUnique({ where: { id: deviceId } });
+  if (!device) return null;
+  return prisma.$transaction(async (tx) => {
+    const source = await upsertSource(tx, "existing_devices");
+    const vendorId = await upsertNameModel(tx, "assetVendor", device.vendor);
+    const platformId = await upsertNameModel(tx, "assetPlatform", device.type);
+    const roleId = await upsertNameModel(tx, "assetRole", device.type === "linux_edge" ? "Linux Server" : "Network Device");
+    const existing = await tx.asset.findFirst({ where: { OR: [{ deviceId: device.id }, { managementIp: device.host }, { hostname: { equals: device.name, mode: "insensitive" } }] } });
+    const data = {
+      name: device.name,
+      hostname: device.name,
+      managementIp: device.host,
+      managedState: "managed",
+      healthState: device.status,
+      deviceId: device.id,
+      vendorId,
+      platformId,
+      roleId,
+      sourceId: source.id,
+      lastSeenAt: new Date(),
+      tagsJson: toJson(device.tags),
+      metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort })
+    };
+    const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
+    await tx.assetIpAddress.upsert({
+      where: { address: device.host },
+      update: { assetId: asset.id, role: "management" },
+      create: { address: device.host, assetId: asset.id, role: "management" }
+    });
+    return asset;
+  });
+}
+
 export async function previewAssetImport(input: ImportInput) {
   assertNoSecrets(input);
   const normalized = normalizeImport(input);

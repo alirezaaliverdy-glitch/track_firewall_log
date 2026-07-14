@@ -7,6 +7,7 @@ import {
   commitOnboarding,
   detectOnboarding,
   discoverOnboarding,
+  previewOnboarding,
   startOnboarding,
   testOnboarding,
   type OnboardingDraft,
@@ -57,7 +58,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     try {
       const next = await operation();
       setSession(next); setForm(next.draft);
-      setMessage(label === "test" ? "اتصال امن با Connector واقعی تایید شد." : label === "detect" ? "پلتفرم پشتیبانی‌شده شناسایی شد." : label === "discover" ? "موجودی و قابلیت‌ها به‌صورت خواندنی جمع‌آوری شد." : label === "commit" ? "دستگاه ثبت و سلامت اولیه ذخیره شد." : "اطلاعات ذخیره شد.");
+      setMessage(label === "test" ? "اتصال امن با Connector واقعی تایید شد." : label === "detect" ? "پلتفرم پشتیبانی‌شده شناسایی شد." : label === "discover" ? "موجودی و قابلیت‌ها به‌صورت خواندنی جمع‌آوری شد." : label === "preview" ? "پیش‌نمایش بر اساس کشف واقعی آماده شد." : label === "commit" ? "دستگاه ثبت و سلامت اولیه ذخیره شد." : "اطلاعات ذخیره شد.");
       return next;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "عملیات ناموفق بود.");
@@ -69,9 +70,30 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
 
   const change = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => setForm((current) => current ? { ...current, [key]: value } : current);
   const saveAnswers = () => run("answers", () => answerOnboarding(session.id, form));
-  const canDetect = session.status === "tested";
-  const canDiscover = session.status === "detected";
+  const canTest = ["answers_saved", "connection_failed"].includes(session.status);
+  const canDetect = session.status === "connection_verified";
+  const canDiscover = session.status === "platform_detected";
+  const canPreview = session.status === "discovery_completed";
   const canCommit = session.status === "preview_ready";
+  const stepIndex: Record<OnboardingSession["status"], number> = {
+    draft: 0,
+    validation_failed: 0,
+    answers_saved: 7,
+    connection_testing: 7,
+    connection_failed: 7,
+    connection_verified: 8,
+    platform_detecting: 8,
+    platform_unsupported: 8,
+    platform_detected: 9,
+    discovery_running: 9,
+    discovery_failed: 9,
+    discovery_completed: 10,
+    preview_ready: 11,
+    saving: 12,
+    completed: 14,
+    save_failed: 12,
+    cancelled: 0
+  };
 
   const saveCredential = async () => {
     setBusy("credential"); setError("");
@@ -90,7 +112,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
       <PageHeader title={params.deviceId ? "راه‌اندازی دوباره دستگاه" : `ثبت دستگاه ${form.vendor === "cisco" ? "Cisco" : ""}`} eyebrow="Onboarding امن" description="اتصال و کشف فقط با Connector ثبت‌شده و Credential رمزگذاری‌شده انجام می‌شود؛ هیچ secret در Session ذخیره نمی‌شود." actions={<a className="secondary-link" href="/assets/devices">بازگشت به تجهیزات</a>} />
 
       <ol className="onboarding-steps" aria-label="مراحل ثبت دستگاه">
-        {["Vendor", "Platform", "Connection", "Address", "Port", "Credential", "Site", "Test", "Detect", "Discover", "Preview", "Save", "Health", "Result"].map((step, index) => <li key={step} className={index < (["draft", "tested", "detected", "preview_ready", "committed"].indexOf(session.status) + 1) * 3 ? "is-complete" : ""}><span>{index + 1}</span>{step}</li>)}
+        {["Vendor", "Platform", "Connection", "Address", "Port", "Credential", "Site", "Test", "Detect", "Discover", "Preview", "Save", "Health", "Result"].map((step, index) => <li key={step} className={index <= stepIndex[session.status] ? "is-complete" : ""}><span>{index + 1}</span>{step}</li>)}
       </ol>
 
       <section className="content-panel onboarding-form">
@@ -107,7 +129,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           <label>موقعیت<input value={form.location} onChange={(event) => change("location", event.target.value)} placeholder="Rack / Room" /></label>
           <label>محیط<select value={form.environment} onChange={(event) => change("environment", event.target.value as OnboardingDraft["environment"])}><option value="lab">Lab</option><option value="staging">Staging</option><option value="production">Production</option></select></label>
         </div>
-        <button type="button" onClick={() => void saveAnswers()} disabled={Boolean(busy)}>ذخیره پاسخ‌ها و ساخت Preview</button>
+        <button type="button" onClick={() => void saveAnswers()} disabled={Boolean(busy)}>ذخیره اطلاعات</button>
       </section>
 
       <details className="content-panel">
@@ -126,9 +148,10 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
       <section className="content-panel">
         <h2>اعتبارسنجی کنترل‌شده</h2>
         <div className="button-row">
-          <button type="button" onClick={() => void run("test", () => testOnboarding(session.id))} disabled={Boolean(busy) || session.status !== "draft"}>تست امن اتصال</button>
+          <button type="button" onClick={() => void run("test", () => testOnboarding(session.id))} disabled={Boolean(busy) || !canTest}>تست امن اتصال</button>
           <button type="button" onClick={() => void run("detect", () => detectOnboarding(session.id))} disabled={Boolean(busy) || !canDetect}>تشخیص پلتفرم</button>
           <button type="button" onClick={() => void run("discover", () => discoverOnboarding(session.id))} disabled={Boolean(busy) || !canDiscover}>کشف خواندنی موجودی و قابلیت‌ها</button>
+          <button type="button" onClick={() => void run("preview", () => previewOnboarding(session.id))} disabled={Boolean(busy) || !canPreview}>ساخت پیش‌نمایش</button>
           <button type="button" onClick={() => void run("commit", () => commitOnboarding(session.id)).then((next) => { if (next?.result?.connectorInvoked === true && next.result.route) window.location.assign(next.result.route); })} disabled={Boolean(busy) || !canCommit}>تأیید Preview و ثبت دستگاه</button>
         </div>
         <dl className="detail-list"><dt>وضعیت Session</dt><dd>{session.status}</dd><dt>Connector invoked</dt><dd>{String(session.test?.connectorInvoked === true)}</dd><dt>پلتفرم</dt><dd>{String(session.detection?.platform ?? "تشخیص داده نشده")}</dd><dt>کشف قابلیت</dt><dd>{session.discovery?.connectorInvoked === true ? "تاییدشده" : "انجام نشده"}</dd></dl>

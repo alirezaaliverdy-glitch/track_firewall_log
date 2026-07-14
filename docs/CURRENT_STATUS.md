@@ -2,6 +2,16 @@
 
 Last updated: 2026-07-14
 
+## Task 19.2A - Runtime Repair and Full Audit
+
+- Device onboarding has an explicit backend state machine from answer save through connection test, platform detection, discovery, preview, saving, and completion. Recoverable failure/cancel states are stored rather than silently falling back to `draft`.
+- The misleading save-and-preview behavior is split: answers save to `answers_saved`, connector-backed discovery completes to `discovery_completed`, and an explicit preview action reaches `preview_ready`.
+- Focused backend coverage proves Cisco onboarding connector invocation, platform detection evidence, Device persistence, and final `completed` state using a controlled connector-backed test double.
+- Dashboard controls now route to implemented destinations: Add Device, quick network check, domain/IP check, and devices. `/tools` and `/tools/network-check` are present as non-executing diagnostic placeholders; no external scan/Nmap work has started.
+- Linux monitoring returns a clean `observability.state=not_configured` contract when optional health tables are missing and logs only one concise warning instead of repeated Prisma errors.
+- Task 19.2A audit evidence is recorded in `docs/TASK_19_2A_RUNTIME_BASELINE.md`, `docs/TASK_19_2A_ONBOARDING_FAILURE_TRACE.md`, `docs/TASK_19_2A_DASHBOARD_CONTROL_MATRIX.md`, `docs/TASK_19_2A_API_FAILURE_REGISTER.md`, `docs/TASK_19_2A_ROUTE_ACCEPTANCE_MATRIX.md`, `docs/TASK_19_2A_CONTROL_ACCEPTANCE_MATRIX.md`, and `docs/TASK_19_2A_BROWSER_RESULTS.md`.
+- Connected Playwright MCP was not exposed to this Codex session, so current authenticated browser acceptance remains documented as pending rather than claimed.
+
 ## Task 19.2-A - Visible Device Registration
 
 - Dashboard exposes `ثبت دستگاه جدید` as a primary action and quick actions now include registration, quick network test, domain/IP check, and device list access.

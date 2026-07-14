@@ -16,7 +16,24 @@ export type OnboardingDraft = {
 export type OnboardingSession = {
   id: string;
   deviceId?: string;
-  status: "draft" | "tested" | "detected" | "discovered" | "preview_ready" | "committed" | "failed";
+  status:
+    | "draft"
+    | "answers_saved"
+    | "connection_testing"
+    | "connection_verified"
+    | "connection_failed"
+    | "platform_detecting"
+    | "platform_detected"
+    | "platform_unsupported"
+    | "discovery_running"
+    | "discovery_completed"
+    | "discovery_failed"
+    | "preview_ready"
+    | "saving"
+    | "completed"
+    | "save_failed"
+    | "validation_failed"
+    | "cancelled";
   step: string;
   draft: OnboardingDraft;
   test: Record<string, unknown> | null;
@@ -53,7 +70,9 @@ export const answerOnboarding = (id: string, input: OnboardingDraft) => request<
 export const testOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/test`, { method: "POST", body: "{}" });
 export const detectOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/detect`, { method: "POST", body: "{}" });
 export const discoverOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/discover`, { method: "POST", body: "{}" });
+export const previewOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/preview`, { method: "POST", body: "{}" });
 export const commitOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/commit`, { method: "POST", body: "{}" });
+export const cancelOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/cancel`, { method: "POST", body: "{}" });
 
 export type DeviceWorkspace = {
   reference: string;

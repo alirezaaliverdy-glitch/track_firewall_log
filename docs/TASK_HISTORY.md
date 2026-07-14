@@ -2,6 +2,16 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 19.2A - Runtime Repair and Full Audit (2026-07-14)
+
+- Summary: repaired onboarding runtime state, Dashboard diagnostic routing, and optional Linux monitoring schema handling while keeping external diagnostics/Nmap unstarted.
+- Onboarding: added explicit persisted states, recoverable failure states, preview and cancel APIs, and UI controls that separate answer save, connection test, platform detection, discovery, preview, and final save.
+- Proof: focused backend regression exercises Cisco onboarding end to end with connector invocation, IOS-XE evidence, platform detection, preview readiness, stored Device creation, and final completed state.
+- Dashboard/tools: quick actions now route to `/assets/devices/new`, `/tools/network-check`, `/tools`, and `/assets/devices`; non-executing tools routes are registered in the route table and Product State contract.
+- Monitoring: missing optional observability tables now return `observability.state=not_configured` with one warning instead of repeated Prisma relation failures.
+- Docs: added the requested Task 19.2A runtime baseline, failure trace, control/API matrices, acceptance matrices, and browser-results limitation files.
+- Browser: connected Playwright MCP/current authenticated session was unavailable to this tool surface, so browser acceptance is explicitly not claimed and replay steps are recorded.
+
 ## Task 19.2-A - Visible Device Registration Entry Points (2026-07-14)
 
 - Summary: restored obvious Add Device access without starting the diagnostics/Nmap milestones.
