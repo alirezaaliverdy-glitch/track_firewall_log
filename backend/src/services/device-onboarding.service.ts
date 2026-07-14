@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, type Device, type Prisma } from "@prisma/client";
+import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, Prisma, type Device } from "@prisma/client";
 import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { detectCiscoPlatform, parseCiscoInterfacesStatus, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
-import { syncDeviceRecordToAsset, syncDeviceToAsset } from "../assets/asset-intelligence.service.js";
-import { createDevice, getDeviceById, updateDevice } from "./device.service.js";
+import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
+import { getDeviceById } from "./device.service.js";
+import { resolveCredentialById } from "./credential.service.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik";
+export class OnboardingCredentialInvalidError extends Error {}
 type SessionStatus =
   | "draft"
   | "answers_saved"
@@ -92,11 +94,51 @@ function publicSession(session: OnboardingSession) {
   return safe;
 }
 
-function activeSession(id: string) {
-  const session = sessions.get(id);
+function nullableJson(value: Record<string, unknown> | null) {
+  return value ? json(value) : Prisma.DbNull;
+}
+
+function hydrateSession(row: {
+  id: string; deviceId: string | null; status: string; step: string; draftJson: unknown;
+  testJson: unknown; detectionJson: unknown; discoveryJson: unknown; previewJson: unknown;
+  resultJson: unknown; privateEvidenceJson: unknown; createdAt: Date; updatedAt: Date; expiresAt: Date;
+}): OnboardingSession {
+  return {
+    id: row.id, deviceId: row.deviceId ?? undefined, status: row.status as SessionStatus, step: row.step,
+    draft: row.draftJson as Draft,
+    test: row.testJson as Record<string, unknown> | null,
+    detection: row.detectionJson as Record<string, unknown> | null,
+    discovery: row.discoveryJson as Record<string, unknown> | null,
+    preview: row.previewJson as Record<string, unknown> | null,
+    result: row.resultJson as Record<string, unknown> | null,
+    privateEvidence: (row.privateEvidenceJson ?? {}) as OnboardingSession["privateEvidence"],
+    createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), expiresAt: row.expiresAt.toISOString()
+  };
+}
+
+async function persistSession(session: OnboardingSession) {
+  const data = {
+    deviceId: session.deviceId ?? null, status: session.status, step: session.step,
+    draftJson: json(session.draft), testJson: nullableJson(session.test), detectionJson: nullableJson(session.detection),
+    discoveryJson: nullableJson(session.discovery), previewJson: nullableJson(session.preview), resultJson: nullableJson(session.result),
+    privateEvidenceJson: json(session.privateEvidence), expiresAt: new Date(session.expiresAt)
+  };
+  await prisma.deviceOnboardingSession.upsert({
+    where: { id: session.id }, update: data,
+    create: { id: session.id, createdAt: new Date(session.createdAt), ...data }
+  });
+  sessions.set(session.id, session);
+}
+
+async function activeSession(id: string) {
+  let session = sessions.get(id);
+  if (!session) {
+    const row = await prisma.deviceOnboardingSession.findUnique({ where: { id } });
+    session = row ? hydrateSession(row) : undefined;
+    if (session) sessions.set(id, session);
+  }
   if (!session) throw new Error("Onboarding session not found.");
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
-    sessions.delete(id);
     throw new Error("Onboarding session expired. Start a new session.");
   }
   return session;
@@ -156,6 +198,7 @@ function requireConnectionDraft(session: OnboardingSession) {
     fail(session, "credential_missing", "credential", "A stored credential reference is required.");
     throw new Error("A stored credential reference is required.");
   }
+  if (draft.connectionMethod !== "ssh") throw new Error(`No registered onboarding connector supports ${draft.vendor}/${draft.connectionMethod}. Use SSH or register unverified.`);
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
 }
 
@@ -191,15 +234,15 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
     updatedAt: now(),
     expiresAt: expiresAt()
   };
-  sessions.set(session.id, session);
+  await persistSession(session);
   return publicSession(session);
 }
 
-export function getOnboardingSession(id: string) { return publicSession(activeSession(id)); }
+export async function getOnboardingSession(id: string) { return publicSession(await activeSession(id)); }
 
-export function answerOnboardingSession(id: string, input: Record<string, unknown>) {
+export async function answerOnboardingSession(id: string, input: Record<string, unknown>) {
   assertNoSecrets(input);
-  const session = activeSession(id);
+  const session = await activeSession(id);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const nextVendor = input.vendor === undefined ? session.draft.vendor : normalizeVendor(input.vendor);
   const nextMethod = input.connectionMethod === undefined ? session.draft.connectionMethod : String(input.connectionMethod) === "api" ? "api" : "ssh";
@@ -218,7 +261,8 @@ export function answerOnboardingSession(id: string, input: Record<string, unknow
   try {
     requireConnectionDraft(session);
   } catch (error) {
-    fail(session, "validation_failed", "answers", error);
+    if (session.status !== "credential_missing") fail(session, "validation_failed", "answers", error);
+    await persistSession(session);
     throw error;
   }
   session.test = null;
@@ -226,15 +270,23 @@ export function answerOnboardingSession(id: string, input: Record<string, unknow
   session.discovery = null;
   session.preview = null;
   session.result = null;
-  return touch(session, "answers_saved", "connection");
+  const response = touch(session, "answers_saved", "connection");
+  await persistSession(session);
+  return response;
 }
 
 export async function testOnboardingConnection(id: string) {
-  const session = activeSession(id);
-  requireConnectionDraft(session);
-  const device = asDevice(session);
-  touch(session, "connection_testing", "connection");
+  const session = await activeSession(id);
   try {
+    requireConnectionDraft(session);
+    try {
+      const credential = await resolveCredentialById(session.draft.credentialId);
+      if (!credential) throw new Error("missing");
+    } catch {
+      throw new Error("CREDENTIAL_INVALID: Stored credential cannot be decrypted with the active credential key. Replace or re-enter the credential.");
+    }
+    const device = asDevice(session);
+    touch(session, "connection_testing", "connection");
     if (session.draft.vendor === "cisco") {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
       const platformResult = result.results[0];
@@ -261,16 +313,21 @@ export async function testOnboardingConnection(id: string) {
       };
     }
     if (session.test.connected !== true || session.test.connectorInvoked !== true) throw new Error("The connector did not complete a successful connection test.");
-    return touch(session, "connection_verified", "detect");
+    const response = touch(session, "connection_verified", "detect");
+    await persistSession(session);
+    return response;
   } catch (error) {
-    session.test = { connected: false, connectorInvoked: false, error: error instanceof Error ? error.message : "Connection test failed." };
-    fail(session, "connection_failed", "connection", error);
-    throw error;
+    const credentialInvalid = error instanceof Error && error.message.startsWith("CREDENTIAL_INVALID:");
+    const safeError = credentialInvalid ? new Error(error.message.replace(/^CREDENTIAL_INVALID:\s*/, "")) : error;
+    session.test = { connected: false, connectorInvoked: false, error: safeError instanceof Error ? safeError.message : "Connection test failed." };
+    fail(session, credentialInvalid ? "credential_invalid" : "connection_failed", credentialInvalid ? "credential" : "connection", safeError);
+    await persistSession(session);
+    throw credentialInvalid ? new OnboardingCredentialInvalidError(safeError instanceof Error ? safeError.message : "Stored credential is invalid.") : safeError;
   }
 }
 
 export async function detectOnboardingPlatform(id: string) {
-  const session = activeSession(id);
+  const session = await activeSession(id);
   if (session.test?.connected !== true || session.test?.connectorInvoked !== true) throw new Error("Run a successful connector-backed connection test first.");
   touch(session, "platform_detecting", "platform");
   if (session.draft.vendor === "cisco") {
@@ -278,6 +335,7 @@ export async function detectOnboardingPlatform(id: string) {
     session.detection = detection;
     if (!detection.supported || detection.platform !== "cisco-ios-xe") {
       fail(session, "platform_unsupported", "platform", `Detected platform ${detection.platform} is not supported by the Cisco IOS-XE onboarding path.`);
+      await persistSession(session);
       throw new Error(`Detected platform ${detection.platform} is not supported by the Cisco IOS-XE onboarding path.`);
     }
     session.draft.platform = detection.platform;
@@ -290,11 +348,13 @@ export async function detectOnboardingPlatform(id: string) {
       evidence: ["registered connector completed its safe connection test"]
     };
   }
-  return touch(session, "platform_detected", "discover");
+  const response = touch(session, "platform_detected", "discover");
+  await persistSession(session);
+  return response;
 }
 
 export async function discoverOnboardingInventory(id: string) {
-  const session = activeSession(id);
+  const session = await activeSession(id);
   if (session.detection?.supported !== true) throw new Error("A supported platform must be detected before discovery.");
   touch(session, "discovery_running", "discover");
   try {
@@ -320,15 +380,18 @@ export async function discoverOnboardingInventory(id: string) {
         warnings: session.test?.warnings ?? []
       };
     }
-    return touch(session, "discovery_completed", "preview");
+    const response = touch(session, "discovery_completed", "preview");
+    await persistSession(session);
+    return response;
   } catch (error) {
     fail(session, "discovery_failed", "discover", error);
+    await persistSession(session);
     throw error;
   }
 }
 
 export async function previewOnboardingSession(id: string) {
-  const session = activeSession(id);
+  const session = await activeSession(id);
   if (session.discovery?.connectorInvoked !== true) throw new Error("Connector-backed discovery is required before preview.");
   try {
     session.preview = {
@@ -339,9 +402,12 @@ export async function previewOnboardingSession(id: string) {
       initialHealthCollection: true,
       deviceMutation: false
     };
-    return touch(session, "preview_ready", "preview");
+    const response = touch(session, "preview_ready", "preview");
+    await persistSession(session);
+    return response;
   } catch (error) {
     fail(session, "preview_failed", "preview", error);
+    await persistSession(session);
     throw error;
   }
 }
@@ -385,7 +451,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
 }
 
 export async function registerUnverifiedOnboardingSession(id: string, input: Record<string, unknown> = {}) {
-  const session = activeSession(id);
+  const session = await activeSession(id);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const draft = validateUnverifiedDraft(session, input);
   const normalizedVendor = draft.vendor.toLowerCase();
@@ -474,15 +540,18 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       connectorInvoked: false,
       connectionVerified: false
     };
-    return touch(session, "completed", "result");
+    const response = touch(session, "completed", "result");
+    await persistSession(session);
+    return response;
   } catch (error) {
     fail(session, "save_failed", "save", error);
+    await persistSession(session);
     throw error;
   }
 }
 
 export async function commitOnboardingSession(id: string) {
-  const session = activeSession(id);
+  const session = await activeSession(id);
   if (session.status !== "preview_ready" || session.test?.connectorInvoked !== true || session.discovery?.connectorInvoked !== true) {
     throw new Error("A connector-backed test, supported detection, discovery, and preview are required before save.");
   }
@@ -496,62 +565,81 @@ export async function commitOnboardingSession(id: string) {
     capabilities.ciscoDetection = session.detection;
     capabilities.ciscoDiscovery = session.discovery;
   }
-  const input = {
-    name: draft.name,
-    vendor: draft.vendor,
-    type: deviceType(draft.vendor),
-    host: draft.host,
-    managementPort: draft.managementPort,
-    protocol: draft.connectionMethod === "api" ? DeviceProtocol.api : DeviceProtocol.ssh,
-    credentialId: draft.credentialId,
-    environment: draft.environment,
-    tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
-    status: DeviceStatus.online,
-    capabilities
-  };
-  let device;
-  let asset;
   try {
-    device = session.deviceId ? await updateDevice(session.deviceId, input) : await createDevice(input);
-    asset = await syncDeviceToAsset(device.id);
+    const wasUpdate = Boolean(session.deviceId);
+    const persisted = await prisma.$transaction(async (tx) => {
+      const data = {
+        name: draft.name, vendor: draft.vendor, type: deviceType(draft.vendor), host: draft.host,
+        managementPort: draft.managementPort, protocol: DeviceProtocol.ssh, credentialId: draft.credentialId,
+        environment: draft.environment as DeviceEnvironment,
+        tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
+        status: DeviceStatus.online, capabilities: json(capabilities)
+      };
+      const device = session.deviceId
+        ? await tx.device.update({ where: { id: session.deviceId }, data })
+        : await tx.device.create({ data });
+      const { asset } = await syncDeviceRecordToAsset(tx, device);
+      let siteId: string | undefined;
+      let locationId: string | undefined;
+      if (draft.site) {
+        const site = await tx.assetSite.upsert({ where: { slug: slug(draft.site) }, update: { name: draft.site }, create: { slug: slug(draft.site), name: draft.site } });
+        siteId = site.id;
+        if (draft.location) {
+          const location = await tx.assetLocation.upsert({
+            where: { siteId_slug: { siteId: site.id, slug: slug(draft.location) } },
+            update: { name: draft.location }, create: { siteId: site.id, slug: slug(draft.location), name: draft.location }
+          });
+          locationId = location.id;
+        }
+        await tx.asset.update({ where: { id: asset.id }, data: { siteId, locationId: locationId ?? null } });
+      }
+      const health = await tx.healthSnapshot.create({
+        data: {
+          deviceId: device.id, assetId: asset.id, score: 100, state: "healthy",
+          summary: "Initial connector-backed onboarding verification succeeded.",
+          metricsJson: json({ connectionVerified: true, connectorInvoked: true }), warningsJson: json([])
+        }
+      });
+      await tx.auditLog.create({
+        data: {
+          deviceId: device.id, action: wasUpdate ? "device.onboarding_verified_updated" : "device.onboarding_verified_created",
+          targetType: "Device", targetId: device.id, dryRun: false, approvalStatus: "not_required",
+          metadata: json({ verificationStatus: "verified", connectorInvoked: true, connectionVerified: true, assetId: asset.id, healthSnapshotId: health.id, siteId, locationId })
+        }
+      });
+      return { device, asset, health };
+    });
+    session.deviceId = persisted.device.id;
+    session.result = {
+      deviceId: persisted.device.id,
+      assetId: persisted.asset.id,
+      route: `/assets/devices/${persisted.device.id}`,
+      verificationStatus: "verified",
+      connectorInvoked: true,
+      connectionVerified: true,
+      platform: draft.platform,
+      capabilityDiscovery: session.discovery,
+      initialHealth: { id: persisted.health.id, status: "healthy", connectorInvoked: true }
+    };
+    const response = touch(session, "completed", "result");
+    await persistSession(session);
+    return response;
   } catch (error) {
     fail(session, "save_failed", "save", error);
+    await persistSession(session);
     throw error;
   }
-  if (asset && draft.site) {
-    const site = await prisma.assetSite.upsert({ where: { slug: slug(draft.site) }, update: { name: draft.site }, create: { slug: slug(draft.site), name: draft.site } });
-    let locationId: string | undefined;
-    if (draft.location) {
-      const location = await prisma.assetLocation.upsert({
-        where: { siteId_slug: { siteId: site.id, slug: slug(draft.location) } },
-        update: { name: draft.location },
-        create: { siteId: site.id, slug: slug(draft.location), name: draft.location }
-      });
-      locationId = location.id;
-    }
-    await prisma.asset.update({ where: { id: asset.id }, data: { siteId: site.id, ...(locationId ? { locationId } : {}) } });
-  }
-  session.deviceId = device.id;
-  session.result = {
-    deviceId: device.id,
-    assetId: asset?.id ?? null,
-    route: `/assets/devices/${device.id}`,
-    connectorInvoked: true,
-    connectionVerified: true,
-    platform: draft.platform,
-    capabilityDiscovery: session.discovery,
-    initialHealth: { status: "online", connectorInvoked: true }
-  };
-  return touch(session, "completed", "result");
 }
 
-export function cancelOnboardingSession(id: string) {
-  const session = activeSession(id);
-  return touch(session, "cancelled", "cancelled");
+export async function cancelOnboardingSession(id: string) {
+  const session = await activeSession(id);
+  const response = touch(session, "cancelled", "cancelled");
+  await persistSession(session);
+  return response;
 }
 
-export function retryOnboardingSession(id: string) {
-  const session = activeSession(id);
+export async function retryOnboardingSession(id: string) {
+  const session = await activeSession(id);
   if (session.status === "completed") throw new Error("Completed onboarding sessions cannot be retried.");
   if (session.status === "cancelled") throw new Error("Cancelled onboarding sessions cannot be retried. Start a new session.");
   if (session.status === "draft") {
@@ -560,7 +648,9 @@ export function retryOnboardingSession(id: string) {
       retryFrom: "draft",
       previousStatus: "draft"
     };
-    return touch(session, "draft", "vendor");
+    const response = touch(session, "draft", "vendor");
+    await persistSession(session);
+    return response;
   }
   const recoverableStatuses = new Set<SessionStatus>([
     "validation_failed",
@@ -579,7 +669,9 @@ export function retryOnboardingSession(id: string) {
     retryFrom: nextStatus,
     previousStatus: session.status
   };
-  return touch(session, nextStatus, nextStatus === "preview_ready" ? "preview" : "connection");
+  const response = touch(session, nextStatus, nextStatus === "preview_ready" ? "preview" : "connection");
+  await persistSession(session);
+  return response;
 }
 
 export function resetOnboardingSessionsForTest() { sessions.clear(); }

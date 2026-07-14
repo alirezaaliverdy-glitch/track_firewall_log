@@ -8,8 +8,10 @@ import {
   commitOnboarding,
   detectOnboarding,
   discoverOnboarding,
+  getOnboarding,
   previewOnboarding,
   registerUnverifiedOnboarding,
+  retryOnboarding,
   startOnboarding,
   testOnboarding,
   type OnboardingDraft,
@@ -65,6 +67,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
       return next;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "عملیات ناموفق بود.");
+      if (session) await getOnboarding(session.id).then((current) => { setSession(current); setForm(current.draft); }).catch(() => undefined);
       return null;
     } finally { setBusy(""); }
   };
@@ -76,6 +79,15 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const registerUnverified = () => run("unverified", () => registerUnverifiedOnboarding(session.id, form)).then((next) => {
     if (next?.result?.verificationStatus === "unverified" && next.result.connectorInvoked === false && next.result.route) navigate(next.result.route);
   });
+  const startNewSession = async () => {
+    setBusy("new"); setError(""); setMessage("");
+    try {
+      const next = await startOnboarding({ vendor: form.vendor, platform: platforms[form.vendor][0].value });
+      setSession(next); setForm(next.draft);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "شروع نشست جدید ناموفق بود."); }
+    finally { setBusy(""); }
+  };
+  const retrySession = () => run("retry", () => retryOnboarding(session.id));
   const canTest = ["answers_saved", "connection_failed"].includes(session.status);
   const canDetect = session.status === "connection_verified";
   const canDiscover = session.status === "platform_detected";
@@ -87,6 +99,8 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     answers_saved: 7,
     connection_testing: 7,
     connection_failed: 7,
+    credential_missing: 5,
+    credential_invalid: 5,
     connection_verified: 8,
     platform_detecting: 8,
     platform_unsupported: 8,
@@ -95,6 +109,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     discovery_failed: 9,
     discovery_completed: 10,
     preview_ready: 11,
+    preview_failed: 10,
     saving: 12,
     completed: 14,
     save_failed: 12,
@@ -126,7 +141,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
         <div className="form-grid">
           <label>Vendor<select value={form.vendor} onChange={(event) => { const vendor = event.target.value as OnboardingDraft["vendor"]; setForm({ ...form, vendor, platform: platforms[vendor][0].value, connectionMethod: "ssh", managementPort: 22 }); }}><option value="linux">Linux</option><option value="cisco">Cisco</option><option value="fortigate">FortiGate</option><option value="mikrotik">MikroTik</option></select></label>
           <label>Platform<select value={form.platform} onChange={(event) => change("platform", event.target.value)}>{platforms[form.vendor].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-          <label>روش اتصال<select value={form.connectionMethod} onChange={(event) => change("connectionMethod", event.target.value as "ssh" | "api")}><option value="ssh">SSH</option>{form.vendor !== "cisco" && form.vendor !== "linux" ? <option value="api">API</option> : null}</select></label>
+          <label>روش اتصال<select value={form.connectionMethod} onChange={(event) => setForm({ ...form, connectionMethod: event.target.value as "ssh", managementPort: 22 })}><option value="ssh">SSH</option></select></label>
           <label>نام دستگاه<input value={form.name} onChange={(event) => change("name", event.target.value)} placeholder="edge-switch-01" /></label>
           <label>آدرس مدیریتی<input value={form.host} onChange={(event) => change("host", event.target.value)} inputMode="url" placeholder="IP یا hostname" /></label>
           <label>پورت<input type="number" min="1" max="65535" value={form.managementPort} onChange={(event) => change("managementPort", Number(event.target.value))} /></label>
@@ -135,7 +150,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           <label>موقعیت<input value={form.location} onChange={(event) => change("location", event.target.value)} placeholder="Rack / Room" /></label>
           <label>محیط<select value={form.environment} onChange={(event) => change("environment", event.target.value as OnboardingDraft["environment"])}><option value="lab">Lab</option><option value="staging">Staging</option><option value="production">Production</option></select></label>
         </div>
-        <button type="button" onClick={() => void saveAnswers()} disabled={Boolean(busy)}>ذخیره اطلاعات</button>
+        <button type="button" onClick={() => void saveAnswers()} disabled={Boolean(busy)}>ثبت اطلاعات و ادامه تست</button>
         <div className="state-card">
           <strong>ثبت بدون تأیید اتصال</strong>
           <p>دستگاه با وضعیت تأییدنشده و سلامت نامشخص ذخیره می‌شود و بعداً می‌توانید اتصال آن را آزمایش کنید.</p>
@@ -150,7 +165,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           <label>نام مرجع<input value={credentialForm.name} onChange={(event) => setCredentialForm({ ...credentialForm, name: event.target.value })} /></label>
           <label>نوع<select value={credentialForm.type} onChange={(event) => setCredentialForm({ ...credentialForm, type: event.target.value as CredentialInput["type"] })}><option value="password">Password</option><option value="private_key">Private key</option></select></label>
           <label>نام کاربری<input autoComplete="username" value={credentialForm.username} onChange={(event) => setCredentialForm({ ...credentialForm, username: event.target.value })} /></label>
-          {credentialForm.type === "password" ? <label>رمز عبور<input type="password" autoComplete="new-password" value={credentialForm.password ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, password: event.target.value })} /></label> : <label>کلید خصوصی<textarea value={credentialForm.privateKey ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, privateKey: event.target.value })} /></label>}
+          {credentialForm.type === "password" ? <label>رمز عبور<input type="password" autoComplete="new-password" value={credentialForm.password ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, password: event.target.value })} /></label> : <><label>کلید خصوصی<textarea value={credentialForm.privateKey ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, privateKey: event.target.value })} /></label><label>عبارت عبور کلید خصوصی<input type="password" autoComplete="new-password" value={credentialForm.passphrase ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, passphrase: event.target.value })} /></label></>}
           <label><input type="checkbox" checked={credentialForm.sudo} onChange={(event) => setCredentialForm({ ...credentialForm, sudo: event.target.checked })} /> دسترسی sudo ثبت شده است</label>
         </div>
         <button type="button" onClick={() => void saveCredential()} disabled={busy === "credential"}>ذخیره امن Credential</button>
@@ -163,7 +178,9 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           <button type="button" onClick={() => void run("detect", () => detectOnboarding(session.id))} disabled={Boolean(busy) || !canDetect}>تشخیص پلتفرم</button>
           <button type="button" onClick={() => void run("discover", () => discoverOnboarding(session.id))} disabled={Boolean(busy) || !canDiscover}>کشف خواندنی موجودی و قابلیت‌ها</button>
           <button type="button" onClick={() => void run("preview", () => previewOnboarding(session.id))} disabled={Boolean(busy) || !canPreview}>ساخت پیش‌نمایش</button>
-          <button type="button" onClick={() => void run("commit", () => commitOnboarding(session.id)).then((next) => { if (next?.result?.connectorInvoked === true && next.result.route) window.location.assign(next.result.route); })} disabled={Boolean(busy) || !canCommit}>تأیید Preview و ثبت دستگاه</button>
+          <button type="button" onClick={() => void run("commit", () => commitOnboarding(session.id)).then((next) => { if (next?.result?.connectorInvoked === true && next.result.connectionVerified === true && next.result.route) navigate(next.result.route); })} disabled={Boolean(busy) || !canCommit}>تأیید Preview و ثبت دستگاه</button>
+          <button type="button" onClick={() => void retrySession()} disabled={Boolean(busy) || !["validation_failed", "credential_missing", "credential_invalid", "connection_failed", "platform_unsupported", "discovery_failed", "preview_failed", "save_failed"].includes(session.status)}>تلاش دوباره</button>
+          <button type="button" onClick={() => void startNewSession()} disabled={Boolean(busy)}>شروع نشست جدید</button>
         </div>
         <dl className="detail-list"><dt>وضعیت Session</dt><dd>{session.status}</dd><dt>Connector invoked</dt><dd>{String(session.test?.connectorInvoked === true)}</dd><dt>پلتفرم</dt><dd>{String(session.detection?.platform ?? "تشخیص داده نشده")}</dd><dt>کشف قابلیت</dt><dd>{session.discovery?.connectorInvoked === true ? "تاییدشده" : "انجام نشده"}</dd></dl>
         {session.preview ? <div className="state-card"><strong>Preview آماده است</strong><p>عملیات: {String(session.preview.operation)} — آدرس: {form.host}:{form.managementPort} — Credential: فقط مرجع ذخیره‌شده — سلامت اولیه: فعال</p></div> : null}

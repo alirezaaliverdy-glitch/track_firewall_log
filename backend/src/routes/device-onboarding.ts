@@ -11,12 +11,17 @@ import {
   registerUnverifiedOnboardingSession,
   retryOnboardingSession,
   testOnboardingConnection,
-  OnboardingDuplicateDeviceError
+  OnboardingDuplicateDeviceError,
+  OnboardingCredentialInvalidError
 } from "../services/device-onboarding.service.js";
 
 function statusCode(error: unknown) {
   const message = error instanceof Error ? error.message : "Onboarding failed.";
-  return /not found|expired/i.test(message) ? 404 : /timeout/i.test(message) ? 504 : /connect|authentication/i.test(message) ? 502 : 400;
+  return /not found|expired/i.test(message) ? 404
+    : /timeout/i.test(message) ? 504
+      : /no registered onboarding connector supports|use ssh or register unverified/i.test(message) ? 400
+        : /connect|authentication/i.test(message) ? 502
+          : 400;
 }
 
 export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
@@ -25,20 +30,20 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_SESSION_INVALID", message: error instanceof Error ? error.message : "Cannot start onboarding." } }); }
   });
   app.get<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId", async (request, reply) => {
-    try { return getOnboardingSession(request.params.sessionId); }
+    try { return await getOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_SESSION_NOT_FOUND", message: error instanceof Error ? error.message : "Session not found." } }); }
   });
   app.post<{ Params: { sessionId: string }; Body: Record<string, unknown> }>("/api/device-onboarding/sessions/:sessionId/answers", async (request, reply) => {
-    try { return answerOnboardingSession(request.params.sessionId, request.body ?? {}); }
+    try { return await answerOnboardingSession(request.params.sessionId, request.body ?? {}); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_ANSWERS_INVALID", message: error instanceof Error ? error.message : "Invalid answers." } }); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/test", async (request, reply) => {
     try { return await testOnboardingConnection(request.params.sessionId); }
-    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_CONNECTION_FAILED", message: error instanceof Error ? error.message : "Connection failed.", connectorInvoked: false } }); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: error instanceof OnboardingCredentialInvalidError ? "ONBOARDING_CREDENTIAL_INVALID" : "ONBOARDING_CONNECTION_FAILED", message: error instanceof Error ? error.message : "Connection failed.", connectorInvoked: false } }); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/test-connection", async (request, reply) => {
     try { return await testOnboardingConnection(request.params.sessionId); }
-    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_CONNECTION_FAILED", message: error instanceof Error ? error.message : "Connection failed.", connectorInvoked: false } }); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: error instanceof OnboardingCredentialInvalidError ? "ONBOARDING_CREDENTIAL_INVALID" : "ONBOARDING_CONNECTION_FAILED", message: error instanceof Error ? error.message : "Connection failed.", connectorInvoked: false } }); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/detect", async (request, reply) => {
     try { return await detectOnboardingPlatform(request.params.sessionId); }
@@ -74,11 +79,11 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
     }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/retry", async (request, reply) => {
-    try { return retryOnboardingSession(request.params.sessionId); }
+    try { return await retryOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_RETRY_BLOCKED", message: error instanceof Error ? error.message : "Retry failed." } }); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/cancel", async (request, reply) => {
-    try { return cancelOnboardingSession(request.params.sessionId); }
+    try { return await cancelOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_CANCEL_FAILED", message: error instanceof Error ? error.message : "Cancel failed." } }); }
   });
 };

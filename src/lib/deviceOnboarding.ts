@@ -22,6 +22,8 @@ export type OnboardingSession = {
     | "connection_testing"
     | "connection_verified"
     | "connection_failed"
+    | "credential_missing"
+    | "credential_invalid"
     | "platform_detecting"
     | "platform_detected"
     | "platform_unsupported"
@@ -29,6 +31,7 @@ export type OnboardingSession = {
     | "discovery_completed"
     | "discovery_failed"
     | "preview_ready"
+    | "preview_failed"
     | "saving"
     | "completed"
     | "save_failed"
@@ -74,6 +77,7 @@ export const previewOnboarding = (id: string) => request<OnboardingSession>(`/de
 export const commitOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/commit`, { method: "POST", body: "{}" });
 export const registerUnverifiedOnboarding = (id: string, input: OnboardingDraft) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/register-unverified`, { method: "POST", body: JSON.stringify(input) });
 export const cancelOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/cancel`, { method: "POST", body: "{}" });
+export const retryOnboarding = (id: string) => request<OnboardingSession>(`/device-onboarding/sessions/${id}/retry`, { method: "POST", body: "{}" });
 
 export type DeviceWorkspace = {
   reference: string;
