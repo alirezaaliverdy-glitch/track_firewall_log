@@ -597,3 +597,9 @@
 - Replaced remaining internal hard navigation with React Router and made the default backend test command discover every test file once on the isolated test database, serially.
 - Authenticated Playwright proved SSH-only UI, guarded missing-credential state, retry, RTL/LTR, SPA navigation, real unverified create/redirect/list visibility, and safe cleanup.
 - Protected counts after cleanup: Device 3, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124.
+
+## Device Workspace / Action Center Repair - Phase 1 (2026-07-15)
+
+- Added persisted, device-scoped connection-test, verification, retry, and commit APIs by reusing the existing onboarding state machine and connector registry.
+- Verification attempts persist the in-progress state before connector invocation, retain truthful `connectorInvoked` evidence on failed real attempts, reject concurrent runs, and return only sanitized errors and credential references.
+- No schema migration or protected-record mutation was required. Backend build and focused onboarding/verification tests passed; one older Cisco onboarding integration case remains environment-sensitive because its fixed host collides with the current real Cisco Device.

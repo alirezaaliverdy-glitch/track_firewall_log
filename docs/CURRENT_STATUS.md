@@ -502,3 +502,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Sessions persist across restarts; missing, expired, credential-invalid, duplicate, and transaction-rollback paths have focused coverage.
 - The additive onboarding-session migration is applied and Prisma reports the schema up to date.
 - Browser acceptance created exactly one Device and linked Asset, verified redirect/list state, then safely removed only those test records; protected counts returned to 3/7/4/5/124.
+
+## Device Workspace / Action Center Repair (2026-07-15)
+
+- Phase 1 device verification backend is implemented without a migration: the Device-scoped API reuses durable onboarding sessions and registered connectors.
+- Failed real attempts remain unverified while preserving `connectorInvoked=true` when invocation occurred; successful verification still requires connector-backed test, detection, discovery, preview, and commit.
+- Next phase: expose this contract as the prominent Connection & Verification workspace surface.

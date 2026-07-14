@@ -286,7 +286,11 @@ export async function testOnboardingConnection(id: string) {
       throw new Error("CREDENTIAL_INVALID: Stored credential cannot be decrypted with the active credential key. Replace or re-enter the credential.");
     }
     const device = asDevice(session);
+    const connector = session.draft.vendor === "cisco" ? ciscoIosXeSshConnector : selectDeviceConnector(device);
+    if (!connector) throw new Error(`No registered connector supports ${session.draft.vendor}/${session.draft.connectionMethod}.`);
+    session.test = { connected: false, connectorInvoked: true, connectorType: connector.name, startedAt: now() };
     touch(session, "connection_testing", "connection");
+    await persistSession(session);
     if (session.draft.vendor === "cisco") {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
       const platformResult = result.results[0];
@@ -300,8 +304,6 @@ export async function testOnboardingConnection(id: string) {
         warnings: result.warnings
       };
     } else {
-      const connector = selectDeviceConnector(device);
-      if (!connector) throw new Error(`No registered connector supports ${session.draft.vendor}/${session.draft.connectionMethod}.`);
       const result = await connector.testConnection(device);
       session.test = {
         connected: result.connected,
@@ -319,7 +321,12 @@ export async function testOnboardingConnection(id: string) {
   } catch (error) {
     const credentialInvalid = error instanceof Error && error.message.startsWith("CREDENTIAL_INVALID:");
     const safeError = credentialInvalid ? new Error(error.message.replace(/^CREDENTIAL_INVALID:\s*/, "")) : error;
-    session.test = { connected: false, connectorInvoked: false, error: safeError instanceof Error ? safeError.message : "Connection test failed." };
+    session.test = {
+      connected: false,
+      connectorInvoked: session.test?.connectorInvoked === true,
+      connectorType: session.test?.connectorType,
+      error: safeError instanceof Error ? safeError.message : "Connection test failed."
+    };
     fail(session, credentialInvalid ? "credential_invalid" : "connection_failed", credentialInvalid ? "credential" : "connection", safeError);
     await persistSession(session);
     throw credentialInvalid ? new OnboardingCredentialInvalidError(safeError instanceof Error ? safeError.message : "Stored credential is invalid.") : safeError;

@@ -574,3 +574,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Closed internal-router reloads, default full-suite discovery/serialization, onboarding lifecycle/rollback tests, and source/migration BOM enforcement.
 - Authenticated Playwright acceptance passed and its single created Device/Asset pair was cleaned up without changing historical protected counts.
 - Commits: `57ad699`, `17f264a`, `6e1c26e` (Phase 4; amended hash reported in final handoff if changed).
+
+## Device Workspace / Action Center Repair - Phase 1 (2026-07-15)
+
+- Implemented the four required Device verification endpoints and device-scoped orchestration over the persisted onboarding session engine.
+- Added concurrency protection, persisted attempt-start evidence, sanitized status/history projection, and focused backend contract coverage.
+- Validation: backend build passed; onboarding final repair tests 8/8 passed; new verification tests passed. No migration, dump operation, or protected-record write was performed.
