@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 20.1 - Onboarding workspace/dashboard trace (2026-07-14)
+
+- Read `CODEX_START_PROMPT.txt` and `TASK_20_1_ONBOARDING_WORKSPACE_DASHBOARD.md`; started Task 20.1 from the current checkout without starting a new task.
+- Added Task 20.1 Milestone A trace docs: `docs/TASK_20_1_ONBOARDING_RUNTIME_TRACE.md`, `docs/TASK_20_1_API_SEQUENCE_TRACE.md`, `docs/TASK_20_1_FRONTEND_STATE_TRACE.md`, and `docs/TASK_20_1_BACKEND_STATE_TRACE.md`.
+- Playwright MCP from this exact session opened `http://localhost:5173/assets/devices/new?vendor=linux`; current URL stayed on that route and page title was `log-app`.
+- MCP network evidence on the onboarding route: `/api/auth/me` returned 200, `/api/device-onboarding/sessions` returned 201, `/api/credentials` returned 200, `/api/product-state/navigation` returned 200, and console errors were zero.
+- MCP accessibility evidence found the live onboarding form and the `Credential reference` selector.
+- Runtime database evidence showed `devices=[]` and `credentials=[]`; therefore Task 20.1 successful acceptance is blocked by missing real reachable target and missing saved Credential Reference.
+- Not claimed: `connectorInvoked=true`, Device persistence, animated success notification, automatic redirect, Device workspace opening, Dashboard charts from persisted device data, or full acceptance tests.
+- Commit: `cc3bd67 docs: trace task 20.1 onboarding failure`.
+
 ## Task 20 - Backend readiness/auth startup repair (2026-07-14)
 
 - Paused Task 20.1 feature work to fix the current backend startup/auth failure first.

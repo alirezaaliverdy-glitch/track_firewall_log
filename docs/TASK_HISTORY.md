@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 20.1 - Onboarding Workspace Dashboard Trace (2026-07-14)
+
+- Summary: executed the Task 20.1 Milestone A failure trace after reading the required prompt/spec/docs, using only Playwright MCP for browser evidence.
+- Browser: MCP opened `http://localhost:5173/assets/devices/new?vendor=linux`; page title was `log-app`; authenticated API calls returned 200/201; the live form and `Credential reference` selector were visible; console errors were zero.
+- Backend/database: runtime database had no Devices and no saved Credential References, so real connector-backed onboarding cannot proceed honestly.
+- Docs: added runtime, API sequence, frontend state, and backend state traces under `docs/TASK_20_1_*`.
+- Safety/blocker: no `.env`, secret, destructive Prisma command, local Playwright fallback, fake device, or fake connector success was used. Full Task 20.1 remains blocked until a real target and saved credential reference are available.
+- Commit: `cc3bd67 docs: trace task 20.1 onboarding failure`.
+
 ## Task 20 - Backend readiness and auth startup repair (2026-07-14)
 
 - Summary: paused Task 20.1 feature work to investigate the current backend startup/auth failure around Prisma `AppUser` bootstrap and login's auth-server connection error.
