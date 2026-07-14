@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { isProduction } from "../config/env.js";
 import {
+  databaseUnavailableReason,
+  isTransientDatabaseStartupError
+} from "../db/prisma.js";
+import {
   AUTH_COOKIE_NAME,
   AUTH_COOKIE_PATH,
   authenticate,
@@ -23,7 +27,22 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(429).send({ ok: false, error: "too_many_attempts", messageFa: "تعداد تلاش‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید." });
     }
 
-    const user = await authenticate(request.body?.username ?? "", request.body?.password ?? "");
+    let user;
+    try {
+      user = await authenticate(request.body?.username ?? "", request.body?.password ?? "");
+    } catch (error) {
+      if (isTransientDatabaseStartupError(error)) {
+        const reason = databaseUnavailableReason(error);
+        return reply.code(503).send({
+          ok: false,
+          error: "database_unavailable",
+          reasonCode: "DATABASE_UNAVAILABLE",
+          retryable: reason.transient,
+          messageFa: "پایگاه داده برای ورود آماده نیست. چند لحظه دیگر دوباره تلاش کنید."
+        });
+      }
+      throw error;
+    }
     if (!user) {
       current.count += 1;
       attempts.set(key, current);
@@ -31,10 +50,28 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     attempts.delete(key);
-    const { token, expiresAt } = await createSession(user.id, {
-      userAgent: request.headers["user-agent"],
-      ipAddress: request.ip
-    });
+    let token: string;
+    let expiresAt: Date;
+    try {
+      const session = await createSession(user.id, {
+        userAgent: request.headers["user-agent"],
+        ipAddress: request.ip
+      });
+      token = session.token;
+      expiresAt = session.expiresAt;
+    } catch (error) {
+      if (isTransientDatabaseStartupError(error)) {
+        const reason = databaseUnavailableReason(error);
+        return reply.code(503).send({
+          ok: false,
+          error: "database_unavailable",
+          reasonCode: "DATABASE_UNAVAILABLE",
+          retryable: reason.transient,
+          messageFa: "پایگاه داده برای ایجاد نشست آماده نیست. چند لحظه دیگر دوباره تلاش کنید."
+        });
+      }
+      throw error;
+    }
     reply.setCookie(AUTH_COOKIE_NAME, token, {
       path: AUTH_COOKIE_PATH,
       httpOnly: true,

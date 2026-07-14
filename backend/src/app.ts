@@ -4,7 +4,7 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyError } from "fastify";
 import { env, isProduction, maxUploadBytes } from "./config/env.js";
-import { isTransientDatabaseStartupError } from "./db/prisma.js";
+import { withDatabaseStartupRetry } from "./db/prisma.js";
 import { actionRoutes } from "./routes/actions.js";
 import { loggerConfig } from "./lib/logger.js";
 import { analysisRoutes } from "./routes/analysis.js";
@@ -38,22 +38,6 @@ import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
 import { AUTH_COOKIE_NAME, bootstrapAdmin, getSessionUser } from "./services/auth.service.js";
-
-async function runStartupDatabaseQuery<T>(label: string, operation: () => Promise<T>) {
-  const attempts = 4;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (!isTransientDatabaseStartupError(error) || attempt === attempts) {
-        const reason = isTransientDatabaseStartupError(error) ? "database connection did not become ready" : "database query failed";
-        throw new Error(`${label} failed: ${reason}.`, { cause: error });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
-    }
-  }
-  throw new Error(`${label} failed: database connection did not become ready.`);
-}
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
   validateCommandCatalog(COMMAND_CATALOG);
@@ -105,10 +89,10 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   });
 
   const authRequired = options.authRequired !== false;
-  if (authRequired) await runStartupDatabaseQuery("Authentication bootstrap", bootstrapAdmin);
+  if (authRequired) await withDatabaseStartupRetry("Authentication bootstrap", bootstrapAdmin);
   await app.register(authRoutes);
 
-  const publicPaths = new Set(["/health", "/api/health", "/api/health/ready", "/api/auth/login", "/api/auth/logout", "/api/auth/me"]);
+  const publicPaths = new Set(["/health", "/api/health", "/api/health/live", "/api/health/ready", "/api/auth/login", "/api/auth/logout", "/api/auth/me"]);
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?", 1)[0];
     if (!authRequired || !path.startsWith("/api/") || publicPaths.has(path)) return;

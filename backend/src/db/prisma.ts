@@ -6,6 +6,7 @@ import { env } from "../config/env.js";
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
   pgPool?: Pool;
+  prismaPgAdapter?: PrismaPg;
   prismaShutdown?: Promise<void>;
 };
 
@@ -29,13 +30,14 @@ function getPgPool() {
 }
 
 const pool = getPgPool();
-const adapter = new PrismaPg(pool, { disposeExternalPool: false });
+const adapter = globalForPrisma.prismaPgAdapter ?? new PrismaPg(pool, { disposeExternalPool: false });
+globalForPrisma.prismaPgAdapter = adapter;
 
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === "production" ? ["error"] : ["error", "warn"]
+    log: process.env.NODE_ENV === "production" ? [] : ["warn"]
   });
 
 if (process.env.NODE_ENV !== "production") {
@@ -67,6 +69,48 @@ export function databaseUnavailableReason(error: unknown) {
   };
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function withDatabaseStartupRetry<T>(label: string, operation: () => Promise<T>) {
+  const attempts = 5;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const retryable = isTransientDatabaseStartupError(error);
+      const reason = databaseUnavailableReason(error);
+      if (!retryable || attempt === attempts) {
+        console.error(JSON.stringify({
+          event: "database_startup_failed",
+          label,
+          attempt,
+          attempts,
+          reasonCode: reason.code,
+          retryable,
+          message: reason.message
+        }));
+        throw new Error(`${label} failed: ${retryable ? "database connection did not become ready" : "database query failed"}.`, { cause: error });
+      }
+      const baseDelayMs = Math.min(2_000, 150 * 2 ** (attempt - 1));
+      const jitterMs = Math.floor(Math.random() * 75);
+      const delayMs = baseDelayMs + jitterMs;
+      console.warn(JSON.stringify({
+        event: "database_startup_retry",
+        label,
+        attempt,
+        attempts,
+        reasonCode: reason.code,
+        retryable,
+        delayMs
+      }));
+      await sleep(delayMs);
+    }
+  }
+  throw new Error(`${label} failed: database connection did not become ready.`);
+}
+
 export async function checkDatabaseReady() {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -79,11 +123,17 @@ export async function checkDatabaseReady() {
 export async function shutdownDatabase() {
   if (!globalForPrisma.prismaShutdown) {
     globalForPrisma.prismaShutdown = (async () => {
-      await prisma.$disconnect();
-      await pool.end();
-      globalForPrisma.prisma = undefined;
-      globalForPrisma.pgPool = undefined;
-    })();
+      try {
+        await prisma.$disconnect();
+        await pool.end();
+      } finally {
+        globalForPrisma.prisma = undefined;
+        globalForPrisma.pgPool = undefined;
+        globalForPrisma.prismaPgAdapter = undefined;
+      }
+    })().finally(() => {
+      globalForPrisma.prismaShutdown = undefined;
+    });
   }
   return globalForPrisma.prismaShutdown;
 }

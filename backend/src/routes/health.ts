@@ -9,27 +9,36 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
   });
   app.get("/health", health);
   app.get("/api/health", health);
+  app.get("/api/health/live", async () => ({
+    status: "live",
+    service: "firewall-log-analyzer-backend",
+    checkedAt: new Date().toISOString()
+  }));
   app.get("/api/health/ready", async (_request, reply) => {
+    const checkedAt = new Date().toISOString();
     const database = await checkDatabaseReady();
     if (!database.ok) {
       return reply.code(503).send({
-        status: "unavailable",
-        ready: false,
+        status: "not_ready",
+        databaseReady: false,
+        reasonCode: "DATABASE_UNAVAILABLE",
+        retryable: database.reason.transient,
+        checkedAt,
         service: "firewall-log-analyzer-backend",
         checks: {
           database
-        },
-        timestamp: new Date().toISOString()
+        }
       });
     }
     return {
       status: "ready",
+      databaseReady: true,
       ready: true,
+      checkedAt,
       service: "firewall-log-analyzer-backend",
       checks: {
         database
-      },
-      timestamp: new Date().toISOString()
+      }
     };
   });
 };
