@@ -510,3 +510,6 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Next phase: expose this contract as the prominent Connection & Verification workspace surface.
 - Phase 2 is complete: the contract is now visible and operable on every managed Device Workspace in Persian and English, with responsive controls and history.
 - Next phase: converge the Action Center lifecycle/backend projection.
+- Phase 3 is complete: `/api/action-center` now supplies truthful lifecycle, summary, control-capability, detail/audit, retry, and cancellation contracts.
+- Current live projection contains 124 preserved ActionPlans; any historical success lacking connector evidence is deliberately counted as failed.
+- Next phase: replace the clipped legacy Action Center UI with the responsive workspace.

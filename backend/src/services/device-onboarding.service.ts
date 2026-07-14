@@ -286,9 +286,9 @@ export async function testOnboardingConnection(id: string) {
       throw new Error("CREDENTIAL_INVALID: Stored credential cannot be decrypted with the active credential key. Replace or re-enter the credential.");
     }
     const device = asDevice(session);
-    const connector = session.draft.vendor === "cisco" ? ciscoIosXeSshConnector : selectDeviceConnector(device);
-    if (!connector) throw new Error(`No registered connector supports ${session.draft.vendor}/${session.draft.connectionMethod}.`);
-    session.test = { connected: false, connectorInvoked: true, connectorType: connector.name, startedAt: now() };
+    const connector = session.draft.vendor === "cisco" ? null : selectDeviceConnector(device);
+    if (session.draft.vendor !== "cisco" && !connector) throw new Error(`No registered connector supports ${session.draft.vendor}/${session.draft.connectionMethod}.`);
+    session.test = { connected: false, connectorInvoked: true, connectorType: session.draft.vendor === "cisco" ? ciscoIosXeSshConnector.connectorType : connector!.name, startedAt: now() };
     touch(session, "connection_testing", "connection");
     await persistSession(session);
     if (session.draft.vendor === "cisco") {
@@ -304,11 +304,11 @@ export async function testOnboardingConnection(id: string) {
         warnings: result.warnings
       };
     } else {
-      const result = await connector.testConnection(device);
+      const result = await connector!.testConnection(device);
       session.test = {
         connected: result.connected,
         connectorInvoked: true,
-        connectorType: connector.name,
+        connectorType: connector!.name,
         stages: result.stages,
         warnings: result.warnings,
         capabilities: result.capabilities

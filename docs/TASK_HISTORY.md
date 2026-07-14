@@ -585,3 +585,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Added the Device Workspace verification client contract, localized control panel, credential reference selector, session step controls, sanitized error display, and persisted history.
 - Validation: frontend build, locale parity, Persian primary-route copy, UTF-8 guard, diff check, and authenticated Playwright at 1366x768 passed.
+
+## Device Workspace / Action Center Repair - Phase 3 (2026-07-15)
+
+- Added the backend Action Center projection, lifecycle normalization, fail-closed success evidence rule, filtered summaries, sanitized detail payload, guarded cancellation, and retry-as-new-plan behavior.
+- Validation: backend build; Action Center contract tests 3/3; existing Action Center UX/source tests 3/3; authenticated browser GET returned 200 with the full 124-plan summary. No existing ActionPlan was mutated.

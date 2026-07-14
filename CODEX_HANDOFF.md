@@ -609,3 +609,9 @@
 - Every managed Device Workspace now renders a prominent Connection & Verification panel before workspace tabs.
 - The panel exposes stored credential selection/replacement, connection test, retry, platform detection, inventory discovery, verified commit, new-session, refresh, and persisted history controls without exposing credential material.
 - Authenticated Playwright verified Persian RTL and English LTR rendering at 1366x768 with every control inside the viewport and no horizontal overflow.
+
+## Device Workspace / Action Center Repair - Phase 3 (2026-07-15)
+
+- Added a stable Action Center backend projection with the required draft, needs-input, ready, confirmed, executing, succeeded, failed, and cancelled lifecycle.
+- The projection fails closed: a stored `succeeded` row without `connectorInvoked=true` is presented as failed, and Execute is enabled only for approved, verified connector-backed actions.
+- Added filtered/paginated summaries, sanitized detail/evidence/result data, non-destructive retry-by-new-plan, and guarded cancellation endpoints. Existing ActionPlan rows were not rewritten.

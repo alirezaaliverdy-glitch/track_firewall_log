@@ -16,6 +16,7 @@ import {
 } from "../services/action-plan.service.js";
 import { commandCatalogForVendor, VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { routeCatalogIntent } from "../actions/intent-router.js";
+import { cancelActionCenterItem, getActionCenterItem, listActionCenter, retryActionCenterItem, updateActionCenterTarget } from "../services/action-center.service.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   const actor = (request: { authUser?: { username: string; role: string } }) => request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined;
@@ -30,6 +31,41 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/api/actions", async () => listActionPlans());
+
+  app.get<{ Querystring: Record<string, unknown> }>("/api/action-center", async (request) => listActionCenter(request.query));
+
+  app.get<{ Params: { id: string } }>("/api/action-center/:id", async (request, reply) => {
+    const item = await getActionCenterItem(request.params.id);
+    return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+  });
+
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>("/api/action-center/:id/cancel", async (request, reply) => {
+    try {
+      const item = await cancelActionCenterItem(request.params.id, actor(request), request.body?.reason);
+      return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      return reply.code(409).send({ error: { code: "ACTION_CANCEL_BLOCKED", message: error instanceof Error ? error.message : "ActionPlan cannot be cancelled." } });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/action-center/:id/retry", async (request, reply) => {
+    try {
+      const item = await retryActionCenterItem(request.params.id, actor(request));
+      return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      return reply.code(409).send({ error: { code: "ACTION_RETRY_BLOCKED", message: error instanceof Error ? error.message : "ActionPlan cannot be retried." } });
+    }
+  });
+
+  app.patch<{ Params: { id: string }; Body: { deviceId?: string } }>("/api/action-center/:id/target", async (request, reply) => {
+    try {
+      if (!request.body?.deviceId) return reply.code(400).send({ error: { code: "DEVICE_SELECTION_REQUIRED", message: "Select a target device." } });
+      const item = await updateActionCenterTarget(request.params.id, request.body.deviceId);
+      return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      return reply.code(409).send({ error: { code: "ACTION_TARGET_CHANGE_BLOCKED", message: error instanceof Error ? error.message : "Target device cannot be changed." } });
+    }
+  });
 
   app.get("/api/actions/catalog", async () => ({ actions: VENDOR_COMMAND_CATALOG }));
 
