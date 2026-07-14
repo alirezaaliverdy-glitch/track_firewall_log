@@ -4,6 +4,9 @@ Last updated: 2026-07-14
 
 ## Task 20 - Real Network Operations Kickoff
 
+- Backend startup/auth repair restored the current login path. The app now uses one shared Prisma client and one shared `pg` Pool, Fastify app close no longer disconnects the shared database adapter, process shutdown owns database teardown, startup auth bootstrap has a short transient retry, and `/api/health/ready` reports database readiness with 200/503 structured output.
+- Local Windows PostgreSQL service `postgresql-x64-18` still reports `Running` but returns `no response`/`ETIMEDOUT` on port 5432, and Windows denied service/process restart. To restore login without touching `.env` or the protected service data directory, a user-owned temporary PostgreSQL 18 cluster was initialized under `.runtime/postgres-task20-auth`, started on `127.0.0.1:55432`, and the backend is running on port 4000 with only its process `DATABASE_URL` overridden to that healthy local database.
+- Validation for the repair slice: `npx prisma validate`, `npx prisma generate`, backend `npm run build`, root `npx pnpm@10 build`, and backend `npm test` pass (209/209) against the healthy temporary database. Playwright MCP confirms `/api/auth/me` returns 200 in the authenticated shell, `/api/*` dashboard requests return 200, and `/dashboard` has zero console errors.
 - Task 20 mandatory MCP gate passed in this session: Playwright MCP opened `http://localhost:5173/`, title `log-app`, and captured an authenticated Persian app shell snapshot.
 - Baseline evidence is recorded in `docs/TASK_20_PRECHANGE_RUNTIME_BASELINE.md`, `docs/TASK_20_MCP_PROOF.md`, `docs/TASK_20_ROUTE_CONTROL_BASELINE.md`, `docs/TASK_20_API_FAILURE_REGISTER.md`, and `docs/TASK_20_BACKEND_LOG_REGISTER.md`.
 - Onboarding API compatibility now includes Task 20 route names: `/test-connection`, `/detect-platform`, `/build-preview`, and `/retry`, alongside the existing Task 19.2A routes.

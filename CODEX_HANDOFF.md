@@ -1,5 +1,17 @@
 # CODEX_HANDOFF.md
 
+## Task 20 - Backend readiness/auth startup repair (2026-07-14)
+
+- Paused Task 20.1 feature work to fix the current backend startup/auth failure first.
+- Reproduced startup failure without reading or printing `.env`: `buildApp()` reaches `bootstrapAdmin()` and fails on the `AppUser` count query when PostgreSQL cannot complete a connection.
+- PostgreSQL diagnostics without secrets: the Windows service `postgresql-x64-18` reports `Running`, but Node `pg` and Prisma time out connecting to port 5432 (`ETIMEDOUT`). Windows denied service restart and process termination from this session.
+- Code repair: `backend/src/db/prisma.ts` now owns one shared `pg` Pool and one shared Prisma client; Fastify `onClose` no longer disconnects the shared Prisma adapter; `backend/src/server.ts` owns process termination shutdown; startup auth bootstrap retries transient DB connection closures/timeouts briefly and then throws one concise startup error.
+- Added `GET /api/health/ready`. It returns structured 503 when the DB is unavailable and returned 200 after the healthy local runtime was started.
+- Runtime workaround for this session: initialized a user-owned PostgreSQL 18 cluster under `.runtime/postgres-task20-auth`, started it on `127.0.0.1:55432`, pushed the Prisma schema into database `firewall_log_auth`, and started the backend on port 4000 with only process `DATABASE_URL` overridden. `.env` was not modified.
+- Current login status: `http://localhost:5173` is usable again with the running backend. Playwright MCP shows authenticated `/api/auth/me` 200, dashboard API 200 responses, visible `Alireza` admin shell, and zero console errors on `/dashboard`.
+- Validation: `cd backend && npx prisma validate` passed; `cd backend && npx prisma generate` passed; `cd backend && npm run build` passed; root `npx pnpm@10 build` passed with the existing large-chunk warning; `cd backend && npm test` passed 209/209 against the healthy temporary database.
+- Follow-up: repair or restart the original Windows PostgreSQL service with elevated permissions before depending on the default `.env` database again.
+
 ## Task 20 - MCP baseline and onboarding API compatibility (2026-07-14)
 
 - Started Task 20 from `CODEX_START_PROMPT.txt` and `TASK_20_REAL_NETWORK_OPERATIONS.md` after re-reading the required live handoff/status/history/architecture docs and Task 19/19.1/19.2/19.2A specifications.

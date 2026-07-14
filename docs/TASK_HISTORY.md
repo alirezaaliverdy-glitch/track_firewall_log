@@ -2,6 +2,14 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 20 - Backend readiness and auth startup repair (2026-07-14)
+
+- Summary: paused Task 20.1 feature work to investigate the current backend startup/auth failure around Prisma `AppUser` bootstrap and login's auth-server connection error.
+- Reproduction: `buildApp()` fails during `bootstrapAdmin()`/`prisma.appUser.count()` with database connection timeout; `/api/health/ready` returns structured 503 while the DB is unavailable.
+- Backend: changed Prisma setup to one shared `pg` Pool plus one shared Prisma client, removed Fastify app-close database disconnect, moved database shutdown to process termination, added narrow transient startup retry, and added `GET /api/health/ready`.
+- Runtime recovery: local PostgreSQL service `postgresql-x64-18` remains externally unreachable to Node/Prisma (`ETIMEDOUT` on port 5432), and service/process restart was denied by Windows permissions. A user-owned temporary PostgreSQL 18 cluster was initialized under `.runtime/postgres-task20-auth`, started on `127.0.0.1:55432`, and the backend was started with only process `DATABASE_URL` overridden to the healthy temporary database.
+- Validation: `npx prisma validate`, `npx prisma generate`, backend build, frontend build, and backend `npm test` passed (209/209) against the healthy temporary database. Playwright MCP confirmed authenticated `/api/auth/me` 200, dashboard API 200 responses, visible admin shell, and no console errors on `/dashboard`.
+
 ## Task 20 - MCP Baseline and Onboarding API Compatibility (2026-07-14)
 
 - Summary: began Task 20 with the mandatory prechange gate, proved current-session Playwright MCP availability, and aligned onboarding API names with the Task 20 contract without changing protected execution behavior.

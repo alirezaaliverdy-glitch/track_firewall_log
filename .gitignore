@@ -18,6 +18,7 @@ coverage
 backend/storage/
 storage/uploads
 backend/storage/uploads
+.runtime/
 
 # Editor directories and files
 .vscode/*
