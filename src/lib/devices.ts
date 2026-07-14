@@ -305,7 +305,7 @@ export function createDevice(input: DeviceInput) {
   }).then(normalizeDevice);
 }
 
-export function updateDevice(id: string, input: DeviceInput) {
+export function updateDevice(id: string, input: Partial<DeviceInput>) {
   return requestJson<unknown>(`/devices/${id}`, {
     method: "PATCH",
     body: JSON.stringify(input),

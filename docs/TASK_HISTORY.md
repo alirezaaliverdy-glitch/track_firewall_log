@@ -590,3 +590,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Added the backend Action Center projection, lifecycle normalization, fail-closed success evidence rule, filtered summaries, sanitized detail payload, guarded cancellation, and retry-as-new-plan behavior.
 - Validation: backend build; Action Center contract tests 3/3; existing Action Center UX/source tests 3/3; authenticated browser GET returned 200 with the full 124-plan summary. No existing ActionPlan was mutated.
+
+## Device Workspace / Action Center Repair - Phase 4 (2026-07-15)
+
+- Added a responsive Action Center client/workspace and moved ActionPlan creation to an accessible top-level catalog panel.
+- Preserved React Router deep links and connected every required control to an existing safe workflow or the new Action Center contract.
+- Validation: frontend build, locale parity, Persian copy, UTF-8 guard, diff check, and authenticated Playwright layout/control/deep-link checks passed.

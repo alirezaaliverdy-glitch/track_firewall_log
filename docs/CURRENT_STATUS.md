@@ -513,3 +513,6 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Phase 3 is complete: `/api/action-center` now supplies truthful lifecycle, summary, control-capability, detail/audit, retry, and cancellation contracts.
 - Current live projection contains 124 preserved ActionPlans; any historical success lacking connector evidence is deliberately counted as failed.
 - Next phase: replace the clipped legacy Action Center UI with the responsive workspace.
+- Phase 4 is complete: Action Center now uses the lifecycle projection, shows at most 25 rows per page, and keeps execution controls visible in the detail panel.
+- Direct routes, both locales, unsupported-action gating, and all three required desktop viewports have authenticated browser proof.
+- Next phase: full validation, real connector acceptance, preservation proof, and final cleanup tests.
