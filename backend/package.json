@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "audit:device-assets": "tsx src/scripts/reconcile-device-assets.ts",
+    "repair:device-assets": "tsx src/scripts/reconcile-device-assets.ts --apply",
     "test:r-e": "tsx --test test/task19-1-action-center-ux.test.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",

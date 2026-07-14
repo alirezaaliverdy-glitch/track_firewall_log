@@ -1,4 +1,4 @@
-import { ActionPlanSource, ActionType, AiRiskLevel, DetectionRuleType, IncidentSeverity, type Prisma } from "@prisma/client";
+import { ActionPlanSource, ActionType, AiRiskLevel, DetectionRuleType, IncidentSeverity, type Device, type Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 
@@ -129,80 +129,129 @@ async function upsertSource(tx: Prisma.TransactionClient, sourceType: string) {
   });
 }
 
+type DeviceAssetProjection = Pick<Device, "id" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags">;
+
+async function projectionCandidates(tx: Prisma.TransactionClient, device: DeviceAssetProjection) {
+  return tx.asset.findMany({
+    where: {
+      OR: [
+        { deviceId: device.id },
+        {
+          deviceId: null,
+          OR: [
+            { managementIp: device.host },
+            { hostname: { equals: device.name, mode: "insensitive" } },
+            { ipAddresses: { some: { address: device.host } } }
+          ]
+        }
+      ]
+    },
+    orderBy: { id: "asc" }
+  });
+}
+
+export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, device: DeviceAssetProjection) {
+  const candidates = await projectionCandidates(tx, device);
+  const linked = candidates.filter((asset) => asset.deviceId === device.id);
+  const unlinked = candidates.filter((asset) => asset.deviceId === null);
+  if (linked.length > 1 || (linked.length === 0 && unlinked.length > 1)) {
+    throw new Error(`Ambiguous Asset projection for Device ${device.id}; no automatic change was made.`);
+  }
+  const source = await upsertSource(tx, "existing_devices");
+  const vendorId = await upsertNameModel(tx, "assetVendor", device.vendor);
+  const platformId = await upsertNameModel(tx, "assetPlatform", device.type);
+  const roleId = await upsertNameModel(tx, "assetRole", device.type === "linux_edge" ? "Linux Server" : "Network Device");
+  const existing = linked[0] ?? unlinked[0];
+  const data = {
+    name: device.name,
+    hostname: device.name,
+    managementIp: device.host,
+    managedState: "managed",
+    healthState: device.status,
+    deviceId: device.id,
+    vendorId,
+    platformId,
+    roleId,
+    sourceId: source.id,
+    lastSeenAt: new Date(),
+    tagsJson: toJson(device.tags),
+    metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort })
+  };
+  const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
+  await tx.assetIpAddress.upsert({
+    where: { address: device.host },
+    update: { assetId: asset.id, role: "management" },
+    create: { address: device.host, assetId: asset.id, role: "management" }
+  });
+  return { asset, created: !existing };
+}
+
+export async function auditDeviceAssetReconciliation() {
+  const [devices, assets] = await Promise.all([
+    prisma.device.findMany({ orderBy: { id: "asc" } }),
+    prisma.asset.findMany({ orderBy: { id: "asc" }, include: { ipAddresses: { select: { address: true } } } })
+  ]);
+  const deviceResults = devices.map((device) => {
+    const linked = assets.filter((asset) => asset.deviceId === device.id);
+    const candidates = assets.filter((asset) => asset.deviceId === null && (
+      asset.managementIp === device.host ||
+      asset.hostname?.localeCompare(device.name, undefined, { sensitivity: "accent" }) === 0 ||
+      asset.ipAddresses.some((address) => address.address === device.host)
+    ));
+    return {
+      deviceId: device.id,
+      name: device.name,
+      type: device.type,
+      host: device.host,
+      state: linked.length === 1 ? "linked" : linked.length > 1 || candidates.length > 1 ? "ambiguous" : candidates.length === 1 ? "unambiguous_match" : "missing_projection",
+      assetIds: linked.length ? linked.map((asset) => asset.id) : candidates.map((asset) => asset.id)
+    };
+  });
+  return {
+    controlEntity: "Device" as const,
+    projectionEntity: "Asset" as const,
+    counts: { devices: devices.length, assets: assets.length },
+    devices: deviceResults,
+    devicesWithoutAsset: deviceResults.filter((item) => item.state !== "linked"),
+    assetsWithoutDevice: assets.filter((asset) => asset.deviceId === null).map((asset) => ({ id: asset.id, name: asset.name, hostname: asset.hostname, managementIp: asset.managementIp })),
+    ambiguous: deviceResults.filter((item) => item.state === "ambiguous")
+  };
+}
+
+export async function repairDeviceAssetReconciliation(apply = false) {
+  const audit = await auditDeviceAssetReconciliation();
+  if (!apply) return { mode: "dry-run" as const, audit, changed: 0 };
+  if (audit.ambiguous.length > 0) {
+    throw new Error(`Refusing reconciliation: ${audit.ambiguous.length} ambiguous Device/Asset match(es) require manual resolution.`);
+  }
+  let changed = 0;
+  await prisma.$transaction(async (tx) => {
+    const devices = await tx.device.findMany({ orderBy: { id: "asc" } });
+    for (const device of devices) {
+      const result = await syncDeviceRecordToAsset(tx, device);
+      if (result.created || audit.devicesWithoutAsset.some((item) => item.deviceId === device.id)) changed += 1;
+    }
+  });
+  return { mode: "apply" as const, audit: await auditDeviceAssetReconciliation(), changed };
+}
+
 export async function syncExistingDevicesToAssets() {
-  const devices = await prisma.device.findMany();
+  const devices = await prisma.device.findMany({ orderBy: { id: "asc" } });
   let created = 0;
   let updated = 0;
   await prisma.$transaction(async (tx) => {
-    const source = await upsertSource(tx, "existing_devices");
     for (const device of devices) {
-      const vendorId = await upsertNameModel(tx, "assetVendor", device.vendor);
-      const platformId = await upsertNameModel(tx, "assetPlatform", device.type);
-      const roleId = await upsertNameModel(tx, "assetRole", device.type === "linux_edge" ? "Linux Server" : "Network Device");
-      const existing = await tx.asset.findFirst({ where: { OR: [{ deviceId: device.id }, { managementIp: device.host }, { hostname: { equals: device.name, mode: "insensitive" } }] } });
-      const data = {
-        name: device.name,
-        hostname: device.name,
-        managementIp: device.host,
-        managedState: "managed",
-        healthState: device.status,
-        deviceId: device.id,
-        vendorId,
-        platformId,
-        roleId,
-        sourceId: source.id,
-        lastSeenAt: new Date(),
-        tagsJson: toJson(device.tags),
-        metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort })
-      };
-      if (existing) {
-        await tx.asset.update({ where: { id: existing.id }, data });
-        updated += 1;
-      } else {
-        const asset = await tx.asset.create({ data });
-        await tx.assetIpAddress.upsert({
-          where: { address: device.host },
-          update: { assetId: asset.id, role: "management" },
-          create: { address: device.host, assetId: asset.id, role: "management" }
-        });
-        created += 1;
-      }
+      const result = await syncDeviceRecordToAsset(tx, device);
+      result.created ? created += 1 : updated += 1;
     }
   });
   return { scanned: devices.length, created, updated };
 }
 
 export async function syncDeviceToAsset(deviceId: string) {
-  const device = await prisma.device.findUnique({ where: { id: deviceId } });
-  if (!device) return null;
   return prisma.$transaction(async (tx) => {
-    const source = await upsertSource(tx, "existing_devices");
-    const vendorId = await upsertNameModel(tx, "assetVendor", device.vendor);
-    const platformId = await upsertNameModel(tx, "assetPlatform", device.type);
-    const roleId = await upsertNameModel(tx, "assetRole", device.type === "linux_edge" ? "Linux Server" : "Network Device");
-    const existing = await tx.asset.findFirst({ where: { OR: [{ deviceId: device.id }, { managementIp: device.host }, { hostname: { equals: device.name, mode: "insensitive" } }] } });
-    const data = {
-      name: device.name,
-      hostname: device.name,
-      managementIp: device.host,
-      managedState: "managed",
-      healthState: device.status,
-      deviceId: device.id,
-      vendorId,
-      platformId,
-      roleId,
-      sourceId: source.id,
-      lastSeenAt: new Date(),
-      tagsJson: toJson(device.tags),
-      metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort })
-    };
-    const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
-    await tx.assetIpAddress.upsert({
-      where: { address: device.host },
-      update: { assetId: asset.id, role: "management" },
-      create: { address: device.host, assetId: asset.id, role: "management" }
-    });
-    return asset;
+    const device = await tx.device.findUnique({ where: { id: deviceId } });
+    return device ? (await syncDeviceRecordToAsset(tx, device)).asset : null;
   });
 }
 

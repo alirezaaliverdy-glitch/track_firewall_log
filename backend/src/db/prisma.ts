@@ -125,15 +125,26 @@ export async function checkDatabaseReady() {
           to_regclass('public."Device"') IS NOT NULL AND
           to_regclass('public."Asset"') IS NOT NULL AND
           to_regclass('public."ActionPlan"') IS NOT NULL AND
-          to_regclass('public."Finding"') IS NOT NULL
+          to_regclass('public."Finding"') IS NOT NULL AND
+          to_regclass('public."DeviceCapabilityCache"') IS NOT NULL AND
+          to_regclass('public."CollectionRun"') IS NOT NULL AND
+          to_regclass('public."MetricSample"') IS NOT NULL AND
+          to_regclass('public."MetricAggregate"') IS NOT NULL AND
+          to_regclass('public."HealthSnapshot"') IS NOT NULL AND
+          to_regclass('public."MonitorIncident"') IS NOT NULL
         ) AS core_tables_ready
     `;
     const identity = rows[0];
+    const [devices, assets] = await Promise.all([
+      prisma.device.count(),
+      prisma.asset.count()
+    ]);
     return {
       ok: true as const,
       database: identity?.database ?? "unknown",
       schema: identity?.schema ?? "public",
-      schemaReady: identity?.core_tables_ready === true
+      schemaReady: identity?.core_tables_ready === true,
+      rowCountSmoke: { devices, assets }
     };
   } catch (error) {
     return { ok: false as const, reason: databaseUnavailableReason(error) };

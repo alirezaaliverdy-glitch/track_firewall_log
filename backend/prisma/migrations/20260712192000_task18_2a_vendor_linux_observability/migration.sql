@@ -1,4 +1,4 @@
-﻿-- Milestone 18.2A: vendor capability cache and Linux observability metrics.
+-- Milestone 18.2A: vendor capability cache and Linux observability metrics.
 CREATE TABLE "DeviceCapabilityCache" (
   "id" TEXT NOT NULL,
   "deviceId" TEXT NOT NULL,

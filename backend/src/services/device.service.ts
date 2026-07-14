@@ -7,6 +7,7 @@ import {
   type Prisma
 } from "@prisma/client";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
+import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
 import { prisma } from "../db/prisma.js";
 
 const DEVICE_TYPES = new Set<string>(Object.values(DeviceType));
@@ -236,42 +237,41 @@ export async function createDevice(rawInput: Record<string, unknown>) {
   const input = normalizeCreateInput(rawInput);
   const { credentialId, ...deviceInput } = input;
 
-  const device = await prisma.device.create({
-    data: {
-      ...deviceInput,
-      ...(credentialId ? { credential: { connect: { id: credentialId } } } : {}),
-      deviceCapabilities: {
-        create: [
-          {
-            name: "log_ingest",
-            category: "telemetry",
-            enabled: true,
-            dryRunSupported: true,
-            manualApprovalRequired: false,
-            metadata: toJson({ description: "Receive or import logs from this device." })
-          },
-          {
-            name: "controlled_change",
-            category: "future_action",
-            enabled: false,
-            dryRunSupported: true,
-            manualApprovalRequired: true,
-            metadata: toJson({
-              description: "Placeholder for future approved firewall changes. No commands are executed in this task."
-            })
-          }
-        ]
-      }
-    },
-    include: {
-      statusChecks: {
-        orderBy: { checkedAt: "desc" },
-        take: 5
+  const device = await prisma.$transaction(async (tx) => {
+    const created = await tx.device.create({
+      data: {
+        ...deviceInput,
+        ...(credentialId ? { credential: { connect: { id: credentialId } } } : {}),
+        deviceCapabilities: {
+          create: [
+            {
+              name: "log_ingest",
+              category: "telemetry",
+              enabled: true,
+              dryRunSupported: true,
+              manualApprovalRequired: false,
+              metadata: toJson({ description: "Receive or import logs from this device." })
+            },
+            {
+              name: "controlled_change",
+              category: "future_action",
+              enabled: false,
+              dryRunSupported: true,
+              manualApprovalRequired: true,
+              metadata: toJson({
+                description: "Placeholder for future approved firewall changes. No commands are executed in this task."
+              })
+            }
+          ]
+        }
       },
-      credential: {
-        select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
+      include: {
+        statusChecks: { orderBy: { checkedAt: "desc" }, take: 5 },
+        credential: { select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true } }
       }
-    }
+    });
+    await syncDeviceRecordToAsset(tx, created);
+    return created;
   });
 
   await writeAudit({
@@ -288,18 +288,17 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
   assertNoPlaintextSecrets(rawInput);
   const input = normalizePatchInput(rawInput);
 
-  const device = await prisma.device.update({
-    where: { id },
-    data: input,
-    include: {
-      statusChecks: {
-        orderBy: { checkedAt: "desc" },
-        take: 5
-      },
-      credential: {
-        select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
+  const device = await prisma.$transaction(async (tx) => {
+    const updated = await tx.device.update({
+      where: { id },
+      data: input,
+      include: {
+        statusChecks: { orderBy: { checkedAt: "desc" }, take: 5 },
+        credential: { select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true } }
       }
-    }
+    });
+    await syncDeviceRecordToAsset(tx, updated);
+    return updated;
   });
 
   await writeAudit({
