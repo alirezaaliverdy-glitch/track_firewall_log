@@ -123,6 +123,34 @@ test("Task 19.2A Cisco onboarding uses explicit connector-backed transitions and
   } finally { await app.close(); }
 });
 
+test("Task 20 onboarding exposes required endpoint aliases and recoverable retry", async () => {
+  resetOnboardingSessionsForTest();
+  const app = await buildApp({ authRequired: false });
+  try {
+    const created = await app.inject({ method: "POST", url: "/api/device-onboarding/sessions", payload: { vendor: "linux" } });
+    assert.equal(created.statusCode, 201);
+    const id = created.json().id;
+
+    const missingConnection = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/test-connection`, payload: {} });
+    assert.equal(missingConnection.statusCode, 400);
+    assert.equal(missingConnection.json().error.code, "ONBOARDING_CONNECTION_FAILED");
+    assert.equal(missingConnection.json().error.connectorInvoked, false);
+
+    const retry = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/retry`, payload: {} });
+    assert.equal(retry.statusCode, 200);
+    assert.equal(retry.json().status, "draft");
+    assert.equal(retry.json().result.retryFrom, "draft");
+
+    const detect = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/detect-platform`, payload: {} });
+    assert.equal(detect.statusCode, 502);
+    assert.equal(detect.json().error.code, "ONBOARDING_PLATFORM_UNSUPPORTED");
+
+    const preview = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/build-preview`, payload: {} });
+    assert.equal(preview.statusCode, 502);
+    assert.equal(preview.json().error.code, "ONBOARDING_PREVIEW_BLOCKED");
+  } finally { await app.close(); }
+});
+
 test("Task 19.2-A Product State keeps implemented onboarding visible in Assets navigation", () => {
   const required = [
     "assets.device_onboarding", "assets.vendor_device_onboarding", "assets.device_setup",

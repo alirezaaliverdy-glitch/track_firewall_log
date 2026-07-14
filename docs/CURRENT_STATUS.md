@@ -2,6 +2,14 @@
 
 Last updated: 2026-07-14
 
+## Task 20 - Real Network Operations Kickoff
+
+- Task 20 mandatory MCP gate passed in this session: Playwright MCP opened `http://localhost:5173/`, title `log-app`, and captured an authenticated Persian app shell snapshot.
+- Baseline evidence is recorded in `docs/TASK_20_PRECHANGE_RUNTIME_BASELINE.md`, `docs/TASK_20_MCP_PROOF.md`, `docs/TASK_20_ROUTE_CONTROL_BASELINE.md`, `docs/TASK_20_API_FAILURE_REGISTER.md`, and `docs/TASK_20_BACKEND_LOG_REGISTER.md`.
+- Onboarding API compatibility now includes Task 20 route names: `/test-connection`, `/detect-platform`, `/build-preview`, and `/retry`, alongside the existing Task 19.2A routes.
+- This is not yet a full Task 20 acceptance: `/tools` remains a non-executing diagnostic placeholder, Check-Host/Nmap/monitors are not yet proven, and no live device onboarding success is claimed without a connector-backed target and credential reference.
+- Local Prisma migration history still reports 34 migrations unapplied; no destructive database recovery was attempted.
+
 ## Task 19.2A - Runtime Repair and Full Audit
 
 - Device onboarding has an explicit backend state machine from answer save through connection test, platform detection, discovery, preview, saving, and completion. Recoverable failure/cancel states are stored rather than silently falling back to `draft`.

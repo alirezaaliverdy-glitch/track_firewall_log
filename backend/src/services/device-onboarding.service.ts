@@ -14,6 +14,8 @@ type SessionStatus =
   | "connection_testing"
   | "connection_verified"
   | "connection_failed"
+  | "credential_missing"
+  | "credential_invalid"
   | "platform_detecting"
   | "platform_detected"
   | "platform_unsupported"
@@ -21,6 +23,7 @@ type SessionStatus =
   | "discovery_completed"
   | "discovery_failed"
   | "preview_ready"
+  | "preview_failed"
   | "saving"
   | "completed"
   | "save_failed"
@@ -149,7 +152,10 @@ function requireConnectionDraft(session: OnboardingSession) {
   if (!draft.name.trim()) throw new Error("Device name is required.");
   if (!draft.host.trim()) throw new Error("Management address is required.");
   if (!Number.isInteger(draft.managementPort) || draft.managementPort < 1 || draft.managementPort > 65535) throw new Error("Management port must be between 1 and 65535.");
-  if (!draft.credentialId) throw new Error("A stored credential reference is required.");
+  if (!draft.credentialId) {
+    fail(session, "credential_missing", "credential", "A stored credential reference is required.");
+    throw new Error("A stored credential reference is required.");
+  }
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
 }
 
@@ -324,15 +330,20 @@ export async function discoverOnboardingInventory(id: string) {
 export async function previewOnboardingSession(id: string) {
   const session = activeSession(id);
   if (session.discovery?.connectorInvoked !== true) throw new Error("Connector-backed discovery is required before preview.");
-  session.preview = {
-    operation: session.deviceId ? "update" : "create",
-    device: { ...session.draft, credentialId: session.draft.credentialId ? "stored-reference-selected" : "missing" },
-    detection: session.detection,
-    discovery: session.discovery,
-    initialHealthCollection: true,
-    deviceMutation: false
-  };
-  return touch(session, "preview_ready", "preview");
+  try {
+    session.preview = {
+      operation: session.deviceId ? "update" : "create",
+      device: { ...session.draft, credentialId: session.draft.credentialId ? "stored-reference-selected" : "missing" },
+      detection: session.detection,
+      discovery: session.discovery,
+      initialHealthCollection: true,
+      deviceMutation: false
+    };
+    return touch(session, "preview_ready", "preview");
+  } catch (error) {
+    fail(session, "preview_failed", "preview", error);
+    throw error;
+  }
 }
 
 function slug(value: string) {
@@ -406,6 +417,38 @@ export async function commitOnboardingSession(id: string) {
 export function cancelOnboardingSession(id: string) {
   const session = activeSession(id);
   return touch(session, "cancelled", "cancelled");
+}
+
+export function retryOnboardingSession(id: string) {
+  const session = activeSession(id);
+  if (session.status === "completed") throw new Error("Completed onboarding sessions cannot be retried.");
+  if (session.status === "cancelled") throw new Error("Cancelled onboarding sessions cannot be retried. Start a new session.");
+  if (session.status === "draft") {
+    session.result = {
+      recoverable: true,
+      retryFrom: "draft",
+      previousStatus: "draft"
+    };
+    return touch(session, "draft", "vendor");
+  }
+  const recoverableStatuses = new Set<SessionStatus>([
+    "validation_failed",
+    "credential_missing",
+    "credential_invalid",
+    "connection_failed",
+    "platform_unsupported",
+    "discovery_failed",
+    "preview_failed",
+    "save_failed"
+  ]);
+  if (!recoverableStatuses.has(session.status)) return publicSession(session);
+  const nextStatus: SessionStatus = session.status === "save_failed" && session.preview ? "preview_ready" : "answers_saved";
+  session.result = {
+    recoverable: true,
+    retryFrom: nextStatus,
+    previousStatus: session.status
+  };
+  return touch(session, nextStatus, nextStatus === "preview_ready" ? "preview" : "connection");
 }
 
 export function resetOnboardingSessionsForTest() { sessions.clear(); }

@@ -2,6 +2,15 @@
 
 Entries are chronological and compact. Validation reflects what was known at the end of each task.
 
+## Task 20 - MCP Baseline and Onboarding API Compatibility (2026-07-14)
+
+- Summary: began Task 20 with the mandatory prechange gate, proved current-session Playwright MCP availability, and aligned onboarding API names with the Task 20 contract without changing protected execution behavior.
+- Browser: MCP opened `http://localhost:5173/`, page title `log-app`, and captured authenticated Persian shell evidence in `.playwright-mcp/page-2026-07-14T08-56-05-007Z.yml`.
+- Docs: added Task 20 prechange runtime baseline, MCP proof, route/control baseline, API failure register, and backend log register.
+- Backend: added `/test-connection`, `/detect-platform`, `/build-preview`, and `/retry` aliases for onboarding sessions; retry is structured and does not fabricate progress from a draft.
+- Safety: no `.env`, secret, destructive DB command, Nmap scan, Check-Host call, external provider invocation, or device mutation occurred in this slice.
+- Validation: Prisma validate passed; backend build passed; focused onboarding/workspace suite passed 9/9; `git diff --check` passed with line-ending warnings only. Migration status remains the known unapplied-history baseline.
+
 ## Task 19.2A - Runtime Repair and Full Audit (2026-07-14)
 
 - Summary: repaired onboarding runtime state, Dashboard diagnostic routing, and optional Linux monitoring schema handling while keeping external diagnostics/Nmap unstarted.

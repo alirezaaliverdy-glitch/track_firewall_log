@@ -1,5 +1,16 @@
 # CODEX_HANDOFF.md
 
+## Task 20 - MCP baseline and onboarding API compatibility (2026-07-14)
+
+- Started Task 20 from `CODEX_START_PROMPT.txt` and `TASK_20_REAL_NETWORK_OPERATIONS.md` after re-reading the required live handoff/status/history/architecture docs and Task 19/19.1/19.2/19.2A specifications.
+- Playwright MCP is available in this exact Codex session. MCP opened `http://localhost:5173/`, reported URL `http://localhost:5173/`, title `log-app`, and captured a visible authenticated Persian shell snapshot at `.playwright-mcp/page-2026-07-14T08-56-05-007Z.yml`.
+- Added Task 20 prechange evidence docs: `docs/TASK_20_PRECHANGE_RUNTIME_BASELINE.md`, `docs/TASK_20_MCP_PROOF.md`, `docs/TASK_20_ROUTE_CONTROL_BASELINE.md`, `docs/TASK_20_API_FAILURE_REGISTER.md`, and `docs/TASK_20_BACKEND_LOG_REGISTER.md`.
+- Device onboarding now exposes Task 20 endpoint names while preserving existing Task 19.2A routes: `/test-connection`, `/detect-platform`, `/build-preview`, and `/retry`.
+- Retry behavior is honest: a draft with no validated answers stays `draft` with `retryFrom=draft`; completed/cancelled sessions are not silently retried; recoverable failures return a structured retry target.
+- Added `credential_missing`, `credential_invalid`, and `preview_failed` to the onboarding state contract. Live connector/device success is still only claimed after connector invocation, platform evidence, discovery, preview, and persisted Device ID.
+- Validation passed for this slice: `cd backend && npx prisma validate`; `cd backend && npm run build`; `cd backend && npx tsx --test test/task19-1-onboarding-workspace.test.ts` (9/9); `git diff --check` with line-ending warnings only.
+- `npx prisma migrate status` still reports the known unapplied local migration-history baseline; no destructive recovery, `.env` access, secret exposure, Nmap scan, Check-Host call, or external diagnostic provider call occurred.
+
 ## Task 19.2A - Runtime repair and full audit (2026-07-14)
 
 - Completed the requested Task 19.2A runtime repair without starting external diagnostics, scan authorization, Check-Host, Nmap, production integration expansion, or unrelated device mutation work.

@@ -8,6 +8,7 @@ import {
   discoverOnboardingInventory,
   getOnboardingSession,
   previewOnboardingSession,
+  retryOnboardingSession,
   testOnboardingConnection
 } from "../services/device-onboarding.service.js";
 
@@ -33,7 +34,15 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
     try { return await testOnboardingConnection(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_CONNECTION_FAILED", message: error instanceof Error ? error.message : "Connection failed.", connectorInvoked: false } }); }
   });
+  app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/test-connection", async (request, reply) => {
+    try { return await testOnboardingConnection(request.params.sessionId); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_CONNECTION_FAILED", message: error instanceof Error ? error.message : "Connection failed.", connectorInvoked: false } }); }
+  });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/detect", async (request, reply) => {
+    try { return await detectOnboardingPlatform(request.params.sessionId); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_PLATFORM_UNSUPPORTED", message: error instanceof Error ? error.message : "Detection failed." } }); }
+  });
+  app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/detect-platform", async (request, reply) => {
     try { return await detectOnboardingPlatform(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_PLATFORM_UNSUPPORTED", message: error instanceof Error ? error.message : "Detection failed." } }); }
   });
@@ -45,9 +54,17 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
     try { return await previewOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_PREVIEW_BLOCKED", message: error instanceof Error ? error.message : "Preview failed." } }); }
   });
+  app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/build-preview", async (request, reply) => {
+    try { return await previewOnboardingSession(request.params.sessionId); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_PREVIEW_BLOCKED", message: error instanceof Error ? error.message : "Preview failed." } }); }
+  });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/commit", async (request, reply) => {
     try { return await commitOnboardingSession(request.params.sessionId); }
     catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_COMMIT_BLOCKED", message: error instanceof Error ? error.message : "Save failed." } }); }
+  });
+  app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/retry", async (request, reply) => {
+    try { return retryOnboardingSession(request.params.sessionId); }
+    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_RETRY_BLOCKED", message: error instanceof Error ? error.message : "Retry failed." } }); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/cancel", async (request, reply) => {
     try { return cancelOnboardingSession(request.params.sessionId); }
