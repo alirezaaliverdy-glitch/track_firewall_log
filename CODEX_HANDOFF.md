@@ -1,5 +1,15 @@
 # CODEX_HANDOFF.md
 
+## Database Runtime Port Correction - Windows PostgreSQL (2026-07-14)
+
+- Normal backend runtime now keeps the existing dotenv database name and credentials and resolves local PostgreSQL to `127.0.0.1:5432`.
+- Root cause: `backend/src/config/database-url.ts` still contained stale normalization from the earlier temporary runtime. It rewrote local `firewall_log_analyzer` to `firewall_log_auth` and forced port `55432`, so `cd backend && npm run dev` targeted the wrong local database runtime.
+- Fix: removed the local database/port rewrite from `resolveDatabaseUrl`; development localhost normalization now only changes host to `127.0.0.1`.
+- Shared path: `backend/src/config/env.ts` and `backend/prisma.config.ts` still both call the same resolver, so Prisma config, PrismaClient, PrismaPgAdapter, and the pg Pool use the same connection source.
+- Verification: `Test-NetConnection 127.0.0.1 -Port 5432` succeeded; resolved runtime source is `127.0.0.1:5432/firewall_log_analyzer`; normal `cd backend && npm run dev` is running on port 4000; `/api/health/ready` returned 200; `/api/auth/login` returned 200; `/api/auth/me` returned 200; `/api/assets` returned 200 with 7 assets; `/api/credentials` returned 200 with 4 credential references.
+- Validation: `cd backend && npm run build` passed.
+- Limitation: Playwright MCP tools were not exposed in this turn after targeted tool discovery, so authenticated dashboard MCP opening could not be completed from this tool surface.
+
 ## Task 20.1A - DB/auth repair and Cisco onboarding blocker (2026-07-14)
 
 - Read `TASK_20_1A_DB_AUTH_CISCO_ONBOARDING_REPAIR.md` and the required project/status/architecture/task docs before editing.

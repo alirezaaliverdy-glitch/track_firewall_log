@@ -473,3 +473,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Backend is running as one normal `npm run dev` process on port 4000.
 - Current frontend origin `http://localhost:5174` is included in backend CORS defaults.
 - Runtime proof passed: ready endpoint 10/10, Prisma `appUser.count()`, auth login 200, and MCP-authenticated dashboard on 5174 with no current console errors.
+
+## Database Runtime Port Correction (2026-07-14)
+
+- Normal `cd backend && npm run dev` now uses the existing dotenv database name and credentials on Windows PostgreSQL at `127.0.0.1:5432`.
+- `backend/src/config/database-url.ts` no longer rewrites the local development database to the stale temporary `127.0.0.1:55432/firewall_log_auth` runtime; it only normalizes localhost to `127.0.0.1`.
+- Verified runtime source: `127.0.0.1:5432/firewall_log_analyzer`.
+- Proof passed: `Test-NetConnection 127.0.0.1 -Port 5432`, `/api/health/ready` 200, `/api/auth/login` 200, `/api/auth/me` 200, `/api/assets` 200 with 7 assets, and `/api/credentials` 200 with 4 credential references.
+- Backend build passed. Playwright MCP dashboard verification is still pending because no Playwright MCP callable tools were exposed in this turn.

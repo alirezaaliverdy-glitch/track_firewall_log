@@ -542,3 +542,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Areas: `backend/src/config/env.ts`, handoff/status docs.
 - Evidence: one normal backend dev process; `/api/health/ready` 200 ten times; `prisma.appUser.count()` succeeded; `/api/auth/login` returned 200; Playwright MCP opened `http://localhost:5174/dashboard` and saw auth/assets/security/monitoring/product-state API calls all 200 with zero current console errors.
 - Commit: pending.
+
+## Database Runtime Port Correction (2026-07-14)
+
+- Summary: corrected normal backend database resolution for Windows PostgreSQL on `127.0.0.1:5432` without Docker, temporary shell overrides, migrations, seeds, db push, reset, or destructive SQL.
+- Root cause: `backend/src/config/database-url.ts` still had stale temporary-runtime normalization that rewrote local `firewall_log_analyzer` to `firewall_log_auth` and forced port `55432`; on the real Windows PostgreSQL listener this produced Prisma `P1003` because the rewritten database did not exist there.
+- Areas: `backend/src/config/database-url.ts`, handoff/status docs.
+- Evidence: shared resolver reports `127.0.0.1:5432/firewall_log_analyzer`; normal `cd backend && npm run dev` starts one backend app process on port 4000; `/api/health/ready` returned 200; `/api/auth/login` returned 200; `/api/auth/me` returned 200; `/api/assets` returned 200 with 7 assets; `/api/credentials` returned 200 with 4 credential references.
+- Validation: `cd backend && npm run build` passed.
+- Limitation: Playwright MCP dashboard verification could not be completed because the Playwright MCP tools were not exposed in this turn after targeted discovery.
