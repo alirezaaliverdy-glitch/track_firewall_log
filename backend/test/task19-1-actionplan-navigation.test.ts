@@ -11,11 +11,17 @@ test("Task 19.1 ActionPlan direct routes preserve the exact plan identity", () =
   const page = frontendSource("src/features/actions/pages/ActionsPage.tsx");
   const center = frontendSource("src/components/actions/ActionCenterPanel.tsx");
   const assistant = frontendSource("src/components/ai/AiSecurityAssistantPanel.tsx");
+  const app = frontendSource("src/App.tsx");
+  const routes = frontendSource("src/routes/appRoutes.tsx");
   assert.match(handoff, /encodeURIComponent\(id\)/);
   assert.match(handoff, /pathname\.match/);
   assert.match(page, /initialActionPlanId=\{params\.actionId\}/);
   assert.match(center, /actionPlanIdFromLocation\(\)/);
-  assert.match(center, /window\.addEventListener\("popstate"/);
+  assert.match(routes, /path:\s*"\/actions\/:actionId"/);
+  assert.match(app, /appRoutes\.map/);
+  assert.match(app, /path="\/actions\/:actionId\/result"/);
+  assert.match(center, /useNavigate/);
+  assert.doesNotMatch(center, /window\.history\.pushState|window\.addEventListener\("popstate"/);
   assert.match(center, /action-row-\$\{plan\.id\}/);
   assert.match(center, /ACTION_PLAN_NOT_FOUND/);
   assert.match(assistant, /reviewInActionCenter\(createdPlanId\)/);

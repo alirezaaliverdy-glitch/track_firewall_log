@@ -1,6 +1,7 @@
 import { Bell, Bot, Boxes, Gauge, LayoutDashboard, LogOut, Menu, Plug, Search, Settings, ShieldAlert, Wrench } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { appRoutes } from "@/routes/appRoutes";
 import { getProductNavigation, type ProductNavigationGroup } from "@/lib/productState";
@@ -19,6 +20,7 @@ const navigationIcons = {
 export function AppShell({ children, currentPath }: { children: ReactNode; currentPath: string }) {
   const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [navigation, setNavigation] = useState<ProductNavigationGroup[]>([]);
   const [navigationError, setNavigationError] = useState(false);
@@ -51,22 +53,22 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
           <Menu className="h-4 w-4" aria-hidden="true" />
         </button>
         <nav className="platform-sidebar__nav">
-          {navigationError ? <a href="/dashboard" className="platform-nav-group__label">{isFa ? "داشبورد" : "Dashboard"}</a> : null}
+          {navigationError ? <Link to="/dashboard" className="platform-nav-group__label">{isFa ? "داشبورد" : "Dashboard"}</Link> : null}
           {!navigation.length && !navigationError ? <span className="platform-nav-group__label" aria-live="polite">{isFa ? "در حال بارگذاری ناوبری..." : "Loading navigation..."}</span> : null}
           {navigation.map((group) => {
             const Icon = navigationIcons[group.iconKey as keyof typeof navigationIcons] ?? LayoutDashboard;
             return (
               <section key={group.key} className={`platform-nav-group ${activeGroup === group.key ? "is-active" : ""}`}>
-                <a href={group.route} className="platform-nav-group__label">
+                <Link to={group.route} className="platform-nav-group__label">
                   <Icon className="h-4 w-4" aria-hidden="true" />
                   <span>{isFa ? group.titleFa : group.titleEn}</span>
-                </a>
+                </Link>
                 {!collapsed && group.items.length > 1 ? (
                   <div className="platform-nav-group__children">
                     {group.items.map((item) => (
-                      <a key={item.key} href={item.route} className={currentPath === item.route ? "is-current" : ""}>
+                      <Link key={item.key} to={item.route} className={location.pathname === item.route ? "is-current" : ""}>
                         <span>{isFa ? item.titleFa : item.titleEn}</span>
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 ) : null}
@@ -98,7 +100,7 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
       </div>
       <nav className="platform-bottom-nav" aria-label={t("shell.mobileNavigation")}>
         {navigation.filter((group) => group.mobilePrimary).map((group) => (
-          <a key={group.key} href={group.route} className={activeGroup === group.key ? "is-current" : ""}>{isFa ? group.titleFa : group.titleEn}</a>
+          <Link key={group.key} to={group.route} className={activeGroup === group.key ? "is-current" : ""}>{isFa ? group.titleFa : group.titleEn}</Link>
         ))}
       </nav>
     </div>

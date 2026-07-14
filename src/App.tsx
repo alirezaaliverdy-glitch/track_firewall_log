@@ -1,6 +1,7 @@
 import "./App.css";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { LogProvider } from "@/context/LogContext";
 import AppBackground from "@/components/background/AppBackground";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
@@ -8,15 +9,16 @@ import ActionResultView from "@/components/actions/ActionResultView";
 import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
 import CommandCatalogPanel from "@/components/commands/CommandCatalogPanel";
 import { AppShell } from "@/components/layout/AppShell";
-import { matchRoute } from "@/routes/appRoutes";
+import { appRoutes, type AppRoute } from "@/routes/appRoutes";
 
 function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
+  const navigate = useNavigate();
   return (
-    <div className="authenticated-app">
+    <div className="authenticated-app" data-page-id="actions.guided.session">
       <AppBackground />
       <main className="App relative z-10 mx-auto max-w-screen-lg px-4 pb-12 pt-6 sm:px-6">
         <h1 dir="rtl" className="mb-4 text-right text-2xl font-bold text-slate-100">ساخت مرحله ای اکشن</h1>
-        <GuidedActionWizard sessionId={sessionId} onClose={() => { window.location.pathname = "/actions"; }} />
+        <GuidedActionWizard sessionId={sessionId} onClose={() => navigate("/actions")} />
       </main>
     </div>
   );
@@ -25,48 +27,83 @@ function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
 const legacyDashboardShortcutKey = "dashboard.shortcuts.library";
 void legacyDashboardShortcutKey;
 
-function App() {
-  const { t } = useTranslation();
-  const pathname = window.location.pathname;
-  const resultMatch = pathname.match(/^\/actions\/([^/]+)\/result\/?$/);
-  if (resultMatch) {
-    return <div className="authenticated-app"><AppBackground /><ActionResultView actionPlanId={decodeURIComponent(resultMatch[1])} /></div>;
-  }
+function GuidedActionRoute() {
+  const { sessionId = "" } = useParams();
+  return <StandaloneGuidedAction sessionId={sessionId} />;
+}
 
-  const guidedMatch = pathname.match(/^\/guided-actions\/([^/]+)\/?$/);
-  if (guidedMatch) return <StandaloneGuidedAction sessionId={decodeURIComponent(guidedMatch[1])} />;
+function ActionResultRoute() {
+  const { actionId = "" } = useParams();
+  return <div className="authenticated-app" data-page-id="actions.result"><AppBackground /><ActionResultView actionPlanId={actionId} /></div>;
+}
 
-  if (pathname === "/action-library") {
-    return (
-      <Suspense fallback={<h1>loading...</h1>}>
-        <LogProvider>
-          <div className="authenticated-app">
-            <AppBackground />
-            <AppShell currentPath="/actions">
-              <ErrorBoundary title={t("error.actionLibrary")}>
-                <CommandCatalogPanel />
-              </ErrorBoundary>
-            </AppShell>
-          </div>
-        </LogProvider>
-      </Suspense>
-    );
-  }
-
-  const { route, params } = matchRoute(pathname);
+function FeatureRoute({ route }: { route: AppRoute }) {
+  const params = useParams();
   const Page = route.component;
+  return (
+    <div className="authenticated-app" data-page-id={route.featureKey}>
+      <AppBackground />
+      <AppShell currentPath={route.path}>
+        <ErrorBoundary title={route.labelFa}>
+          <Page params={params as Record<string, string>} />
+        </ErrorBoundary>
+      </AppShell>
+    </div>
+  );
+}
 
+function ActionLibraryRoute() {
+  const { t } = useTranslation();
+  return (
+    <div className="authenticated-app" data-page-id="actions.library">
+      <AppBackground />
+      <AppShell currentPath="/actions">
+        <ErrorBoundary title={t("error.actionLibrary")}><CommandCatalogPanel /></ErrorBoundary>
+      </AppShell>
+    </div>
+  );
+}
+
+function NotFoundPage() {
+  return (
+    <div className="authenticated-app" data-page-id="not-found">
+      <AppBackground />
+      <AppShell currentPath="">
+        <section className="state-card" role="alert">
+          <h1>404</h1>
+          <p>Page not found / صفحه پیدا نشد</p>
+        </section>
+      </AppShell>
+    </div>
+  );
+}
+
+function RouterNavigationBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const to = event instanceof CustomEvent && typeof event.detail?.to === "string" ? event.detail.to : "";
+      if (to) navigate(to);
+    };
+    window.addEventListener("app:navigate", handler);
+    return () => window.removeEventListener("app:navigate", handler);
+  }, [navigate]);
+  return null;
+}
+
+function App() {
   return (
     <Suspense fallback={<h1>loading...</h1>}>
       <LogProvider>
-        <div className="authenticated-app">
-          <AppBackground />
-          <AppShell currentPath={route.path}>
-            <ErrorBoundary title={route.labelFa}>
-              <Page params={params} />
-            </ErrorBoundary>
-          </AppShell>
-        </div>
+        <RouterNavigationBridge />
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/action-library" element={<ActionLibraryRoute />} />
+          <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
+          <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />
+          {appRoutes.map((route) => <Route key={route.featureKey} path={route.path} element={<FeatureRoute route={route} />} />)}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
       </LogProvider>
     </Suspense>
   );

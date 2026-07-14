@@ -1,5 +1,12 @@
 # Current Project Status
 
+## Master repair convergence - Phase 2 (2026-07-14)
+
+- Phase 2 router convergence is complete: React Router owns routing/navigation, unknown routes render a distinct 404, and all 53 feature routes have stable page identities.
+- Frontend routes and backend Product State are guarded by exact 53-key and route parity tests.
+- Authenticated Playwright verified the 404, Dashboard, and client-side Assets navigation with correct identities, RTL, no overflow, and real same-origin API traffic.
+- Historical database counts remain unchanged. Next allowed work is Phase 3 Device/Asset and schema reconciliation.
+
 ## Master repair convergence - Phase 1 (2026-07-14)
 
 - Phase 0 complete with a verified, untouched custom-format database dump and preserved historical counts.

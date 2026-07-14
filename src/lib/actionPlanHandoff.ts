@@ -1,8 +1,6 @@
 export const ACTION_PLAN_CREATED_EVENT = "action-plan-created";
 
 type HandoffTarget = Pick<Window, "addEventListener" | "removeEventListener" | "dispatchEvent">;
-type NavigationTarget = { location: Pick<Location, "assign"> };
-
 export function actionPlanPath(actionPlanId: string) {
   const id = actionPlanId.trim();
   if (!id) throw new Error("actionPlanId is required");
@@ -32,6 +30,6 @@ export function subscribeToActionPlanCreated(listener: (actionPlanId: string) =>
   return () => target.removeEventListener(ACTION_PLAN_CREATED_EVENT, handler);
 }
 
-export function reviewInActionCenter(actionPlanId: string, target: NavigationTarget = window) {
-  target.location.assign(actionPlanPath(actionPlanId));
+export function reviewInActionCenter(actionPlanId: string, target: EventTarget = window) {
+  target.dispatchEvent(new CustomEvent("app:navigate", { detail: { to: actionPlanPath(actionPlanId) } }));
 }

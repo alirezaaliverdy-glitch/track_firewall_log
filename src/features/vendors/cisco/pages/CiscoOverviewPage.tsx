@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getCiscoDevices, getVendorDetail, listVendors, type VendorDetail, type VendorSummary } from "@/lib/vendors";
+import { useLocation } from "react-router-dom";
 
 type CiscoDeviceResponse = { data: unknown[]; warnings: string[]; meta: Record<string, unknown> };
 
@@ -40,7 +41,8 @@ const vendorOnboardingLabelFa: Record<string, string> = {
 };
 
 export default function CiscoOverviewPage() {
-  const isCiscoRoute = window.location.pathname.includes("/assets/vendors/cisco");
+  const location = useLocation();
+  const isCiscoRoute = location.pathname.includes("/assets/vendors/cisco");
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [vendor, setVendor] = useState<VendorDetail | null>(null);
   const [devices, setDevices] = useState<CiscoDeviceResponse | null>(null);

@@ -24,6 +24,7 @@ import {
 } from "@/lib/actions";
 import { actionPlanIdFromLocation, actionPlanPath, subscribeToActionPlanCreated } from "@/lib/actionPlanHandoff";
 import { actionResultUrl, openActionResultInNewTab } from "@/lib/actionResultNavigation";
+import { useNavigate } from "react-router-dom";
 
 const safeNumber = (value: unknown): number => {
   const n = Number(value ?? 0);
@@ -455,6 +456,7 @@ type SelectedActionError = { code: string; message: string; actionPlanId: string
 type ActionUiError = { code: string; retryable: boolean; recovery: string | null; currentRevision: number | null; approvedRevision: number | null; changedFields: string[] };
 
 export default function ActionCenterPanel({ initialActionPlanId }: { initialActionPlanId?: string }) {
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const copy = isFa ? {
@@ -538,17 +540,11 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
   }, [initialActionPlanId, refreshActions]);
 
   useEffect(() => {
-    const handleHistoryNavigation = () => { void refreshActions(actionPlanIdFromLocation()); };
-    window.addEventListener("popstate", handleHistoryNavigation);
-    return () => window.removeEventListener("popstate", handleHistoryNavigation);
-  }, [refreshActions]);
-
-  useEffect(() => {
     return subscribeToActionPlanCreated((id) => {
-      window.history.pushState({}, "", actionPlanPath(id));
+      navigate(actionPlanPath(id));
       void refreshActions(id);
     });
-  }, [refreshActions]);
+  }, [navigate, refreshActions]);
 
   const safeActions = useMemo(() => normalizeArray<ActionPlan>(actions), [actions]);
   const hiddenSet = useMemo(() => new Set(hiddenCompletedIds), [hiddenCompletedIds]);
@@ -590,7 +586,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
   };
 
   const openAction = (action: ActionPlan) => {
-    window.history.pushState({}, "", actionPlanPath(action.id));
+    navigate(actionPlanPath(action.id));
     setDetailsLoading(true);
     setMessage(null);
     setActionError(null);
@@ -605,7 +601,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
   const closeSelectedAction = () => {
     setSelectedAction(null);
     setAuditEntries([]);
-    window.history.pushState({}, "", "/actions");
+    navigate("/actions");
   };
 
   const runPlanStep = (label: string, operation: (id: string) => Promise<ActionPlan>) => {
@@ -1104,7 +1100,7 @@ export default function ActionCenterPanel({ initialActionPlanId }: { initialActi
             className="mt-3 rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100"
             onClick={() => {
               setSelectedError(null);
-              window.history.pushState({}, "", "/actions");
+              navigate("/actions");
             }}
           >
             {copy.return}

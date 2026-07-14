@@ -6,6 +6,7 @@ import { createCatalogAction, proposeWithAi, searchCommands, type CatalogItem } 
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
 import { startGuidedSession } from "@/lib/guidedActions";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const VENDORS = ["fortigate", "mikrotik", "linux", "cisco", "pfsense", "generic"];
 
@@ -41,6 +42,8 @@ function goToActionCenter(actionPlanId: string) {
 }
 
 export default function CommandCatalogPanel() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceId, setDeviceId] = useState("");
@@ -63,12 +66,12 @@ export default function CommandCatalogPanel() {
     void listDevices()
       .then((next) => {
         setDevices(next);
-        const params = new URLSearchParams(window.location.search);
+        const params = new URLSearchParams(location.search);
         const selected = params.get("deviceId") ?? params.get("selectedDeviceId");
         if (selected && next.some((device) => device.id === selected)) setDeviceId(selected);
       })
       .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "دریافت دستگاه‌ها انجام نشد."));
-  }, []);
+  }, [location.search]);
 
   useEffect(() => {
     if (selectedDevice) setVendor(vendorOf(selectedDevice));
@@ -102,7 +105,7 @@ export default function CommandCatalogPanel() {
     url.searchParams.set("catalogActionId", item.id);
     url.searchParams.set("vendor", item.vendor);
     if (deviceId) url.searchParams.set("deviceId", deviceId);
-    window.history.pushState({}, "", url);
+    navigate(`${url.pathname}${url.search}`, { replace: true });
   }
 
   function closeGuidedFlow() {
@@ -110,7 +113,7 @@ export default function CommandCatalogPanel() {
     const url = new URL(window.location.href);
     url.searchParams.delete("guidedBlueprintId");
     url.searchParams.delete("catalogActionId");
-    window.history.pushState({}, "", url);
+    navigate(`${url.pathname}${url.search}`, { replace: true });
   }
 
   function openCatalogGuidedFlow(item: CatalogItem) {

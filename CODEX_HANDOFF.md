@@ -1,5 +1,15 @@
 # CODEX_HANDOFF.md
 
+## Master Repair Phase 2 - Router convergence (2026-07-14)
+
+- Replaced the manual pathname matcher with `react-router-dom` `BrowserRouter`, `Routes`, `Route`, `Navigate`, `Link`, `useNavigate`, and `useParams`.
+- Unknown authenticated routes now render a real 404 with `data-page-id="not-found"`; Dashboard is no longer the fallback.
+- All 53 feature routes expose their feature key as `data-page-id`; ActionPlan result and guided-session deep links remain explicit.
+- Removed direct `history.pushState`, pathname assignment, reload navigation, and manual popstate handling from frontend navigation paths.
+- Route/Product State parity now asserts exactly 53 unique keys and exact key-to-route equality.
+- Playwright authenticated proof: unknown route rendered 404/`not-found`; Dashboard rendered `dashboard.overview`; clicking Assets rendered `assets.overview`; Persian RTL and no overflow were confirmed; API calls stayed on `/firewall-api` and returned the expected contracts.
+- Preserved DB counts: Device 3, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124.
+
 ## Master Repair Phase 1 - Normal runtime convergence (2026-07-14)
 
 - Phase 0 verified the existing custom dump at `backups/phase0_firewall_log_analyzer.dump` read-only; archive header reports `firewall_log_analyzer`, PostgreSQL 18.4, and 364 TOC entries.

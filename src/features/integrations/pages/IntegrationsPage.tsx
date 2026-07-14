@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { useLocation } from "react-router-dom";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 
@@ -31,11 +32,12 @@ async function requestJson<T>(path: string): Promise<T> {
 }
 
 export default function IntegrationsPage() {
+  const location = useLocation();
   const current = useMemo<IntegrationKey | null>(() => {
-    if (window.location.pathname.endsWith("/netbox")) return "netbox";
-    if (window.location.pathname.endsWith("/wazuh")) return "wazuh";
+    if (location.pathname.endsWith("/netbox")) return "netbox";
+    if (location.pathname.endsWith("/wazuh")) return "wazuh";
     return null;
-  }, []);
+  }, [location.pathname]);
   const [health, setHealth] = useState<Record<IntegrationKey, Health> | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(true);

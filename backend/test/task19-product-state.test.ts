@@ -39,11 +39,26 @@ test("Task 19A navigation excludes planned, mock-only, not-configured and unveri
 test("Task 19A backend feature keys and frontend route registry stay aligned", () => {
   const source = readFileSync(join(process.cwd(), "..", "src", "routes", "appRoutes.tsx"), "utf8");
   const frontendKeys = [...source.matchAll(/featureKey:\s*"([^"]+)"/g)].map((match) => match[1]);
+  const frontendRoutes = [...source.matchAll(/path:\s*"([^"]+)"\s*,\s*featureKey:\s*"([^"]+)"/g)]
+    .map((match) => ({ route: match[1], key: match[2] }));
   const backendKeys = new Set(PRODUCT_FEATURES.map((item) => item.key));
-  assert.ok(frontendKeys.length > 0);
+  assert.equal(frontendKeys.length, 53);
+  assert.equal(PRODUCT_FEATURES.length, 53);
   assert.equal(new Set(frontendKeys).size, frontendKeys.length);
   for (const key of frontendKeys) assert.ok(backendKeys.has(key), `Frontend feature key is missing from product state: ${key}`);
   for (const item of PRODUCT_FEATURES.filter((feature) => feature.route)) assert.ok(frontendKeys.includes(item.key), `Product state feature is missing from frontend routes: ${item.key}`);
+  for (const frontend of frontendRoutes) {
+    const backend = PRODUCT_FEATURES.find((item) => item.key === frontend.key);
+    assert.equal(backend?.route, frontend.route, `Route mismatch for ${frontend.key}`);
+  }
+});
+
+test("Phase 2 uses React Router, route identity markers, and a real not-found page", () => {
+  const appSource = readFileSync(join(process.cwd(), "..", "src", "App.tsx"), "utf8");
+  assert.match(appSource, /<Routes>/);
+  assert.match(appSource, /path="\*" element={<NotFoundPage/);
+  assert.match(appSource, /data-page-id={route\.featureKey}/);
+  assert.doesNotMatch(appSource, /matchRoute|window\.location\.pathname|history\.pushState/);
 });
 
 test("Task 19A product-state APIs expose one consistent contract", async () => {

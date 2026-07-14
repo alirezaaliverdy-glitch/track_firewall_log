@@ -9,9 +9,12 @@ import './i18n'
 import App from './App.tsx'
 import { AuthProvider } from './context/AuthContext.tsx'
 import ProtectedRoute from './components/auth/ProtectedRoute.tsx'
+import { BrowserRouter } from 'react-router-dom'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider><ProtectedRoute><App /></ProtectedRoute></AuthProvider>
+    <BrowserRouter>
+      <AuthProvider><ProtectedRoute><App /></ProtectedRoute></AuthProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

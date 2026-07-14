@@ -87,22 +87,3 @@ export const appRoutes: AppRoute[] = [
   { path: "/integrations/wazuh", featureKey: "integrations.wazuh", labelFa: "Wazuh", labelEn: "Wazuh", group: "integrations", component: IntegrationsPage },
   { path: "/settings", featureKey: "settings", labelFa: "تنظیمات", labelEn: "Settings", group: "settings", component: SettingsPage }
 ];
-
-export function matchRoute(pathname: string) {
-  const normalized = pathname === "/" || pathname === "" ? "/dashboard" : pathname.replace(/\/$/, "") || "/dashboard";
-  for (const route of appRoutes) {
-    const routeParts = route.path.split("/").filter(Boolean);
-    const pathParts = normalized.split("/").filter(Boolean);
-    if (routeParts.length !== pathParts.length) continue;
-    const params: Record<string, string> = {};
-    const matches = routeParts.every((part, index) => {
-      if (part.startsWith(":")) {
-        params[part.slice(1)] = decodeURIComponent(pathParts[index]);
-        return true;
-      }
-      return part === pathParts[index];
-    });
-    if (matches) return { route, params };
-  }
-  return { route: appRoutes[0], params: {} };
-}

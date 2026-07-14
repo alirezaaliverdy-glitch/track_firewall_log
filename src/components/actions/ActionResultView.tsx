@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, CircleX } from "lucide-react";
 import { getAction, normalizeObject, type ActionPlan } from "@/lib/actions";
 import { formatActionResult } from "@/features/actions/actionResultFormatter";
+import { useNavigate } from "react-router-dom";
 
 const metadataOf = (action: ActionPlan) => normalizeObject(normalizeObject(action.parametersJson).metadata);
 
@@ -37,6 +38,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 }
 
 export default function ActionResultView({ actionPlanId }: { actionPlanId: string }) {
+  const navigate = useNavigate();
   const [action, setAction] = useState<ActionPlan | null>(null);
   const [error, setError] = useState("");
 
@@ -74,10 +76,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
             <h1 className="mt-1 text-2xl font-semibold">نتیجه اجرای دستور</h1>
           </div>
           <button
-            onClick={() => {
-              window.history.pushState({}, "", "/#action-center");
-              window.location.reload();
-            }}
+            onClick={() => navigate("/actions")}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-200"
           >
             <ArrowRight className="h-4 w-4" />

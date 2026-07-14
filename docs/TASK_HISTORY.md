@@ -1,5 +1,13 @@
 # Task History
 
+## 2026-07-14 - Master repair Phase 2
+
+- Migrated the application from manual pathname matching to React Router while preserving ActionPlan result and guided-action deep links.
+- Added real 404 behavior and stable `data-page-id` markers for all feature routes and special routes.
+- Replaced direct URL mutation/popstate navigation with router navigation and converted the generated shell navigation to `Link`.
+- Strengthened Product State parity to exactly 53 unique keys with exact frontend/backend route equality.
+- Validation passed: backend build; focused route/product-state/deep-link tests; frontend build; locale and UTF-8 checks; diff check; authenticated Playwright 404/Dashboard/Assets acceptance. Database counts remained unchanged.
+
 ## 2026-07-14 - Master repair Phase 1
 
 - Completed the non-destructive Phase 0 identity/dump gate and normal-runtime convergence.

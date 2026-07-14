@@ -3,6 +3,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { listDiagnostics, listNmapScans, runDiagnostic, runNmapScan, type DiagnosticSession, type NmapScan } from "@/lib/diagnostics";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 const routeTitle: Record<string, string> = {
   "/tools/network-check": "تست سریع شبکه",
@@ -32,8 +33,9 @@ function providerIds(session: DiagnosticSession) {
 }
 
 export default function ToolsPage() {
-  const title = routeTitle[window.location.pathname] ?? "ابزارهای تشخیصی";
-  const isNmap = window.location.pathname === "/tools/nmap";
+  const location = useLocation();
+  const title = routeTitle[location.pathname] ?? "ابزارهای تشخیصی";
+  const isNmap = location.pathname === "/tools/nmap";
   const [target, setTarget] = useState(isNmap ? "scanme.nmap.org" : "example.com");
   const [sessions, setSessions] = useState<DiagnosticSession[]>([]);
   const [nmapScans, setNmapScans] = useState<NmapScan[]>([]);
