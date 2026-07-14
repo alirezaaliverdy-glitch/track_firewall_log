@@ -50,7 +50,7 @@ test("Task 20 tools routes and Dashboard controls point to real tool destination
   }
   const dashboard = readFileSync(join(process.cwd(), "..", "src", "features", "dashboard", "pages", "DashboardPage.tsx"), "utf8");
   for (const path of ["/tools/network-check", "/tools", "/tools/nmap", "/tools/monitors", "/assets/devices/new", "/assets/devices"]) {
-    assert.match(dashboard, new RegExp(`href="${path.replace("/", "\\/")}`));
+    assert.match(dashboard, new RegExp(`to="${path.replace("/", "\\/")}`));
   }
 });
 

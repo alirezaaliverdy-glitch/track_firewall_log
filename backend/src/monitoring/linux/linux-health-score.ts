@@ -1,4 +1,4 @@
-﻿export type LinuxMetric = { metricKey: string; value: number; unit?: string; labels?: Record<string, unknown> };
+export type LinuxMetric = { metricKey: string; value: number; unit?: string; labels?: Record<string, unknown> };
 export type LinuxHealthState = "healthy" | "warning" | "critical" | "offline" | "stale" | "unknown";
 
 export function scoreLinuxHealth(metrics: LinuxMetric[], warnings: string[] = []) {

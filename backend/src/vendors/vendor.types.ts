@@ -1,4 +1,4 @@
-﻿export type ImplementationState = "implemented" | "partial" | "planned" | "unsupported";
+export type ImplementationState = "implemented" | "partial" | "planned" | "unsupported";
 export type CapabilityMode = "read" | "mutate";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 

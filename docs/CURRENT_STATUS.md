@@ -495,3 +495,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Verified runtime source: `127.0.0.1:5432/firewall_log_analyzer`.
 - Proof passed: `Test-NetConnection 127.0.0.1 -Port 5432`, `/api/health/ready` 200, `/api/auth/login` 200, `/api/auth/me` 200, `/api/assets` 200 with 7 assets, and `/api/credentials` 200 with 4 credential references.
 - Backend build passed. Playwright MCP dashboard verification is still pending because no Playwright MCP callable tools were exposed in this turn.
+
+## Device Onboarding Final Repair (2026-07-15)
+
+- Onboarding now has an explicit honest unverified path and a connector-backed verified path that cannot succeed unless `connectorInvoked=true`.
+- Sessions persist across restarts; missing, expired, credential-invalid, duplicate, and transaction-rollback paths have focused coverage.
+- The additive onboarding-session migration is applied and Prisma reports the schema up to date.
+- Browser acceptance created exactly one Device and linked Asset, verified redirect/list state, then safely removed only those test records; protected counts returned to 3/7/4/5/124.

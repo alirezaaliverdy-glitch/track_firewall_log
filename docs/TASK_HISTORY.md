@@ -566,3 +566,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Evidence: shared resolver reports `127.0.0.1:5432/firewall_log_analyzer`; normal `cd backend && npm run dev` starts one backend app process on port 4000; `/api/health/ready` returned 200; `/api/auth/login` returned 200; `/api/auth/me` returned 200; `/api/assets` returned 200 with 7 assets; `/api/credentials` returned 200 with 4 credential references.
 - Validation: `cd backend && npm run build` passed.
 - Limitation: Playwright MCP dashboard verification could not be completed because the Playwright MCP tools were not exposed in this turn after targeted discovery.
+
+## Device Onboarding Final Repair (2026-07-15)
+
+- Root cause: the onboarding UI exposed unsupported API choices, sessions were memory-only, credential-decrypt failures were not safely classified, and verified persistence crossed multiple non-atomic writes.
+- Implemented honest unverified registration, persisted sessions, SSH-only verified onboarding, sanitized recovery states, and one atomic verified persistence transaction.
+- Closed internal-router reloads, default full-suite discovery/serialization, onboarding lifecycle/rollback tests, and source/migration BOM enforcement.
+- Authenticated Playwright acceptance passed and its single created Device/Asset pair was cleaned up without changing historical protected counts.
+- Commits: `57ad699`, `17f264a`, `6e1c26e` (Phase 4; amended hash reported in final handoff if changed).

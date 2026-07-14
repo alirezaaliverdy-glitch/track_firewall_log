@@ -37,7 +37,7 @@ test("authentication lifecycle, bootstrap, and protected routes", async (t) => {
   assert.equal(ready.json().schemaReady, true);
   assert.equal(ready.json().runtime.host, "127.0.0.1");
   assert.equal(ready.json().runtime.port, 5432);
-  assert.equal(ready.json().runtime.database, "firewall_log_analyzer");
+  assert.equal(ready.json().runtime.database, new URL(process.env.DATABASE_URL ?? "postgresql://localhost/firewall_log_analyzer").pathname.slice(1));
   assert.equal(ready.json().runtime.schema, "public");
 
   const anonymousMe = await app.inject({ method: "GET", url: "/api/auth/me" });

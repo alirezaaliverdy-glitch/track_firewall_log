@@ -1,4 +1,4 @@
-﻿import type { PlatformDefinition } from "./vendor.types.js";
+import type { PlatformDefinition } from "./vendor.types.js";
 
 export const PLATFORM_REGISTRY: PlatformDefinition[] = [
   { key: "cisco-ios-xe", vendorKey: "cisco", titleFa: "Cisco IOS-XE", titleEn: "Cisco IOS-XE", family: "ios-xe", implementationState: "partial", executable: true, notes: ["Milestone 18.2A supports safe read-only SSH capabilities only."] },

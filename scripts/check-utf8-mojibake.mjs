@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const scanRoots = ["src", "backend/src", "docs"];
+const scanRoots = ["src", "backend/src", "backend/prisma/migrations", "docs"];
 const textExtensions = new Set([
   ".css",
   ".html",
@@ -46,7 +46,14 @@ for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
 
 const failures = [];
 for (const file of Array.from(new Set(files))) {
-  const content = fs.readFileSync(file, "utf8");
+  const bytes = fs.readFileSync(file);
+  const relative = path.relative(root, file).replace(/\\/g, "/");
+  const rejectsBom = relative.startsWith("src/") || relative.startsWith("backend/src/") || relative.startsWith("backend/prisma/migrations/");
+  if (rejectsBom && bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    failures.push(`${relative}:1: UTF-8 BOM is not allowed`);
+    continue;
+  }
+  const content = bytes.toString("utf8");
   const lines = content.split(/\r?\n/);
   lines.forEach((line, index) => {
     if (mojibakePattern.test(line)) {

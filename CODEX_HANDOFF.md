@@ -589,3 +589,11 @@
 - Raw `pg.Pool`, minimal PrismaPgAdapter, and shared app Prisma all succeeded against the same resolved connection source.
 - Added the actual frontend dev origin `http://localhost:5174` and `http://127.0.0.1:5174` to default CORS origins; this fixed MCP/browser auth requests from the current frontend port.
 - Evidence: `/api/health/ready` returned 200 ten times, `prisma.appUser.count()` succeeded, `/api/auth/login` returned 200 and set a cookie, and Playwright MCP opened `http://localhost:5174/dashboard` with authenticated shell plus auth/assets/security/monitoring/product-state API calls returning 200 and zero current console errors.
+
+## Device Onboarding Final Repair (2026-07-15)
+
+- Added honest credential-free unverified registration, durable database-backed onboarding sessions, sanitized credential failures, retry/new-session recovery, and atomic verified Device/Asset/placement/health/audit persistence.
+- Applied additive migration `20260714210000_persist_device_onboarding_sessions`; it only creates the onboarding-session table and indexes.
+- Replaced remaining internal hard navigation with React Router and made the default backend test command discover every test file once on the isolated test database, serially.
+- Authenticated Playwright proved SSH-only UI, guarded missing-credential state, retry, RTL/LTR, SPA navigation, real unverified create/redirect/list visibility, and safe cleanup.
+- Protected counts after cleanup: Device 3, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124.

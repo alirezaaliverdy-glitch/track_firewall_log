@@ -85,7 +85,7 @@ test("frontend source has action-library route, dashboard shortcut, filters, and
   assert.doesNotMatch(library, /expanded && item\.requiredParams/);
   assert.match(assistant, /response\.actionSessionId/);
   assert.match(assistant, /response\.guidedActionUrl/);
-  assert.match(assistant, /window\.location\.assign\(url\)/);
+  assert.match(assistant, /navigate\(url\)/);
   assert.match(actionCenter, /Backup is disabled for Quick Controlled execution\./);
   assert.doesNotMatch(actionState, /The action changed after its preview/);
   assert.doesNotMatch(actionCenter, /backup\/export preflight required/i);

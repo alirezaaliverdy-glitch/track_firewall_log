@@ -1,4 +1,4 @@
-﻿export const CISCO_IOSXE_READ_COMMANDS = Object.freeze({
+export const CISCO_IOSXE_READ_COMMANDS = Object.freeze({
   platform: "show version",
   inventory: "show inventory",
   interfacesStatus: "show interfaces status",

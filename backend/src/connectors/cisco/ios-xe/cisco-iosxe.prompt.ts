@@ -1,4 +1,4 @@
-﻿export type CiscoPromptState = { mode: "user" | "privileged" | "config" | "unknown"; prompt: string | null; paging: boolean };
+export type CiscoPromptState = { mode: "user" | "privileged" | "config" | "unknown"; prompt: string | null; paging: boolean };
 
 export function detectCiscoPrompt(output: string): CiscoPromptState {
   const lines = output.trimEnd().split(/\r?\n/).filter(Boolean);

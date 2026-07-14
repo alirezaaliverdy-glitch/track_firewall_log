@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import {
   getAiProviderStatus,
@@ -303,6 +304,7 @@ function ChatMessageBubble({ message }: { message: AiMessage }) {
 }
 
 export default function AiSecurityAssistantPanel() {
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const copy = isFa ? {
@@ -514,7 +516,7 @@ export default function AiSecurityAssistantPanel() {
         if (response.mode === "guided_workflow" && response.blueprintId) {
           if (response.actionSessionId) {
             const url = response.guidedActionUrl ?? `/guided-actions/${encodeURIComponent(response.actionSessionId)}`;
-            window.location.assign(url);
+            navigate(url);
             return;
           }
           const guided = {
@@ -527,7 +529,7 @@ export default function AiSecurityAssistantPanel() {
           setGuidedStart(guided);
           startGuidedSession(guided)
             .then((session) => {
-              window.location.assign(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
+              navigate(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
             })
             .catch((err: unknown) => {
               setError("شروع ساخت مرحله‌ای انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
@@ -551,7 +553,7 @@ export default function AiSecurityAssistantPanel() {
     if (!guidedStart) return;
     startGuidedSession(guidedStart)
       .then((session) => {
-        window.location.assign(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
+        navigate(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
       })
       .catch((err: unknown) => {
         setError("شروع ساخت مرحله‌ای انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");

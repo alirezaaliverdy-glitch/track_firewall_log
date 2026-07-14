@@ -3,7 +3,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { listDiagnostics, listNmapScans, runDiagnostic, runNmapScan, type DiagnosticSession, type NmapScan } from "@/lib/diagnostics";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 const routeTitle: Record<string, string> = {
   "/tools/network-check": "تست سریع شبکه",
@@ -102,7 +102,7 @@ export default function ToolsPage() {
         title={title}
         eyebrow="Diagnostics"
         description="بررسی‌های عمومی با Check-Host external nodes اجرا و نتیجه در پایگاه داده ثبت می‌شود. مسیرهای خصوصی و Nmap بدون scope مجاز اجرا نمی‌شوند."
-        actions={<a className="secondary-link" href="/dashboard">بازگشت به داشبورد</a>}
+        actions={<Link className="secondary-link" to="/dashboard">بازگشت به داشبورد</Link>}
       />
 
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}
@@ -126,9 +126,9 @@ export default function ToolsPage() {
           {isNmap
             ? <button type="button" onClick={() => void submitNmap()} disabled={running}>{running ? "در حال اجرای Worker" : "اجرای Nmap ایزوله"}</button>
             : <button type="button" onClick={() => void submit()} disabled={running}>{running ? "در حال اجرا" : "اجرای بررسی واقعی"}</button>}
-          <a className="secondary-link" href="/tools/history">تاریخچه</a>
-          <a className="secondary-link" href="/tools/nmap">Nmap</a>
-          <a className="secondary-link" href="/tools/monitors">مانیتورها</a>
+          <Link className="secondary-link" to="/tools/history">تاریخچه</Link>
+          <Link className="secondary-link" to="/tools/nmap">Nmap</Link>
+          <Link className="secondary-link" to="/tools/monitors">مانیتورها</Link>
         </div>
         {isNmap ? <p className="muted-text">Nmap فقط با پروفایل‌های ثابت، بدون فلگ دلخواه و از Worker ایزوله اجرا می‌شود. هدف خصوصی بدون scope رد می‌شود.</p> : null}
         <div className="tag-row">{suggestions.map((item) => <span key={item} className="status-pill">{item}</span>)}</div>

@@ -138,8 +138,8 @@ test("Task 20 onboarding exposes required endpoint aliases and recoverable retry
 
     const retry = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/retry`, payload: {} });
     assert.equal(retry.statusCode, 200);
-    assert.equal(retry.json().status, "draft");
-    assert.equal(retry.json().result.retryFrom, "draft");
+    assert.equal(retry.json().status, "answers_saved");
+    assert.equal(retry.json().result.retryFrom, "answers_saved");
 
     const detect = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/detect-platform`, payload: {} });
     assert.equal(detect.statusCode, 502);
@@ -188,10 +188,10 @@ test("Task 19.2-A Product State keeps implemented onboarding visible in Assets n
 test("Task 19.2A Dashboard quick actions route to tools and devices, not integrations", () => {
   const dashboard = readFileSync(join(process.cwd(), "..", "src", "features", "dashboard", "pages", "DashboardPage.tsx"), "utf8");
   const routes = readFileSync(join(process.cwd(), "..", "src", "routes", "appRoutes.tsx"), "utf8");
-  assert.match(dashboard, /href="\/assets\/devices\/new"/);
-  assert.match(dashboard, /href="\/tools\/network-check"/);
-  assert.match(dashboard, /href="\/tools"/);
-  assert.match(dashboard, /href="\/assets\/devices"/);
+  assert.match(dashboard, /to="\/assets\/devices\/new"/);
+  assert.match(dashboard, /to="\/tools\/network-check"/);
+  assert.match(dashboard, /to="\/tools"/);
+  assert.match(dashboard, /to="\/assets\/devices"/);
   assert.doesNotMatch(dashboard, /تست سریع شبکه<\/a>[\s\S]*href="\/integrations"/);
   assert.match(routes, /path: "\/tools"/);
   assert.match(routes, /path: "\/tools\/network-check"/);

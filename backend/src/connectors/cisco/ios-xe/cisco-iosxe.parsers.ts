@@ -1,4 +1,4 @@
-﻿import type { PlatformDetectionResult } from "../../../vendors/vendor.types.js";
+import type { PlatformDetectionResult } from "../../../vendors/vendor.types.js";
 
 const lineValue = (text: string, pattern: RegExp) => text.match(pattern)?.[1]?.trim() ?? null;
 

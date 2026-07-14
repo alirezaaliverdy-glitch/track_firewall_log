@@ -1,4 +1,4 @@
-﻿import type { VendorDefinition } from "./vendor.types.js";
+import type { VendorDefinition } from "./vendor.types.js";
 
 export const VENDOR_REGISTRY: VendorDefinition[] = [
   { key: "linux", titleFa: "Linux", titleEn: "Linux", description: "Linux SSH managed servers.", implementationState: "implemented", connectorTypes: ["linux-ssh"] },

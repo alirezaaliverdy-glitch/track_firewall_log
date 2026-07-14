@@ -1,5 +1,6 @@
 import type { SecurityFinding } from "@/lib/platform";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Link } from "react-router-dom";
 
 function severityTone(value: string): "danger" | "warning" | "info" | "neutral" {
   if (["critical", "high"].includes(value)) return "danger";
@@ -27,14 +28,14 @@ export function FindingTable({ findings }: { findings: SecurityFinding[] }) {
         <tbody>
           {findings.map((finding) => (
             <tr key={finding.id}>
-              <td><a href={`/security/findings/${finding.id}`}>{finding.title}</a></td>
+              <td><Link to={`/security/findings/${finding.id}`}>{finding.title}</Link></td>
               <td><StatusBadge value={finding.severity} tone={severityTone(finding.severity)} /></td>
               <td>{finding.asset?.name ?? finding.device?.name ?? "-"}</td>
               <td>{finding.summary}</td>
               <td>{finding.count}</td>
               <td>{finding.lastSeen ? new Date(finding.lastSeen).toLocaleString() : "-"}</td>
               <td><StatusBadge value={finding.status} tone={finding.status === "active" ? "warning" : "neutral"} /></td>
-              <td><a className="text-cyan-200" href={`/security/findings/${finding.id}`}>ساخت ActionPlan</a></td>
+              <td><Link className="text-cyan-200" to={`/security/findings/${finding.id}`}>ساخت ActionPlan</Link></td>
             </tr>
           ))}
         </tbody>

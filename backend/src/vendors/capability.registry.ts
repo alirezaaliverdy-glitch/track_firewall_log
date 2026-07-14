@@ -1,4 +1,4 @@
-﻿import type { CapabilityDefinition } from "./vendor.types.js";
+import type { CapabilityDefinition } from "./vendor.types.js";
 
 const ciscoSources = [
   "cisco-ios-xe-17-index",

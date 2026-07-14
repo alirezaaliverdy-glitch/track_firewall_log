@@ -1,4 +1,4 @@
-﻿import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { CAPABILITY_REGISTRY, getCapabilitiesForVendor } from "./capability.registry.js";
 import { getPlatformsForVendor } from "./platform.registry.js";

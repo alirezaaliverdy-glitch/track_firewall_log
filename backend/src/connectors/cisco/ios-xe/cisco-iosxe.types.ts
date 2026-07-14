@@ -1,4 +1,4 @@
-﻿export type CiscoIosXeParsedBundle = {
+export type CiscoIosXeParsedBundle = {
   platform: unknown;
   interfaces: unknown[];
   vlans: unknown[];

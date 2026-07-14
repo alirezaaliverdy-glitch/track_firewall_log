@@ -184,7 +184,7 @@ export default function CommandCatalogPanel() {
           vendor: result.vendor ?? selectedVendor ?? null,
           deviceId: result.deviceId ?? (deviceId || null),
         });
-        window.location.assign(`/guided-actions/${encodeURIComponent(start.sessionId)}`);
+        navigate(`/guided-actions/${encodeURIComponent(start.sessionId)}`);
         return;
       }
       if (result.mode === "clarification") {

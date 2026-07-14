@@ -3,6 +3,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useFindings } from "../hooks/useFindings";
+import { Link } from "react-router-dom";
 
 export default function SecurityOverviewPage() {
   const { findings, stats, loading, error, refresh } = useFindings();
@@ -21,7 +22,7 @@ export default function SecurityOverviewPage() {
       <div className="content-grid">
         <section className="content-panel">
           <h2>موارد فوری</h2>
-          {findings.slice(0, 5).map((finding) => <a key={finding.id} href={`/security/findings/${finding.id}`} className="list-row">{finding.title}<span>{finding.severity}</span></a>)}
+          {findings.slice(0, 5).map((finding) => <Link key={finding.id} to={`/security/findings/${finding.id}`} className="list-row">{finding.title}<span>{finding.severity}</span></Link>)}
           {!findings.length ? <EmptyState title="یافته ای ثبت نشده است" description="بعد از ورود event و اجرای detection، موارد اینجا دیده می شوند." /> : null}
         </section>
         <section className="content-panel"><h2>توزیع شدت</h2><p>Critical: {stats.critical} / High: {stats.high}</p></section>

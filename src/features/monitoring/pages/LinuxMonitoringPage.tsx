@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getLinuxMonitoringDevices, getLinuxMonitoringSummary, refreshLinuxMonitoringDevice, type LinuxMonitoringDevice, type LinuxSummary } from "@/lib/linuxMonitoring";
+import { Link } from "react-router-dom";
 
 const stateFa: Record<string, string> = {
   healthy: "سالم",
@@ -82,7 +83,7 @@ export default function LinuxMonitoringPage({ params }: { params?: Record<string
                 const state = device.latestHealth?.state ?? "unknown";
                 return (
                   <tr key={device.id}>
-                    <td><a href={`/monitoring/linux/${device.id}`}>{device.name}</a></td>
+                    <td><Link to={`/monitoring/linux/${device.id}`}>{device.name}</Link></td>
                     <td>{device.host}</td>
                     <td>{device.asset?.site?.name ?? "ثبت نشده"}</td>
                     <td>{stateFa[device.status] ?? device.status}</td>
