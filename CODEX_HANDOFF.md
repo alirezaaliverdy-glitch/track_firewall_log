@@ -11,6 +11,16 @@
 - Validation passed for this slice: `cd backend && npx prisma validate`; `cd backend && npm run build`; `cd backend && npx tsx --test test/task19-1-onboarding-workspace.test.ts` (9/9); `git diff --check` with line-ending warnings only.
 - `npx prisma migrate status` still reports the known unapplied local migration-history baseline; no destructive recovery, `.env` access, secret exposure, Nmap scan, Check-Host call, or external diagnostic provider call occurred.
 
+## Task 20 - Check-Host diagnostics workspace (2026-07-14)
+
+- Replaced the public diagnostics placeholder with a real Check-Host-backed API and UI for public DNS/HTTP/Ping/TCP checks.
+- Added `/api/diagnostics/sessions` create/list/get. Sessions persist through the existing `AuditLog` table as `action=diagnostic_session`, avoiding a new Prisma migration while migration history is drifted.
+- Added target classification and safety rejection: private/reserved/loopback/unsafe URL targets are rejected and persisted with `providerInvoked=false`.
+- Added direct tool routes for `/tools/domain-check`, `/tools/ip-check`, `/tools/nmap`, `/tools/dns`, `/tools/http`, `/tools/ports`, `/tools/traceroute`, `/tools/ip-info`, `/tools/subnet`, `/tools/history`, and `/tools/monitors`. Nmap and monitors are visible but gated until their worker/scheduler milestones.
+- Real provider proof: `example.com` produced persisted diagnostic session `cmrkfksle0000zolvol4yk1ge`; Check-Host request IDs were `446466a3k175` (DNS), `446466cfk36b` (HTTP), `446466e5k33e` (Ping), and `4464670ck87e` (TCP), with `providerInvoked=true`.
+- MCP browser proof: `/tools` rendered the real form; `/tools/history` rendered `Target: example.com`, the provider request IDs, and the persisted history table in the authenticated Persian shell.
+- Validation passed: `cd backend && npx tsx --test test/task20-diagnostics.test.ts` (3/3); `cd backend && npm run build`; root `npx pnpm@10 build` with the existing Vite chunk warning.
+
 ## Task 19.2A - Runtime repair and full audit (2026-07-14)
 
 - Completed the requested Task 19.2A runtime repair without starting external diagnostics, scan authorization, Check-Host, Nmap, production integration expansion, or unrelated device mutation work.

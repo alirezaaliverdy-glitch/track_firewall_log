@@ -28,6 +28,8 @@ export default function DashboardPage() {
           <a href="/assets/devices/new" className="primary-link">ثبت دستگاه جدید</a>
           <a href="/tools/network-check" className="secondary-link">تست سریع شبکه</a>
           <a href="/tools" className="secondary-link">بررسی دامنه یا IP</a>
+          <a href="/tools/nmap" className="secondary-link">Nmap</a>
+          <a href="/tools/monitors" className="secondary-link">مانیتورها</a>
           <a href="/assets/devices" className="secondary-link">مشاهده دستگاه‌ها</a>
         </div>
       </section>

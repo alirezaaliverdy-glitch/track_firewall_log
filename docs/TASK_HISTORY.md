@@ -11,6 +11,15 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Safety: no `.env`, secret, destructive DB command, Nmap scan, Check-Host call, external provider invocation, or device mutation occurred in this slice.
 - Validation: Prisma validate passed; backend build passed; focused onboarding/workspace suite passed 9/9; `git diff --check` passed with line-ending warnings only. Migration status remains the known unapplied-history baseline.
 
+## Task 20 - Check-Host Diagnostics Workspace (2026-07-14)
+
+- Summary: replaced the public `/tools` placeholder with a real Check-Host-backed diagnostic session API, Tools UI, direct tool routes, and persisted history through the existing `AuditLog` table.
+- Backend: added `/api/diagnostics/sessions` create/list/get, target classification, private/reserved target rejection with `providerInvoked=false`, Check-Host DNS/HTTP/Ping/TCP JSON invocation with bounded polling, provider request IDs, and database persistence.
+- Frontend: `/tools`, `/tools/network-check`, `/tools/history`, and related tool routes render a target input, suggestions, provider source, invocation flag, request IDs, latest result, and history. Nmap and monitors remain visibly gated until their worker/scheduler milestones.
+- Real provider proof: `example.com` persisted session `cmrkfksle0000zolvol4yk1ge` with Check-Host request IDs `446466a3k175`, `446466cfk36b`, `446466e5k33e`, and `4464670ck87e`, all with `providerInvoked=true`.
+- Browser: MCP opened `/tools` and `/tools/history`; `/tools/history` visibly rendered `Target: example.com`, the request IDs, and the history table.
+- Validation: focused diagnostics tests passed 3/3; backend build passed; frontend `npx pnpm@10 build` passed with the existing chunk-size warning.
+
 ## Task 19.2A - Runtime Repair and Full Audit (2026-07-14)
 
 - Summary: repaired onboarding runtime state, Dashboard diagnostic routing, and optional Linux monitoring schema handling while keeping external diagnostics/Nmap unstarted.

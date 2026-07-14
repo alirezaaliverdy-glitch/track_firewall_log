@@ -36,3 +36,21 @@ Visible authenticated text and controls included Persian primary navigation:
 ## Acceptance Boundary
 
 This proof only verifies MCP availability, current URL/title, and visible authenticated shell rendering. It does not prove diagnostics, connector execution, worker execution, persistence, or provider success.
+
+## Diagnostics UI Evidence
+
+After implementing the diagnostics slice, MCP opened:
+
+```text
+http://localhost:5173/tools/history
+```
+
+Observed:
+
+- Page title: `log-app`
+- Snapshot file: `.playwright-mcp/page-2026-07-14T09-10-28-261Z.yml`
+- visible `Target: example.com`
+- visible provider request IDs `446466a3k175, 446466cfk36b, 446466e5k33e, 4464670ck87e`
+- visible history table
+
+This proves UI rendering of the persisted diagnostic result, while provider invocation and database persistence are proven separately by the backend route evidence in `docs/TASK_20_API_FAILURE_REGISTER.md`.

@@ -12,6 +12,25 @@ No backend log file was read to avoid accidentally exposing environment or secre
 
 The current app shell rendered authenticated Persian navigation. This register will be updated with sanitized backend observations as Task 20 provider, worker, persistence, and UI acceptance runs are executed.
 
+## Sanitized Provider Invocation
+
+`POST /api/diagnostics/sessions` with target `example.com` returned HTTP 201 after real Check-Host provider invocation. Persisted session ID:
+
+```text
+cmrkfksle0000zolvol4yk1ge
+```
+
+Recorded Check-Host request IDs:
+
+```text
+446466a3k175
+446466cfk36b
+446466e5k33e
+4464670ck87e
+```
+
+No secrets or `.env` values were read or printed.
+
 ## Known Backend Runtime Risks
 
 | Area | Risk | Current handling |

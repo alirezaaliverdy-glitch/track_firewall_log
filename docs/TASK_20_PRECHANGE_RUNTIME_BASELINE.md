@@ -35,7 +35,9 @@ Current mismatches against Task 20:
 
 ## Current Tools and Diagnostics State
 
-`/tools` and `/tools/network-check` exist, but `src/features/tools/pages/ToolsPage.tsx` explicitly labels them as non-executing Task 19.2 placeholders. There is no real persisted diagnostic session, Check-Host provider invocation, Nmap worker invocation, monitor scheduler, or diagnostic history visible from the page at baseline.
+At prechange baseline, `/tools` and `/tools/network-check` existed, but `src/features/tools/pages/ToolsPage.tsx` explicitly labeled them as non-executing Task 19.2 placeholders. There was no real persisted diagnostic session, Check-Host provider invocation, Nmap worker invocation, monitor scheduler, or diagnostic history visible from the page.
+
+Task 20 follow-up in this slice replaced the placeholder for public diagnostics with a Check-Host-backed diagnostic API and UI. Nmap worker and monitor scheduler remain unimplemented and visibly gated.
 
 ## Current Product State
 
