@@ -516,3 +516,7 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Phase 4 is complete: Action Center now uses the lifecycle projection, shows at most 25 rows per page, and keeps execution controls visible in the detail panel.
 - Direct routes, both locales, unsupported-action gating, and all three required desktop viewports have authenticated browser proof.
 - Next phase: full validation, real connector acceptance, preservation proof, and final cleanup tests.
+- Final acceptance is complete. Device Workspace real Cisco attempts invoke the registered connector and persist truthful failure evidence across restart; the current Cisco target times out and therefore remains unverified.
+- A temporary read-only Linux ActionPlan completed the full Action Center lifecycle with `connectorInvoked=true`; its evidence/result views passed authenticated browser inspection and the tagged plan was precisely cleaned up.
+- Final protected counts are Device 4, Asset 7, DeviceCredential 4, Finding 5, and ActionPlan 124. Prisma is current, the dry-run reconciliation changed zero rows, and no migration is required by this repair.
+- Validation passed: backend build and 236/236 tests; frontend build; 97-key locale parity; Persian copy check; 450-file UTF-8 check; responsive authenticated Playwright acceptance; and diff check.

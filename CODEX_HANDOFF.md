@@ -621,3 +621,12 @@
 - Replaced the legacy clipped Action Center table/modal with a paginated lifecycle workspace, responsive summary/filter surface, and sticky detail/control panel.
 - All required primary controls are visible: create, review, edit parameters, device/credential selection, preview, confirm, execute, retry, cancel, evidence/result views, and related Device Workspace navigation.
 - Authenticated Playwright proved direct all/pending/history/detail/not-found routes, Persian RTL and English LTR, unsupported-action fail-closed controls, and no document overflow at 1366x768, 1440x900, or 1920x1080.
+
+## Device Workspace / Action Center Repair - Final Acceptance (2026-07-15)
+
+- Authenticated Playwright invoked the real `cisco-iosxe-ssh` connector twice from the Device Workspace. Both attempts truthfully remained failed/unverified because `192.168.7.12` timed out; each persisted `connectorInvoked=true`, a sanitized timeout, and history that survived a backend restart.
+- Authenticated Playwright exercised a temporary read-only Linux ActionPlan through Draft -> Preview -> Confirmed -> Execute -> Succeeded. Success included `connectorInvoked=true`, visible evidence/audit and connector result, with no credential material; the exact tagged acceptance plan was then removed and ActionPlan count returned from 125 to 124.
+- Action Center direct routes, lifecycle filters, unsupported-action gating, detail controls, evidence/result drawers, Persian RTL, English LTR, and 1366/1440/1920 desktop layouts passed browser acceptance without horizontal overflow.
+- Final validation passed: backend build, full backend tests 236/236, final contract tests 3/3, frontend build, locale parity (97 keys), Persian primary copy, UTF-8 scan (450 files), Prisma migration status, dry-run Device/Asset audit, and `git diff --check`.
+- Database preservation proof after all acceptance and test cleanup: Device 4, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124. The audit reported `changed=0`; all 35 migrations are current and this repair requires no migration.
+- Remaining honest blocker: the configured Cisco target is unreachable over SSH, so successful Cisco verification/promotion cannot be claimed until the target responds. The failure path and connector invocation evidence are verified.

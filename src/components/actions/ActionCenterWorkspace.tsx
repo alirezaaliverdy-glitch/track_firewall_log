@@ -34,7 +34,7 @@ function EvidenceBlock({ title, value }: { title: string; value: unknown }) {
   return <section className="action-detail-block"><h3>{title}</h3><pre>{pretty(value)}</pre></section>;
 }
 
-export function ActionCenterWorkspace({ initialActionId, onCreate }: { initialActionId?: string; onCreate: () => void }) {
+export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initialActionPlanId?: string; onCreate: () => void }) {
   const { i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const locale = isFa ? "fa-IR" : "en-US";
@@ -122,7 +122,7 @@ export function ActionCenterWorkspace({ initialActionId, onCreate }: { initialAc
 
   useEffect(() => { void Promise.all([listDevices().then(setDevices), listCredentials().then(setCredentials)]).catch(() => undefined); }, []);
   useEffect(() => { void loadList(); }, [loadList]);
-  useEffect(() => { if (initialActionId) void loadDetail(initialActionId); else { setSelected(null); setNotFound(false); } }, [initialActionId, loadDetail]);
+  useEffect(() => { if (initialActionPlanId) void loadDetail(initialActionPlanId); else { setSelected(null); setNotFound(false); } }, [initialActionPlanId, loadDetail]);
 
   const run = async (name: string, operation: () => Promise<unknown>, options?: { selectReturned?: boolean }) => {
     if (!selected) return;
@@ -131,7 +131,7 @@ export function ActionCenterWorkspace({ initialActionId, onCreate }: { initialAc
       const result = await operation();
       const nextId = options?.selectReturned && result && typeof result === "object" && "id" in result ? String((result as { id: unknown }).id) : selected.id;
       await loadList(); await loadDetail(nextId);
-      if (nextId !== initialActionId) navigate(`/actions/${nextId}`);
+      if (nextId !== initialActionPlanId) navigate(`/actions/${nextId}`);
     } catch (failure) { setError(failure instanceof Error ? failure.message : `${name} failed.`); await loadDetail(selected.id).catch(() => undefined); }
     finally { setWorking(""); }
   };

@@ -596,3 +596,13 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a responsive Action Center client/workspace and moved ActionPlan creation to an accessible top-level catalog panel.
 - Preserved React Router deep links and connected every required control to an existing safe workflow or the new Action Center contract.
 - Validation: frontend build, locale parity, Persian copy, UTF-8 guard, diff check, and authenticated Playwright layout/control/deep-link checks passed.
+
+## Device Workspace / Action Center Repair - Final Acceptance (2026-07-15)
+
+- Reproduced and repaired the Device Workspace verification gap and the clipped, non-lifecycle Action Center in four separately committed phases.
+- Proved truthful device behavior with two real Cisco SSH connector attempts: both timed out, both recorded `connectorInvoked=true`, neither promoted the Device to verified, and the persisted history survived backend restart.
+- Proved successful execution with a temporary read-only Linux ActionPlan through preview, confirmation, connector execution, evidence, and result inspection. The succeeded result had `connectorInvoked=true`; the exact tagged plan was deleted afterward, restoring ActionPlan count to 124.
+- Verified Action Center all/pending/history/detail/not-found routes, unsupported-action fail-closed behavior, complete controls, RTL/LTR, and responsive 1366x768, 1440x900, and 1920x1080 layouts with authenticated Playwright.
+- Validation: backend build; backend tests 236/236; final repair contract 3/3; frontend build; locale parity 97 keys; Persian copy; UTF-8 450 files; Prisma schema current; dry-run Device/Asset audit `changed=0`; `git diff --check`.
+- Preservation: Device 4, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124. No migration was created or required.
+- Honest blocker: the configured Cisco host `192.168.7.12` does not answer SSH before timeout, so live successful Cisco verification remains unavailable despite proven connector invocation and recovery behavior.

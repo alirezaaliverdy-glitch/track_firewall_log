@@ -19,7 +19,7 @@ export default function ActionsPage({ params }: RouteComponentProps) {
         actions={<button className="primary-button" type="button" onClick={() => setCatalogOpen(!catalogOpen)}>{isFa ? "ساخت ActionPlan" : "Create ActionPlan"}</button>}
       />
       {catalogOpen && <section id="action-library" className="content-panel action-create-panel"><div className="action-create-panel__header"><div><h2>{isFa ? "کتابخانه اقدام" : "Action library"}</h2><p>{isFa ? "یک فرمان پشتیبانی‌شده را انتخاب کنید تا ActionPlan ساخته شود." : "Choose a supported catalog command to create an ActionPlan."}</p></div><button className="text-button" type="button" onClick={() => setCatalogOpen(false)}>{isFa ? "بستن" : "Close"}</button></div><CommandCatalogPanel /></section>}
-      <ActionCenterWorkspace initialActionId={params.actionId} onCreate={() => setCatalogOpen(true)} />
+      <ActionCenterWorkspace initialActionPlanId={params.actionId} onCreate={() => setCatalogOpen(true)} />
     </section>
   );
 }
