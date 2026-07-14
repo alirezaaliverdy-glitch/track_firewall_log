@@ -14,6 +14,29 @@ export type DiagnosticSession = {
   createdAt: string;
 };
 
+export type NmapScan = {
+  id: string;
+  state: "completed" | "failed" | "rejected";
+  target: string;
+  normalizedTarget: string;
+  profile: "host_discovery" | "quick_tcp";
+  workerInvoked: boolean;
+  policyDecision: string;
+  reason?: string;
+  durationMs?: number;
+  exitCode?: number;
+  result?: {
+    hosts: Array<{
+      state: string;
+      addresses: Array<{ address: string; type: string }>;
+      hostnames: string[];
+      ports: Array<{ protocol: string; port: number; state: string; service: string | null; product: string | null; version: string | null }>;
+    }>;
+    elapsedSeconds: number;
+  };
+  createdAt: string;
+};
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -32,4 +55,12 @@ export function runDiagnostic(target: string) {
 
 export function listDiagnostics() {
   return requestJson<{ sessions: DiagnosticSession[] }>("/diagnostics/sessions");
+}
+
+export function runNmapScan(target: string, profile: "host_discovery" | "quick_tcp") {
+  return requestJson<{ scan: NmapScan }>("/diagnostics/nmap", { method: "POST", body: JSON.stringify({ target, profile }) });
+}
+
+export function listNmapScans() {
+  return requestJson<{ scans: NmapScan[] }>("/diagnostics/nmap");
 }

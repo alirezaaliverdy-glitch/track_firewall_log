@@ -39,3 +39,21 @@ No secrets or `.env` values were read or printed.
 | Optional observability tables | Tables may be absent in local DB. | Task 19.2A fallback returns stable not-configured/partial state instead of repeated stack traces. |
 | Diagnostics provider calls | Not implemented at baseline. | No false success claim. |
 | Nmap worker | Not implemented at baseline. | No scan run. |
+
+## Nmap Worker / Database Blocker
+
+Nmap installation succeeded:
+
+```text
+Nmap version 7.80
+```
+
+Worker implementation was added, but live persistence proof is blocked by PostgreSQL connectivity failure. Sanitized errors observed:
+
+```text
+Prisma AuditLog count/create: P1008 / ETIMEDOUT / SocketTimeout
+Direct pg connection: connect ETIMEDOUT 127.0.0.1:5432
+Test-NetConnection 127.0.0.1:5432: failed
+```
+
+No `.env` value or credential was printed.

@@ -21,6 +21,17 @@
 - MCP browser proof: `/tools` rendered the real form; `/tools/history` rendered `Target: example.com`, the provider request IDs, and the persisted history table in the authenticated Persian shell.
 - Validation passed: `cd backend && npx tsx --test test/task20-diagnostics.test.ts` (3/3); `cd backend && npm run build`; root `npx pnpm@10 build` with the existing Vite chunk warning.
 
+## Task 20 - Nmap worker implementation blocked on DB persistence proof (2026-07-14)
+
+- Installed real Nmap through winget. `C:\Program Files (x86)\Nmap\nmap.exe --version` reports Nmap 7.80.
+- Added a safe isolated Nmap worker service using `spawn(..., { shell: false })`, fixed profile argument arrays only, timeout handling, XML parsing, and `AuditLog` persistence for `workerInvoked`, normalized hosts, addresses, ports, services, duration, and policy decisions.
+- Added `/api/diagnostics/nmap` create/list routes and `/tools/nmap` UI controls for `host_discovery` and `quick_tcp`. Arbitrary flags are not accepted.
+- Added regression coverage for private-target rejection, fixed profile args, and XML normalization.
+- Important blocker: the local PostgreSQL service became unreachable from this session. `Test-NetConnection 127.0.0.1 -Port 5432` fails after service recovery attempts, and direct `pg`/Prisma reads time out. Service restart was denied by Windows permissions. Because Task 20 requires persisted evidence, Nmap acceptance is not claimed.
+- Two pre-fix `scanme.nmap.org` API attempts reached the worker but returned HTTP 500 because `AuditLog` persistence timed out; after adding persistence retry, no further live acceptance is claimed while DB connectivity is unhealthy.
+- MCP opened `/tools/nmap`, but the available browser context showed the unauthenticated login page, so route UI acceptance is also not claimed for this slice.
+- Validation while DB was unhealthy: backend `npm run build` passed; root `npx pnpm@10 build` passed with the existing Vite chunk warning; focused diagnostics tests passed 3 source/policy/parser cases and failed 2 DB-persistence cases due the PostgreSQL timeout.
+
 ## Task 19.2A - Runtime repair and full audit (2026-07-14)
 
 - Completed the requested Task 19.2A runtime repair without starting external diagnostics, scan authorization, Check-Host, Nmap, production integration expansion, or unrelated device mutation work.

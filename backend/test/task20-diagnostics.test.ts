@@ -5,6 +5,7 @@ import test from "node:test";
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { diagnosticInternalsForTest } from "../src/services/diagnostics.service.js";
+import { nmapInternalsForTest } from "../src/services/nmap-worker.service.js";
 
 test("Task 20 diagnostics target parser blocks private and unsafe external targets", () => {
   assert.equal(diagnosticInternalsForTest.classifyTarget("192.168.1.10").publicAllowed, false);
@@ -50,5 +51,36 @@ test("Task 20 tools routes and Dashboard controls point to real tool destination
   const dashboard = readFileSync(join(process.cwd(), "..", "src", "features", "dashboard", "pages", "DashboardPage.tsx"), "utf8");
   for (const path of ["/tools/network-check", "/tools", "/tools/nmap", "/tools/monitors", "/assets/devices/new", "/assets/devices"]) {
     assert.match(dashboard, new RegExp(`href="${path.replace("/", "\\/")}`));
+  }
+});
+
+test("Task 20 Nmap worker allows only fixed safe profiles and parses XML", () => {
+  assert.deepEqual(nmapInternalsForTest.profileArgs("host_discovery", "scanme.nmap.org"), ["-sn", "-oX", "-", "scanme.nmap.org"]);
+  assert.deepEqual(nmapInternalsForTest.profileArgs("quick_tcp", "scanme.nmap.org"), ["-Pn", "-sT", "--top-ports", "20", "-T3", "-oX", "-", "scanme.nmap.org"]);
+  assert.equal(nmapInternalsForTest.classifyNmapTarget("192.168.1.1").allowed, false);
+  assert.equal(nmapInternalsForTest.classifyNmapTarget("scanme.nmap.org").allowed, true);
+  const parsed = nmapInternalsForTest.parseXml(`<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="45.33.32.156" addrtype="ipv4"/><hostnames><hostname name="scanme.nmap.org"/></hostnames><ports><port protocol="tcp" portid="80"><state state="open"/><service name="http"/></port></ports></host><runstats><finished elapsed="1.2"/></runstats></nmaprun>`);
+  assert.equal(parsed.hosts[0].state, "up");
+  assert.equal(parsed.hosts[0].addresses[0].address, "45.33.32.156");
+  assert.equal(parsed.hosts[0].ports[0].port, 80);
+  assert.equal(parsed.hosts[0].ports[0].state, "open");
+});
+
+test("Task 20 Nmap rejects unauthorized private targets without worker invocation", async (t) => {
+  const app = await buildApp({ authRequired: false });
+  const createdIds: string[] = [];
+  t.after(async () => {
+    if (createdIds.length) await prisma.auditLog.deleteMany({ where: { id: { in: createdIds } } });
+  });
+  try {
+    const response = await app.inject({ method: "POST", url: "/api/diagnostics/nmap", payload: { target: "10.0.0.1", profile: "quick_tcp" } });
+    assert.equal(response.statusCode, 422);
+    const scan = response.json().scan;
+    createdIds.push(scan.id);
+    assert.equal(scan.state, "rejected");
+    assert.equal(scan.workerInvoked, false);
+    assert.equal(scan.policyDecision, "rejected");
+  } finally {
+    await app.close();
   }
 });

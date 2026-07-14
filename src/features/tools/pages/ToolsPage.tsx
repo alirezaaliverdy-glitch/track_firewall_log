@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { listDiagnostics, runDiagnostic, type DiagnosticSession } from "@/lib/diagnostics";
+import { listDiagnostics, listNmapScans, runDiagnostic, runNmapScan, type DiagnosticSession, type NmapScan } from "@/lib/diagnostics";
 import { useEffect, useMemo, useState } from "react";
 
 const routeTitle: Record<string, string> = {
@@ -36,6 +36,9 @@ export default function ToolsPage() {
   const isNmap = window.location.pathname === "/tools/nmap";
   const [target, setTarget] = useState(isNmap ? "scanme.nmap.org" : "example.com");
   const [sessions, setSessions] = useState<DiagnosticSession[]>([]);
+  const [nmapScans, setNmapScans] = useState<NmapScan[]>([]);
+  const [activeNmap, setActiveNmap] = useState<NmapScan | null>(null);
+  const [nmapProfile, setNmapProfile] = useState<"host_discovery" | "quick_tcp">("host_discovery");
   const [active, setActive] = useState<DiagnosticSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -50,9 +53,11 @@ export default function ToolsPage() {
 
   const refresh = () => {
     setLoading(true);
-    listDiagnostics().then((data) => {
-      setSessions(data.sessions);
-      setActive((current) => current ?? data.sessions[0] ?? null);
+    Promise.all([listDiagnostics(), listNmapScans()]).then(([diagnostics, nmap]) => {
+      setSessions(diagnostics.sessions);
+      setNmapScans(nmap.scans);
+      setActive((current) => current ?? diagnostics.sessions[0] ?? null);
+      setActiveNmap((current) => current ?? nmap.scans[0] ?? null);
       setError(null);
     }).catch((err: Error) => setError(err.message)).finally(() => setLoading(false));
   };
@@ -68,6 +73,20 @@ export default function ToolsPage() {
       setSessions((current) => [data.session, ...current.filter((item) => item.id !== data.session.id)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Diagnostic failed.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const submitNmap = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const data = await runNmapScan(target, nmapProfile);
+      setActiveNmap(data.scan);
+      setNmapScans((current) => [data.scan, ...current.filter((item) => item.id !== data.scan.id)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nmap worker failed.");
     } finally {
       setRunning(false);
     }
@@ -90,20 +109,56 @@ export default function ToolsPage() {
         <h2>اجرای بررسی</h2>
         <div className="form-grid">
           <label>دامنه، IP، URL، پورت یا CIDR را وارد کنید
-            <input value={target} onChange={(event) => setTarget(event.target.value)} disabled={running || isNmap} />
+            <input value={target} onChange={(event) => setTarget(event.target.value)} disabled={running} />
           </label>
+          {isNmap ? (
+            <label>Profile
+              <select value={nmapProfile} onChange={(event) => setNmapProfile(event.target.value as "host_discovery" | "quick_tcp")} disabled={running}>
+                <option value="host_discovery">Host discovery</option>
+                <option value="quick_tcp">Quick reviewed TCP</option>
+              </select>
+            </label>
+          ) : null}
         </div>
         <div className="button-row">
-          <button type="button" onClick={() => void submit()} disabled={running || isNmap}>{running ? "در حال اجرا" : "اجرای بررسی واقعی"}</button>
+          {isNmap
+            ? <button type="button" onClick={() => void submitNmap()} disabled={running}>{running ? "در حال اجرای Worker" : "اجرای Nmap ایزوله"}</button>
+            : <button type="button" onClick={() => void submit()} disabled={running}>{running ? "در حال اجرا" : "اجرای بررسی واقعی"}</button>}
           <a className="secondary-link" href="/tools/history">تاریخچه</a>
           <a className="secondary-link" href="/tools/nmap">Nmap</a>
           <a className="secondary-link" href="/tools/monitors">مانیتورها</a>
         </div>
-        {isNmap ? <p className="muted-text">Nmap فقط از Worker ایزوله و scope مجاز اجرا خواهد شد. این کنترل تا پیاده‌سازی Worker فعال نیست.</p> : null}
+        {isNmap ? <p className="muted-text">Nmap فقط با پروفایل‌های ثابت، بدون فلگ دلخواه و از Worker ایزوله اجرا می‌شود. هدف خصوصی بدون scope رد می‌شود.</p> : null}
         <div className="tag-row">{suggestions.map((item) => <span key={item} className="status-pill">{item}</span>)}</div>
       </section>
 
-      {active ? (
+      {isNmap && activeNmap ? (
+        <section className="content-panel">
+          <h2>نتیجه Nmap</h2>
+          <div className="summary-grid">
+            <article className="metric-panel"><span>وضعیت</span><strong>{activeNmap.state}</strong></article>
+            <article className="metric-panel"><span>Worker invoked</span><strong>{activeNmap.workerInvoked ? "true" : "false"}</strong></article>
+            <article className="metric-panel"><span>Profile</span><strong>{activeNmap.profile}</strong></article>
+            <article className="metric-panel"><span>Scan ID</span><strong>{activeNmap.id}</strong></article>
+          </div>
+          <p>Target: {activeNmap.normalizedTarget}</p>
+          {activeNmap.reason ? <p>Policy reason: {activeNmap.reason}</p> : null}
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Host state</th><th>Addresses</th><th>Ports</th></tr></thead>
+              <tbody>{(activeNmap.result?.hosts ?? []).map((host, index) => (
+                <tr key={`${activeNmap.id}-host-${index}`}>
+                  <td>{host.state}</td>
+                  <td>{host.addresses.map((item) => `${item.type}:${item.address}`).join(", ") || "-"}</td>
+                  <td>{host.ports.map((port) => `${port.port}/${port.protocol} ${port.state} ${port.service ?? ""}`).join(", ") || "-"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {!isNmap && active ? (
         <section className="content-panel">
           <h2>خلاصه نتیجه</h2>
           <div className="summary-grid">
@@ -133,8 +188,25 @@ export default function ToolsPage() {
       ) : null}
 
       <section className="content-panel">
-        <h2>تاریخچه</h2>
-        {sessions.length === 0 ? <p>هنوز نتیجه‌ای ثبت نشده است.</p> : (
+        <h2>{isNmap ? "تاریخچه Nmap" : "تاریخچه"}</h2>
+        {isNmap ? (
+          nmapScans.length === 0 ? <p>هنوز اسکن Nmap ثبت نشده است.</p> : (
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead><tr><th>زمان</th><th>Target</th><th>Profile</th><th>State</th><th>Worker</th></tr></thead>
+                <tbody>{nmapScans.map((scan) => (
+                  <tr key={scan.id} onClick={() => setActiveNmap(scan)}>
+                    <td>{new Date(scan.createdAt).toLocaleString("fa-IR")}</td>
+                    <td>{scan.normalizedTarget}</td>
+                    <td>{scan.profile}</td>
+                    <td>{scan.state}</td>
+                    <td>{scan.workerInvoked ? "true" : "false"}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )
+        ) : sessions.length === 0 ? <p>هنوز نتیجه‌ای ثبت نشده است.</p> : (
           <div className="data-table-wrap">
             <table className="data-table">
               <thead><tr><th>زمان</th><th>Target</th><th>State</th><th>Provider</th><th>Invoked</th></tr></thead>

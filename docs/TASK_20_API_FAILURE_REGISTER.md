@@ -31,3 +31,16 @@ Provider evidence:
 - `providerInvoked=true`
 - source label: `Check-Host external nodes`
 - persisted through `AuditLog` action `diagnostic_session`
+
+## Nmap Persistence Blocker
+
+Nmap 7.80 is installed and the safe worker implementation exists, but acceptance is blocked until database writes recover.
+
+Observed:
+
+- `Test-NetConnection 127.0.0.1 -Port 5432` failed after service recovery attempts.
+- direct `pg` connection timed out.
+- Prisma `AuditLog.count()` timed out.
+- `POST /api/diagnostics/nmap` attempts against `scanme.nmap.org` returned HTTP 500 because `AuditLog` persistence timed out after worker execution.
+
+No `workerInvoked=true` Nmap acceptance is claimed until an `nmap_scan` record is persisted and rendered.

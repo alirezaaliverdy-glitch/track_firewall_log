@@ -11,6 +11,15 @@ function getDatabaseUrl() {
     throw new Error("DATABASE_URL is required to start the backend");
   }
 
+  try {
+    const url = new URL(env.databaseUrl);
+    if (url.hostname === "localhost") {
+      url.hostname = "127.0.0.1";
+      return url.toString();
+    }
+  } catch {
+    return env.databaseUrl;
+  }
   return env.databaseUrl;
 }
 

@@ -30,5 +30,5 @@ The prechange primary placeholder was the Tools page itself. In this slice, publ
 | `/tools` | Renders a real target input, suggested checks, provider source, latest result, and persisted history. |
 | `/tools/network-check` | Shares the real Check-Host diagnostic session workflow. |
 | `/tools/history` | Renders persisted diagnostic sessions from the database. |
-| `/tools/nmap` | Direct route exists and explains worker gating; execution remains disabled until the isolated worker exists. |
+| `/tools/nmap` | Direct route exists and source code now renders fixed-profile Nmap worker controls; live MCP route acceptance is blocked by unauthenticated browser context and DB persistence failure. |
 | `/tools/monitors` | Direct route exists; monitor execution remains disabled until the scheduler exists. |

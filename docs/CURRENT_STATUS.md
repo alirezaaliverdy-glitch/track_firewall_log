@@ -10,6 +10,7 @@ Last updated: 2026-07-14
 - Public diagnostics now have a real Check-Host-backed session API and Tools UI. `example.com` produced persisted session `cmrkfksle0000zolvol4yk1ge` with DNS/HTTP/Ping/TCP provider request IDs and `providerInvoked=true`; MCP verified `/tools/history` renders those IDs.
 - This is not yet full Task 20 acceptance: dedicated diagnostic Prisma domain models, Nmap worker, monitor scheduler, integration expansion, and live device onboarding with a supplied target/credential are still not complete.
 - Local Prisma migration history still reports 34 migrations unapplied; no destructive database recovery was attempted.
+- Nmap 7.80 is now installed and a safe isolated worker implementation exists, but live `workerInvoked=true` persistence is blocked because local PostgreSQL stopped accepting TCP connections from this session. Do not mark Nmap acceptance complete until a scan record is persisted and visible.
 
 ## Task 19.2A - Runtime Repair and Full Audit
 

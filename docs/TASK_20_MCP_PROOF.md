@@ -54,3 +54,15 @@ Observed:
 - visible history table
 
 This proves UI rendering of the persisted diagnostic result, while provider invocation and database persistence are proven separately by the backend route evidence in `docs/TASK_20_API_FAILURE_REGISTER.md`.
+
+## Nmap Route Attempt
+
+MCP opened:
+
+```text
+http://localhost:5173/tools/nmap
+```
+
+Observed page title: `log-app`.
+
+The current MCP browser context displayed the unauthenticated login page, not the authenticated Tools UI. Therefore `/tools/nmap` browser acceptance is not claimed from this snapshot.

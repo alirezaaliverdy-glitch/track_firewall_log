@@ -20,6 +20,15 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Browser: MCP opened `/tools` and `/tools/history`; `/tools/history` visibly rendered `Target: example.com`, the request IDs, and the history table.
 - Validation: focused diagnostics tests passed 3/3; backend build passed; frontend `npx pnpm@10 build` passed with the existing chunk-size warning.
 
+## Task 20 - Safe Nmap Worker Implementation Attempt (2026-07-14)
+
+- Summary: installed real Nmap 7.80 and implemented the safe worker path, but did not complete acceptance because PostgreSQL persistence became unreachable.
+- Backend: added fixed-profile Nmap worker execution through `spawn` without shell concatenation, policy rejection for private/unsafe targets, XML parsing for host/address/port/service data, retry around `AuditLog` persistence, and `/api/diagnostics/nmap` routes.
+- Frontend: `/tools/nmap` now has target/profile controls and Nmap history/result rendering for `workerInvoked`, profile, scan ID, host state, addresses, and ports.
+- Safety: arbitrary flags, private targets without scope, URL/host:port/CIDR Nmap targets, and unsafe profiles are rejected. No exploit scripts or intrusive NSE profiles were added.
+- Blocker: PostgreSQL service remained `Running` but stopped completing TCP connections; direct `pg` and Prisma calls timed out. Service restart/control was denied. Nmap scans against `scanme.nmap.org` reached the worker but could not persist, so `workerInvoked=true` acceptance is not claimed.
+- Validation: backend build passed; frontend build passed with the existing chunk warning; focused diagnostics tests passed source/policy/parser cases and failed DB-persistence cases due the local PostgreSQL timeout.
+
 ## Task 19.2A - Runtime Repair and Full Audit (2026-07-14)
 
 - Summary: repaired onboarding runtime state, Dashboard diagnostic routing, and optional Linux monitoring schema handling while keeping external diagnostics/Nmap unstarted.
