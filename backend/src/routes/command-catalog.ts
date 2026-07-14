@@ -14,10 +14,11 @@ const deviceVendor = (device: { type: string; vendor: string }) => {
   if (device.type === "fortigate" || vendor.includes("forti")) return "fortigate";
   if (device.type === "mikrotik" || vendor.includes("mikrotik") || vendor.includes("routeros")) return "mikrotik";
   if (device.type === "linux_edge" || vendor.includes("linux")) return "linux";
+  if (vendor.includes("cisco")) return "cisco";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type;
 };
-const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : null;
+const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : null;
 function invalidValue(type: string, value: unknown) {
   if (type === "ip") return typeof value !== "string" || net.isIP(value) === 0;
   if (type === "cidr") { if (typeof value !== "string") return true; const [address, prefix] = value.split("/"); const version = net.isIP(address); const max = version === 4 ? 32 : version === 6 ? 128 : -1; return prefix === undefined || !/^\d+$/.test(prefix) || Number(prefix) > max; }

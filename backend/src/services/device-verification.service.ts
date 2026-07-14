@@ -69,9 +69,14 @@ export async function getDeviceVerification(deviceId: string) {
   const latest = attempts[0] ?? null;
   const capabilities = object(device.capabilities);
   const onboarding = object(capabilities.onboarding);
+  const successfulAttempt = attempts.find((attempt) => attempt.connectorInvoked && attempt.connected);
   const verifiedAttempt = attempts.find((attempt) => attempt.status === "completed" && attempt.connectorInvoked && attempt.connected);
+  const failedAttempt = attempts.find((attempt) => !attempt.connected && Boolean(attempt.error));
   const verified = Boolean(verifiedAttempt || onboarding.verifiedAt);
   const active = latest && new Date(latest.expiresAt).getTime() > Date.now() && !["completed", "cancelled"].includes(latest.status);
+  const latestError = String(latest?.error ?? "");
+  const authenticationFailed = /auth|credential|password|permission denied/i.test(latestError);
+  const sshUnreachable = /timeout|timed out|refused|unreachable|network|econn/i.test(latestError);
   return {
     deviceId: device.id,
     verificationStatus: verified ? "verified" : latest?.status === "connection_failed" ? "failed" : "unverified",
@@ -82,9 +87,13 @@ export async function getDeviceVerification(deviceId: string) {
     method: device.protocol,
     credential: device.credential ? { id: device.credential.id, name: device.credential.name, type: device.credential.type } : null,
     lastAttemptAt: latest?.attemptedAt ?? null,
-    lastSuccessAt: verifiedAttempt?.attemptedAt ?? onboarding.verifiedAt ?? null,
+    lastSuccessAt: successfulAttempt?.attemptedAt ?? onboarding.verifiedAt ?? null,
+    lastFailureAt: failedAttempt?.attemptedAt ?? null,
     connectorInvoked: latest?.connectorInvoked ?? false,
     connectorType: latest?.connectorType ?? onboarding.connectorType ?? null,
+    connectorState: latest?.connected ? "connected" : latest?.error ? "failed" : "unknown",
+    sshReachability: latest?.connected || authenticationFailed ? "reachable" : sshUnreachable ? "unreachable" : "unknown",
+    authenticationStatus: latest?.connected ? "authenticated" : authenticationFailed ? "failed" : "unknown",
     connected: latest?.connected ?? false,
     error: latest?.error ?? null,
     activeSessionId: active ? latest.sessionId : null,

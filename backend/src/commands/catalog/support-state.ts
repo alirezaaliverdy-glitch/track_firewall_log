@@ -50,13 +50,15 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "fortigate_show_firewall_policies",
   "fortigate_show_vpn_status",
   "fortigate_show_ha_vdom_zone",
-  "fortigate_guided_vpn_setup"
+  "fortigate_guided_vpn_setup",
+  "cisco_show_version"
 ]);
 
 function connectorVendor(connectorType: string | null) {
   if (connectorType === "linux-ssh") return "linux_edge";
   if (connectorType === "fortigate-ssh") return "fortigate";
   if (connectorType === "mikrotik-ssh") return "mikrotik";
+  if (connectorType === "cisco-ios-xe-ssh") return "cisco";
   return null;
 }
 
@@ -74,7 +76,7 @@ function missingChecks(item: Pick<CommandCatalogItem, "actionType" | "connectorT
   const actionType = item.actionType as ActionType;
   if (!connector?.supportedActions.includes(actionType) || !planner?.supportedActions.includes(actionType)) missing.push("connector");
 
-  if (!VERIFIED_RESULT_PARSERS.has(item.actionType)) missing.push("semantic_result_parser");
+  if (!VERIFIED_RESULT_PARSERS.has(item.actionType) && !VERIFIED_RESULT_PARSERS.has(item.executionTemplateRef ?? "")) missing.push("semantic_result_parser");
   if (!item.prechecks.length) missing.push("precheck");
   if (!item.verification.length) missing.push("post_verification");
   return missing;

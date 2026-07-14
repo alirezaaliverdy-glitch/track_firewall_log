@@ -1,5 +1,17 @@
 # Current Project Status
 
+## Operator-first Action Center (2026-07-15)
+
+- Action Center now opens with Connection status and the direct Device -> Credential -> Action workflow. Execute immediately is the default; Preview only is optional; ActionPlan history remains available without dominating normal operation.
+- Connection status exposes Test, Refresh, Retry, last success/failure, connector, SSH, and authentication state. Exact sanitized failures are visible, while raw JSON is confined to the closed Advanced Details disclosure.
+- The Execute control calls the real create-plan and quick-execute backend endpoints and retains controlled planning, PolicyGuard, connector audit, and `connectorInvoked=true` success requirements.
+- Cisco show-version is a verified read-only catalog/template/planner/connector path. Vendor-scoped convergence prevents unrelated generic manual actions from being promoted.
+- Authenticated Playwright: Linux service status succeeded; Linux daily check succeeded; FortiGate VPN succeeded; FortiGate HA/VDOM/zone reached the connector and failed on the appliance's `show system vdom`; Cisco show version reached the connector and timed out. Exact failures and invocation evidence are persisted. Preview-only remained non-executing.
+- English/Persian, LTR/RTL, 1440px/390px, no-overflow, default Execute, closed Advanced Details, direct history context, green Connected, and failed Retry states passed browser acceptance.
+- Validation is green: backend build, catalog 138, backend 237/237, frontend build, locale parity, Persian copy, UTF-8, diff check, Prisma status, and dry-run reconciliation. All 35 migrations are current; no migration was added or applied.
+- Protected counts: Device 4, Asset 7, DeviceCredential 4, Finding 5. ActionPlan is 133 after intentionally retaining seven current-task acceptance plans from the 126 browser baseline; existing history was preserved.
+- Live blockers: FortiGate rejects one zone/VDOM read command in its current context; Cisco SSH times out. Neither path is reported as a successful device operation.
+
 ## Master repair convergence - Phase 2 (2026-07-14)
 
 - Phase 2 router convergence is complete: React Router owns routing/navigation, unknown routes render a distinct 404, and all 53 feature routes have stable page identities.

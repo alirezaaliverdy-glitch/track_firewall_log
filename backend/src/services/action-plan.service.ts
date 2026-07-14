@@ -52,6 +52,7 @@ function vendorFromDevice(device: Pick<Device, "type" | "vendor"> | null | undef
   if (device?.type === DeviceType.mikrotik || vendor.includes("mikrotik") || vendor.includes("routeros")) return "mikrotik";
   if (device?.type === DeviceType.fortigate || vendor.includes("forti")) return "fortigate";
   if (device?.type === DeviceType.linux_edge || vendor.includes("linux")) return "linux_edge";
+  if (vendor.includes("cisco")) return "cisco";
   return undefined;
 }
 
@@ -764,7 +765,8 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   const catalogVendor = vendor === "mikrotik" || vendor === "fortigate" ? vendor : null;
   const catalog = getActionCatalogEntry(actionType, catalogVendor);
   if (catalog) riskLevel = catalog.riskLevel;
-  const productMatches = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.executionSupport === "connector" && item.actionType === actionType);
+  const productVendor = vendor === "linux_edge" ? "linux" : vendor;
+  const productMatches = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.executionSupport === "connector" && item.actionType === actionType && item.vendor === productVendor);
   if (productMatches.length === 1 && asObject(parameters.metadata).source !== "command_catalog") {
     const item = productMatches[0];
     const normalizedParams = executionParametersOnly(parameters);
@@ -1439,6 +1441,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
         })),
         resultJson: toJson({
           executed: false,
+          connectorInvoked: true,
           backupEnabled: false,
           error: connectorError.code,
           message: connectorError.message

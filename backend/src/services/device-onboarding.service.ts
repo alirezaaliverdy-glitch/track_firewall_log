@@ -72,7 +72,7 @@ const SUPPORTED_PLATFORMS: Record<OnboardingVendor, string[]> = {
 };
 
 function normalizeVendor(value: unknown): OnboardingVendor {
-  const vendor = String(value ?? "linux").trim().toLowerCase().replace(/[_-]edge$/, "");
+  const vendor = String(value ?? "linux").trim().toLowerCase().replace(/[\s_-]+edge$/, "").replace(/[\s_-]+/g, "");
   if (vendor === "linux" || vendor === "cisco" || vendor === "fortigate" || vendor === "mikrotik") return vendor;
   throw new Error("Unsupported vendor. Choose Linux, Cisco, FortiGate, or MikroTik.");
 }

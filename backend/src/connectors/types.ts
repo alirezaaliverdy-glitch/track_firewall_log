@@ -1,6 +1,6 @@
 import type { ActionPlan, ActionType, AiRiskLevel, Device, DeviceProtocol, DeviceType } from "@prisma/client";
 
-export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "generic";
+export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "cisco" | "generic";
 export type CommandPlanStatus = "planned" | "needs_clarification" | "unsupported";
 export type CommandTransport = "ssh" | "api" | "manual";
 

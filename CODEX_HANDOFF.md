@@ -1,5 +1,19 @@
 # CODEX_HANDOFF.md
 
+## Operator-first Action Center repair (2026-07-15)
+
+- Replaced the lifecycle-table-first Action Center with a direct operator workflow: select Device, saved Credential Reference, and executable catalog action, then Execute. `Execute immediately` is the default; `Preview only` remains an explicit optional mode.
+- Added the top Connection card with connector-backed Test Connection, Refresh Status, Retry, Last Success, Last Failure, connector state/type, SSH reachability, authentication status, green Connected state, and exact sanitized connector errors.
+- Raw command/validation/result/audit JSON is no longer exposed on the main surface; it is retained under a closed native `Advanced Details` disclosure. ActionPlan history and all existing Action Center APIs/routes remain available in a secondary disclosure.
+- Immediate execution still preserves the controlled architecture: the UI creates the ActionPlan, posts `intent=execute` to `/api/actions/:id/quick-execute`, runs PolicyGuard, and accepts success only with `connectorInvoked=true`. Preview posts `intent=preview` and leaves `connectorInvoked=false`.
+- Added one verified read-only Cisco path for `cisco.show-version`, backed by the existing IOS-XE SSH connector and fixed `show version` command ID. Generic actions now converge only within the same normalized vendor, preventing Cisco support from promoting Linux manual actions.
+- Fixed three runtime truth defects exposed by browser acceptance: `Linux Edge` vendor aliases now normalize correctly, failed connector executions persist `connectorInvoked=true` in result evidence, and successful connection attempts populate Last Success before a full onboarding commit.
+- Authenticated Playwright proof: Linux service status and Linux daily check succeeded through real quick-execute requests; FortiGate VPN succeeded; FortiGate HA/VDOM/zone invoked the connector but FortiOS rejected `show system vdom`; Cisco show version invoked the connector but the configured target timed out. Both failures retain `connectorInvoked=true` and render the exact error. Preview-only produced a ready command plan without connector invocation.
+- Browser UX proof passed in English LTR and Persian RTL at 1440px desktop and 390px mobile with zero horizontal overflow. Execute is checked by default; Advanced Details is closed and raw JSON is not visible; direct history links restore the target Device/Credential context.
+- Validation passed: backend build, command catalog validation (138), full backend suite (237/237), frontend build, locale parity, Persian primary-copy guard, UTF-8 scan, `git diff --check`, authenticated Playwright, Prisma migration status, and dry-run Device/Asset reconciliation (`changed=0`). No migration is required.
+- Protected records remain Device 4, Asset 7, DeviceCredential 4, and Finding 5. ActionPlan count moved from the current-task browser baseline 126 to 133 because the seven requested acceptance operations/previews were intentionally retained as audit history; no existing ActionPlan was deleted or rewritten.
+- Remaining live-target results are honest: the FortiGate appliance does not accept `show system vdom` in its current CLI context, and the configured Cisco target is unreachable over SSH. UI/backend/connector invocation and error handling are verified; successful device output is not claimed for those two paths.
+
 ## Master Repair Phase 2 - Router convergence (2026-07-14)
 
 - Replaced the manual pathname matcher with `react-router-dom` `BrowserRouter`, `Routes`, `Route`, `Navigate`, `Link`, `useNavigate`, and `useParams`.

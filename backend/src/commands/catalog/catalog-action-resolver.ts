@@ -5,7 +5,7 @@ import { selectDeviceConnector } from "../../connectors/connector-registry.servi
 
 type Resolution = { matched: false } | { matched: true; valid: false; code: string; messageFa: string } | { matched: true; valid: true; item: (typeof COMMAND_CATALOG)[number] };
 const object = (value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-const vendorOf = (device: Device) => device.type === "linux_edge" ? "linux" : device.type === "generic_firewall" || device.type === "generic_syslog_source" ? "generic" : device.type;
+const vendorOf = (device: Device) => device.type === "linux_edge" ? "linux" : String(device.vendor).toLowerCase().includes("cisco") ? "cisco" : device.type === "generic_firewall" || device.type === "generic_syslog_source" ? "generic" : device.type;
 
 export function resolveCatalogAction(plan: Pick<ActionPlan, "actionType" | "parametersJson">, device: Device | null): Resolution {
   const parameters = object(plan.parametersJson); const metadata = object(parameters.metadata);

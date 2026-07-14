@@ -13,12 +13,12 @@ export default function ActionsPage({ params }: RouteComponentProps) {
   return (
     <section className="page-stack">
       <PageHeader
-        title={isFa ? "مرکز اقدامات" : "Action Center"}
-        eyebrow="ActionPlan"
-        description={isFa ? "پیش‌نمایش، تأیید کاربر، PolicyGuard و اجرای واقعی Connector در یک چرخه شفاف." : "Preview, user confirmation, PolicyGuard, and real connector execution in one transparent lifecycle."}
-        actions={<button className="primary-button" type="button" onClick={() => setCatalogOpen(!catalogOpen)}>{isFa ? "ساخت ActionPlan" : "Create ActionPlan"}</button>}
+        title={isFa ? "مرکز عملیات" : "Action Center"}
+        eyebrow="Operator Console"
+        description={isFa ? "دستگاه، اعتبارنامه و عملیات را انتخاب کنید؛ سپس مستقیماً از طریق Connector اجرا کنید." : "Select a device, credential, and action, then run it directly through the connector."}
+        actions={<button className="secondary-button" type="button" onClick={() => setCatalogOpen(!catalogOpen)}>{isFa ? "کتابخانه کامل" : "Full action library"}</button>}
       />
-      {catalogOpen && <section id="action-library" className="content-panel action-create-panel"><div className="action-create-panel__header"><div><h2>{isFa ? "کتابخانه اقدام" : "Action library"}</h2><p>{isFa ? "یک فرمان پشتیبانی‌شده را انتخاب کنید تا ActionPlan ساخته شود." : "Choose a supported catalog command to create an ActionPlan."}</p></div><button className="text-button" type="button" onClick={() => setCatalogOpen(false)}>{isFa ? "بستن" : "Close"}</button></div><CommandCatalogPanel /></section>}
+      {catalogOpen && <section id="action-library" className="content-panel action-create-panel"><div className="action-create-panel__header"><div><h2>{isFa ? "کتابخانه عملیات" : "Action library"}</h2><p>{isFa ? "برای جریان‌های پیشرفته، کاتالوگ کامل ActionPlan را باز کنید." : "Use the complete ActionPlan catalog for advanced workflows."}</p></div><button className="text-button" type="button" onClick={() => setCatalogOpen(false)}>{isFa ? "بستن" : "Close"}</button></div><CommandCatalogPanel /></section>}
       <ActionCenterWorkspace initialActionPlanId={params.actionId} onCreate={() => setCatalogOpen(true)} />
     </section>
   );

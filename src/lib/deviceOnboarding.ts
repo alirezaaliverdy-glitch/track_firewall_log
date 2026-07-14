@@ -131,8 +131,12 @@ export type DeviceVerification = {
   credential: { id: string; name: string; type: string } | null;
   lastAttemptAt: string | null;
   lastSuccessAt: string | null;
+  lastFailureAt: string | null;
   connectorInvoked: boolean;
   connectorType: string | null;
+  connectorState: "connected" | "failed" | "unknown";
+  sshReachability: "reachable" | "unreachable" | "unknown";
+  authenticationStatus: "authenticated" | "failed" | "unknown";
   connected: boolean;
   error: string | null;
   activeSessionId: string | null;

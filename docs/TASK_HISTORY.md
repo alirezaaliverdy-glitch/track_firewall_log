@@ -1,5 +1,14 @@
 # Task History
 
+## 2026-07-15 - Operator-first Action Center repair
+
+- Rebuilt the Action Center around the normal operator path: Device, Credential Reference, action, and one Execute click. Added default immediate execution and optional preview mode while retaining every ActionPlan API, direct route, history row, PolicyGuard check, and connector audit.
+- Added the Connection card, persisted status refresh, exact failure/Retry behavior, successful-attempt timestamps, responsive enterprise layout, and closed Advanced Details JSON disclosure.
+- Registered read-only Cisco show-version through the existing IOS-XE SSH transport and fixed vendor-scoped generic-action convergence plus connector-failure invocation evidence.
+- Authenticated Playwright exercised all requested paths. Linux service status, Linux daily check, and FortiGate VPN succeeded with `connectorInvoked=true`; FortiGate zone and Cisco show version invoked their real connectors and surfaced exact live-target failures; preview-only created no connector invocation.
+- Validation passed: catalog 138; backend build and 237/237 tests; frontend build; locale/Persian/UTF-8 checks; diff check; Playwright desktop/mobile RTL/LTR acceptance; Prisma current; dry-run reconciliation changed zero rows.
+- Database preservation: Device 4, Asset 7, DeviceCredential 4, Finding 5 stayed unchanged. Seven acceptance ActionPlans were retained by design, moving the task baseline from 126 to 133 without deleting or rewriting prior history. No migration, restore, seed, destructive SQL, or secret access occurred.
+
 ## 2026-07-14 - Master repair Phase 2
 
 - Migrated the application from manual pathname matching to React Router while preserving ActionPlan result and guided-action deep links.

@@ -1,6 +1,6 @@
 import { FORTIGATE_FULL_CONTROL_ACTION_TYPES } from "../../fortigate/full-control-registry.js";
 
-export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh"; handler: string };
+export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh"; handler: string };
 
 const templates: ExecutionTemplate[] = [
   { id: "linux_open_port", actionType: "linux_open_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
@@ -41,6 +41,7 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "fortigate_show_vpn_status", actionType: "fortigate_show_vpn_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_ha_vdom_zone", actionType: "fortigate_show_ha_vdom_zone", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_guided_vpn_setup", actionType: "fortigate_guided_vpn_setup", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "cisco_show_version", actionType: "generic_security_action", connectorType: "cisco-ios-xe-ssh", handler: "ciscoIosXePlanner" }
   ,...FORTIGATE_FULL_CONTROL_ACTION_TYPES.map((actionType) => ({ id: actionType, actionType, connectorType: "fortigate-ssh" as const, handler: "fortigatePlanner" }))
 ];
 
