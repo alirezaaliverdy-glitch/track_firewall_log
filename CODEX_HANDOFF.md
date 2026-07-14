@@ -552,3 +552,11 @@
 - Normal `cd backend && npm run dev` now starts and stays listening on port 4000.
 - Evidence: `/api/health/ready` returned `200 ready` ten consecutive times; direct `prisma.appUser.count()` succeeded with count 1; MCP dashboard pass showed `/api/auth/me`, `/api/assets`, `/api/security/findings`, `/api/monitoring/linux/summary`, and `/api/product-state/navigation` all returning 200 with zero current console errors.
 - Validation: `npx prisma validate`, `npx prisma generate`, backend build, serialized backend test matrix 209/209, and frontend `npx pnpm@10 build` passed. The default parallel backend test run hit live-DB contention, then passed when rerun with Node test concurrency set to 1.
+
+## Runtime Auth/CORS Follow-up (2026-07-14)
+
+- Stopped duplicate backend dev processes and restarted exactly one normal `cd backend && npm run dev` backend.
+- Confirmed PrismaPgAdapter/pg Pool path uses the shared `env.databaseUrl`, resolving to `127.0.0.1:55432/firewall_log_auth`.
+- Raw `pg.Pool`, minimal PrismaPgAdapter, and shared app Prisma all succeeded against the same resolved connection source.
+- Added the actual frontend dev origin `http://localhost:5174` and `http://127.0.0.1:5174` to default CORS origins; this fixed MCP/browser auth requests from the current frontend port.
+- Evidence: `/api/health/ready` returned 200 ten times, `prisma.appUser.count()` succeeded, `/api/auth/login` returned 200 and set a cookie, and Playwright MCP opened `http://localhost:5174/dashboard` with authenticated shell plus auth/assets/security/monitoring/product-state API calls returning 200 and zero current console errors.

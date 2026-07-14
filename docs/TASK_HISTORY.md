@@ -534,3 +534,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Evidence: normal `cd backend && npm run dev` stayed running; `/api/health/ready` returned 200 ten times; direct `prisma.appUser.count()` succeeded; Playwright MCP opened the authenticated Dashboard and saw auth/assets/security/monitoring/product-state API calls return 200 with zero current console errors.
 - Validation: `cd backend && npx prisma validate`; `cd backend && npx prisma generate`; `cd backend && npm run build`; backend test matrix passed 209/209 with `npx tsx --test --test-concurrency=1 ...`; `npx pnpm@10 build` passed with the existing chunk-size warning.
 - Commit: pending.
+
+## Runtime Auth/CORS Follow-up (2026-07-14)
+
+- Summary: stopped duplicate backend dev processes, verified the normal PrismaPgAdapter/pg Pool connection source, and fixed browser authentication for the active frontend port.
+- Root cause: the database source now resolves correctly, but the active frontend was running on 5174 while backend CORS defaults only allowed 5173, so MCP/browser auth calls were blocked from the dashboard. Duplicate/hot-restarted backend processes also produced misleading transient timeout symptoms during probing.
+- Areas: `backend/src/config/env.ts`, handoff/status docs.
+- Evidence: one normal backend dev process; `/api/health/ready` 200 ten times; `prisma.appUser.count()` succeeded; `/api/auth/login` returned 200; Playwright MCP opened `http://localhost:5174/dashboard` and saw auth/assets/security/monitoring/product-state API calls all 200 with zero current console errors.
+- Commit: pending.

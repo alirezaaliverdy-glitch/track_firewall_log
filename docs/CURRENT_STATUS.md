@@ -467,3 +467,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - `/api/health/ready` is stable and verifies database connectivity before reporting ready.
 - Authentication is reachable again: MCP showed authenticated `/api/auth/me` responses and the Dashboard opened from the live frontend without current console errors.
 - Validation passed: Prisma validate/generate, backend build, serialized backend tests 209/209, and frontend build.
+
+## Runtime Auth/CORS Follow-up (2026-07-14)
+
+- Backend is running as one normal `npm run dev` process on port 4000.
+- Current frontend origin `http://localhost:5174` is included in backend CORS defaults.
+- Runtime proof passed: ready endpoint 10/10, Prisma `appUser.count()`, auth login 200, and MCP-authenticated dashboard on 5174 with no current console errors.
