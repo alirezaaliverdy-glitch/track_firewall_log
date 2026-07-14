@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
 import { Link } from "react-router-dom";
+import { DeviceVerificationPanel } from "@/features/assets/components/DeviceVerificationPanel";
 
 const sections = [
   ["overview", "نمای کلی"], ["health", "سلامت"], ["inventory", "موجودی"], ["capabilities", "قابلیت‌ها"],
@@ -77,6 +78,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     <section className="page-stack">
       <PageHeader title={overview.name} eyebrow="فضای کاری دستگاه" description={`${overview.vendor} / ${overview.platform}`} actions={<><Link className="secondary-link" to="/assets/devices">همه تجهیزات</Link><Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>تنظیم اتصال</Link></>} />
       <div className="summary-grid"><article><span>وضعیت</span><StatusBadge value={overview.availability} tone={overview.availability === "online" ? "good" : "warning"} /></article><article><span>IP مدیریت</span><strong>{value(overview.managementIp)}</strong></article><article><span>Connector</span><strong>{value(overview.connectorType)}</strong></article><article><span>آخرین تماس</span><strong>{date(overview.lastContact)}</strong></article></div>
+      {workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}
       <nav className="workspace-tabs" aria-label="بخش‌های فضای کاری">{sections.map(([key, label]) => <Link key={key} aria-current={section === key ? "page" : undefined} to={`/assets/devices/${deviceId}/${key}`}>{label}</Link>)}{workspace.vendor.sections.map((item) => <Link key={`vendor-${item.key}`} aria-current={section === item.key ? "page" : undefined} to={`/assets/devices/${deviceId}/${item.key}`}>{isFa ? item.titleFa : item.titleEn}</Link>)}</nav>
       {content}
     </section>

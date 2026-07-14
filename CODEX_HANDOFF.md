@@ -603,3 +603,9 @@
 - Added persisted, device-scoped connection-test, verification, retry, and commit APIs by reusing the existing onboarding state machine and connector registry.
 - Verification attempts persist the in-progress state before connector invocation, retain truthful `connectorInvoked` evidence on failed real attempts, reject concurrent runs, and return only sanitized errors and credential references.
 - No schema migration or protected-record mutation was required. Backend build and focused onboarding/verification tests passed; one older Cisco onboarding integration case remains environment-sensitive because its fixed host collides with the current real Cisco Device.
+
+## Device Workspace / Action Center Repair - Phase 2 (2026-07-15)
+
+- Every managed Device Workspace now renders a prominent Connection & Verification panel before workspace tabs.
+- The panel exposes stored credential selection/replacement, connection test, retry, platform detection, inventory discovery, verified commit, new-session, refresh, and persisted history controls without exposing credential material.
+- Authenticated Playwright verified Persian RTL and English LTR rendering at 1366x768 with every control inside the viewport and no horizontal overflow.

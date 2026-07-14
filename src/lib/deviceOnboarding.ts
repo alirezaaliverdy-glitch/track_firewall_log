@@ -106,3 +106,41 @@ export type DeviceWorkspace = {
 export type WorkspaceChartPoint = { timestamp: string; value: number; label?: string; unit?: string | null };
 
 export const getDeviceWorkspace = (reference: string) => request<DeviceWorkspace>(`/device-workspaces/${encodeURIComponent(reference)}`);
+
+export type DeviceVerificationAttempt = {
+  sessionId: string;
+  status: string;
+  step: string;
+  connectorInvoked: boolean;
+  connected: boolean;
+  connectorType: string | null;
+  platform: string | null;
+  error: string | null;
+  attemptedAt: string;
+  expiresAt: string;
+};
+
+export type DeviceVerification = {
+  deviceId: string;
+  verificationStatus: "verified" | "failed" | "unverified";
+  vendor: string;
+  platform: string;
+  host: string;
+  port: number;
+  method: string;
+  credential: { id: string; name: string; type: string } | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  connectorInvoked: boolean;
+  connectorType: string | null;
+  connected: boolean;
+  error: string | null;
+  activeSessionId: string | null;
+  busy: boolean;
+  history: DeviceVerificationAttempt[];
+};
+
+export const getDeviceVerification = (deviceId: string) => request<DeviceVerification>(`/devices/${encodeURIComponent(deviceId)}/verification`);
+export const testDeviceVerification = (deviceId: string, credentialId?: string) => request<DeviceVerification>(`/devices/${encodeURIComponent(deviceId)}/connection-test`, { method: "POST", body: JSON.stringify({ credentialId }) });
+export const retryDeviceVerification = (deviceId: string, credentialId?: string) => request<DeviceVerification>(`/devices/${encodeURIComponent(deviceId)}/verification/retry`, { method: "POST", body: JSON.stringify({ credentialId }) });
+export const commitDeviceVerification = (deviceId: string, sessionId?: string | null) => request<DeviceVerification>(`/devices/${encodeURIComponent(deviceId)}/verification/commit`, { method: "POST", body: JSON.stringify({ sessionId }) });

@@ -580,3 +580,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Implemented the four required Device verification endpoints and device-scoped orchestration over the persisted onboarding session engine.
 - Added concurrency protection, persisted attempt-start evidence, sanitized status/history projection, and focused backend contract coverage.
 - Validation: backend build passed; onboarding final repair tests 8/8 passed; new verification tests passed. No migration, dump operation, or protected-record write was performed.
+
+## Device Workspace / Action Center Repair - Phase 2 (2026-07-15)
+
+- Added the Device Workspace verification client contract, localized control panel, credential reference selector, session step controls, sanitized error display, and persisted history.
+- Validation: frontend build, locale parity, Persian primary-route copy, UTF-8 guard, diff check, and authenticated Playwright at 1366x768 passed.

@@ -508,3 +508,5 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Phase 1 device verification backend is implemented without a migration: the Device-scoped API reuses durable onboarding sessions and registered connectors.
 - Failed real attempts remain unverified while preserving `connectorInvoked=true` when invocation occurred; successful verification still requires connector-backed test, detection, discovery, preview, and commit.
 - Next phase: expose this contract as the prominent Connection & Verification workspace surface.
+- Phase 2 is complete: the contract is now visible and operable on every managed Device Workspace in Persian and English, with responsive controls and history.
+- Next phase: converge the Action Center lifecycle/backend projection.
