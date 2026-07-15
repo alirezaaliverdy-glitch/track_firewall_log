@@ -24,14 +24,14 @@ test("Device Workspace exposes every verification control over credential refere
   assert.doesNotMatch(verificationPanel, /password\s*[:=]|privateKey\s*[:=]|passphrase\s*[:=]/);
 });
 
-test("Action Center defaults to the operator-first immediate execution contract", () => {
+test("Action Center exposes an operator-first preview and real execution contract", () => {
   for (const contract of [
-    "Select device", "Select credential", "Select action", "Preview only", "Execute immediately", "Test Connection",
+    "Select device", "Select credential", "Select action", "Generate Preview", "Execute immediately", "Confirm and Execute", "Run again", "Test Connection",
     "Refresh Status", "Last Success", "Last Failure", "Connector state", "SSH reachability", "Authentication status",
     "Advanced Details"
   ]) assert.match(actionWorkspace, new RegExp(contract));
-  assert.match(actionWorkspace, /useState<RunMode>\("execute"\)/);
-  assert.match(actionWorkspace, /quickExecuteAction\(plan\.id, \{ intent: mode/);
+  assert.match(actionWorkspace, /quickExecuteAction\(plan\.id, \{ intent: "preview"/);
+  assert.match(actionWorkspace, /quickExecuteAction\(selected\.id, \{ intent: "execute"/);
   assert.match(actionWorkspace, /testDeviceVerification/);
   assert.match(actionWorkspace, /setDeviceId\(selected\.deviceId\)/);
   assert.match(actionWorkspace, /operator-advanced/);

@@ -4,7 +4,7 @@ import { proposeActionPlan, rejectActionPlan } from "./action-plan.service.js";
 
 const TERMINAL = new Set<ActionPlanStatus>([ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back]);
 const PREVIEWABLE = new Set<ActionPlanStatus>([ActionPlanStatus.proposed, ActionPlanStatus.validation_failed, ActionPlanStatus.awaiting_approval]);
-const RETRYABLE = new Set<ActionPlanStatus>([ActionPlanStatus.failed, ActionPlanStatus.validation_failed, ActionPlanStatus.rejected]);
+const RETRYABLE = new Set<ActionPlanStatus>([ActionPlanStatus.failed, ActionPlanStatus.validation_failed, ActionPlanStatus.rejected, ActionPlanStatus.succeeded]);
 const SENSITIVE_KEY = /password|passphrase|private.?key|token|api.?key|secret/i;
 
 function object(value: unknown): Record<string, unknown> {
@@ -140,7 +140,7 @@ export async function retryActionCenterItem(id: string, actor?: string) {
   const plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
   if (!RETRYABLE.has(plan.status)) {
-    throw new Error("Only failed, needs-input, or cancelled ActionPlans can be retried.");
+    throw new Error("Only completed, failed, needs-input, or cancelled ActionPlans can be run again.");
   }
   const parameters = object(plan.parametersJson);
   const retry = await proposeActionPlan({

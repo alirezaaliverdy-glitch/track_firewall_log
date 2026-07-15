@@ -615,3 +615,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Validation: backend build; backend tests 236/236; final repair contract 3/3; frontend build; locale parity 97 keys; Persian copy; UTF-8 450 files; Prisma schema current; dry-run Device/Asset audit `changed=0`; `git diff --check`.
 - Preservation: Device 4, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124. No migration was created or required.
 - Honest blocker: the configured Cisco host `192.168.7.12` does not answer SSH before timeout, so live successful Cisco verification remains unavailable despite proven connector invocation and recovery behavior.
+## 2026-07-15 - Urgent Action Center operator flow
+
+- Replaced immediate one-click creation/execution with preview then explicit confirmation over the real quick-execute endpoint.
+- Added primary New Action and lifecycle-specific Confirm and Execute, Retry, and Run again controls.
+- Promoted connector evidence and stdout/stderr to the visible result surface while retaining raw payloads under Advanced Details.
+- Extended retry-as-new-plan to succeeded records without altering completed history.

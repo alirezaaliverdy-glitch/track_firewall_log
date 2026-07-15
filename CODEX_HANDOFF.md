@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Urgent Action Center execution-path correction (2026-07-15)
+
+- Added a visible primary `New Action` entry point and changed new actions to an explicit two-step flow: required device/credential/action/parameters -> `Generate Preview` -> visible `Confirm and Execute` through the existing `/api/actions/:id/quick-execute` route.
+- Added visible lifecycle controls: planned previews offer `Confirm and Execute`, failures offer `Retry`, and completed read-only history offers `Run again`; retry/rerun always creates a new ActionPlan and never mutates the historical record.
+- The main result surface now shows final status, `connectorInvoked`, stdout, stderr, and evidence. Unsupported actions show their support reason. Raw JSON remains collapsed under `Advanced Details`.
+- Success projection remains fail-closed unless `connectorInvoked=true`; no execution policy, connector, credential-secret, migration, or protected lab behavior changed.
+- Focused backend Action Center contract tests, backend build, frontend build, i18n/UTF-8 checks, and diff checks passed. Playwright navigation tooling is not exposed in this turn, so authenticated browser/vendor acceptance is not claimed here.
+
 ## Operator-first Action Center repair (2026-07-15)
 
 - Replaced the lifecycle-table-first Action Center with a direct operator workflow: select Device, saved Credential Reference, and executable catalog action, then Execute. `Execute immediately` is the default; `Preview only` remains an explicit optional mode.

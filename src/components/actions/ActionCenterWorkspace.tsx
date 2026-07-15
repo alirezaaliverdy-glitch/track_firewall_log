@@ -2,14 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { quickExecuteAction } from "@/lib/actions";
-import { getActionCenterItem, listActionCenter, type ActionCenterItem, type ActionLifecycle } from "@/lib/actionCenter";
+import { getActionCenterItem, listActionCenter, retryActionCenterItem, type ActionCenterItem, type ActionLifecycle } from "@/lib/actionCenter";
 import { createCatalogAction, searchCommands, type CatalogItem, type CatalogParam } from "@/lib/commandCatalog";
 import { listCredentials, type DeviceCredential } from "@/lib/credentials";
 import { getDeviceVerification, retryDeviceVerification, testDeviceVerification, type DeviceVerification } from "@/lib/deviceOnboarding";
 import { listDevices, updateDevice, type Device } from "@/lib/devices";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-
-type RunMode = "execute" | "preview";
 
 function formatDate(value: string | null | undefined, locale: string) {
   return value ? new Date(value).toLocaleString(locale) : "—";
@@ -164,7 +162,6 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const [credentialId, setCredentialId] = useState("");
   const [actionId, setActionId] = useState("");
   const [parameters, setParameters] = useState<Record<string, string>>({});
-  const [mode, setMode] = useState<RunMode>("execute");
   const [verification, setVerification] = useState<DeviceVerification | null>(null);
   const [selected, setSelected] = useState<ActionCenterItem | null>(null);
   const [connectionBusy, setConnectionBusy] = useState(false);
@@ -278,7 +275,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
       await persistCredential();
       const input = Object.fromEntries(allFields.filter((field) => parameters[field.key] !== "").map((field) => [field.key, field.type === "number" ? Number(parameters[field.key]) : field.type === "boolean" ? parameters[field.key] === "true" : parameters[field.key]]));
       const plan = await createCatalogAction(selectedAction.id, selectedDevice.id, input);
-      await quickExecuteAction(plan.id, { intent: mode, reason: mode === "execute" ? "Execute immediately from operator Action Center" : "Preview only from operator Action Center" });
+      await quickExecuteAction(plan.id, { intent: "preview", reason: "Preview generated from operator Action Center" });
       await Promise.all([loadDetail(plan.id), loadHistory()]);
       navigate(`/actions/${plan.id}`);
     } catch (failure) {
@@ -287,6 +284,32 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     } finally {
       setActionBusy(false);
     }
+  }
+
+  async function executeSelected() {
+    if (!selected?.controls.canConfirm && !selected?.controls.canExecute) return;
+    setActionBusy(true);
+    setError("");
+    try {
+      await quickExecuteAction(selected.id, { intent: "execute", reason: "Confirmed and executed from operator Action Center" });
+      await Promise.all([loadDetail(selected.id), loadHistory()]);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Execution failed.");
+      await loadDetail(selected.id).catch(() => undefined);
+    } finally { setActionBusy(false); }
+  }
+
+  async function repeatSelected() {
+    if (!selected) return;
+    setActionBusy(true);
+    setError("");
+    try {
+      const next = await retryActionCenterItem(selected.id);
+      setSelected(next);
+      await loadHistory();
+      navigate(`/actions/${next.id}`);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not create a new run."); }
+    finally { setActionBusy(false); }
   }
 
   const latestFailure = verification?.history.find((attempt) => !attempt.connected && Boolean(attempt.error));
@@ -327,19 +350,21 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
           {allFields.map((field: CatalogParam) => <label key={field.key}>{isFa ? field.labelFa : humanize(field.key)}{selectedAction.requiredParams.some((required) => required.key === field.key) && <small>{copy.required}</small>}{field.type === "boolean" ? <select value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">{copy.choose}</option><option value="true">true</option><option value="false">false</option></select> : <input type={field.type === "number" ? "number" : "text"} placeholder={field.placeholderFa} value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))} />}</label>)}
         </section>}
 
-        <fieldset className="operator-mode"><legend>{isFa ? "حالت اجرا" : "Run mode"}</legend>
-          <label className={mode === "preview" ? "is-selected" : ""}><input type="radio" name="operator-mode" value="preview" checked={mode === "preview"} onChange={() => setMode("preview")} /><span><strong>{copy.previewOnly}</strong><small>{copy.previewHelp}</small></span></label>
-          <label className={mode === "execute" ? "is-selected" : ""}><input type="radio" name="operator-mode" value="execute" checked={mode === "execute"} onChange={() => setMode("execute")} /><span><strong>{copy.executeNow}</strong><small>{copy.executeHelp}</small></span></label>
-        </fieldset>
-
         {error && <div className="state-panel state-panel--error" role="alert">{error}</div>}
-        <footer><p>{copy.connectorRequired}</p><button className="primary-button operator-execute" type="button" disabled={!selectedDevice || !credentialId || !selectedAction || !requiredComplete || actionBusy} onClick={() => void runOperatorAction()}>{actionBusy ? copy.running : mode === "execute" ? copy.execute : copy.generatePreview}</button></footer>
+        <footer><p>{copy.previewHelp}</p><button className="primary-button operator-execute" type="button" disabled={!selectedDevice || !credentialId || !selectedAction || !requiredComplete || actionBusy} onClick={() => void runOperatorAction()}>{actionBusy ? copy.running : copy.generatePreview}</button></footer>
       </section>
 
       {selected && <section className={`operator-result operator-result--${selected.lifecycleState}`} aria-label={copy.result}>
         <header><div><p className="operator-eyebrow">{copy.result}</p><h2>{selected.actionType.replace(/_/g, " ")}</h2></div><StatusBadge value={lifecycleLabels[selected.lifecycleState]} tone={selected.lifecycleState === "succeeded" ? "good" : selected.lifecycleState === "failed" ? "danger" : "warning"} /></header>
         <p>{resultMessage(selected, isFa)}</p>
         <div className="operator-result__proof"><span>{copy.connectorProof}</span><strong>{selected.evidence.connectorInvoked ? "connectorInvoked=true" : "connectorInvoked=false"}</strong><small>{formatDate(selected.updatedAt, locale)}</small></div>
+        {!selected.support.executable && <div className="state-panel state-panel--error" role="alert"><strong>{isFa ? "غیرقابل اجرا" : "Unsupported action"}</strong><p>{String(selected.support.reason ?? (isFa ? "برای این فروشنده Connector ثبت‌شده‌ای وجود ندارد." : "No registered connector supports this action for the selected vendor."))}</p></div>}
+        <div className="operator-result__actions">
+          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
+          {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
+          {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
+        </div>
+        {(selected.lifecycleState === "executing" || selected.connectorResult.stdout !== undefined || selected.connectorResult.stderr !== undefined) && <section className="operator-live-result" aria-live="polite"><h3>{isFa ? "خروجی زنده" : "Live result"}</h3><p><strong>{isFa ? "وضعیت نهایی" : "Final status"}:</strong> {lifecycleLabels[selected.lifecycleState]}</p><h4>stdout</h4><pre>{String(selected.connectorResult.stdout ?? "")}</pre><h4>stderr</h4><pre>{String(selected.connectorResult.stderr ?? "")}</pre><h4>{isFa ? "شواهد" : "Evidence"}</h4><pre>{pretty(selected.evidence)}</pre></section>}
         {selected.controls.relatedDevicePath && <Link className="secondary-link" to={selected.controls.relatedDevicePath}>{isFa ? "باز کردن فضای کاری دستگاه" : "Open Device Workspace"}</Link>}
         <details className="operator-advanced"><summary>{copy.advanced}</summary><div><AdvancedBlock title="Command preview" value={selected.commandPreview} /><AdvancedBlock title="Validation" value={selected.validationJson} /><AdvancedBlock title="Connector result" value={selected.connectorResult} /><AdvancedBlock title="Evidence and audit" value={{ evidence: selected.evidence, audit: selected.audit }} /></div></details>
       </section>}

@@ -532,3 +532,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - A temporary read-only Linux ActionPlan completed the full Action Center lifecycle with `connectorInvoked=true`; its evidence/result views passed authenticated browser inspection and the tagged plan was precisely cleaned up.
 - Final protected counts are Device 4, Asset 7, DeviceCredential 4, Finding 5, and ActionPlan 124. Prisma is current, the dry-run reconciliation changed zero rows, and no migration is required by this repair.
 - Validation passed: backend build and 236/236 tests; frontend build; 97-key locale parity; Persian copy check; 450-file UTF-8 check; responsive authenticated Playwright acceptance; and diff check.
+## 2026-07-15 - Action Center urgent execution path
+
+- Implemented visible New Action, preview, Confirm and Execute, Retry, and Run again controls.
+- Real execution continues through quick-execute and the UI exposes connector invocation, stdout/stderr, evidence, and final lifecycle status.
+- Historical completed records remain immutable; rerun/retry creates a new ActionPlan.
+- Browser acceptance remains pending because Playwright MCP navigation is unavailable in the current tool surface.
