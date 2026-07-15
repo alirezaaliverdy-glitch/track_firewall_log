@@ -133,3 +133,4 @@ export const getActionCenterItem = (id: string) => request<unknown>(`/action-cen
 export const cancelActionCenterItem = (id: string, reason = "Cancelled from Action Center") => request<unknown>(`/action-center/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }).then(normalizeActionCenterItem);
 export const retryActionCenterItem = (id: string) => request<unknown>(`/action-center/${encodeURIComponent(id)}/retry`, { method: "POST", body: "{}" }).then(normalizeActionCenterItem);
 export const updateActionCenterTarget = (id: string, deviceId: string) => request<unknown>(`/action-center/${encodeURIComponent(id)}/target`, { method: "PATCH", body: JSON.stringify({ deviceId }) }).then(normalizeActionCenterItem);
+export const clearActionCenterHistory = () => request<{ deleted: number; retainedActive: number }>("/action-center/history", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE ACTION HISTORY" }) });

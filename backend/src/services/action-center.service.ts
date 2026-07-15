@@ -20,6 +20,15 @@ function sanitize(value: unknown, key = ""): unknown {
 
 export type ActionCenterLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "cancelled";
 
+export async function clearActionCenterHistory() {
+  const terminalStatuses = [ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back];
+  const [deleted, retainedActive] = await prisma.$transaction([
+    prisma.actionPlan.deleteMany({ where: { status: { in: terminalStatuses } } }),
+    prisma.actionPlan.count({ where: { status: { notIn: terminalStatuses } } })
+  ]);
+  return { deleted: deleted.count, retainedActive };
+}
+
 function lifecycle(status: ActionPlanStatus, resultJson: unknown): ActionCenterLifecycle {
   if (status === ActionPlanStatus.proposed) return "draft";
   if (status === ActionPlanStatus.validation_failed) return "needs_input";

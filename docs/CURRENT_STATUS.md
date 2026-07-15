@@ -563,3 +563,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - `/assets/sync` now renders actual preview rows and structured operation results instead of instructing operators to inspect raw API/audit data.
 - NetBox and Wazuh mock apply are explicitly review/confirm gated and idempotent; production connectivity remains disabled and clearly labeled until real endpoints and credential references exist.
 - Device-to-Asset reconciliation is directly usable and reports scanned/created/updated totals. Focused API and authenticated browser acceptance passed.
+## 2026-07-15 - Direct equipment management and history cleanup
+
+- Equipment and vendor clicks now lead to useful summaries, and the device workspace has direct quick-edit and guarded-delete controls.
+- Admins can clear completed ActionPlan history after explicit confirmation; active/pending actions are preserved.
+- Focused API tests and authenticated 1366x768 browser acceptance passed without deleting existing user records.

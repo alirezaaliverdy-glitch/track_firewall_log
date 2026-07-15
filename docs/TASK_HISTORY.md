@@ -646,3 +646,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Rebuilt the three-card Asset Sync surface with visible progress, sanitized errors, preview rows, confirmation, idempotent mock apply, and structured results.
 - Preserved the product-state truth boundary: NetBox/Wazuh are working mock workflows, not falsely advertised production integrations; Device sync is a real internal reconciliation.
 - Verified focused backend integration behavior and all three cards in authenticated Chrome at 1366x768 without console errors or overflow.
+## 2026-07-15 - Simplify device/vendor and ActionPlan management
+
+- Linked vendor cells to vendor overview pages and added device edit/delete controls to the primary workspace.
+- Added the admin-only confirmed ActionPlan terminal-history deletion endpoint and UI while retaining non-terminal actions.
+- Verified real temporary-device create/edit/delete through backend APIs and all non-destructive UI confirmations in authenticated Chrome.

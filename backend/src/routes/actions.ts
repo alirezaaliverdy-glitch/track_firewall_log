@@ -16,7 +16,7 @@ import {
 } from "../services/action-plan.service.js";
 import { commandCatalogForVendor, VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { routeCatalogIntent } from "../actions/intent-router.js";
-import { cancelActionCenterItem, getActionCenterItem, listActionCenter, retryActionCenterItem, updateActionCenterTarget } from "../services/action-center.service.js";
+import { cancelActionCenterItem, clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, updateActionCenterTarget } from "../services/action-center.service.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   const actor = (request: { authUser?: { username: string; role: string } }) => request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined;
@@ -33,6 +33,12 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/actions", async () => listActionPlans());
 
   app.get<{ Querystring: Record<string, unknown> }>("/api/action-center", async (request) => listActionCenter(request.query));
+
+  app.delete<{ Body: { confirmation?: string } }>("/api/action-center/history", async (request, reply) => {
+    if (request.authUser?.role !== "admin") return reply.code(403).send({ error: { code: "ADMIN_REQUIRED", message: "Only an administrator can clear ActionPlan history." } });
+    if (request.body?.confirmation !== "DELETE ACTION HISTORY") return reply.code(400).send({ error: { code: "CONFIRMATION_REQUIRED", message: "Confirm clearing completed ActionPlan history." } });
+    return clearActionCenterHistory();
+  });
 
   app.get<{ Params: { id: string } }>("/api/action-center/:id", async (request, reply) => {
     const item = await getActionCenterItem(request.params.id);

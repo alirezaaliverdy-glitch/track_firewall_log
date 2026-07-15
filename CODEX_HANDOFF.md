@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## Direct device/vendor management and ActionPlan history cleanup (2026-07-15)
+
+- Vendor names in the equipment table now link directly to a vendor overview; equipment names already open the device workspace, which now exposes visible Edit and Delete controls.
+- Device edit supports name, management host/port, protocol, environment, and tags. Delete requires typing the exact device name and preserves historical ActionPlans with their device link unset by the existing database relation.
+- ActionPlan history now has an admin-only `Clear history` workflow with explicit confirmation. It deletes only terminal succeeded/failed/cancelled/rolled-back plans and their dependent audit/approvals; pending and executing plans are retained.
+- Authenticated Chrome proved vendor/device navigation, edit/delete dialogs, and history-clear confirmation without mutating protected records. A separate temporary-device API test proved real create -> edit -> delete and cleaned the temporary record.
+
 ## Asset Sync usability and runtime repair (2026-07-15)
 
 - Replaced the screenshot-reproduced dead-end status message with a complete structured workflow for NetBox mock data, Wazuh mock data, and real internal Device-to-Asset reconciliation.

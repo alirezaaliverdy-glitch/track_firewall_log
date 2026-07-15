@@ -9,6 +9,15 @@ function healthTone(value: string): "good" | "warning" | "danger" | "neutral" {
   return "neutral";
 }
 
+function vendorPath(value: string | null | undefined) {
+  const normalized = String(value ?? "").toLowerCase();
+  if (normalized.includes("cisco")) return "/assets/vendors/cisco";
+  if (normalized.includes("forti")) return "/assets/vendors/fortigate";
+  if (normalized.includes("mikro")) return "/assets/vendors/mikrotik";
+  if (normalized.includes("linux")) return "/assets/vendors/linux";
+  return "/assets/vendors";
+}
+
 export function AssetTable({ assets }: { assets: PlatformAsset[] }) {
   return (
     <div className="table-shell">
@@ -31,7 +40,7 @@ export function AssetTable({ assets }: { assets: PlatformAsset[] }) {
             return (
             <tr key={asset.id}>
               <td><Link to={`/assets/devices/${workspaceId}`}>{asset.name}</Link></td>
-              <td>{asset.vendor?.name ?? "-"}</td>
+              <td>{asset.vendor?.name ? <Link className="vendor-summary-link" to={vendorPath(asset.vendor.name)}>{asset.vendor.name}</Link> : "-"}</td>
               <td>{asset.site?.name ?? "-"}</td>
               <td>{asset.managementIp ?? asset.hostname ?? "-"}</td>
               <td><StatusBadge value={asset.managedState} tone={asset.managedState === "managed" ? "good" : "warning"} /></td>

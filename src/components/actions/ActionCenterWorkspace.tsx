@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { quickExecuteAction } from "@/lib/actions";
-import { getActionCenterItem, listActionCenter, retryActionCenterItem, type ActionCenterItem, type ActionLifecycle } from "@/lib/actionCenter";
+import { clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, type ActionCenterItem, type ActionLifecycle } from "@/lib/actionCenter";
 import { createCatalogAction, searchCommands, type CatalogItem, type CatalogParam } from "@/lib/commandCatalog";
 import { listCredentials, type DeviceCredential } from "@/lib/credentials";
 import { getDeviceVerification, retryDeviceVerification, testDeviceVerification, type DeviceVerification } from "@/lib/deviceOnboarding";
@@ -177,6 +177,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [historyBusy, setHistoryBusy] = useState(true);
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
+  const [historyNotice, setHistoryNotice] = useState("");
 
   const selectedDevice = useMemo(() => devices.find((device) => device.id === deviceId) ?? null, [deviceId, devices]);
   const selectedAction = useMemo(() => actions.find((action) => action.id === actionId) ?? null, [actionId, actions]);
@@ -337,6 +339,20 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     finally { setActionBusy(false); }
   }
 
+  async function clearCompletedHistory() {
+    setHistoryBusy(true); setError(""); setHistoryNotice("");
+    try {
+      const response = await clearActionCenterHistory();
+      setClearHistoryOpen(false);
+      setSelected((current) => current && ["succeeded", "failed", "cancelled"].includes(current.lifecycleState) ? null : current);
+      if (initialActionPlanId) navigate("/actions/history");
+      setHistoryNotice(isFa ? `${response.deleted} رکورد نهایی حذف شد؛ ${response.retainedActive} اکشن فعال حفظ شد.` : `${response.deleted} completed records deleted; ${response.retainedActive} active actions preserved.`);
+      setOffset(0);
+      await loadHistory();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not clear ActionPlan history."); }
+    finally { setHistoryBusy(false); }
+  }
+
   const latestFailure = verification?.history.find((attempt) => !attempt.connected && Boolean(attempt.error));
   const connectionTone = verification?.connected ? "connected" : verification?.error ? "failed" : "unknown";
   const pages = Math.max(1, Math.ceil(total / 10));
@@ -414,7 +430,9 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
       <details className="operator-history" open={view === "history" || Boolean(initialActionPlanId)}>
         <summary><span><strong>{copy.history}</strong><small>{copy.historyHelp}</small></span><span>{total}</span></summary>
         <div className="operator-history__content">
-          <div className="action-workspace__toolbar"><button className="secondary-button" type="button" onClick={onCreate}>{copy.fullLibrary}</button><nav className="action-workspace__views" aria-label={copy.history}><Link aria-current={view === "all" ? "page" : undefined} to="/actions">{isFa ? "همه" : "All"}</Link><Link aria-current={view === "pending" ? "page" : undefined} to="/actions/pending">{isFa ? "در انتظار" : "Pending"}</Link><Link aria-current={view === "history" ? "page" : undefined} to="/actions/history">{copy.history}</Link></nav></div>
+          <div className="action-workspace__toolbar"><div className="button-row"><button className="secondary-button" type="button" onClick={onCreate}>{copy.fullLibrary}</button><button className="danger-button" type="button" disabled={historyBusy || total === 0} onClick={() => setClearHistoryOpen(true)}>{isFa ? "پاک‌کردن تاریخچه" : "Clear history"}</button></div><nav className="action-workspace__views" aria-label={copy.history}><Link aria-current={view === "all" ? "page" : undefined} to="/actions">{isFa ? "همه" : "All"}</Link><Link aria-current={view === "pending" ? "page" : undefined} to="/actions/pending">{isFa ? "در انتظار" : "Pending"}</Link><Link aria-current={view === "history" ? "page" : undefined} to="/actions/history">{copy.history}</Link></nav></div>
+          {clearHistoryOpen && <section className="destructive-confirm" role="alertdialog" aria-label={isFa ? "تأیید پاک‌کردن تاریخچه" : "Confirm clearing history"}><strong>{isFa ? "تاریخچه نهایی پاک شود؟" : "Clear completed history?"}</strong><p>{isFa ? "اکشن‌های موفق، ناموفق و لغوشده همراه Audit وابسته حذف می‌شوند. اکشن‌های در انتظار یا در حال اجرا حفظ می‌شوند." : "Succeeded, failed, and cancelled actions and their related audit are deleted. Pending or executing actions are preserved."}</p><div className="button-row"><button className="danger-button" type="button" disabled={historyBusy} onClick={() => void clearCompletedHistory()}>{isFa ? "بله، تاریخچه نهایی پاک شود" : "Yes, clear completed history"}</button><button className="secondary-button" type="button" disabled={historyBusy} onClick={() => setClearHistoryOpen(false)}>{isFa ? "انصراف" : "Cancel"}</button></div></section>}
+          {historyNotice && <div className="state-panel state-panel--success" role="status">{historyNotice}</div>}
           <div className="filter-bar action-workspace__filters"><input aria-label={copy.search} placeholder={copy.search} value={query} onChange={(event) => { setQuery(event.target.value); setOffset(0); }} /><select aria-label={copy.lifecycle} value={status} onChange={(event) => { setStatus(event.target.value); setOffset(0); }}><option value="">{copy.allStates}</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
           <section className="table-shell action-list" aria-busy={historyBusy}>{historyBusy ? <div className="state-panel">{copy.loading}</div> : items.length === 0 ? <div className="state-panel">{copy.empty}</div> : <table><thead><tr><th>{copy.action}</th><th>{copy.device}</th><th>{copy.lifecycle}</th><th>{copy.updated}</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : ""}><td><strong>{item.actionType ? item.actionType.replace(/_/g, " ") : (isFa ? "اطلاعات موجود نیست" : "Not available")}</strong><small>{item.id}</small></td><td>{item.device?.name || (isFa ? "اطلاعات موجود نیست" : "Not available")}</td><td><StatusBadge value={lifecycleLabel(item.lifecycleState)} tone={item.lifecycleState === "succeeded" ? "good" : item.lifecycleState === "failed" ? "danger" : "warning"} /></td><td>{formatDate(item.updatedAt, locale)}</td><td><button className={item.controls.canPreview || item.controls.canConfirm || item.controls.canExecute ? "primary-button" : "text-button"} type="button" onClick={() => navigate(`/actions/${encodeURIComponent(item.id)}`)}>{historyActionLabel(item)}</button></td></tr>)}</tbody></table>}{!historyBusy && total > 0 && <div className="action-pagination"><button className="secondary-button" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 10))}>{copy.previous}</button><span>{currentPage} / {pages}</span><button className="secondary-button" type="button" disabled={offset + 10 >= total} onClick={() => setOffset(offset + 10)}>{copy.next}</button></div>}</section>
         </div>

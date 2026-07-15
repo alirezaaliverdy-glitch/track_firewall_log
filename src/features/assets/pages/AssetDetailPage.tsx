@@ -6,8 +6,9 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { DeviceVerificationPanel } from "@/features/assets/components/DeviceVerificationPanel";
+import { deleteDevice, updateDevice, type DeviceInput } from "@/lib/devices";
 
 const sections = [
   ["overview", "نمای کلی"], ["health", "سلامت"], ["inventory", "موجودی"], ["capabilities", "قابلیت‌ها"],
@@ -34,6 +35,7 @@ function TrendChart({ title, points, empty, binary = false }: { title: string; p
 }
 
 export default function AssetDetailPage({ params }: RouteComponentProps) {
+  const navigate = useNavigate();
   const { i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const reference = params.deviceId || params.assetId;
@@ -41,6 +43,11 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const [workspace, setWorkspace] = useState<DeviceWorkspace | null>(null);
   const [error, setError] = useState("");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteName, setDeleteName] = useState("");
+  const [form, setForm] = useState({ name: "", host: "", managementPort: "22", protocol: "ssh", environment: "lab", tags: "" });
   const load = () => getDeviceWorkspace(reference).then(setWorkspace).catch((failure: Error) => setError(failure.message));
   useEffect(() => { void load(); }, [reference]);
   if (!workspace && !error) return <LoadingState />;
@@ -50,6 +57,26 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const since = Date.now() - rangeHours[timeRange] * 60 * 60 * 1000;
   const chart = (points: WorkspaceChartPoint[]) => points.filter((item) => new Date(item.timestamp).getTime() >= since);
   const vendorSection = workspace.vendor.sections.find((item) => item.key === section);
+  const startEditing = () => {
+    if (!workspace.device) return;
+    setForm({ name: workspace.device.name, host: workspace.device.host, managementPort: String(workspace.device.managementPort), protocol: workspace.device.protocol, environment: workspace.device.environment, tags: workspace.device.tags.join(", ") });
+    setEditing(true); setError("");
+  };
+  const saveDevice = async () => {
+    if (!workspace.device || !form.name.trim() || !form.host.trim() || !Number.isInteger(Number(form.managementPort))) return;
+    setSaving(true); setError("");
+    try {
+      await updateDevice(workspace.device.id, { name: form.name.trim(), host: form.host.trim(), managementPort: Number(form.managementPort), protocol: form.protocol as DeviceInput["protocol"], environment: form.environment as DeviceInput["environment"], tags: form.tags.split(",").map((item) => item.trim()).filter(Boolean) });
+      await load(); setEditing(false);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "ویرایش تجهیز انجام نشد."); }
+    finally { setSaving(false); }
+  };
+  const removeDevice = async () => {
+    if (!workspace.device || deleteName.trim() !== workspace.device.name) return;
+    setSaving(true); setError("");
+    try { await deleteDevice(workspace.device.id); navigate("/assets/devices", { replace: true }); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "حذف تجهیز انجام نشد."); setSaving(false); }
+  };
   const chartCopy = isFa ? {
     health: "روند امتیاز سلامت", connector: "موفقیت/خطای کانکتور", availability: "دردسترس‌بودن", resources: "CPU و حافظه", findings: "روند یافته‌ها", actions: "نتیجه اقدام‌ها", empty: "برای این بازه داده تأییدشده‌ای ذخیره نشده است.", ranges: "بازه زمانی", changes: "نشانه‌های تغییر اخیر"
   } : {
@@ -76,7 +103,9 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
   return (
     <section className="page-stack">
-      <PageHeader title={overview.name} eyebrow="فضای کاری دستگاه" description={`${overview.vendor} / ${overview.platform}`} actions={<><Link className="secondary-link" to="/assets/devices">همه تجهیزات</Link><Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>تنظیم اتصال</Link></>} />
+      <PageHeader title={overview.name} eyebrow="فضای کاری دستگاه" description={`${overview.vendor} / ${overview.platform}`} actions={<><Link className="secondary-link" to="/assets/devices">همه تجهیزات</Link>{workspace.device && <button className="secondary-button" type="button" onClick={startEditing}>ویرایش تجهیز</button>}<Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>تنظیم اتصال</Link>{workspace.device && <button className="danger-button" type="button" onClick={() => { setDeleteOpen(true); setDeleteName(""); }}>حذف تجهیز</button>}</>} />
+      {editing && workspace.device && <section className="content-panel device-edit-panel" aria-label="ویرایش تجهیز"><header><div><p className="operator-eyebrow">ویرایش سریع</p><h2>اطلاعات اصلی تجهیز</h2></div><button className="secondary-button" type="button" onClick={() => setEditing(false)}>بستن</button></header><div className="device-edit-grid"><label>نام تجهیز<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label>آدرس مدیریت<input value={form.host} onChange={(event) => setForm({ ...form, host: event.target.value })} required dir="ltr" /></label><label>پورت مدیریت<input type="number" min="1" max="65535" value={form.managementPort} onChange={(event) => setForm({ ...form, managementPort: event.target.value })} required /></label><label>پروتکل<select value={form.protocol} onChange={(event) => setForm({ ...form, protocol: event.target.value })}><option value="ssh">SSH</option><option value="api">API</option><option value="syslog">Syslog</option><option value="agent">Agent</option></select></label><label>محیط<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })}><option value="lab">آزمایشگاه</option><option value="production">Production</option><option value="staging">Staging</option></select></label><label>برچسب‌ها<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="linux, edge" /></label></div><div className="button-row"><button className="primary-button" type="button" disabled={saving || !form.name.trim() || !form.host.trim()} onClick={() => void saveDevice()}>{saving ? "در حال ذخیره…" : "ذخیره تغییرات"}</button><button className="secondary-button" type="button" disabled={saving} onClick={() => setEditing(false)}>انصراف</button></div></section>}
+      {deleteOpen && workspace.device && <section className="destructive-confirm" role="alertdialog" aria-label="تأیید حذف تجهیز"><strong>حذف «{workspace.device.name}»</strong><p>برای جلوگیری از حذف اشتباه، نام تجهیز را وارد کنید. ActionPlanهای قبلی باقی می‌مانند اما ارتباط آن‌ها با تجهیز حذف می‌شود.</p><label>نام تجهیز<input value={deleteName} onChange={(event) => setDeleteName(event.target.value)} autoComplete="off" /></label><div className="button-row"><button className="danger-button" type="button" disabled={saving || deleteName.trim() !== workspace.device.name} onClick={() => void removeDevice()}>{saving ? "در حال حذف…" : "حذف قطعی تجهیز"}</button><button className="secondary-button" type="button" disabled={saving} onClick={() => setDeleteOpen(false)}>انصراف</button></div></section>}
       <div className="summary-grid"><article><span>وضعیت</span><StatusBadge value={overview.availability} tone={overview.availability === "online" ? "good" : "warning"} /></article><article><span>IP مدیریت</span><strong>{value(overview.managementIp)}</strong></article><article><span>Connector</span><strong>{value(overview.connectorType)}</strong></article><article><span>آخرین تماس</span><strong>{date(overview.lastContact)}</strong></article></div>
       {workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}
       <nav className="workspace-tabs" aria-label="بخش‌های فضای کاری">{sections.map(([key, label]) => <Link key={key} aria-current={section === key ? "page" : undefined} to={`/assets/devices/${deviceId}/${key}`}>{label}</Link>)}{workspace.vendor.sections.map((item) => <Link key={`vendor-${item.key}`} aria-current={section === item.key ? "page" : undefined} to={`/assets/devices/${deviceId}/${item.key}`}>{isFa ? item.titleFa : item.titleEn}</Link>)}</nav>
