@@ -631,3 +631,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Root cause: backend projected `canPreview=true` for proposed Assistant plans, but the new Action Center rendered no Preview control for selected historical/deep-linked plans.
 - Added top-level selected-action controls and wired preview to the existing quick-execute preview intent.
 - Browser-proved Assistant -> Action Center -> Preview -> Confirm and Execute -> succeeded Linux connector result; temporary records were removed afterward.
+## 2026-07-15 - User-friendly Action result navigation
+
+- Connected the operator-first Action Center Confirm/Execute control to the existing deep-linkable result page.
+- Preserved the real quick-execute backend call, ActionPlan history, execution safety checks, and connector-evidence success invariant.
+- Proved the navigation in authenticated Playwright with a real Linux connector execution, then deleted only the temporary acceptance ActionPlan.

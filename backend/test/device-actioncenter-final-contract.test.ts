@@ -33,7 +33,8 @@ test("Action Center exposes an operator-first preview and real execution contrac
   ]) assert.match(actionWorkspace, new RegExp(contract));
   assert.match(actionWorkspace, /quickExecuteAction\(plan\.id, \{ intent: "preview"/);
   assert.match(actionWorkspace, /quickExecuteAction\(selected\.id, \{ intent: "preview"/);
-  assert.match(actionWorkspace, /quickExecuteAction\(selected\.id, \{ intent: "execute"/);
+  assert.match(actionWorkspace, /quickExecuteAction\(actionPlanId, \{ intent: "execute"/);
+  assert.match(actionWorkspace, /navigate\(`\/actions\/\$\{encodeURIComponent\(actionPlanId\)\}\/result`\)/);
   assert.match(actionWorkspace, /selected\.controls\.canPreview/);
   assert.match(actionWorkspace, /operator-handoff/);
   assert.match(actionWorkspace, /testDeviceVerification/);

@@ -1,5 +1,11 @@
 # CODEX_HANDOFF.md
 
+## Dedicated Action result handoff (2026-07-15)
+
+- Action Center now navigates to `/actions/:actionId/result` immediately after a confirmed real execution, including connector-backed failures so operators can see an actionable result instead of remaining in the approval workspace.
+- The existing result page remains the single deep-linkable result surface and preserves the fail-closed `connectorInvoked=true` success rule.
+- Authenticated Playwright proved Linux open-ports Preview -> Confirm and Execute -> dedicated result route with real connector output and `connectorInvoked=true`; the temporary ActionPlan was deleted after acceptance.
+
 ## Assistant to Action Center approval repair (2026-07-15)
 
 - Fixed the unusable assistant handoff: proposed executable ActionPlans now expose a visible top-of-page `Generate Preview` control in Action Center, followed by `Confirm and Execute` after preview.

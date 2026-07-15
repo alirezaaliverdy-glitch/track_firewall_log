@@ -548,3 +548,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Proposed Assistant ActionPlans now show Generate Preview immediately at the top of their Action Center deep link.
 - Preview transitions the same plan to visible Confirm and Execute; execution remains routed through quick-execute and requires connector evidence.
 - Authenticated Persian browser acceptance succeeded against the registered Linux connector with real stdout and `connectorInvoked=true`.
+## 2026-07-15 - Action result page handoff
+
+- Confirmed Action Center executions now open the dedicated `/actions/:actionId/result` page after the backend quick-execute request settles.
+- Failed connector executions also open the result page so sanitized error/output evidence remains visible.
+- Focused contract tests, frontend/backend builds, and authenticated real-browser acceptance passed; temporary acceptance data was removed.

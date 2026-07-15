@@ -291,14 +291,17 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   async function executeSelected() {
     if (!selected?.controls.canConfirm && !selected?.controls.canExecute) return;
+    const actionPlanId = selected.id;
     setActionBusy(true);
     setError("");
     try {
-      await quickExecuteAction(selected.id, { intent: "execute", reason: "Confirmed and executed from operator Action Center" });
-      await Promise.all([loadDetail(selected.id), loadHistory()]);
+      await quickExecuteAction(actionPlanId, { intent: "execute", reason: "Confirmed and executed from operator Action Center" });
+      await Promise.all([loadDetail(actionPlanId), loadHistory()]);
+      navigate(`/actions/${encodeURIComponent(actionPlanId)}/result`);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Execution failed.");
-      await loadDetail(selected.id).catch(() => undefined);
+      await loadDetail(actionPlanId).catch(() => undefined);
+      navigate(`/actions/${encodeURIComponent(actionPlanId)}/result`);
     } finally { setActionBusy(false); }
   }
 
