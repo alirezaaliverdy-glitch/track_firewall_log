@@ -543,3 +543,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Historical ActionPlans with nullable result/approval JSON are normalized before rendering.
 - Authenticated Playwright proved planned, failed, and succeeded deep links at 1366x768 with no error boundary, console errors, or horizontal overflow.
 - Existing ActionPlan records were read only; mutation-based preview/retry/execution acceptance was intentionally not run under the no-database-modification constraint.
+## 2026-07-15 - Assistant Action Center handoff
+
+- Proposed Assistant ActionPlans now show Generate Preview immediately at the top of their Action Center deep link.
+- Preview transitions the same plan to visible Confirm and Execute; execution remains routed through quick-execute and requires connector evidence.
+- Authenticated Persian browser acceptance succeeded against the registered Linux connector with real stdout and `connectorInvoked=true`.

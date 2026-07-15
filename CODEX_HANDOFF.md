@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Assistant to Action Center approval repair (2026-07-15)
+
+- Fixed the unusable assistant handoff: proposed executable ActionPlans now expose a visible top-of-page `Generate Preview` control in Action Center, followed by `Confirm and Execute` after preview.
+- Added a prominent selected-action handoff card above connection/history content, so operators arriving from the Assistant deep link do not need to search or scroll for approval controls.
+- Authenticated Playwright proved the full Persian flow: select registered Linux device in Assistant, request `وضعیت پورت های باز رو نشون بده`, click `رفتن به مرکز عملیات`, click `ساخت پیش‌نمایش`, then `تأیید و اجرا`.
+- Real quick-execute returned 200, lifecycle `succeeded`, `connectorInvoked=true`, exit code 0, and live `ss/netstat` stdout. No error boundary or horizontal overflow occurred.
+- All temporary acceptance ActionPlans and AI chat sessions were deleted precisely; ActionPlan count returned to 136.
+
 ## Action detail null-payload runtime regression (2026-07-15)
 
 - Root cause: historical/planned ActionPlan `cmrlyhzyg001sqklvahjmseq2` returned HTTP 200 with `connectorResult: null` and `approval: null`; `ActionCenterWorkspace` directly read `selected.connectorResult.stdout`, causing the route error boundary.

@@ -302,6 +302,19 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     } finally { setActionBusy(false); }
   }
 
+  async function previewSelected() {
+    if (!selected?.controls.canPreview) return;
+    setActionBusy(true);
+    setError("");
+    try {
+      await quickExecuteAction(selected.id, { intent: "preview", reason: "Preview requested from Action Center handoff" });
+      await Promise.all([loadDetail(selected.id), loadHistory()]);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Preview failed.");
+      await loadDetail(selected.id).catch(() => undefined);
+    } finally { setActionBusy(false); }
+  }
+
   async function repeatSelected() {
     if (!selected) return;
     setActionBusy(true);
@@ -322,6 +335,15 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   return (
     <section className="action-workspace operator-action-center" aria-label="Action Center">
+      {selected && <section className="operator-handoff" aria-label={isFa ? "اکشن انتخاب‌شده" : "Selected action"}>
+        <div><p className="operator-eyebrow">{isFa ? "اکشن آماده بررسی" : "Action ready for review"}</p><h2>{selected.actionType.replace(/_/g, " ")}</h2><span>{selected.device?.name || (isFa ? "اطلاعات دستگاه موجود نیست" : "Device information is not available")}</span></div>
+        <div className="operator-result__actions">
+          {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
+          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
+          {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
+          {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
+        </div>
+      </section>}
       <section className={`operator-connection operator-connection--${connectionTone}`} aria-label={copy.connection}>
         <header>
           <div><p className="operator-eyebrow">{copy.connection}</p><h2>{verification?.connected ? copy.connected : verification?.error ? copy.failed : copy.notTested}</h2><span>{copy.connectionHelp}</span></div>
@@ -363,6 +385,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         <div className="operator-result__proof"><span>{copy.connectorProof}</span><strong>{selected.evidence.connectorInvoked ? "connectorInvoked=true" : "connectorInvoked=false"}</strong><small>{formatDate(selected.updatedAt, locale)}</small></div>
         {!selected.support.executable && <div className="state-panel state-panel--error" role="alert"><strong>{isFa ? "غیرقابل اجرا" : "Unsupported action"}</strong><p>{String(selected.support.reason ?? (isFa ? "برای این فروشنده Connector ثبت‌شده‌ای وجود ندارد." : "No registered connector supports this action for the selected vendor."))}</p></div>}
         <div className="operator-result__actions">
+          {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
           {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
           {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
           {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
