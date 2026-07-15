@@ -117,12 +117,12 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
             <p className="mt-2 text-sm text-slate-400">برای این نوع نتیجه، خروجی ساختاریافته جداگانه ثبت نشده است.</p>
           ) : (
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              {formatted.structuredSections.map((section) => (
-                <article key={section.title} className="rounded-xl border border-slate-800 bg-black/20 p-4">
+              {formatted.structuredSections.map((section, sectionIndex) => (
+                <article key={`${section.title}-${sectionIndex}`} className="rounded-xl border border-slate-800 bg-black/20 p-4">
                   <h3 className="text-sm font-semibold text-slate-100">{section.title}</h3>
                   <dl className="mt-3 space-y-2 text-sm">
-                    {section.rows.map((row) => (
-                      <div key={`${section.title}-${row.label}`} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                    {section.rows.map((row, rowIndex) => (
+                      <div key={`${section.title}-${row.label}-${rowIndex}`} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3">
                         <dt className="text-xs text-slate-500">{row.label}</dt>
                         <dd className="mt-1 whitespace-pre-wrap text-slate-200">{row.value}</dd>
                       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { quickExecuteAction } from "@/lib/actions";
@@ -51,6 +51,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const locale = isFa ? "fa-IR" : "en-US";
   const navigate = useNavigate();
   const location = useLocation();
+  const handoffRef = useRef<HTMLElement | null>(null);
   const view = location.pathname === "/actions/pending" ? "pending" : location.pathname === "/actions/history" ? "history" : "all";
 
   const copy = isFa ? {
@@ -213,6 +214,11 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   useEffect(() => { void loadHistory(); }, [loadHistory]);
   useEffect(() => { if (initialActionPlanId) void loadDetail(initialActionPlanId); }, [initialActionPlanId, loadDetail]);
   useEffect(() => {
+    if (!initialActionPlanId || selected?.id !== initialActionPlanId) return;
+    handoffRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    handoffRef.current?.focus({ preventScroll: true });
+  }, [initialActionPlanId, selected?.id]);
+  useEffect(() => {
     if (!deviceId && selected?.deviceId && devices.some((device) => device.id === selected.deviceId)) {
       setDeviceId(selected.deviceId);
     }
@@ -335,10 +341,17 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const connectionTone = verification?.connected ? "connected" : verification?.error ? "failed" : "unknown";
   const pages = Math.max(1, Math.ceil(total / 10));
   const currentPage = Math.floor(offset / 10) + 1;
+  const historyActionLabel = (item: ActionCenterItem) => {
+    if (item.controls.canPreview) return isFa ? "بررسی و ساخت پیش‌نمایش" : "Review and preview";
+    if (item.controls.canConfirm || item.controls.canExecute) return isFa ? "بررسی و تأیید اجرا" : "Review and execute";
+    if (item.lifecycleState === "failed") return isFa ? "بررسی و تلاش دوباره" : "Review and retry";
+    if (item.lifecycleState === "succeeded") return isFa ? "مشاهده نتیجه" : "View result";
+    return copy.open;
+  };
 
   return (
     <section className="action-workspace operator-action-center" aria-label="Action Center">
-      {selected && <section className="operator-handoff" aria-label={isFa ? "اکشن انتخاب‌شده" : "Selected action"}>
+      {selected && <section ref={handoffRef} className="operator-handoff" aria-label={isFa ? "اکشن انتخاب‌شده" : "Selected action"} tabIndex={-1}>
         <div><p className="operator-eyebrow">{isFa ? "اکشن آماده بررسی" : "Action ready for review"}</p><h2>{selected.actionType.replace(/_/g, " ")}</h2><span>{selected.device?.name || (isFa ? "اطلاعات دستگاه موجود نیست" : "Device information is not available")}</span></div>
         <div className="operator-result__actions">
           {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
@@ -403,7 +416,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         <div className="operator-history__content">
           <div className="action-workspace__toolbar"><button className="secondary-button" type="button" onClick={onCreate}>{copy.fullLibrary}</button><nav className="action-workspace__views" aria-label={copy.history}><Link aria-current={view === "all" ? "page" : undefined} to="/actions">{isFa ? "همه" : "All"}</Link><Link aria-current={view === "pending" ? "page" : undefined} to="/actions/pending">{isFa ? "در انتظار" : "Pending"}</Link><Link aria-current={view === "history" ? "page" : undefined} to="/actions/history">{copy.history}</Link></nav></div>
           <div className="filter-bar action-workspace__filters"><input aria-label={copy.search} placeholder={copy.search} value={query} onChange={(event) => { setQuery(event.target.value); setOffset(0); }} /><select aria-label={copy.lifecycle} value={status} onChange={(event) => { setStatus(event.target.value); setOffset(0); }}><option value="">{copy.allStates}</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-          <section className="table-shell action-list" aria-busy={historyBusy}>{historyBusy ? <div className="state-panel">{copy.loading}</div> : items.length === 0 ? <div className="state-panel">{copy.empty}</div> : <table><thead><tr><th>{copy.action}</th><th>{copy.device}</th><th>{copy.lifecycle}</th><th>{copy.updated}</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : ""}><td><strong>{item.actionType ? item.actionType.replace(/_/g, " ") : (isFa ? "اطلاعات موجود نیست" : "Not available")}</strong><small>{item.id}</small></td><td>{item.device?.name || (isFa ? "اطلاعات موجود نیست" : "Not available")}</td><td><StatusBadge value={lifecycleLabel(item.lifecycleState)} tone={item.lifecycleState === "succeeded" ? "good" : item.lifecycleState === "failed" ? "danger" : "warning"} /></td><td>{formatDate(item.updatedAt, locale)}</td><td><button className="text-button" type="button" onClick={() => navigate(`/actions/${item.id}`)}>{copy.open}</button></td></tr>)}</tbody></table>}{!historyBusy && total > 0 && <div className="action-pagination"><button className="secondary-button" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 10))}>{copy.previous}</button><span>{currentPage} / {pages}</span><button className="secondary-button" type="button" disabled={offset + 10 >= total} onClick={() => setOffset(offset + 10)}>{copy.next}</button></div>}</section>
+          <section className="table-shell action-list" aria-busy={historyBusy}>{historyBusy ? <div className="state-panel">{copy.loading}</div> : items.length === 0 ? <div className="state-panel">{copy.empty}</div> : <table><thead><tr><th>{copy.action}</th><th>{copy.device}</th><th>{copy.lifecycle}</th><th>{copy.updated}</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : ""}><td><strong>{item.actionType ? item.actionType.replace(/_/g, " ") : (isFa ? "اطلاعات موجود نیست" : "Not available")}</strong><small>{item.id}</small></td><td>{item.device?.name || (isFa ? "اطلاعات موجود نیست" : "Not available")}</td><td><StatusBadge value={lifecycleLabel(item.lifecycleState)} tone={item.lifecycleState === "succeeded" ? "good" : item.lifecycleState === "failed" ? "danger" : "warning"} /></td><td>{formatDate(item.updatedAt, locale)}</td><td><button className={item.controls.canPreview || item.controls.canConfirm || item.controls.canExecute ? "primary-button" : "text-button"} type="button" onClick={() => navigate(`/actions/${encodeURIComponent(item.id)}`)}>{historyActionLabel(item)}</button></td></tr>)}</tbody></table>}{!historyBusy && total > 0 && <div className="action-pagination"><button className="secondary-button" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 10))}>{copy.previous}</button><span>{currentPage} / {pages}</span><button className="secondary-button" type="button" disabled={offset + 10 >= total} onClick={() => setOffset(offset + 10)}>{copy.next}</button></div>}</section>
         </div>
       </details>
     </section>

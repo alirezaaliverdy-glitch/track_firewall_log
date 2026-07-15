@@ -553,3 +553,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Confirmed Action Center executions now open the dedicated `/actions/:actionId/result` page after the backend quick-execute request settles.
 - Failed connector executions also open the result page so sanitized error/output evidence remains visible.
 - Focused contract tests, frontend/backend builds, and authenticated real-browser acceptance passed; temporary acceptance data was removed.
+## 2026-07-15 - Action history controls are executable and visible
+
+- Opening a history ActionPlan now brings its review/preview/execute controls into the viewport instead of leaving the user at the bottom of the history table.
+- Row actions are lifecycle-aware and visually primary when operator approval is possible.
+- Authenticated AI Assistant -> Action Center -> real connector -> result acceptance passed at 1366x768 with zero console errors; temporary runtime records were removed.

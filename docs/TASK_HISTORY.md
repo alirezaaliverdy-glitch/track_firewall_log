@@ -636,3 +636,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Connected the operator-first Action Center Confirm/Execute control to the existing deep-linkable result page.
 - Preserved the real quick-execute backend call, ActionPlan history, execution safety checks, and connector-evidence success invariant.
 - Proved the navigation in authenticated Playwright with a real Linux connector execution, then deleted only the temporary acceptance ActionPlan.
+## 2026-07-15 - Repair Action Center history execution dead end
+
+- Reproduced the screenshot behavior and connected history selection to the top review card through focus/scroll handling.
+- Added lifecycle-specific history CTA copy and repaired duplicate result-row React keys.
+- Proved the full Persian AI-created action flow in authenticated Chrome, including real Linux execution, result-route navigation, connector evidence, and cleanup.

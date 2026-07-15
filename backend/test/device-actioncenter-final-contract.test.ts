@@ -9,6 +9,7 @@ import { ActionType } from "@prisma/client";
 
 const verificationPanel = readFileSync(new URL("../../src/features/assets/components/DeviceVerificationPanel.tsx", import.meta.url), "utf8");
 const actionWorkspace = readFileSync(new URL("../../src/components/actions/ActionCenterWorkspace.tsx", import.meta.url), "utf8");
+const actionResultView = readFileSync(new URL("../../src/components/actions/ActionResultView.tsx", import.meta.url), "utf8");
 const actionCenterClient = readFileSync(new URL("../../src/lib/actionCenter.ts", import.meta.url), "utf8");
 const actionPlanService = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
 const deviceVerificationService = readFileSync(new URL("../src/services/device-verification.service.ts", import.meta.url), "utf8");
@@ -37,6 +38,10 @@ test("Action Center exposes an operator-first preview and real execution contrac
   assert.match(actionWorkspace, /navigate\(`\/actions\/\$\{encodeURIComponent\(actionPlanId\)\}\/result`\)/);
   assert.match(actionWorkspace, /selected\.controls\.canPreview/);
   assert.match(actionWorkspace, /operator-handoff/);
+  assert.match(actionWorkspace, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(actionWorkspace, /Review and execute/);
+  assert.match(actionWorkspace, /View result/);
+  assert.match(actionResultView, /row\.label\}-\$\{rowIndex\}/);
   assert.match(actionWorkspace, /testDeviceVerification/);
   assert.match(actionWorkspace, /setDeviceId\(selected\.deviceId\)/);
   assert.match(actionWorkspace, /operator-advanced/);

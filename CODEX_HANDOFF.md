@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## Action history execution discoverability repair (2026-07-15)
+
+- Fixed the screenshot-reproduced dead end where history-row `Open` changed the deep link but left the operator scrolled below all execution controls. Selecting an ActionPlan now scrolls and focuses the visible review card.
+- History actions now use lifecycle-aware labels (`Review and preview`, `Review and execute`, `Review and retry`, `View result`) and executable pending rows receive primary-button emphasis.
+- Fixed duplicate React keys in structured result rows, which surfaced as console errors for repeated Linux port evidence.
+- Authenticated Playwright proved the requested Persian flow end-to-end: AI Assistant created Linux open-ports ActionPlan -> `رفتن به مرکز عملیات` -> review card in viewport -> preview -> confirm/execute -> dedicated result page with real connector output and `connectorInvoked=true`. No console errors remained, and temporary plans/sessions were deleted.
+
 ## Dedicated Action result handoff (2026-07-15)
 
 - Action Center now navigates to `/actions/:actionId/result` immediately after a confirmed real execution, including connector-backed failures so operators can see an actionable result instead of remaining in the approval workspace.
