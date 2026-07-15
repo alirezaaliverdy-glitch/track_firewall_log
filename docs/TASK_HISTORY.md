@@ -621,3 +621,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added primary New Action and lifecycle-specific Confirm and Execute, Retry, and Run again controls.
 - Promoted connector evidence and stdout/stderr to the visible result surface while retaining raw payloads under Advanced Details.
 - Extended retry-as-new-plan to succeeded records without altering completed history.
+## 2026-07-15 - Action detail null-payload regression
+
+- Reproduced `connectorResult: null` on existing planned ActionPlan `cmrlyhzyg001sqklvahjmseq2` and traced the crash to `ActionCenterWorkspace` reading `.stdout` on null.
+- Added Action Center response normalization for legacy/null JSON, lifecycle, device, support, controls, connector evidence, and audit fields.
+- Authenticated Playwright read-only acceptance covered planned, failed, and succeeded records plus New Action visibility and responsive overflow.

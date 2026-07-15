@@ -538,3 +538,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Real execution continues through quick-execute and the UI exposes connector invocation, stdout/stderr, evidence, and final lifecycle status.
 - Historical completed records remain immutable; rerun/retry creates a new ActionPlan.
 - Browser acceptance remains pending because Playwright MCP navigation is unavailable in the current tool surface.
+## 2026-07-15 - Action detail runtime compatibility repair
+
+- Historical ActionPlans with nullable result/approval JSON are normalized before rendering.
+- Authenticated Playwright proved planned, failed, and succeeded deep links at 1366x768 with no error boundary, console errors, or horizontal overflow.
+- Existing ActionPlan records were read only; mutation-based preview/retry/execution acceptance was intentionally not run under the no-database-modification constraint.

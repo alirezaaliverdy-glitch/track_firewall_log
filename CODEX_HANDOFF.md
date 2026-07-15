@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Action detail null-payload runtime regression (2026-07-15)
+
+- Root cause: historical/planned ActionPlan `cmrlyhzyg001sqklvahjmseq2` returned HTTP 200 with `connectorResult: null` and `approval: null`; `ActionCenterWorkspace` directly read `selected.connectorResult.stdout`, causing the route error boundary.
+- Added a backward-compatible client normalization boundary for nullable, missing, legacy, and JSON-string ActionPlan fields. Lifecycle/status projection remains fail-closed for succeeded records without `connectorInvoked=true`.
+- Authenticated local Playwright at 1366x768 proved the exact deep link, an existing failed record, an existing succeeded record, and the planned record render without the error boundary; Retry, Run again, and Confirm and Execute are visible; no horizontal overflow or post-login console errors occurred.
+- Read-only network proof returned 200 for Action Center detail/list, devices, credentials, catalog search, device verification, and evidence embedded in Action Center detail. No ActionPlan mutation endpoint was called.
+- Full-suite and commit remain gated until final validation; no migration, reset, seed, ActionPlan execution, preview, retry mutation, or database maintenance was performed.
+
 ## Urgent Action Center execution-path correction (2026-07-15)
 
 - Added a visible primary `New Action` entry point and changed new actions to an explicit two-step flow: required device/credential/action/parameters -> `Generate Preview` -> visible `Confirm and Execute` through the existing `/api/actions/:id/quick-execute` route.

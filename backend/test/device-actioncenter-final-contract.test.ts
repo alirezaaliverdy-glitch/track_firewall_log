@@ -9,6 +9,7 @@ import { ActionType } from "@prisma/client";
 
 const verificationPanel = readFileSync(new URL("../../src/features/assets/components/DeviceVerificationPanel.tsx", import.meta.url), "utf8");
 const actionWorkspace = readFileSync(new URL("../../src/components/actions/ActionCenterWorkspace.tsx", import.meta.url), "utf8");
+const actionCenterClient = readFileSync(new URL("../../src/lib/actionCenter.ts", import.meta.url), "utf8");
 const actionPlanService = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
 const deviceVerificationService = readFileSync(new URL("../src/services/device-verification.service.ts", import.meta.url), "utf8");
 const routes = readFileSync(new URL("../../src/routes/appRoutes.tsx", import.meta.url), "utf8");
@@ -46,6 +47,15 @@ test("Action Center exposes an operator-first preview and real execution contrac
   assert.match(css, /\.operator-connection--connected/);
   assert.match(css, /\.operator-run-card__selectors/);
   assert.match(css, /@media\(max-width:650px\)/);
+});
+
+test("Action Center normalizes nullable historical payloads before rendering", () => {
+  assert.match(actionCenterClient, /export function normalizeActionCenterItem/);
+  assert.match(actionCenterClient, /object\(source\.connectorResult \?\? source\.resultJson\)/);
+  assert.match(actionCenterClient, /object\(source\.commandPreview \?\? source\.dryRunJson\)/);
+  assert.match(actionCenterClient, /LIFECYCLES\.has/);
+  assert.match(actionCenterClient, /\.then\(normalizeActionCenterItem\)/);
+  assert.match(actionWorkspace, /اطلاعات موجود نیست/);
 });
 
 test("Cisco show version is a verified read-only catalog/template/planner/connector path", () => {
