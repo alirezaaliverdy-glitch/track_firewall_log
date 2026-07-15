@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## Asset Sync usability and runtime repair (2026-07-15)
+
+- Replaced the screenshot-reproduced dead-end status message with a complete structured workflow for NetBox mock data, Wazuh mock data, and real internal Device-to-Asset reconciliation.
+- NetBox/Wazuh now support Preview -> visible create/update rows -> explicit mock-data confirmation -> idempotent mock apply. They remain honestly labeled Mock and never claim a production external connection.
+- Device sync now shows scanned, created, and updated counts instead of discarding the API response. Failures are sanitized and visible; loading disables duplicate submissions.
+- Focused backend integration tests proved preview/apply/idempotency, and authenticated Chrome at 1366x768 proved both previews, confirmation/cancel, Device sync, structured result, zero console errors, and zero horizontal overflow.
+
 ## Action history execution discoverability repair (2026-07-15)
 
 - Fixed the screenshot-reproduced dead end where history-row `Open` changed the deep link but left the operator scrolled below all execution controls. Selecting an ActionPlan now scrolls and focuses the visible review card.

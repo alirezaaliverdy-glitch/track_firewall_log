@@ -558,3 +558,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Opening a history ActionPlan now brings its review/preview/execute controls into the viewport instead of leaving the user at the bottom of the history table.
 - Row actions are lifecycle-aware and visually primary when operator approval is possible.
 - Authenticated AI Assistant -> Action Center -> real connector -> result acceptance passed at 1366x768 with zero console errors; temporary runtime records were removed.
+## 2026-07-15 - Asset synchronization workflow repaired
+
+- `/assets/sync` now renders actual preview rows and structured operation results instead of instructing operators to inspect raw API/audit data.
+- NetBox and Wazuh mock apply are explicitly review/confirm gated and idempotent; production connectivity remains disabled and clearly labeled until real endpoints and credential references exist.
+- Device-to-Asset reconciliation is directly usable and reports scanned/created/updated totals. Focused API and authenticated browser acceptance passed.

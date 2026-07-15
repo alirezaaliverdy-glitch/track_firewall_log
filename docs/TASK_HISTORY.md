@@ -641,3 +641,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Reproduced the screenshot behavior and connected history selection to the top review card through focus/scroll handling.
 - Added lifecycle-specific history CTA copy and repaired duplicate result-row React keys.
 - Proved the full Persian AI-created action flow in authenticated Chrome, including real Linux execution, result-route navigation, connector evidence, and cleanup.
+## 2026-07-15 - Complete Asset Sync feature repair
+
+- Rebuilt the three-card Asset Sync surface with visible progress, sanitized errors, preview rows, confirmation, idempotent mock apply, and structured results.
+- Preserved the product-state truth boundary: NetBox/Wazuh are working mock workflows, not falsely advertised production integrations; Device sync is a real internal reconciliation.
+- Verified focused backend integration behavior and all three cards in authenticated Chrome at 1366x768 without console errors or overflow.
