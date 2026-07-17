@@ -37,3 +37,7 @@ backend/.env
 .env.*
 !.env.example
 !backend/.env.example
+
+.playwright-mcp/
+.playwright-mcp_*.png
+backups/
