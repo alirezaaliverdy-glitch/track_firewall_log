@@ -40,13 +40,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = text ? JSON.parse(text) as unknown : {};
   if (!response.ok) {
     const body = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
-    throw new Error(String(body.detail ?? body.error ?? `Request failed: ${response.status}`));
+    const nested = body.error && typeof body.error === "object" ? body.error as Record<string, unknown> : {};
+    throw new Error(String(nested.message ?? body.detail ?? body.error ?? `Request failed: ${response.status}`));
   }
   return payload as T;
 }
 
-export const listPlatformAssets = () => request<{ assets: PlatformAsset[]; summary: Record<string, unknown> }>("/assets");
+export const listPlatformAssets = (view: "active" | "archived" | "all" = "active") => request<{ assets: PlatformAsset[]; summary: Record<string, unknown> }>(`/assets?view=${encodeURIComponent(view)}`);
 export const getPlatformAsset = (id: string) => request<PlatformAsset>(`/assets/${id}`);
+export const removePlatformAsset = (id: string) => request<{ ok: boolean; assetId: string; deviceId?: string | null; inventoryStatus: string; visibleInActiveInventory: boolean }>(`/assets/${id}`, { method: "DELETE" });
 export const previewAssetImport = (body: Record<string, unknown>) => request<Record<string, unknown>>("/assets/import/preview", { method: "POST", body: JSON.stringify(body) });
 export const applyAssetImport = (body: Record<string, unknown>) => request<Record<string, unknown>>("/assets/import/apply", { method: "POST", body: JSON.stringify(body) });
 export const netboxPreview = () => request<Record<string, unknown>>("/integrations/netbox/sync-preview");

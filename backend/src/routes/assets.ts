@@ -5,17 +5,31 @@ import {
   getAsset,
   getAssetTopology,
   listAssets,
+  removeAssetFromInventory,
   previewAssetImport,
   syncExistingDevicesToAssets
 } from "../assets/asset-intelligence.service.js";
 import { mockNetBoxAssets, mockNetBoxHealth } from "../integrations/netbox/mock-adapter.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/api/assets", async () => listAssets());
+  app.get<{ Querystring: { view?: string } }>("/api/assets", async (request) => {
+    const view = request.query.view === "archived" || request.query.view === "all" ? request.query.view : "active";
+    return listAssets(view);
+  });
 
   app.get<{ Params: { id: string } }>("/api/assets/:id", async (request, reply) => {
     const asset = await getAsset(request.params.id);
     return asset ? asset : reply.code(404).send({ error: "Asset not found" });
+  });
+
+  app.delete<{ Params: { id: string } }>("/api/assets/:id", async (request, reply) => {
+    try {
+      const result = await removeAssetFromInventory(request.params.id);
+      return result ?? reply.code(404).send({ error: { code: "ASSET_NOT_FOUND", message: "Asset not found." } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Asset removal failed.";
+      return reply.code(409).send({ error: { code: "ASSET_REMOVAL_FAILED", message } });
+    }
   });
 
   app.get<{ Params: { id: string } }>("/api/assets/:id/topology", async (request, reply) => {

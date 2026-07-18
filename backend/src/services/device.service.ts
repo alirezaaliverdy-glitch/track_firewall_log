@@ -15,6 +15,36 @@ const DEVICE_PROTOCOLS = new Set<string>(Object.values(DeviceProtocol));
 const DEVICE_ENVIRONMENTS = new Set<string>(Object.values(DeviceEnvironment));
 const DEVICE_STATUSES = new Set<string>(Object.values(DeviceStatus));
 
+export class DuplicateDeviceError extends Error {
+  constructor(public readonly deviceId: string) {
+    super("A Device with the same vendor, host, and management port already exists.");
+  }
+}
+
+function capabilityObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isInventoryArchived(value: unknown) {
+  const capabilities = capabilityObject(value);
+  const inventory = capabilityObject(capabilities.inventory);
+  return capabilities.inventoryStatus === "archived" || inventory.status === "archived" || Boolean(inventory.removedAt);
+}
+
+function archivedCapabilities(value: unknown, removedAt: string, reason: string) {
+  const capabilities = capabilityObject(value);
+  return toJson({
+    ...capabilities,
+    inventoryStatus: "archived",
+    inventory: {
+      ...capabilityObject(capabilities.inventory),
+      status: "archived",
+      removedAt,
+      reason
+    }
+  });
+}
+
 const SENSITIVE_INPUT_KEYS = new Set([
   "password",
   "passphrase",
@@ -214,7 +244,7 @@ export async function listDevices() {
       }
     }
   });
-  return devices.map(toDeviceResponse);
+  return devices.filter((device) => !isInventoryArchived(device.capabilities)).map(toDeviceResponse);
 }
 
 export async function getDeviceById(id: string) {
@@ -238,6 +268,16 @@ export async function createDevice(rawInput: Record<string, unknown>) {
   const { credentialId, ...deviceInput } = input;
 
   const device = await prisma.$transaction(async (tx) => {
+    const duplicate = await tx.device.findFirst({
+      where: {
+        vendor: { equals: input.vendor, mode: "insensitive" },
+        host: { equals: input.host, mode: "insensitive" },
+        managementPort: input.managementPort
+      },
+      select: { id: true, capabilities: true }
+    });
+    if (duplicate && !isInventoryArchived(duplicate.capabilities)) throw new DuplicateDeviceError(duplicate.id);
+
     const created = await tx.device.create({
       data: {
         ...deviceInput,
@@ -312,16 +352,69 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
 }
 
 export async function deleteDevice(id: string) {
-  const device = await prisma.device.delete({
-    where: { id }
-  });
+  const removedAt = new Date();
+  const reason = "removed_from_inventory";
+  const device = await prisma.device.findUnique({ where: { id }, include: { asset: true } });
+  if (!device) return null;
 
-  await writeAudit({
-    action: "device.deleted",
-    targetId: id,
-    dryRun: true,
-    metadata: { name: device.name, host: device.host }
-  });
+  const alreadyArchived = isInventoryArchived(device.capabilities) && device.asset?.managedState === "archived";
+  if (!alreadyArchived) {
+    await prisma.$transaction(async (tx) => {
+      await tx.device.update({
+        where: { id },
+        data: {
+          status: DeviceStatus.unknown,
+          capabilities: archivedCapabilities(device.capabilities, removedAt.toISOString(), reason)
+        }
+      });
+
+      const asset = await tx.asset.findUnique({ where: { deviceId: id }, select: { id: true, metadataJson: true } });
+      if (asset) {
+        await tx.asset.update({
+          where: { id: asset.id },
+          data: {
+            managedState: "archived",
+            healthState: "archived",
+            metadataJson: toJson({
+              ...capabilityObject(asset.metadataJson),
+              inventoryStatus: "archived",
+              removedAt: removedAt.toISOString(),
+              removedReason: reason
+            })
+          }
+        });
+      }
+
+      await tx.deviceOnboardingSession.updateMany({
+        where: { deviceId: id, status: { notIn: ["completed", "cancelled"] } },
+        data: { status: "cancelled", step: "removed", expiresAt: removedAt }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          deviceId: id,
+          action: "device.inventory_archived",
+          targetType: "device",
+          targetId: id,
+          dryRun: false,
+          approvalStatus: "not_required",
+          metadata: toJson({ name: device.name, host: device.host, assetId: asset?.id ?? null, reason })
+        }
+      });
+    });
+  }
+
+  const asset = await prisma.asset.findUnique({ where: { deviceId: id }, select: { id: true, managedState: true, healthState: true } });
+  return {
+    ok: true,
+    idempotent: alreadyArchived,
+    deviceId: id,
+    assetId: asset?.id ?? device.asset?.id ?? null,
+    inventoryStatus: "archived",
+    deviceStatus: "unknown",
+    visibleInActiveInventory: false,
+    archivedAt: removedAt.toISOString()
+  };
 }
 
 function tcpCheck(host: string, port: number, timeoutMs = 2500) {

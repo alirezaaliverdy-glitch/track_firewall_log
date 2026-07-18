@@ -129,7 +129,17 @@ async function upsertSource(tx: Prisma.TransactionClient, sourceType: string) {
   });
 }
 
-type DeviceAssetProjection = Pick<Device, "id" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags">;
+type DeviceAssetProjection = Pick<Device, "id" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags" | "capabilities">;
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isArchivedDevice(device: Pick<Device, "capabilities">) {
+  const capabilities = object(device.capabilities);
+  const inventory = object(capabilities.inventory);
+  return capabilities.inventoryStatus === "archived" || inventory.status === "archived" || Boolean(inventory.removedAt);
+}
 
 async function projectionCandidates(tx: Prisma.TransactionClient, device: DeviceAssetProjection) {
   return tx.asset.findMany({
@@ -151,6 +161,13 @@ async function projectionCandidates(tx: Prisma.TransactionClient, device: Device
 }
 
 export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, device: DeviceAssetProjection) {
+  if (isArchivedDevice(device)) {
+    const archived = await tx.asset.findUnique({ where: { deviceId: device.id } });
+    if (archived && archived.managedState !== "archived") {
+      return { asset: await tx.asset.update({ where: { id: archived.id }, data: { managedState: "archived", healthState: "archived" } }), created: false };
+    }
+    if (archived) return { asset: archived, created: false };
+  }
   const candidates = await projectionCandidates(tx, device);
   const linked = candidates.filter((asset) => asset.deviceId === device.id);
   const unlinked = candidates.filter((asset) => asset.deviceId === null);
@@ -228,6 +245,7 @@ export async function repairDeviceAssetReconciliation(apply = false) {
   await prisma.$transaction(async (tx) => {
     const devices = await tx.device.findMany({ orderBy: { id: "asc" } });
     for (const device of devices) {
+      if (isArchivedDevice(device)) continue;
       const result = await syncDeviceRecordToAsset(tx, device);
       if (result.created || audit.devicesWithoutAsset.some((item) => item.deviceId === device.id)) changed += 1;
     }
@@ -241,6 +259,7 @@ export async function syncExistingDevicesToAssets() {
   let updated = 0;
   await prisma.$transaction(async (tx) => {
     for (const device of devices) {
+      if (isArchivedDevice(device)) continue;
       const result = await syncDeviceRecordToAsset(tx, device);
       result.created ? created += 1 : updated += 1;
     }
@@ -345,19 +364,23 @@ export async function applyAssetImport(input: ImportInput) {
   return { ...preview, applied: { created, updated }, syncRunId: run.id, idempotentReplay: false };
 }
 
-export async function listAssets() {
+export async function listAssets(view: "active" | "archived" | "all" = "active") {
   await syncExistingDevicesToAssets();
-  const [assets, total, byHealth, byManaged] = await Promise.all([
+  const where = view === "all" ? {} : view === "archived" ? { managedState: "archived" } : { managedState: { not: "archived" } };
+  const [assets, total, active, archived, byHealth, byManaged] = await Promise.all([
     prisma.asset.findMany({
+      where,
       orderBy: [{ healthState: "asc" }, { name: "asc" }],
       take: 100,
       include: { site: true, vendor: true, platform: true, device: { select: { id: true, name: true, type: true, host: true } }, ipAddresses: { take: 5 } }
     }),
-    prisma.asset.count(),
-    prisma.asset.groupBy({ by: ["healthState"], _count: { _all: true } }),
+    prisma.asset.count({ where }),
+    prisma.asset.count({ where: { managedState: { not: "archived" } } }),
+    prisma.asset.count({ where: { managedState: "archived" } }),
+    prisma.asset.groupBy({ by: ["healthState"], where, _count: { _all: true } }),
     prisma.asset.groupBy({ by: ["managedState"], _count: { _all: true } })
   ]);
-  return { assets, summary: { total, byHealth, byManaged } };
+  return { assets, summary: { total, active, archived, view, byHealth, byManaged } };
 }
 
 export async function getAsset(id: string) {
@@ -566,4 +589,43 @@ export function validateRuleDsl(rule: unknown) {
     if (operator === "safe_regex" && String(condition.value ?? "").length > 120) errors.push("safe_regex pattern is too long");
   }
   return { valid: errors.length === 0, errors };
+}
+
+export async function removeAssetFromInventory(id: string) {
+  const removedAt = new Date();
+  const asset = await prisma.asset.findUnique({ where: { id }, include: { device: true } });
+  if (!asset) return null;
+  const alreadyArchived = asset.managedState === "archived";
+  if (!alreadyArchived) {
+    await prisma.$transaction(async (tx) => {
+      await tx.asset.update({
+        where: { id },
+        data: {
+          managedState: "archived",
+          healthState: "archived",
+          metadataJson: toJson({ ...object(asset.metadataJson), inventoryStatus: "archived", removedAt: removedAt.toISOString(), removedReason: "removed_from_inventory" })
+        }
+      });
+      if (asset.deviceId && asset.device) {
+        const capabilities = object(asset.device.capabilities);
+        await tx.device.update({
+          where: { id: asset.deviceId },
+          data: { status: "unknown", capabilities: toJson({ ...capabilities, inventoryStatus: "archived", inventory: { ...object(capabilities.inventory), status: "archived", removedAt: removedAt.toISOString(), reason: "removed_from_inventory" } }) }
+        });
+        await tx.deviceOnboardingSession.updateMany({ where: { deviceId: asset.deviceId, status: { notIn: ["completed", "cancelled"] } }, data: { status: "cancelled", step: "removed", expiresAt: removedAt } });
+      }
+      await tx.auditLog.create({
+        data: {
+          deviceId: asset.deviceId,
+          action: "asset.inventory_archived",
+          targetType: "asset",
+          targetId: id,
+          dryRun: false,
+          approvalStatus: "not_required",
+          metadata: toJson({ assetId: id, deviceId: asset.deviceId, name: asset.name, reason: "removed_from_inventory" })
+        }
+      });
+    });
+  }
+  return { ok: true, idempotent: alreadyArchived, assetId: id, deviceId: asset.deviceId, inventoryStatus: "archived", visibleInActiveInventory: false, archivedAt: removedAt.toISOString() };
 }
