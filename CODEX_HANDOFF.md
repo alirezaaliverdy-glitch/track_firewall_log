@@ -727,3 +727,11 @@
 - Simplified equipment list and device overview surfaces; moved implementation details to Advanced sections and removed popup/result-window navigation from normal action execution.
 - Validation completed without Docker or destructive database commands: Prisma validate, backend build, frontend build, command catalog validation, i18n/RTL/LTR parity checks, UTF-8 guard, diff check, and focused non-DB/fixture tests where available.
 - Database-dependent tests requiring TEST_DATABASE_URL were not executed against the local development or historical database. No migration file was created.
+## Operational dashboard and Cisco capability architecture phase (2026-07-18)
+
+- Replaced the dashboard placeholder activity cards with a real read-only operational activity API backed by ActionPlan, ActionAuditLog, AuditLog, and Device records.
+- Dashboard now surfaces recent executions, connector-backed successes, failures/integrity failures, pending approvals, recent device registrations, and latest configuration-change evidence.
+- Added a scalable Cisco operation registry grouping read/show, system, interfaces, switching, routing, security, services, configuration, and health operations.
+- Registered implemented Cisco IOS-XE read-only operations through the existing Command Catalog, execution-template registry, Cisco planner, Cisco SSH connector, and Action Center workflow. Planned mutating/admin operations are present as non-executable roadmap definitions until templates, prechecks, parsers, verification, and rollback are implemented.
+- Cisco vendor device inventory route now returns active registered Cisco devices instead of a hard-coded empty list.
+- Validation passed: Prisma schema validate, command catalog validation (187 items), backend build, frontend build, i18n parity, UTF-8 guard, diff check, and Cisco fixture tests. Database-bound tests requiring TEST_DATABASE_URL were not run against the local development database.

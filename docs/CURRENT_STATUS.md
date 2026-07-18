@@ -596,3 +596,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Cisco onboarding uses secure modern algorithms first and exposes legacy compatibility only behind an explicit Advanced approval path.
 - Equipment list, device overview, and Action Center execution surfaces are simplified for operator use, with diagnostics and internals moved to Advanced sections.
 - Validation passed for schema/build/catalog/i18n/UTF-8/diff checks; isolated-database tests remain skipped unless TEST_DATABASE_URL is provided.
+## 2026-07-18 - Operational dashboard and Cisco capability architecture
+
+- Dashboard is now operational-data backed: recent executions, success/failure, approvals, registrations, and configuration changes come from stored product records.
+- Cisco support now has a central operation registry and generated catalog/action definitions. Implemented read-only IOS-XE commands execute through Action Center; configuration/admin areas remain planned and non-executable until safe contracts are added.
+- `/api/vendors/cisco/devices` reports active registered Cisco devices from inventory/detection evidence instead of returning a mock empty list.
+- Current validation passed for schema, catalog, backend/frontend builds, i18n, UTF-8, diff check, and Cisco parser/fixture coverage. Isolated DB tests still require TEST_DATABASE_URL.

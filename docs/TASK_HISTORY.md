@@ -679,3 +679,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Implemented archive-from-inventory behavior, duplicate prevention, simplified onboarding/list/overview UI, modern-first Cisco legacy retry with explicit approval, and a focused Action Center review/confirm/result flow.
 - Validation: Prisma schema validation, backend build, command catalog validation, frontend build, locale parity checks, UTF-8 guard, diff check, and focused Cisco/non-database tests where possible.
 - Skipped database-bound tests that require an isolated TEST_DATABASE_URL; no destructive database command or migration execution was run.
+## 2026-07-18 - Real dashboard activity and Cisco operation registry
+
+- Root causes: the dashboard activity surface was placeholder text rather than an operational projection; Cisco execution was hard-coded around one show-version action and the older Cisco action catalog was empty.
+- Added a dashboard activity service/route and frontend dashboard feed for executions, successful/failed actions, pending approvals, device registrations, and configuration changes.
+- Added a Cisco operation registry, generated command/action catalog entries, expanded read-only IOS-XE command templates, and updated planner/connector execution to select operations by catalog metadata through Action Center.
+- Planned Cisco configuration/admin areas were registered as non-executable roadmap definitions only; no weak SSH algorithms, raw commands, migrations, or destructive database operations were added.
+- Validation: Prisma schema validation, command catalog validation, backend build, frontend build, i18n, UTF-8, diff check, and Cisco fixture tests passed; DB-bound catalog/support tests stopped at TEST_DATABASE_URL_REQUIRED.
