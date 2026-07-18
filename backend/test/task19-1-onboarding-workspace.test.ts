@@ -50,11 +50,22 @@ test("Task 19.1 onboarding rejects plaintext secrets and unsupported targets", a
 
 test("Task 19.2A Cisco onboarding uses explicit connector-backed transitions and persists the Device", async (t) => {
   resetOnboardingSessionsForTest();
+  const testHost = `192.0.2.${100 + Math.floor(Date.now() % 100)}`;
   const originalRun = ciscoIosXeSshConnector.runReadOnlyCommands.bind(ciscoIosXeSshConnector);
   const credential = await createCredential({ name: `task19-2a-cisco-${Date.now()}`, type: "password", username: "admin", password: "test-secret" });
   ciscoIosXeSshConnector.runReadOnlyCommands = async (_device, commandIds) => ({
     connectorInvoked: true,
     warnings: [],
+    connection: {
+      semantic: "connected_supported",
+      promptMode: "privileged",
+      compatibilityProfile: "modern",
+      diagnostic: {
+        code: "CISCO_CONNECTED_SUPPORTED", stage: "command", retryable: false,
+        connectorInvoked: true, transportConnected: true, authenticated: true, shellOpened: true,
+        userMessage: "Cisco interactive SSH and read-only command execution succeeded.", remediation: [], compatibilityProfile: "modern"
+      }
+    },
     results: commandIds.map((commandId) => ({
       commandId,
       command: `show ${commandId}`,
@@ -73,6 +84,7 @@ test("Task 19.2A Cisco onboarding uses explicit connector-backed transitions and
   t.after(async () => {
     ciscoIosXeSshConnector.runReadOnlyCommands = originalRun;
     await prisma.device.deleteMany({ where: { name: "task19-2a-cisco" } });
+    await prisma.asset.deleteMany({ where: { managementIp: testHost } });
     await prisma.deviceCredential.deleteMany({ where: { id: credential.id } });
   });
 
@@ -85,7 +97,7 @@ test("Task 19.2A Cisco onboarding uses explicit connector-backed transitions and
     const answers = await app.inject({
       method: "POST",
       url: `/api/device-onboarding/sessions/${id}/answers`,
-      payload: { vendor: "cisco", platform: "cisco-ios-xe", connectionMethod: "ssh", name: "task19-2a-cisco", host: "192.168.7.12", managementPort: 22, credentialId: credential.id, site: "Tehran", location: "Rack", environment: "lab" }
+      payload: { vendor: "cisco", platform: "cisco-ios-xe", connectionMethod: "ssh", name: "task19-2a-cisco", host: testHost, managementPort: 22, credentialId: credential.id, site: "Tehran", location: "Rack", environment: "lab" }
     });
     assert.equal(answers.statusCode, 200);
     assert.equal(answers.json().status, "answers_saved");
@@ -113,13 +125,13 @@ test("Task 19.2A Cisco onboarding uses explicit connector-backed transitions and
     assert.equal(preview.json().preview.deviceMutation, false);
 
     const commit = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${id}/commit`, payload: {} });
-    assert.equal(commit.statusCode, 200);
+    assert.equal(commit.statusCode, 200, commit.body);
     assert.equal(commit.json().status, "completed");
     assert.equal(commit.json().result.connectorInvoked, true);
     assert.match(commit.json().result.route, /^\/assets\/devices\//);
     const persisted = await prisma.device.findUnique({ where: { id: commit.json().result.deviceId } });
     assert.equal(persisted?.name, "task19-2a-cisco");
-    assert.equal(persisted?.host, "192.168.7.12");
+    assert.equal(persisted?.host, testHost);
   } finally { await app.close(); }
 });
 

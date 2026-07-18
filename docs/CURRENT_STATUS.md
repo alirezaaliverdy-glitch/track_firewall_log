@@ -1,5 +1,12 @@
 # Current Project Status
 
+## Repair bundle Phase 1 - interactive Cisco SSH and diagnostics (2026-07-18)
+
+- Cisco read-only operations now use a reusable PTY interactive shell with prompt synchronization, privileged EXEC handling, paging control, bounded output, stage-specific timeouts, keyboard-interactive auth, keepalives, and deterministic cleanup.
+- Safe diagnostic evidence distinguishes DNS/TCP, SSH negotiation, authentication, shell, prompt, privilege, command, and platform detection failures. Classic IOS and NX-OS remain connected-but-unsupported instead of appearing disconnected.
+- Legacy algorithms are opt-in per device and auditable; enable mode references a separate encrypted stored Credential. Defaults were not weakened and no migration was required.
+- Validation: Phase 1 scoped lint, backend/frontend builds, 250/250 backend tests, i18n and UTF-8 passed. Global lint has unrelated baseline failures (65 backend; 89 root errors plus 6 warnings). Phase 2 is intentionally not started.
+
 ## Device onboarding required-name UX repair (2026-07-18)
 
 - The reported onboarding 400 was traced to an empty device name; `edge-switch-01` was placeholder text rather than an entered value. The selected stored Credential was valid and present.

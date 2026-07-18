@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Repair bundle Phase 1 - reliable interactive Cisco connector (2026-07-18)
+
+- Replaced per-command `ssh2.exec()` probing with one PTY-backed interactive Cisco shell: initial prompt synchronization, user/privileged EXEC detection, separately stored enable Credential reference, `terminal length 0`, defensive `--More--` handling, command echo/prompt stripping, bounded output, independent TCP/SSH/prompt/command timeouts, keyboard-interactive support, keepalives, and deterministic stream/socket/client cleanup.
+- Added typed safe diagnostics with code, stage, retryability, invocation/transport/auth/shell evidence, remediation, and explicit `connected_supported` / `connected_unsupported` / `connection_failed` semantics. Onboarding and the Cisco device connector now preserve and return that safe structure instead of rebuilding stages from error text.
+- Modern SSH algorithms remain the default. The reviewed legacy Cisco additions are enabled only by explicit per-device `capabilities.sshCompatibilityProfile=legacy_cisco`; the used profile is returned in evidence. Enable mode uses a separate encrypted DeviceCredential referenced by `capabilities.enableCredentialId`; no schema migration was needed.
+- Added direct interactive-stream tests and an ephemeral in-process SSH2 server with runtime-generated host/client keys. Coverage includes password/key success, auth failure, TCP and negotiation failures, `>`/`#`, enable, paging, echo stripping, IOS Classic/NX-OS connected-but-unsupported, compatibility opt-in, and cleanup. Full backend tests passed 250/250; backend/frontend builds, i18n, UTF-8, and Phase 1 scoped lint passed.
+- Repository-wide lint remains pre-existing red: backend 65 errors and root 89 errors/6 warnings across unrelated legacy files. No Phase 1 file has a lint error. No deploy, migration execution, real-device mutation, or secret inspection occurred. Phase 2 has not started.
+
 ## Device onboarding required-name UX repair (2026-07-18)
 
 - Reproduced the reported `/answers` 400 against persisted Session `0a491d1a-d131-49e9-8cf9-15a603cc99cb`: the selected Credential existed, but the submitted device name was empty. The visible `edge-switch-01` text was only a placeholder, and the backend correctly returned `Device name is required.`

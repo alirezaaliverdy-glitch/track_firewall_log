@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ActionPlanStatus } from "@prisma/client";
-import type { DeviceConnector } from "../src/connectors/device-connector.js";
+import type { DeviceConnector } from "../src/connectors/types.js";
 import { buildApp } from "../src/app.js";
 import { COMMAND_CATALOG } from "../src/commands/catalog/index.js";
 import { getExecutionTemplate } from "../src/commands/execution/execution-template-registry.js";

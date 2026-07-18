@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, Prisma, type Device } from "@prisma/client";
-import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
+import { CiscoConnectorError, ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { detectCiscoPlatform, parseCiscoInterfacesStatus, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
@@ -90,8 +90,9 @@ function assertNoSecrets(input: Record<string, unknown>) {
 }
 
 function publicSession(session: OnboardingSession) {
-  const { privateEvidence: _privateEvidence, ...safe } = session;
-  return safe;
+  const safe = { ...session } as Partial<OnboardingSession>;
+  delete safe.privateEvidence;
+  return safe as Omit<OnboardingSession, "privateEvidence">;
 }
 
 function nullableJson(value: Record<string, unknown> | null) {
@@ -301,7 +302,11 @@ export async function testOnboardingConnection(id: string) {
         connectorType: ciscoIosXeSshConnector.connectorType,
         readOnlyProbe: "show version",
         durationMs: platformResult?.durationMs ?? 0,
-        warnings: result.warnings
+        warnings: result.warnings,
+        semantic: result.connection.semantic,
+        diagnostic: result.connection.diagnostic,
+        promptMode: result.connection.promptMode,
+        compatibilityProfile: result.connection.compatibilityProfile
       };
     } else {
       const result = await connector!.testConnection(device);
@@ -321,11 +326,13 @@ export async function testOnboardingConnection(id: string) {
   } catch (error) {
     const credentialInvalid = error instanceof Error && error.message.startsWith("CREDENTIAL_INVALID:");
     const safeError = credentialInvalid ? new Error(error.message.replace(/^CREDENTIAL_INVALID:\s*/, "")) : error;
+    const ciscoDiagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
     session.test = {
       connected: false,
-      connectorInvoked: session.test?.connectorInvoked === true,
+      connectorInvoked: ciscoDiagnostic?.connectorInvoked ?? session.test?.connectorInvoked === true,
       connectorType: session.test?.connectorType,
-      error: safeError instanceof Error ? safeError.message : "Connection test failed."
+      error: safeError instanceof Error ? safeError.message : "Connection test failed.",
+      diagnostic: ciscoDiagnostic
     };
     fail(session, credentialInvalid ? "credential_invalid" : "connection_failed", credentialInvalid ? "credential" : "connection", safeError);
     await persistSession(session);

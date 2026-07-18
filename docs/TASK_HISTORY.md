@@ -1,5 +1,12 @@
 # Task History
 
+## 2026-07-18 - Repair bundle Phase 1: reliable interactive Cisco connector
+
+- Replaced exec-only Cisco SSH with a single PTY interactive session supporting prompt detection, enable mode through a separate encrypted Credential reference, paging disable/handling, command echo cleanup, keyboard-interactive auth, keepalive, independent timeouts, output bounds, and deterministic cleanup.
+- Added a typed sanitized diagnostic contract and propagated it through the Cisco wrapper and onboarding test endpoint. Added explicit supported/unsupported/failed connection semantics and opt-in per-device legacy algorithm compatibility without weakening defaults.
+- Added deterministic stream tests and real in-process SSH2 password/private-key fixtures with runtime-generated keys; repaired the stale `DeviceConnector` test import and made the onboarding integration fixture use collision-free test addressing and cleanup.
+- Passed Phase 1 scoped lint, backend/frontend builds, full backend 250/250, i18n and UTF-8. Global lint remains blocked by unrelated pre-existing issues. No deployment, migration execution, production mock, real-device mutation, or secret inspection was performed. Stopped before Phase 2.
+
 ## 2026-07-18 - Device onboarding required-name UX repair
 
 - Inspected the exact persisted failed onboarding Session and confirmed the backend rejected an empty `name`; the apparent `edge-switch-01` value was only a visually ambiguous placeholder.

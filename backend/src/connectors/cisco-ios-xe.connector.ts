@@ -1,5 +1,5 @@
 import { ActionType, type ActionPlan, type Device } from "@prisma/client";
-import { ciscoIosXeSshConnector, isCiscoIosXeSshCandidate } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
+import { CiscoConnectorError, ciscoIosXeSshConnector, isCiscoIosXeSshCandidate } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, DeviceConnectionTestResult, DeviceConnector } from "./types.js";
 
 function metadata(plan: ActionPlan) {
@@ -20,8 +20,10 @@ function assertShowVersion(plan: ActionPlan) {
 async function connection(device: Device): Promise<DeviceConnectionTestResult> {
   try {
     const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
+    const diagnostic = result.connection.diagnostic;
+    const supported = result.connection.semantic === "connected_supported";
     return {
-      connected: result.connectorInvoked,
+      connected: diagnostic.authenticated && diagnostic.shellOpened,
       deviceId: device.id,
       vendor: "cisco",
       host: device.host,
@@ -30,21 +32,25 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
       stages: [
         { name: "resolve_device", status: "ok" },
         { name: "resolve_credential", status: "ok" },
-        { name: "tcp_connect", status: "ok" },
-        { name: "ssh_handshake", status: "ok" },
-        { name: "ssh_auth", status: "ok" },
-        { name: "basic_commands", status: "ok", message: "show version completed." }
+        { name: "tcp_connect", status: diagnostic.transportConnected ? "ok" : "failed" },
+        { name: "ssh_handshake", status: diagnostic.authenticated ? "ok" : "failed" },
+        { name: "ssh_auth", status: diagnostic.authenticated ? "ok" : "failed" },
+        { name: "shell", status: diagnostic.shellOpened ? "ok" : "failed" },
+        { name: "prompt", status: "ok" },
+        { name: "basic_commands", status: "ok", message: "show version completed." },
+        { name: "platform_detection", status: supported ? "ok" : "warning", code: diagnostic.code, message: diagnostic.userMessage }
       ],
       warnings: result.warnings.map((message) => ({ code: "CISCO_WARNING", message })),
-      capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: true, canExecuteWriteActions: false },
-      message: "Cisco SSH connection and authentication succeeded."
+      capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: supported, canExecuteWriteActions: false },
+      diagnostic: diagnostic as unknown as Record<string, unknown>,
+      message: diagnostic.userMessage
     };
   } catch (error) {
+    const connectorError = error instanceof CiscoConnectorError ? error : null;
+    const diagnostic = connectorError?.toDiagnostic();
     const source = error as { code?: string; message?: string };
-    const errorText = String(source.code ?? source.message ?? "");
-    const authFailed = /auth/i.test(errorText);
-    const timeout = /timeout/i.test(errorText);
-    const credentialMissing = /credential.*missing/i.test(errorText);
+    const credentialMissing = diagnostic?.code === "CISCO_SSH_CREDENTIAL_MISSING";
+    const failedStage = diagnostic?.stage;
     return {
       connected: false,
       deviceId: device.id,
@@ -55,13 +61,17 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
       stages: [
         { name: "resolve_device", status: "ok" },
         { name: "resolve_credential", status: credentialMissing ? "failed" : "ok" },
-        { name: "tcp_connect", status: timeout ? "failed" : "warning", code: source.code, message: source.message },
-        { name: "ssh_auth", status: authFailed ? "failed" : "warning", code: source.code, message: source.message }
+        { name: "tcp_connect", status: diagnostic?.transportConnected ? "ok" : failedStage === "tcp" || failedStage === "dns" ? "failed" : "warning", code: failedStage === "tcp" || failedStage === "dns" ? diagnostic?.code : undefined, message: failedStage === "tcp" || failedStage === "dns" ? diagnostic?.userMessage : undefined },
+        { name: "ssh_handshake", status: diagnostic?.authenticated ? "ok" : failedStage === "ssh_negotiation" ? "failed" : "warning", code: failedStage === "ssh_negotiation" ? diagnostic?.code : undefined, message: failedStage === "ssh_negotiation" ? diagnostic?.userMessage : undefined },
+        { name: "ssh_auth", status: diagnostic?.authenticated ? "ok" : failedStage === "authentication" ? "failed" : "warning", code: failedStage === "authentication" ? diagnostic?.code : undefined, message: failedStage === "authentication" ? diagnostic?.userMessage : undefined },
+        { name: "shell", status: diagnostic?.shellOpened ? "ok" : failedStage === "shell" ? "failed" : "warning", code: failedStage === "shell" ? diagnostic?.code : undefined, message: failedStage === "shell" ? diagnostic?.userMessage : undefined },
+        { name: "prompt", status: failedStage === "prompt" ? "failed" : "warning", code: failedStage === "prompt" ? diagnostic?.code : undefined, message: failedStage === "prompt" ? diagnostic?.userMessage : undefined }
       ],
       warnings: [],
       capabilities: { canConnect: false, canRunBasicReadOnly: false, canReadSystem: false, canExecuteWriteActions: false },
-      errorCode: source.code ?? "CISCO_SSH_CONNECT_FAILED",
-      message: source.message ?? "Cisco SSH connection failed."
+      errorCode: diagnostic?.code ?? source.code ?? "CISCO_SSH_CONNECT_FAILED",
+      diagnostic: diagnostic as unknown as Record<string, unknown> | undefined,
+      message: diagnostic?.userMessage ?? source.message ?? "Cisco SSH connection failed."
     };
   }
 }
@@ -73,7 +83,7 @@ export const ciscoIosXeConnector: DeviceConnector = {
     return Boolean(device && isCiscoIosXeSshCandidate(device));
   },
   testConnection: connection,
-  async getCapabilities(_device): Promise<DeviceCapabilities> {
+  async getCapabilities(): Promise<DeviceCapabilities> {
     return {
       canTestConnection: true,
       canCollectStatus: true,

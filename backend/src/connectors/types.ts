@@ -69,7 +69,7 @@ export type DeviceConnectionTestResult = {
   mikrotik?: MikroTikDiscovery;
   fortigate?: FortiGateDiscovery;
   stages: Array<{
-    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
+    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "shell" | "prompt" | "privilege" | "platform_detection" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
     status: "ok" | "warning" | "failed";
     code?: string;
     message?: string;
@@ -89,6 +89,7 @@ export type DeviceConnectionTestResult = {
   };
   errorCode?: string;
   message?: string;
+  diagnostic?: Record<string, unknown>;
 };
 
 export type DeviceCapabilities = {
