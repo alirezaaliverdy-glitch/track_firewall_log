@@ -2,6 +2,7 @@ import { ActionType } from "@prisma/client";
 import { getDeviceConnectors, getVendorPlanners } from "../../connectors/connector-registry.service.js";
 import type { CommandCatalogItem, SupportState } from "./types.js";
 import { getExecutionTemplate } from "../execution/execution-template-registry.js";
+import { executableCiscoOperations } from "../../cisco/cisco-operation-registry.js";
 
 export type SupportCheck = "input_schema" | "template" | "connector" | "semantic_result_parser" | "precheck" | "post_verification";
 
@@ -51,7 +52,7 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "fortigate_show_vpn_status",
   "fortigate_show_ha_vdom_zone",
   "fortigate_guided_vpn_setup",
-  "cisco_show_version"
+  ...executableCiscoOperations().map((operation) => operation.executionTemplateRef!)
 ]);
 
 function connectorVendor(connectorType: string | null) {

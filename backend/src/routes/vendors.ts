@@ -1,7 +1,17 @@
 import type { FastifyPluginAsync } from "fastify";
+import { prisma } from "../db/prisma.js";
 import { getCapabilitiesForVendor } from "../vendors/capability.registry.js";
 import { getPlatformsForVendor } from "../vendors/platform.registry.js";
 import { listVendors, refreshDeviceVendorCapabilities, vendorDetail } from "../vendors/capability-discovery.service.js";
+
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isArchived(capabilities: unknown) {
+  const caps = object(capabilities);
+  return object(caps.inventory).archived === true || object(caps.inventoryArchive).archived === true;
+}
 
 export const vendorRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/vendors", async () => ({ vendors: listVendors() }));
@@ -10,5 +20,37 @@ export const vendorRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { vendorKey: string } }>("/api/vendors/:vendorKey/capabilities", async (request) => ({ capabilities: getCapabilitiesForVendor(request.params.vendorKey) }));
   app.post<{ Params: { deviceId: string } }>("/api/devices/:deviceId/capabilities/refresh", async (request, reply) => (await refreshDeviceVendorCapabilities(request.params.deviceId, true)) ?? reply.code(404).send({ error: "Device not found" }));
 
-  app.get("/api/vendors/cisco/devices", async () => ({ data: [], pagination: { page: 1, pageSize: 25, total: 0, totalPages: 0 }, meta: { note: "Cisco device operational inventory is populated after platform detection refresh." }, warnings: [] }));
+  app.get("/api/vendors/cisco/devices", async () => {
+    const devices = await prisma.device.findMany({
+      where: { vendor: { contains: "cisco", mode: "insensitive" } },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+      include: { deviceCapabilityCaches: { orderBy: { createdAt: "desc" }, take: 1 } }
+    });
+    const active = devices.filter((device) => !isArchived(device.capabilities));
+    return {
+      data: active.map((device) => {
+        const cache = device.deviceCapabilityCaches[0];
+        const detection = object(cache?.detectionJson ?? object(device.capabilities).ciscoDetection);
+        const facts = object(cache?.factsJson);
+        return {
+          id: device.id,
+          name: device.name,
+          host: device.host,
+          port: device.managementPort,
+          status: device.status,
+          platform: cache?.platformKey ?? detection.platform ?? device.type,
+          version: facts.version ?? detection.version ?? null,
+          model: facts.model ?? detection.model ?? null,
+          hostname: facts.hostname ?? detection.hostname ?? null,
+          supported: detection.supported === true || cache?.platformKey === "cisco-ios-xe",
+          updatedAt: device.updatedAt,
+          route: `/assets/devices/${device.id}`
+        };
+      }),
+      pagination: { page: 1, pageSize: 100, total: active.length, totalPages: active.length ? 1 : 0 },
+      meta: { source: "Device", note: "Cisco inventory is based on registered active devices and latest capability detection evidence." },
+      warnings: active.length ? [] : ["No active Cisco device is registered yet."]
+    };
+  });
 };

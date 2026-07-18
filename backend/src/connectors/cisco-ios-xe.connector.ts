@@ -1,6 +1,8 @@
 import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { CiscoConnectorError, ciscoIosXeSshConnector, isCiscoIosXeSshCandidate } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, DeviceConnectionTestResult, DeviceConnector } from "./types.js";
+import { ciscoReadCommand } from "./cisco/ios-xe/cisco-iosxe.templates.js";
+import { findCiscoOperation, type CiscoOperationDefinition } from "../cisco/cisco-operation-registry.js";
 
 function metadata(plan: ActionPlan) {
   const parameters = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson)
@@ -11,10 +13,13 @@ function metadata(plan: ActionPlan) {
     : {};
 }
 
-function assertShowVersion(plan: ActionPlan) {
-  if (metadata(plan).catalogCommandId !== "cisco.show-version") {
-    throw new Error("Only the registered Cisco show version template is executable.");
+function executableOperation(plan: ActionPlan): CiscoOperationDefinition {
+  const meta = metadata(plan);
+  const operation = findCiscoOperation(String(meta.catalogCommandId ?? meta.executionTemplateRef ?? ""));
+  if (!operation || operation.state !== "implemented" || operation.commandIds.length === 0) {
+    throw new Error("Cisco operation is not registered for controlled execution.");
   }
+  return operation;
 }
 
 async function connection(device: Device): Promise<DeviceConnectionTestResult> {
@@ -95,32 +100,33 @@ export const ciscoIosXeConnector: DeviceConnector = {
   },
   collectStatus: connection,
   async dryRun(plan): Promise<ConnectorDryRun> {
-    assertShowVersion(plan);
+    const operation = executableOperation(plan);
     return {
-      plannedCommands: ["show version"],
-      validationWarnings: ["Read-only Cisco IOS-XE command."],
+      plannedCommands: operation.commandIds.map(ciscoReadCommand),
+      validationWarnings: [`Read-only Cisco IOS-XE operation: ${operation.titleEn}.`],
       affectedPorts: [],
       affectedServices: [],
       rollbackSteps: [],
       riskLevel: plan.riskLevel,
       requiresApproval: true,
-      commandSpecs: [{ template: "show version", command: "show version", write: false, target: { deviceId: plan.deviceId } }],
+      commandSpecs: operation.commandIds.map((commandId) => ({ template: commandId, command: ciscoReadCommand(commandId), write: false, target: { deviceId: plan.deviceId, operationId: operation.id } })),
       exactTarget: { deviceId: plan.deviceId }
     };
   },
   async execute(plan, device): Promise<ConnectorExecutionResult> {
-    assertShowVersion(plan);
-    const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
+    const operation = executableOperation(plan);
+    const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, operation.commandIds);
     return {
       executed: result.connectorInvoked,
       actionType: plan.actionType,
       deviceId: device.id,
-      commands: result.results.map((entry) => ({ template: "show version", stdout: entry.stdout, stderr: entry.stderr, exitCode: entry.exitCode })),
+      commands: result.results.map((entry) => ({ template: entry.commandId, stdout: entry.stdout, stderr: entry.stderr, exitCode: entry.exitCode })),
       warnings: result.warnings,
       rollbackJson: { available: false, outcome: "read_only_no_rollback_required" }
     };
   },
   async rollback(plan, device): Promise<ConnectorExecutionResult> {
-    return { executed: false, actionType: plan.actionType, deviceId: device.id, commands: [], warnings: ["Read-only Cisco show version has no rollback."], rollbackJson: { available: false } };
+    const operation = executableOperation(plan);
+    return { executed: false, actionType: plan.actionType, deviceId: device.id, commands: [], warnings: [`Read-only Cisco ${operation.titleEn} has no rollback.`], rollbackJson: { available: false } };
   }
 };

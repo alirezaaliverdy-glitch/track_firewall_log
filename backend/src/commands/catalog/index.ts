@@ -1,6 +1,7 @@
 import { FORTIGATE_FULL_CONTROL_REGISTRY } from "../../fortigate/full-control-registry.js";
 import type { CommandCatalogItem, CommandParam, CommandRiskLevel, CommandVendor, ImplementationState } from "./types.js";
 import { evaluateCatalogSupportState } from "./support-state.js";
+import { CISCO_OPERATION_REGISTRY } from "../../cisco/cisco-operation-registry.js";
 
 const param = (key: string, labelFa: string, helpFa: string, type: CommandParam["type"], placeholderFa?: string): CommandParam => ({ key, labelFa, helpFa, type, placeholderFa });
 const ipAddress = param("ipAddress", "آدرس IP", "یک آدرس IPv4 یا IPv6 معتبر برای مسدودسازی وارد کنید.", "ip", "192.0.2.10");
@@ -75,6 +76,40 @@ const fullControlFortiGateItems = FORTIGATE_FULL_CONTROL_REGISTRY.map((entry) =>
   uiHints: { executable: true, badgeFa: "اجراپذیر" },
 })));
 
+
+
+const ciscoParam = (key: string): CommandParam => param(key, key, `Cisco parameter ${key}.`, key.toLowerCase().includes("vlan") || key.toLowerCase().includes("asn") || key.toLowerCase().includes("group") || key.toLowerCase().includes("id") ? "number" : key.toLowerCase().includes("ip") || key.toLowerCase().includes("hop") || key.toLowerCase().includes("server") ? "ip" : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("network") || key.toLowerCase().includes("source") ? "cidr" : "string");
+const ciscoCommandCatalogItems = CISCO_OPERATION_REGISTRY.map((operation) => item("cisco", operation.slug, operation.titleFa, operation.titleEn, operation.category, "generic_security_action", (operation.state === "implemented" ? implemented(operation.executionTemplateRef!, {
+  mutates: false,
+  riskLevel: operation.risk as CommandRiskLevel,
+  privilegeLevel: "read",
+  required: [],
+  optionalParams: [],
+  prechecks: operation.prechecks,
+  verification: operation.verification,
+  rollback: operation.rollback.available ? { available: true, steps: operation.rollback.steps } : { available: false, notAvailableReasonFa: operation.rollback.reason },
+  searchKeywordsFa: operation.keywords,
+  descriptionFa: `${operation.titleFa} through the controlled Cisco IOS-XE SSH connector and Action Center review flow.`
+}) : operation.state === "manualOnly" ? manual({
+  mutates: !operation.readOnly,
+  riskLevel: operation.risk as CommandRiskLevel,
+  required: (operation.requiredParams ?? []).map(ciscoParam),
+  optionalParams: (operation.optionalParams ?? []).map(ciscoParam),
+  prechecks: operation.prechecks,
+  verification: operation.verification,
+  searchKeywordsFa: operation.keywords,
+  descriptionFa: `${operation.titleFa} is prepared as a Cisco action definition but is manual-only until a verified connector contract exists.`
+}) : planned({
+  mutates: !operation.readOnly,
+  riskLevel: operation.risk as CommandRiskLevel,
+  required: (operation.requiredParams ?? []).map(ciscoParam),
+  optionalParams: (operation.optionalParams ?? []).map(ciscoParam),
+  prechecks: operation.prechecks,
+  verification: operation.verification,
+  searchKeywordsFa: operation.keywords,
+  descriptionFa: `${operation.titleFa} is in the Cisco roadmap. It is not executable until template, precheck, parser, verification, and rollback support are registered.`
+}))));
+
 const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("linux", "daily-check", "چک روزانه", "Daily check", "daily-check", "linux_daily_check", implemented("linux_daily_check", { searchKeywordsFa: ["چک روزانه سرور", "بررسی روزانه"] })),
   item("linux", "open-port", "باز کردن پورت", "Open port", "firewall", "linux_open_port", implemented("linux_open_port", { mutates: true, required: [param("port", "شماره پورت", "شماره پورت TCP/UDP معتبر را وارد کنید.", "number", "55000")], defaultParams: { protocol: "tcp" } })),
@@ -120,7 +155,7 @@ const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("fortigate", "vpn-status", "وضعیت VPN", "VPN status", "vpn", "fortigate_show_vpn_status", implemented("fortigate_show_vpn_status", { mutates: false, searchKeywordsFa: ["وضعیت vpn", "تونل ipsec", "ssl vpn"] })),
   item("fortigate", "ha-vdom-zone", "HA، VDOM و Zone", "HA, VDOM and zones", "network", "fortigate_show_ha_vdom_zone", implemented("fortigate_show_ha_vdom_zone", { mutates: false, searchKeywordsFa: ["وضعیت ha", "vdom ها", "zone ها"] })),
   ...fullControlFortiGateItems,
-  item("cisco", "show-version", "نمایش نسخه Cisco", "Cisco show version", "system", "generic_security_action", implemented("cisco_show_version", { mutates: false, searchKeywordsFa: ["show version", "نسخه سیسکو", "IOS XE"] })),
+  ...ciscoCommandCatalogItems,
   item("cisco", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("pfsense", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("juniper", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),

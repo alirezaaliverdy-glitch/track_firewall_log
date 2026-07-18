@@ -1,12 +1,16 @@
 import { ActionType, AiRiskLevel } from "@prisma/client";
 import type { PlannerInput, VendorCommandPlan, VendorPlanner } from "../types.js";
 import { isCiscoIosXeSshCandidate } from "../cisco/ios-xe/cisco-iosxe.ssh.connector.js";
+import { ciscoReadCommand } from "../cisco/ios-xe/cisco-iosxe.templates.js";
+import { findCiscoOperation } from "../../cisco/cisco-operation-registry.js";
 
-function commandId(parameters: Record<string, unknown>) {
-  const metadata = parameters.metadata && typeof parameters.metadata === "object" && !Array.isArray(parameters.metadata)
-    ? parameters.metadata as Record<string, unknown>
-    : {};
-  return String(metadata.catalogCommandId ?? "");
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function operationId(parameters: Record<string, unknown>) {
+  const metadata = object(parameters.metadata);
+  return String(metadata.catalogCommandId ?? metadata.executionTemplateRef ?? "");
 }
 
 export const ciscoIosXePlanner: VendorPlanner = {
@@ -16,7 +20,8 @@ export const ciscoIosXePlanner: VendorPlanner = {
     return Boolean(device && isCiscoIosXeSshCandidate(device));
   },
   plan(input: PlannerInput): VendorCommandPlan {
-    if (commandId(input.parameters) !== "cisco.show-version") {
+    const operation = findCiscoOperation(operationId(input.parameters));
+    if (!operation || operation.state !== "implemented" || operation.commandIds.length === 0) {
       return {
         status: "unsupported",
         vendor: "cisco",
@@ -25,11 +30,11 @@ export const ciscoIosXePlanner: VendorPlanner = {
         transport: "manual",
         commands: [],
         apiCalls: [],
-        warnings: ["Only the registered Cisco show version template is executable."],
+        warnings: ["This Cisco operation is not registered for controlled execution."],
         rollbackSteps: [],
         riskLevel: input.riskLevel,
         requiresApproval: true,
-        unsupportedReason: "Cisco action is not registered for controlled execution."
+        unsupportedReason: "Cisco action is not registered with an implemented command template."
       };
     }
     return {
@@ -38,11 +43,11 @@ export const ciscoIosXePlanner: VendorPlanner = {
       deviceId: input.device?.id ?? null,
       actionType: input.actionType,
       transport: "ssh",
-      commands: ["show version"],
+      commands: operation.commandIds.map(ciscoReadCommand),
       apiCalls: [],
-      warnings: ["Read-only Cisco IOS-XE command."],
+      warnings: [`Cisco ${operation.titleEn} is read-only and runs through the Action Center workflow.`],
       rollbackSteps: [],
-      riskLevel: AiRiskLevel.low,
+      riskLevel: operation.risk === "low" ? AiRiskLevel.low : input.riskLevel,
       requiresApproval: false
     };
   }

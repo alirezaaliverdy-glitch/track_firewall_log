@@ -11,7 +11,11 @@ export const CISCO_IOSXE_READ_COMMANDS = Object.freeze({
   route: "show ip route",
   acl: "show access-lists",
   cpu: "show processes cpu platform",
-  memory: "show processes memory"
+  memory: "show processes memory",
+  logging: "show logging",
+  ntpStatus: "show ntp status",
+  licenseSummary: "show license summary",
+  flash: "dir flash:"
 } as const);
 
 export type CiscoReadCommandId = keyof typeof CISCO_IOSXE_READ_COMMANDS;
