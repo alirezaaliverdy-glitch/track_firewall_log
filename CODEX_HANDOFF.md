@@ -717,3 +717,13 @@
 - Final validation passed: backend build, full backend tests 236/236, final contract tests 3/3, frontend build, locale parity (97 keys), Persian primary copy, UTF-8 scan (450 files), Prisma migration status, dry-run Device/Asset audit, and `git diff --check`.
 - Database preservation proof after all acceptance and test cleanup: Device 4, Asset 7, DeviceCredential 4, Finding 5, ActionPlan 124. The audit reported `changed=0`; all 35 migrations are current and this repair requires no migration.
 - Remaining honest blocker: the configured Cisco target is unreachable over SSH, so successful Cisco verification/promotion cannot be claimed until the target responds. The failure path and connector invocation evidence are verified.
+
+## Inventory, onboarding, Cisco compatibility, and Action Center UX repair (2026-07-18)
+
+- Removed the temporary README sentinel line `TEST_FROM_CODEX`; README now has no scoped diff.
+- Simplified device registration to a three-step guided flow with inline credential creation, optional Cisco enable secret, explicit legacy-compatibility approval, real-test registration, and honest unverified registration.
+- Added modern-first Cisco onboarding retry behavior: legacy compatibility is session/device scoped, requires explicit approval, and only retries after SSH negotiation failure.
+- Replaced Device hard-delete behavior with idempotent archive-from-inventory semantics that archive the linked Asset, preserve audit/action/finding/history records, and expire active onboarding sessions.
+- Simplified equipment list and device overview surfaces; moved implementation details to Advanced sections and removed popup/result-window navigation from normal action execution.
+- Validation completed without Docker or destructive database commands: Prisma validate, backend build, frontend build, command catalog validation, i18n/RTL/LTR parity checks, UTF-8 guard, diff check, and focused non-DB/fixture tests where available.
+- Database-dependent tests requiring TEST_DATABASE_URL were not executed against the local development or historical database. No migration file was created.

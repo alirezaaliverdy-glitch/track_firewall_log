@@ -588,3 +588,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Equipment and vendor clicks now lead to useful summaries, and the device workspace has direct quick-edit and guarded-delete controls.
 - Admins can clear completed ActionPlan history after explicit confirmation; active/pending actions are preserved.
 - Focused API tests and authenticated 1366x768 browser acceptance passed without deleting existing user records.
+
+## 2026-07-18 - Inventory/onboarding/Cisco/action UX repair
+
+- Active inventory removal now uses archive semantics across Device and Asset instead of hard-deleting only Device rows.
+- Device onboarding is a simplified three-step flow with inline credentials, real connection testing, unverified fallback, SPA navigation, and duplicate prevention.
+- Cisco onboarding uses secure modern algorithms first and exposes legacy compatibility only behind an explicit Advanced approval path.
+- Equipment list, device overview, and Action Center execution surfaces are simplified for operator use, with diagnostics and internals moved to Advanced sections.
+- Validation passed for schema/build/catalog/i18n/UTF-8/diff checks; isolated-database tests remain skipped unless TEST_DATABASE_URL is provided.

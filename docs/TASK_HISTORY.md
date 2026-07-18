@@ -672,3 +672,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Linked vendor cells to vendor overview pages and added device edit/delete controls to the primary workspace.
 - Added the admin-only confirmed ActionPlan terminal-history deletion endpoint and UI while retaining non-terminal actions.
 - Verified real temporary-device create/edit/delete through backend APIs and all non-destructive UI confirmations in authenticated Chrome.
+
+## 2026-07-18 - Simplify inventory, onboarding, Cisco compatibility, and action execution
+
+- Root causes: Device deletion left Asset-backed equipment visible; onboarding mixed operator fields with connector internals; Cisco compatibility needed a scoped legacy retry path; action execution still had legacy popup/direct-list paths.
+- Implemented archive-from-inventory behavior, duplicate prevention, simplified onboarding/list/overview UI, modern-first Cisco legacy retry with explicit approval, and a focused Action Center review/confirm/result flow.
+- Validation: Prisma schema validation, backend build, command catalog validation, frontend build, locale parity checks, UTF-8 guard, diff check, and focused Cisco/non-database tests where possible.
+- Skipped database-bound tests that require an isolated TEST_DATABASE_URL; no destructive database command or migration execution was run.
