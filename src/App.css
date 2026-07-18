@@ -754,3 +754,12 @@ select {
   .simple-steps,.device-overview-first { grid-template-columns:1fr; }
   .equipment-table { min-width:640px; }
 }
+
+.operational-grid-wide { align-items: start; }
+.operational-feed { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.operational-feed li { display: flex; justify-content: space-between; gap: var(--space-3); border-top: 1px solid var(--app-border); padding-top: var(--space-2); color: var(--app-muted); font-size: var(--text-sm); }
+.operational-feed li > div { display: grid; gap: 3px; min-width: 0; }
+.operational-feed a { color: #9ff3ff; font-weight: 800; overflow-wrap: anywhere; }
+.operational-feed span { color: var(--app-muted); font-size: var(--text-xs); }
+.operational-feed time { white-space: nowrap; color: var(--app-muted); font-size: var(--text-xs); }
+@media (max-width: 720px) { .operational-feed li { display: grid; } .operational-feed time { white-space: normal; } }

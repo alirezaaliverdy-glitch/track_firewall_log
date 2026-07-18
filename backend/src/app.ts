@@ -34,6 +34,7 @@ import { productStateRoutes } from "./routes/product-state.js";
 import { deviceOnboardingRoutes } from "./routes/device-onboarding.js";
 import { deviceWorkspaceRoutes } from "./routes/device-workspaces.js";
 import { diagnosticRoutes } from "./routes/diagnostics.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
@@ -104,6 +105,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   });
 
   await app.register(healthRoutes);
+  await app.register(dashboardRoutes);
   await app.register(actionRoutes);
   await app.register(assessmentRoutes);
   await app.register(connectorPlanRoutes);
