@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { quickExecuteAction } from "@/lib/actions";
+import { correctActionFields, quickExecuteAction } from "@/lib/actions";
 import { clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, type ActionCenterItem, type ActionLifecycle } from "@/lib/actionCenter";
 import { createCatalogAction, searchCommands, type CatalogItem, type CatalogParam } from "@/lib/commandCatalog";
 import { listCredentials, type DeviceCredential } from "@/lib/credentials";
@@ -26,6 +26,23 @@ function humanize(value: string) {
 function fieldValue(value: unknown) {
   if (typeof value === "boolean") return value ? "true" : "false";
   return value === undefined || value === null ? "" : String(value);
+}
+
+function terminalLifecycle(value: ActionLifecycle) {
+  return value === "succeeded" || value === "failed" || value === "cancelled";
+}
+
+function reviewParametersFrom(value: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== "metadata" && (item === null || ["string", "number", "boolean"].includes(typeof item))).map(([key, item]) => [key, fieldValue(item)]));
+}
+
+function commandLines(preview: Record<string, unknown>) {
+  const candidates = [preview.plannedCommands, preview.commands, preview.generatedCommands, preview.command];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate.map((item) => typeof item === "string" ? item : fieldValue((item as Record<string, unknown>)?.command)).filter(Boolean);
+    if (typeof candidate === "string" && candidate.trim()) return [candidate];
+  }
+  return [];
 }
 
 function AdvancedBlock({ title, value }: { title: string; value: unknown }) {
@@ -168,6 +185,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const [parameters, setParameters] = useState<Record<string, string>>({});
   const [verification, setVerification] = useState<DeviceVerification | null>(null);
   const [selected, setSelected] = useState<ActionCenterItem | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewParameters, setReviewParameters] = useState<Record<string, string>>({});
   const [connectionBusy, setConnectionBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState("");
@@ -225,6 +244,11 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
       setDeviceId(selected.deviceId);
     }
   }, [deviceId, devices, selected?.deviceId]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setReviewParameters(reviewParametersFrom(selected.parametersJson));
+  }, [selected?.id, selected?.updatedAt]);
 
   useEffect(() => {
     setActionId("");
@@ -297,13 +321,39 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     }
   }
 
+  async function pollActionUntilTerminal(id: string) {
+    const deadline = Date.now() + 120000;
+    let latest = await getActionCenterItem(id);
+    setSelected(latest);
+    while (!terminalLifecycle(latest.lifecycleState) && Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      latest = await getActionCenterItem(id);
+      setSelected(latest);
+    }
+    return latest;
+  }
+
+  function openExecutionReview() {
+    if (!selected) return;
+    setReviewParameters(reviewParametersFrom(selected.parametersJson));
+    setReviewOpen(true);
+  }
+
   async function executeSelected() {
     if (!selected?.controls.canConfirm && !selected?.controls.canExecute) return;
     const actionPlanId = selected.id;
     setActionBusy(true);
     setError("");
+    setReviewOpen(false);
     try {
-      await quickExecuteAction(actionPlanId, { intent: "execute", reason: "Confirmed and executed from operator Action Center" });
+      const currentParams = reviewParametersFrom(selected.parametersJson);
+      const changedFields = Object.fromEntries(Object.entries(reviewParameters).filter(([key, value]) => currentParams[key] !== value));
+      if (Object.keys(changedFields).length > 0 && selected.controls.canEditParameters) {
+        await correctActionFields(actionPlanId, changedFields);
+        await quickExecuteAction(actionPlanId, { intent: "preview", reason: "Preview refreshed after parameter edits in Action Center review" });
+      }
+      await quickExecuteAction(actionPlanId, { intent: "execute", reason: "Explicitly confirmed and executed from operator Action Center review" });
+      await pollActionUntilTerminal(actionPlanId);
       await Promise.all([loadDetail(actionPlanId), loadHistory()]);
       navigate(`/actions/${encodeURIComponent(actionPlanId)}/result`);
     } catch (failure) {
@@ -371,11 +421,12 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         <div><p className="operator-eyebrow">{isFa ? "اکشن آماده بررسی" : "Action ready for review"}</p><h2>{selected.actionType.replace(/_/g, " ")}</h2><span>{selected.device?.name || (isFa ? "اطلاعات دستگاه موجود نیست" : "Device information is not available")}</span></div>
         <div className="operator-result__actions">
           {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
+          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
           {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
           {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
         </div>
       </section>}
+      {selected && reviewOpen && <section className="action-review-dialog" role="dialog" aria-modal="true" aria-label="Execution review"><div className="action-review-dialog__card"><header><div><p className="operator-eyebrow">Explicit confirmation</p><h2>Review action execution</h2></div><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Close</button></header><dl className="detail-list"><dt>Target device</dt><dd>{selected.device?.name ?? selected.deviceId ?? "-"}</dd><dt>Action purpose</dt><dd>{selected.actionType.replace(/_/g, " ")}</dd><dt>Risk</dt><dd>{selected.riskLevel}</dd><dt>Backup requirement</dt><dd>{String(selected.rollback.required ?? selected.commandPreview.requiresBackup ?? selected.validationJson.requiresBackup ?? "Not specified")}</dd></dl><section><h3>Generated commands</h3>{commandLines(selected.commandPreview).length ? <ol className="command-review-list">{commandLines(selected.commandPreview).map((command, index) => <li key={`${command}-${index}`}><code dir="ltr">{command}</code></li>)}</ol> : <p>Generate a preview first to show commands.</p>}</section><section><h3>Editable parameters</h3>{Object.keys(reviewParameters).length ? <div className="operator-parameters">{Object.entries(reviewParameters).map(([key, value]) => <label key={key}>{humanize(key)}<input value={value} onChange={(event) => setReviewParameters((current) => ({ ...current, [key]: event.target.value }))} /></label>)}</div> : <p>No simple editable parameters are available.</p>}</section><footer className="button-row"><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Cancel</button><button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : "Confirm and execute"}</button></footer></div></section>}
       <section className={`operator-connection operator-connection--${connectionTone}`} aria-label={copy.connection}>
         <header>
           <div><p className="operator-eyebrow">{copy.connection}</p><h2>{verification?.connected ? copy.connected : verification?.error ? copy.failed : copy.notTested}</h2><span>{copy.connectionHelp}</span></div>
@@ -418,7 +469,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         {!selected.support.executable && <div className="state-panel state-panel--error" role="alert"><strong>{isFa ? "غیرقابل اجرا" : "Unsupported action"}</strong><p>{String(selected.support.reason ?? (isFa ? "برای این فروشنده Connector ثبت‌شده‌ای وجود ندارد." : "No registered connector supports this action for the selected vendor."))}</p></div>}
         <div className="operator-result__actions">
           {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
+          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
           {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
           {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
         </div>

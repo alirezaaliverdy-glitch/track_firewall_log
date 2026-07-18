@@ -28,6 +28,10 @@ function statusLabel(action: ActionPlan) {
   return String(action.status);
 }
 
+function isTerminalStatus(action: ActionPlan) {
+  return ["succeeded", "failed", "rejected", "rolled_back", "expired"].includes(String(action.status));
+}
+
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-black/20 p-3">
@@ -47,6 +51,19 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
       .then(setAction)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "نتیجه اجرا بارگذاری نشد."));
   }, [actionPlanId]);
+
+  useEffect(() => {
+    if (!action || isTerminalStatus(action)) return;
+    const deadline = Date.now() + 120000;
+    const interval = window.setInterval(() => {
+      if (Date.now() > deadline) { window.clearInterval(interval); return; }
+      void getAction(actionPlanId).then((next) => {
+        setAction(next);
+        if (isTerminalStatus(next)) window.clearInterval(interval);
+      }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Execution result could not be refreshed."));
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [actionPlanId, action?.status]);
 
   const formatted = useMemo(() => (action ? formatActionResult(action) : null), [action]);
 
