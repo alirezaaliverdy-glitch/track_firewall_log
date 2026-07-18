@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## Device UX repair Phase A - data safety and removal regression (2026-07-18)
+
+- Added a fail-closed test database gate. Database-writing tests require an explicit `TEST_DATABASE_URL` distinct from `DATABASE_URL` and refuse the historical `firewall_log_analyzer` database; safe diagnostics expose only host, port, and database name.
+- Captured the removal defect in regression coverage: `DELETE /api/devices/:id` returns 204 after deleting only `Device`; Prisma `onDelete: SetNull` detaches the linked `Asset`, while `/api/assets` continues to return all Assets and the equipment page is Asset-backed.
+- Defined the canonical contract: Device is authoritative, Asset is its inventory projection, an active pair is one equipment item, and Device removal must atomically remove/archive the projection. Inventory, connection, verification, and management status are separate dimensions.
+- No `TEST_DATABASE_URL` is configured in this environment. Pure Phase A tests pass; the DB integration reproduction is correctly refused with `TEST_DATABASE_URL_REQUIRED` before any write. Phase B must run it against an explicitly isolated database and then implement atomic removal/cache refresh.
+- Phase 1 Cisco connector files, visible onboarding UI, schema, Cisco compatibility behavior, and deployed environments were not changed.
+
 ## Repair bundle Phase 1 - reliable interactive Cisco connector (2026-07-18)
 
 - Replaced per-command `ssh2.exec()` probing with one PTY-backed interactive Cisco shell: initial prompt synchronization, user/privileged EXEC detection, separately stored enable Credential reference, `terminal length 0`, defensive `--More--` handling, command echo/prompt stripping, bounded output, independent TCP/SSH/prompt/command timeouts, keyboard-interactive support, keepalives, and deterministic stream/socket/client cleanup.

@@ -1,5 +1,13 @@
 # Task History
 
+## 2026-07-18 - Device UX repair Phase A: test data safety and removal regression
+
+- Audited Phase 1 and the Device/Asset paths without modifying the committed Cisco connector work. Confirmed the equipment page reads Asset records, while deletion removes only Device and Prisma nulls the Asset link.
+- Replaced the derived historical test database behavior with an explicit safety gate. Missing/invalid/equal/historical test targets are rejected without exposing connection credentials; Prisma test initialization enforces the same gate.
+- Added pure safety/contract/source-chain tests plus an isolated DB integration reproduction for create/link -> DELETE 204 -> orphan Asset still returned by `/api/assets`. Cleanup is limited to the exact generated IDs.
+- Defined and documented Device ownership, Asset projection/removal semantics, and independent inventory/connection/verification/management statuses. No schema, visible onboarding, Cisco fallback, Phase B behavior, deployment, migration, or database mutation occurred.
+- Validation: seven pure Phase A tests, backend build, Prisma validate, locale/Persian checks, UTF-8, and diff check. With no `TEST_DATABASE_URL`, the DB-writing regression and full DB suite correctly stop at `TEST_DATABASE_URL_REQUIRED` before any write.
+
 ## 2026-07-18 - Repair bundle Phase 1: reliable interactive Cisco connector
 
 - Replaced exec-only Cisco SSH with a single PTY interactive session supporting prompt detection, enable mode through a separate encrypted Credential reference, paging disable/handling, command echo cleanup, keyboard-interactive auth, keepalive, independent timeouts, output bounds, and deterministic cleanup.

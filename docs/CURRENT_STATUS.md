@@ -1,5 +1,12 @@
 # Current Project Status
 
+## Device UX repair Phase A - guarded data integrity (2026-07-18)
+
+- Test execution now fails closed unless `TEST_DATABASE_URL` is explicitly isolated from `DATABASE_URL` and is not the historical `firewall_log_analyzer` database. Prisma test runtime uses only the verified test target.
+- Equipment is currently an Asset-backed list. Device deletion returns 204, `Asset.deviceId` becomes null through `onDelete: SetNull`, and the orphan Asset remains visible from `/api/assets`; executable DB regression coverage records this exact sequence.
+- The canonical Device/Asset contract and four independent status dimensions are documented and represented in backend types. Runtime removal behavior is intentionally unchanged until Phase B.
+- Current environment has no test database identity (`TEST_DATABASE_URL` missing). Seven non-DB Phase A tests pass and the DB regression is safely refused before writes. Backend build and Prisma validation pass.
+
 ## Repair bundle Phase 1 - interactive Cisco SSH and diagnostics (2026-07-18)
 
 - Cisco read-only operations now use a reusable PTY interactive shell with prompt synchronization, privileged EXEC handling, paging control, bounded output, stage-specific timeouts, keyboard-interactive auth, keepalives, and deterministic cleanup.

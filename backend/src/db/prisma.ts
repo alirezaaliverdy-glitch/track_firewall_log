@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { env } from "../config/env.js";
+import { assertSafeTestDatabaseEnvironment } from "../testing/test-database-safety.js";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
@@ -11,6 +12,11 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function getDatabaseUrl() {
+  const isTestRuntime = process.env.NODE_ENV === "test" || Boolean(process.env.NODE_TEST_CONTEXT);
+  if (isTestRuntime) {
+    assertSafeTestDatabaseEnvironment();
+    return process.env.TEST_DATABASE_URL as string;
+  }
   if (!env.databaseUrl) {
     throw new Error("DATABASE_URL is required to start the backend");
   }
