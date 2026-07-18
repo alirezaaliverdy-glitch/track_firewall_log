@@ -8,6 +8,8 @@ export type OnboardingDraft = {
   host: string;
   managementPort: number;
   credentialId: string;
+  enableCredentialId?: string;
+  ciscoLegacyCompatibilityApproved?: boolean;
   site: string;
   location: string;
   environment: "lab" | "staging" | "production";
@@ -89,7 +91,7 @@ export type DeviceWorkspace = {
   findings: Array<Record<string, unknown>>;
   actions: Array<Record<string, unknown>>;
   audit: Array<Record<string, unknown>>;
-  capabilities: { platformKey?: string; connectorType?: string; capabilities?: unknown; facts?: unknown; warnings?: unknown; refreshedAt?: string } | null;
+  capabilities: { platformKey?: string; connectorType?: string; capabilities?: unknown; facts?: unknown; detection?: unknown; warnings?: unknown; refreshedAt?: string; expiresAt?: string } | null;
   collections: Array<Record<string, unknown>>;
   charts: {
     healthScore: WorkspaceChartPoint[];

@@ -40,6 +40,8 @@ type Draft = {
   host: string;
   managementPort: number;
   credentialId: string;
+  enableCredentialId: string;
+  ciscoLegacyCompatibilityApproved?: boolean;
   site: string;
   location: string;
   environment: "lab" | "staging" | "production";
@@ -168,7 +170,7 @@ function deviceType(vendor: OnboardingVendor) {
   return DeviceType.generic_firewall;
 }
 
-function asDevice(session: OnboardingSession): Device {
+function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | "legacy_cisco"): Device {
   const draft = session.draft;
   const timestamp = new Date();
   return {
@@ -184,7 +186,7 @@ function asDevice(session: OnboardingSession): Device {
     environment: draft.environment as DeviceEnvironment,
     tags: [],
     status: DeviceStatus.unknown,
-    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform },
+    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -221,9 +223,11 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
       host: String(input.host ?? existing?.host ?? ""),
       managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method)),
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
+      enableCredentialId: String(input.enableCredentialId ?? ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).enableCredentialId ?? "")),
       site: String(input.site ?? ""),
       location: String(input.location ?? ""),
-      environment: String(input.environment ?? existing?.environment ?? "lab") as Draft["environment"]
+      environment: String(input.environment ?? existing?.environment ?? "lab") as Draft["environment"],
+      ciscoLegacyCompatibilityApproved: (input.ciscoLegacyCompatibilityApproved === true) || ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).sshCompatibilityProfile === "legacy_cisco")
     },
     test: null,
     detection: null,
@@ -255,6 +259,8 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     host: String(input.host ?? session.draft.host).trim(),
     managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod))),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
+    enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
+    ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
     site: String(input.site ?? session.draft.site).trim(),
     location: String(input.location ?? session.draft.location).trim(),
     environment: String(input.environment ?? session.draft.environment) as Draft["environment"]
@@ -293,7 +299,17 @@ export async function testOnboardingConnection(id: string) {
     touch(session, "connection_testing", "connection");
     await persistSession(session);
     if (session.draft.vendor === "cisco") {
-      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
+      let result: Awaited<ReturnType<typeof ciscoIosXeSshConnector.runReadOnlyCommands>>;
+      let legacyRetry = false;
+      try {
+        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "modern"), ["platform"]);
+      } catch (error) {
+        const diagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
+        const negotiationFailed = diagnostic?.stage === "ssh_negotiation" || diagnostic?.code === "CISCO_SSH_NEGOTIATION_FAILED";
+        if (!negotiationFailed || session.draft.ciscoLegacyCompatibilityApproved !== true) throw error;
+        legacyRetry = true;
+        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "legacy_cisco"), ["platform"]);
+      }
       const platformResult = result.results[0];
       session.privateEvidence.showVersion = platformResult?.stdout ?? "";
       session.test = {
@@ -306,7 +322,8 @@ export async function testOnboardingConnection(id: string) {
         semantic: result.connection.semantic,
         diagnostic: result.connection.diagnostic,
         promptMode: result.connection.promptMode,
-        compatibilityProfile: result.connection.compatibilityProfile
+        compatibilityProfile: result.connection.compatibilityProfile,
+        legacyRetry
       };
     } else {
       const result = await connector!.testConnection(device);
@@ -373,7 +390,7 @@ export async function discoverOnboardingInventory(id: string) {
   touch(session, "discovery_running", "discover");
   try {
     if (session.draft.vendor === "cisco") {
-      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session), ["inventory", "interfacesStatus", "ipInterfaceBrief", "vlanBrief"]);
+      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, session.draft.ciscoLegacyCompatibilityApproved ? "legacy_cisco" : "modern"), ["inventory", "interfacesStatus", "ipInterfaceBrief", "vlanBrief"]);
       if (!result.connectorInvoked) throw new Error("Cisco inventory connector was not invoked.");
       const byId = Object.fromEntries(result.results.map((item) => [item.commandId, item]));
       session.discovery = {
@@ -434,6 +451,12 @@ function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
 }
 
+function archivedInventory(value: unknown) {
+  const capabilities = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const inventory = capabilities.inventory && typeof capabilities.inventory === "object" && !Array.isArray(capabilities.inventory) ? capabilities.inventory as Record<string, unknown> : {};
+  return capabilities.inventoryStatus === "archived" || inventory.status === "archived" || Boolean(inventory.removedAt);
+}
+
 export class OnboardingDuplicateDeviceError extends Error {
   constructor(public readonly deviceId: string) {
     super("A Device with the same vendor, host, and management port already exists.");
@@ -459,6 +482,8 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   return {
     vendor, platform, name, host, managementPort, environment, connectionMethod,
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
+    enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
+    ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
     site: String(input.site ?? session.draft.site).trim(),
     location: String(input.location ?? session.draft.location).trim()
   } satisfies Draft;
@@ -476,9 +501,9 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       host: { equals: draft.host, mode: "insensitive" },
       managementPort: draft.managementPort
     },
-    select: { id: true }
+    select: { id: true, capabilities: true }
   });
-  if (duplicate) throw new OnboardingDuplicateDeviceError(duplicate.id);
+  if (duplicate && !archivedInventory(duplicate.capabilities)) throw new OnboardingDuplicateDeviceError(duplicate.id);
 
   touch(session, "saving", "save");
   const createdAt = now();
@@ -489,7 +514,9 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       connectorInvoked: false,
       connectionVerified: false,
       platform: draft.platform,
-      createdAt
+      createdAt,
+      ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),
+      ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
     }
   });
   try {
@@ -571,8 +598,21 @@ export async function commitOnboardingSession(id: string) {
   }
   touch(session, "saving", "save");
   const draft = session.draft;
+  const duplicate = await prisma.device.findFirst({
+    where: {
+      ...(session.deviceId ? { id: { not: session.deviceId } } : {}),
+      vendor: { equals: draft.vendor, mode: "insensitive" },
+      host: { equals: draft.host, mode: "insensitive" },
+      managementPort: draft.managementPort
+    },
+    select: { id: true, capabilities: true }
+  });
+  if (duplicate && !archivedInventory(duplicate.capabilities)) throw new OnboardingDuplicateDeviceError(duplicate.id);
+
   const capabilities: Record<string, unknown> = {
-    onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now() }
+    onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
+    ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),
+    ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
   };
   if (draft.vendor === "cisco") {
     capabilities.cisco = { showVersion: session.privateEvidence.showVersion };
