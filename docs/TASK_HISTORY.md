@@ -1,5 +1,11 @@
 # Task History
 
+## 2026-07-18 - Device onboarding required-name UX repair
+
+- Inspected the exact persisted failed onboarding Session and confirmed the backend rejected an empty `name`; the apparent `edge-switch-01` value was only a visually ambiguous placeholder.
+- Marked required fields, clarified the name example, added pre-request validation, placed the error inside the connection form, and focused/scrolled the invalid control.
+- Added regression coverage. Focused onboarding tests passed 9/9; backend and frontend builds passed. No device, credential, connector, migration, or execution-policy behavior changed.
+
 ## 2026-07-15 - Operator-first Action Center repair
 
 - Rebuilt the Action Center around the normal operator path: Device, Credential Reference, action, and one Execute click. Added default immediate execution and optional preview mode while retaining every ActionPlan API, direct route, history row, PolicyGuard check, and connector audit.

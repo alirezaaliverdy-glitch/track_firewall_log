@@ -36,6 +36,10 @@ function initialVendor(params: Record<string, string>) {
 export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const navigate = useNavigate();
   const started = useRef(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const hostInput = useRef<HTMLInputElement>(null);
+  const portInput = useRef<HTMLInputElement>(null);
+  const credentialInput = useRef<HTMLSelectElement>(null);
   const [session, setSession] = useState<OnboardingSession | null>(null);
   const [form, setForm] = useState<OnboardingDraft | null>(null);
   const [credentials, setCredentials] = useState<DeviceCredential[]>([]);
@@ -43,6 +47,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [invalidField, setInvalidField] = useState<"name" | "host" | "managementPort" | "credentialId" | "">("");
 
   useEffect(() => {
     if (started.current) return;
@@ -74,9 +79,24 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
 
   if (!form || !session) return <section className="page-stack"><PageHeader title="ثبت دستگاه" eyebrow="Device onboarding" /><div className="state-card">در حال آماده‌سازی گردش کار امن...</div>{error ? <div className="state-card is-error">{error}</div> : null}</section>;
 
-  const change = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => setForm((current) => current ? { ...current, [key]: value } : current);
-  const saveAnswers = () => run("answers", () => answerOnboarding(session.id, form));
-  const registerUnverified = () => run("unverified", () => registerUnverifiedOnboarding(session.id, form)).then((next) => {
+  const change = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => {
+    setForm((current) => current ? { ...current, [key]: value } : current);
+    if (invalidField === key) { setInvalidField(""); setError(""); }
+  };
+  const validateRegistration = (requiresCredential: boolean) => {
+    const invalid = !form.name.trim() ? { field: "name" as const, message: "نام دستگاه الزامی است؛ متن کم‌رنگ داخل کادر فقط نمونه است." }
+      : !form.host.trim() ? { field: "host" as const, message: "آدرس مدیریتی دستگاه الزامی است." }
+        : !Number.isInteger(form.managementPort) || form.managementPort < 1 || form.managementPort > 65535 ? { field: "managementPort" as const, message: "پورت مدیریتی باید عددی بین ۱ تا ۶۵۵۳۵ باشد." }
+          : requiresCredential && !form.credentialId ? { field: "credentialId" as const, message: "برای تست اتصال، یک Credential ذخیره‌شده انتخاب کنید." }
+            : null;
+    if (!invalid) { setInvalidField(""); return true; }
+    setInvalidField(invalid.field); setError(invalid.message); setMessage("");
+    const target = invalid.field === "name" ? nameInput.current : invalid.field === "host" ? hostInput.current : invalid.field === "managementPort" ? portInput.current : credentialInput.current;
+    requestAnimationFrame(() => { target?.focus(); target?.scrollIntoView({ behavior: "smooth", block: "center" }); });
+    return false;
+  };
+  const saveAnswers = () => validateRegistration(true) ? run("answers", () => answerOnboarding(session.id, form)) : Promise.resolve(null);
+  const registerUnverified = () => (validateRegistration(false) ? run("unverified", () => registerUnverifiedOnboarding(session.id, form)) : Promise.resolve(null)).then((next) => {
     if (next?.result?.verificationStatus === "unverified" && next.result.connectorInvoked === false && next.result.route) navigate(next.result.route);
   });
   const startNewSession = async () => {
@@ -138,14 +158,16 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
 
       <section className="content-panel onboarding-form">
         <h2>مشخصات اتصال</h2>
+        <p>فیلدهای دارای علامت <span aria-hidden="true">*</span> الزامی هستند.</p>
+        {error ? <div role="alert" className="state-card is-error">{error}</div> : null}
         <div className="form-grid">
           <label>Vendor<select value={form.vendor} onChange={(event) => { const vendor = event.target.value as OnboardingDraft["vendor"]; setForm({ ...form, vendor, platform: platforms[vendor][0].value, connectionMethod: "ssh", managementPort: 22 }); }}><option value="linux">Linux</option><option value="cisco">Cisco</option><option value="fortigate">FortiGate</option><option value="mikrotik">MikroTik</option></select></label>
           <label>Platform<select value={form.platform} onChange={(event) => change("platform", event.target.value)}>{platforms[form.vendor].map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label>روش اتصال<select value={form.connectionMethod} onChange={(event) => setForm({ ...form, connectionMethod: event.target.value as "ssh", managementPort: 22 })}><option value="ssh">SSH</option></select></label>
-          <label>نام دستگاه<input value={form.name} onChange={(event) => change("name", event.target.value)} placeholder="edge-switch-01" /></label>
-          <label>آدرس مدیریتی<input value={form.host} onChange={(event) => change("host", event.target.value)} inputMode="url" placeholder="IP یا hostname" /></label>
-          <label>پورت<input type="number" min="1" max="65535" value={form.managementPort} onChange={(event) => change("managementPort", Number(event.target.value))} /></label>
-          <label>Credential reference<select value={form.credentialId} onChange={(event) => change("credentialId", event.target.value)}><option value="">انتخاب Credential ذخیره‌شده</option>{credentials.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.username}</option>)}</select></label>
+          <label>نام دستگاه *<input ref={nameInput} required aria-invalid={invalidField === "name"} value={form.name} onChange={(event) => change("name", event.target.value)} placeholder="مثال: edge-switch-01" /></label>
+          <label>آدرس مدیریتی *<input ref={hostInput} required aria-invalid={invalidField === "host"} value={form.host} onChange={(event) => change("host", event.target.value)} inputMode="url" placeholder="IP یا hostname" /></label>
+          <label>پورت *<input ref={portInput} required aria-invalid={invalidField === "managementPort"} type="number" min="1" max="65535" value={form.managementPort} onChange={(event) => change("managementPort", Number(event.target.value))} /></label>
+          <label>Credential reference (برای تست اتصال الزامی)<select ref={credentialInput} aria-invalid={invalidField === "credentialId"} value={form.credentialId} onChange={(event) => change("credentialId", event.target.value)}><option value="">انتخاب Credential ذخیره‌شده</option>{credentials.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.username}</option>)}</select></label>
           <label>سایت<input value={form.site} onChange={(event) => change("site", event.target.value)} placeholder="مثال: Tehran DC" /></label>
           <label>موقعیت<input value={form.location} onChange={(event) => change("location", event.target.value)} placeholder="Rack / Room" /></label>
           <label>محیط<select value={form.environment} onChange={(event) => change("environment", event.target.value as OnboardingDraft["environment"])}><option value="lab">Lab</option><option value="staging">Staging</option><option value="production">Production</option></select></label>
@@ -186,7 +208,6 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
         {session.preview ? <div className="state-card"><strong>Preview آماده است</strong><p>عملیات: {String(session.preview.operation)} — آدرس: {form.host}:{form.managementPort} — Credential: فقط مرجع ذخیره‌شده — سلامت اولیه: فعال</p></div> : null}
       </section>
       {message ? <div role="status" className="state-card">{message}</div> : null}
-      {error ? <div role="alert" className="state-card is-error">{error}</div> : null}
     </section>
   );
 }

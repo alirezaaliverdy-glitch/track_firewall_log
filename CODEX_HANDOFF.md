@@ -1,5 +1,11 @@
 # CODEX_HANDOFF.md
 
+## Device onboarding required-name UX repair (2026-07-18)
+
+- Reproduced the reported `/answers` 400 against persisted Session `0a491d1a-d131-49e9-8cf9-15a603cc99cb`: the selected Credential existed, but the submitted device name was empty. The visible `edge-switch-01` text was only a placeholder, and the backend correctly returned `Device name is required.`
+- Required device identity fields are now explicitly marked. The name placeholder says `مثال`, empty/invalid values are blocked before the request, the exact Persian validation appears inside the connection form, and focus/scroll moves to the invalid control.
+- The server-side validation and controlled connector flow are unchanged. Focused onboarding tests passed 9/9; backend and frontend builds passed. Browser automation was not exposed in this session, so no click-level browser proof is claimed.
+
 ## Direct device/vendor management and ActionPlan history cleanup (2026-07-15)
 
 - Vendor names in the equipment table now link directly to a vendor overview; equipment names already open the device workspace, which now exposes visible Edit and Delete controls.

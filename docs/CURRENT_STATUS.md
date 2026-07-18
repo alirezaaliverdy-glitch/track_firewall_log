@@ -1,5 +1,11 @@
 # Current Project Status
 
+## Device onboarding required-name UX repair (2026-07-18)
+
+- The reported onboarding 400 was traced to an empty device name; `edge-switch-01` was placeholder text rather than an entered value. The selected stored Credential was valid and present.
+- Required identity fields are explicit, client-side validation prevents the invalid request, the error is visible inside the active form, and focus moves to the failing field.
+- Backend validation and connector behavior are unchanged. Focused onboarding tests passed 9/9, and both builds passed.
+
 ## Operator-first Action Center (2026-07-15)
 
 - Action Center now opens with Connection status and the direct Device -> Credential -> Action workflow. Execute immediately is the default; Preview only is optional; ActionPlan history remains available without dominating normal operation.

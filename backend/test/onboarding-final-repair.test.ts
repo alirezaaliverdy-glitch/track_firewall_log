@@ -20,6 +20,15 @@ test("unverified registration has an explicit honest API and UI contract", () =>
   assert.match(page, /connectorInvoked === false/);
 });
 
+test("onboarding form makes required identity fields explicit and blocks an empty device name before the request", () => {
+  assert.match(page, /نام دستگاه \*/);
+  assert.match(page, /placeholder="مثال: edge-switch-01"/);
+  assert.match(page, /نام دستگاه الزامی است؛ متن کم‌رنگ داخل کادر فقط نمونه است/);
+  assert.match(page, /validateRegistration\(true\)/);
+  assert.match(page, /aria-invalid=\{invalidField === "name"\}/);
+  assert.match(page, /role="alert" className="state-card is-error"/);
+});
+
 test("unverified registration is atomic and never invokes a connector", () => {
   const start = service.indexOf("export async function registerUnverifiedOnboardingSession");
   const end = service.indexOf("export async function commitOnboardingSession", start);
