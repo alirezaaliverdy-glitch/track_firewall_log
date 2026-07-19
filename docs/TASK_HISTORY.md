@@ -768,3 +768,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Restored ActionPlan creation for supported executable target actions while keeping unsupported/custom/unmatched prompts inside Assistant chat.
 - Added regression coverage for MikroTik SSH port change, Cisco VLAN creation, FortiGate policy creation, Linux supported service status, unknown/custom chat-only behavior, and cross-vendor prompt text not overriding selected device context.
 - Validation: backend build, command catalog validation, targeted backend tests, frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend suite was attempted and failed because the local isolated test database `firewall_log_analyzer_test` does not exist.
+
+## 2026-07-19 - AI Assistant custom ActionPlan fallback
+
+- Root cause: the guided-routing repair intentionally blocked unmatched/custom prompts, but the product now needs selected-device operational custom requests to become reviewable ActionPlans for every vendor.
+- Implemented a shared, vendor-agnostic fallback in the chat service after catalog resolution: if a selected-device request is operational, has no executable catalog/support match, and has no missing fields, create a `custom_vendor_action` ActionPlan.
+- Preserved the safety boundary by making fallback plans manual review only: no connector, no execution template, no preview/execution flags, no Guided Action session, and `executable=false`.
+- Kept informational/status prompts chat-only and kept supported MikroTik/Cisco/FortiGate/Linux catalog actions on the existing executable ActionPlan path.
+- Added regression coverage that the chat service creates review-only custom ActionPlans while the resolver still avoids fake executable catalog matches.
+- Validation: backend build, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend suite was attempted with an isolated test URL but failed because `firewall_log_analyzer_test` is not present and several older unrelated source-contract tests fail.

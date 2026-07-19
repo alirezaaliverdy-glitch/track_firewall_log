@@ -118,6 +118,36 @@ function isCustomProposal(actionType: string) {
   return actionType === AiIntentType.custom_vendor_action || actionType === AiIntentType.generic_security_action;
 }
 
+function normalizedChatText(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function hasOperationalVerb(message: string) {
+  const text = normalizedChatText(message);
+  return [
+    "configure", "config", "create", "add", "change", "set", "update", "delete", "remove", "enable", "disable",
+    "block", "unblock", "allow", "deny", "open", "close", "restart", "reload", "apply", "make", "build",
+    "تنظیم", "کانفیگ", "بساز", "ساخت", "ایجاد", "اضافه", "تغییر", "عوض", "حذف", "پاک", "فعال", "غیرفعال",
+    "بلاک", "مسدود", "اجازه", "باز", "ببند", "بستن", "ریستارت", "راه اندازی", "راه‌اندازی", "اعمال"
+  ].some((term) => text.includes(term));
+}
+
+function shouldCreateReviewOnlyActionPlan(input: {
+  message: string;
+  selectedDevice: { id: string } | null;
+  resolution: ReturnType<typeof resolveAiTemplate>;
+  supportedActionForPlan: unknown;
+  resolutionMissing: string[];
+}) {
+  return Boolean(
+    input.selectedDevice &&
+    !input.supportedActionForPlan &&
+    input.resolution.mode === "manual_or_not_supported" &&
+    input.resolutionMissing.length === 0 &&
+    hasOperationalVerb(input.message)
+  );
+}
+
 function selectedDeviceSupportsConnector(device: { protocol?: string | null } | null, connectorType: string | null) {
   if (!device || !connectorType) return false;
   if (connectorType.endsWith("-ssh")) return device.protocol === "ssh";
@@ -310,6 +340,13 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     selectedDeviceSupportsConnector(selectedDevice, resolution.connectorType) &&
     (resolution.mode === "executable_action_plan" || resolution.mode === "needs_input"),
   );
+  const canCreateReviewOnlyActionPlan = shouldCreateReviewOnlyActionPlan({
+    message,
+    selectedDevice,
+    resolution,
+    supportedActionForPlan,
+    resolutionMissing
+  });
   const actionVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;
   const actionRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? "medium";
   const actionSupportState = resolution.catalogItem?.supportState ?? "verified";
@@ -317,6 +354,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const actionTitleFa = resolution.catalogItem?.titleFa ?? resolution.targetSupportedAction?.titleFa ?? resolution.canonicalActionType;
   const actionPlan = canCreateSupportedActionPlan && selectedDevice && supportedActionForPlan
     ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
+    : canCreateReviewOnlyActionPlan && selectedDevice
+      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, vendor: actionVendor, userRequest: message, source: "ai_custom_proposal", implementationState: "manualOnly", executionSupport: "manual", supportState: "manual_only", supportReasonKey: "support.reason.manualReview", executable: false, connectorType: null, executionTemplateRef: null, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, missingFields: resolutionMissing, requiresExplicitReview: true, metadata: { source: "ai_custom_proposal", catalogCommandId: null, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: "پیشنهاد سفارشی هوش مصنوعی", vendor: actionVendor, actionType: "custom_vendor_action", requestedActionType: resolution.canonicalActionType, implementationState: "manualOnly", executionSupport: "manual", supportState: "manual_only", supportReasonKey: "support.reason.manualReview", executable: false, connectorType: null, executionTemplateRef: null, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started", reviewOnly: true } } })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
@@ -358,8 +397,10 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const selectedDeviceUnsupportedMessage = selectedDevice && executionSupport !== "connector"
     ? unsupportedForSelectedDeviceMessageFa({ deviceName: selectedDevice.name, reasonFa: resolution.reasonFa, selectedDevice })
     : null;
-  const assistantText = actionPlan && executionSupport === "connector"
-    ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
+  const assistantText = actionPlan
+    ? executionSupport === "connector"
+      ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
+      : "پیشنهاد سفارشی قابل بازبینی ساخته شد. این برنامه اجرایی نیست و باید در مرکز عملیات دستی بررسی شود."
     : resolutionMissing.length ? nextStepFa : selectedDeviceUnsupportedMessage ?? providerResponse.assistantMessage;
   const responseMode = guidedBlueprintId ? "guided_workflow" : resolution.mode === "guided_workflow" ? "manual_or_not_supported" : resolution.mode;
   const guidedAssistantText = guidedBlueprintId

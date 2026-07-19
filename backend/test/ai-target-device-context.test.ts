@@ -105,6 +105,20 @@ test("unsupported selected-device requests stay reviewable in Assistant", () => 
   assert.match(chat, /suggestSupportedActionsForAssistantTarget\(input\.selectedDevice\)/);
 });
 
+test("custom operational selected-device requests create review-only ActionPlans", () => {
+  const chat = read("../src/services/ai-chat.service.ts");
+  assert.match(chat, /shouldCreateReviewOnlyActionPlan/);
+  assert.match(chat, /hasOperationalVerb/);
+  assert.match(chat, /!input\.supportedActionForPlan/);
+  assert.match(chat, /input\.resolution\.mode === "manual_or_not_supported"/);
+  assert.match(chat, /actionType: "custom_vendor_action"/);
+  assert.match(chat, /source: "ai_custom_proposal"/);
+  assert.match(chat, /implementationState: "manualOnly"/);
+  assert.match(chat, /executionSupport: "manual"/);
+  assert.match(chat, /executable: false/);
+  assert.match(chat, /reviewOnly: true/);
+});
+
 test("custom proposals do not create or redirect to a Guided Action session", () => {
   const chat = read("../src/services/ai-chat.service.ts");
   assert.doesNotMatch(chat, /import \{ startGuidedActionSession \}/);

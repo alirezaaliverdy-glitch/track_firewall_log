@@ -681,3 +681,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - The selected device is the source of truth for vendor/platform/capabilities/supported actions; prompt text is not used to infer or switch vendor.
 - Supported executable MikroTik, Cisco, FortiGate, and Linux target actions can create reviewable ActionPlans again. Unsupported/custom requests stay in Assistant chat with no ActionPlan or Guided Action redirect.
 - Validation passed for backend build, command catalog validation, targeted routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check. Full backend tests still need an existing isolated test database; the attempted run failed because `firewall_log_analyzer_test` is absent.
+
+## 2026-07-19 - AI Assistant custom ActionPlan fallback
+
+- Supported executable actions still resolve through the selected device catalog and create connector-backed ActionPlans.
+- Operational custom/unmatched prompts for a selected device now create a review-only `custom_vendor_action` ActionPlan for Action Center review across vendors.
+- The fallback is not executable: metadata records `manualOnly`, `executionSupport=manual`, `executable=false`, no connector/template, no preview, no execution, and no Guided Action session.
+- Informational prompts remain chat-only because the fallback requires an operational verb.
+- Validation passed for backend build, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check. Full backend tests were attempted; 232/298 passed and 66 failed due to the missing isolated `firewall_log_analyzer_test` database and older unrelated source-contract expectations.

@@ -823,3 +823,10 @@
 - Target-supported command-catalog and legacy controlled-catalog actions can create ActionPlans for MikroTik, Cisco, FortiGate, and Linux supported actions; unsupported/custom prompts remain chat-only.
 - Preserved Action Center, approval, audit, connector-selection, and guided-action confirmation behavior. Frontend navigation remains explicit-confirmation only.
 - Validation: backend build, command catalog validation, targeted backend routing/context tests, frontend build, i18n, UTF-8, workflow, and `git diff --check` passed. Full backend test run was attempted but the local `firewall_log_analyzer_test` database does not exist, causing DB-bound failures unrelated to this change.
+
+## 2026-07-19 - AI Assistant custom ActionPlan fallback
+
+- Adjusted the Assistant ActionPlan guard so selected-device operational/custom prompts that do not match an executable catalog item create a review-only `custom_vendor_action` ActionPlan instead of stopping at the unsupported message.
+- The fallback is vendor-agnostic and still uses the selected device context as source of truth. It is explicitly `manualOnly`, `executionSupport=manual`, `executable=false`, has no connector/template reference, and cannot bypass the existing Action Center, approval, policy, and audit pipeline.
+- Informational/read-only chat remains inside the Assistant because the fallback requires an operational verb and a selected device; supported executable catalog actions still create normal connector-backed ActionPlans.
+- Validation: backend build, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and `git diff --check` passed. Full backend suite was attempted with `TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/firewall_log_analyzer_test`; it ran 298 tests with 232 pass and 66 fail because the isolated test database does not exist plus older unrelated source-contract expectations.

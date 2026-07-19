@@ -83,7 +83,7 @@ test("Linux supported service status action uses selected Linux context", () => 
   assert.equal(resolution.normalizedParams.serviceName, "nginx");
 });
 
-test("unsupported custom request stays chat-only with no ActionPlan catalog match", () => {
+test("unsupported custom request keeps no executable catalog match", () => {
   const resolution = resolveForTarget("configure something for me", targetDevice({ id: "mt-2", vendor: "MikroTik", type: "mikrotik" }));
 
   assert.equal(resolution.mode, "manual_or_not_supported");
