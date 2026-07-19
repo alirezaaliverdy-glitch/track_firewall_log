@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+**Workflow foundation Phase A - reusable UI primitives and DEV lab (2026-07-19)**
+
+- Added presentation-only workflow primitives under src/components/workflows/: stepper, state callout, review summary, result timeline, and primary action. They accept existing workflow/action states and do not introduce a backend state machine.
+- Added DEV-only /tools/workflow-lab behind import.meta.env.DEV; it is fixture-only, renders Persian RTL and English LTR examples for onboarding/action/planned/unsupported states, performs no API calls, no database writes, no connector invocation, and creates no ActionPlan.
+- Production navigation and backend Product State were not changed; production build output contains no /tools/workflow-lab route string. Action Center architecture, API contracts, Prisma schema, connectors, PolicyGuard, and protected lab execution behavior were untouched.
+- Validation passed: npm run build, npm run test:i18n, npm run test:utf8, npm run test:workflows, git diff --check, and production bundle route-string check. Build keeps the existing Vite large-chunk warning only.
+
 ## Device UX repair Phase A - data safety and removal regression (2026-07-18)
 
 - Added a fail-closed test database gate. Database-writing tests require an explicit `TEST_DATABASE_URL` distinct from `DATABASE_URL` and refuse the historical `firewall_log_analyzer` database; safe diagnostics expose only host, port, and database name.

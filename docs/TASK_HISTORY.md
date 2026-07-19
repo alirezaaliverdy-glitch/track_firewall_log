@@ -1,5 +1,13 @@
 # Task History
 
+## 2026-07-19 - Workflow foundation Phase A
+
+- Added WorkflowStepper, WorkflowStateCallout, WorkflowReviewSummary, WorkflowResultTimeline, and WorkflowPrimaryAction as reusable presentation-only workflow primitives.
+- Added /tools/workflow-lab as a DEV-only fixture page with Persian RTL and English LTR examples for the required onboarding, action, planned Cisco, and unsupported states.
+- Added locale keys and a source validation script proving the lab route is not exposed through production navigation/Product State and performs no API/execution calls.
+- Preserved frontend/backend compatibility, full Persian RTL support, Action Center architecture, existing API contracts, Prisma schema, connectors, PolicyGuard, and protected lab execution behavior.
+- Validation: npm run build, npm run test:i18n, npm run test:utf8, npm run test:workflows, git diff --check, and production bundle route-string check passed; only the known Vite large-chunk warning remains.
+
 ## 2026-07-18 - Device UX repair Phase A: test data safety and removal regression
 
 - Audited Phase 1 and the Device/Asset paths without modifying the committed Cisco connector work. Confirmed the equipment page reads Asset records, while deletion removes only Device and Prisma nulls the Asset link.

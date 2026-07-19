@@ -1,5 +1,12 @@
 # Current Project Status
 
+## Workflow Foundation Phase A - reusable UI and safe lab (2026-07-19)
+
+- Phase A only is complete: reusable presentation primitives now exist in src/components/workflows/ and a fixture-driven DEV-only Workflow Lab is available at /tools/workflow-lab.
+- The lab covers Persian RTL and English LTR visual states for device onboarding success/failure/unverified registration, action review/executing/success/failure, planned Cisco, and unsupported operations.
+- No backend behavior, API contract, Prisma schema, connector, ActionPlan execution, Product State navigation, or protected lab execution setting changed.
+- Validation is green: frontend typecheck/build, locale parity/Persian copy, UTF-8/mojibake, Workflow Lab dev-only source contract, diff check, and production bundle absence of the lab route string.
+
 ## Device UX repair Phase A - guarded data integrity (2026-07-18)
 
 - Test execution now fails closed unless `TEST_DATABASE_URL` is explicitly isolated from `DATABASE_URL` and is not the historical `firewall_log_analyzer` database. Prisma test runtime uses only the verified test target.

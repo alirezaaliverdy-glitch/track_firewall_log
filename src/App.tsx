@@ -10,6 +10,7 @@ import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
 import CommandCatalogPanel from "@/components/commands/CommandCatalogPanel";
 import { AppShell } from "@/components/layout/AppShell";
 import { appRoutes, type AppRoute } from "@/routes/appRoutes";
+import WorkflowLabPage from "@/features/tools/pages/WorkflowLabPage";
 
 function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
@@ -47,6 +48,18 @@ function FeatureRoute({ route }: { route: AppRoute }) {
         <ErrorBoundary title={route.labelFa}>
           <Page params={params as Record<string, string>} />
         </ErrorBoundary>
+      </AppShell>
+    </div>
+  );
+}
+
+function WorkflowLabRoute() {
+  const { t } = useTranslation();
+  return (
+    <div className="authenticated-app" data-page-id="tools.workflow_lab">
+      <AppBackground />
+      <AppShell currentPath="/tools">
+        <ErrorBoundary title={t("workflowLab.title")}><WorkflowLabPage /></ErrorBoundary>
       </AppShell>
     </div>
   );
@@ -101,6 +114,7 @@ function App() {
           <Route path="/action-library" element={<ActionLibraryRoute />} />
           <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
           <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />
+          {import.meta.env.DEV ? <Route path="/tools/workflow-lab" element={<WorkflowLabRoute />} /> : null}
           {appRoutes.map((route) => <Route key={route.featureKey} path={route.path} element={<FeatureRoute route={route} />} />)}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
