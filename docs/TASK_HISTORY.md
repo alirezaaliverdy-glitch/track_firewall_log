@@ -1,5 +1,13 @@
 # Task History
 
+## 2026-07-19 - Phase B: device onboarding and workspace simplification
+
+- Simplified the existing Device Onboarding page without adding APIs or stores: identity, credential/test, review, verified commit, and explicit unverified registration all continue through the current onboarding-session contract.
+- Added structured frontend onboarding error handling using backend error codes, while keeping detailed diagnostics behind Advanced and preserving connector-backed success semantics.
+- Simplified Device Workspace to the six Phase B tabs, moved vendor capability sections to Advanced, and made missing collection data explicit rather than showing invented zero values.
+- Extended Workflow Lab with verified/unverified workspace fixture states and added balanced English/Persian locale coverage plus source-level mocked Phase B tests.
+- Validation: root npm run build; root npm run test:i18n; root npm run test:utf8; root npm run test:workflows; backend npm run build; backend npm run validate:command-catalog; backend npx tsx --test test/phase-b-onboarding-workspace-source.test.ts; git diff --check.
+
 ## 2026-07-19 - Workflow foundation Phase A
 
 - Added WorkflowStepper, WorkflowStateCallout, WorkflowReviewSummary, WorkflowResultTimeline, and WorkflowPrimaryAction as reusable presentation-only workflow primitives.

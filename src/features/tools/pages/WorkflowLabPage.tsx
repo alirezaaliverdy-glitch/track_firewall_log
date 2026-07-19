@@ -71,6 +71,31 @@ const examples: LabExample[] = [
     timelineTone: "warning"
   },
   {
+    id: "device-workspace-verified",
+    group: "device",
+    titleKey: "workflowLab.examples.workspaceVerified.title",
+    descriptionKey: "workflowLab.examples.workspaceVerified.description",
+    calloutTitleKey: "workflowLab.examples.workspaceVerified.calloutTitle",
+    calloutMessageKey: "workflowLab.examples.workspaceVerified.calloutMessage",
+    calloutTone: "success",
+    actionKey: "workflowLab.actions.openOverview",
+    stepStatuses: ["complete", "complete", "complete", "complete"],
+    timelineTone: "success"
+  },
+  {
+    id: "device-workspace-unverified",
+    group: "device",
+    titleKey: "workflowLab.examples.workspaceUnverified.title",
+    descriptionKey: "workflowLab.examples.workspaceUnverified.description",
+    calloutTitleKey: "workflowLab.examples.workspaceUnverified.calloutTitle",
+    calloutMessageKey: "workflowLab.examples.workspaceUnverified.calloutMessage",
+    calloutTone: "warning",
+    actionKey: "workflowLab.actions.retryTest",
+    stepStatuses: ["complete", "blocked", "current", "pending"],
+    timelineTone: "warning",
+    technical: true
+  },
+  {
     id: "action-review",
     group: "action",
     titleKey: "workflowLab.examples.actionReview.title",

@@ -1,5 +1,13 @@
 # Current Project Status
 
+## Phase B - device onboarding and workspace simplification (2026-07-19)
+
+- Phase B only is complete on top of Phase A commit 11923753ea8e00feda6a4ff25a20b529ade47132; commit history was not rewritten.
+- Device onboarding now uses a tighter three-step operator flow with localized copy, structured client-side error mapping, existing credential/session APIs, honest verified vs unverified registration, and Cisco legacy SSH approval only under Advanced.
+- Device Workspace now exposes only Overview, Interfaces, Configuration, Actions, Monitoring, and History as primary tabs. Overview shows Connection, Identity, Interfaces summary, and Recommended next action, with no fake collection values.
+- Workflow Lab now includes verified and unverified workspace fixture states in both Persian RTL and English LTR. Action Center architecture and backend execution policy remain untouched.
+- Validation is green for the applicable Phase B scope: frontend build/typecheck, i18n parity/Persian copy, UTF-8, workflow-lab contract, backend build, command catalog validation, mocked/source Phase B tests, and diff check.
+
 ## Workflow Foundation Phase A - reusable UI and safe lab (2026-07-19)
 
 - Phase A only is complete: reusable presentation primitives now exist in src/components/workflows/ and a fixture-driven DEV-only Workflow Lab is available at /tools/workflow-lab.

@@ -245,7 +245,7 @@ test("Task 19.1 R-F workspace exposes stored-data charts and capability-gated ve
 
     const source = readFileSync(join(process.cwd(), "..", "src", "features", "assets", "pages", "AssetDetailPage.tsx"), "utf8");
     for (const range of ["1h", "6h", "24h", "7d", "30d"]) assert.match(source, new RegExp(`\\"${range}\\"`));
-    assert.match(source, /workspace\.vendor\.sections/);
+    assert.match(source, /currentWorkspace\.vendor\.sections/);
     assert.match(source, /No verified data is stored/);
   } finally { await app.close(); }
 });

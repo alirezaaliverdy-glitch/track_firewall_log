@@ -52,6 +52,22 @@ function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+export class OnboardingApiError extends Error {
+  code?: string;
+  status: number;
+  detail?: unknown;
+  connectorInvoked?: boolean;
+
+  constructor(message: string, options: { code?: string; status: number; detail?: unknown; connectorInvoked?: boolean }) {
+    super(message);
+    this.name = "OnboardingApiError";
+    this.code = options.code;
+    this.status = options.status;
+    this.detail = options.detail;
+    this.connectorInvoked = options.connectorInvoked;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: "include",
@@ -64,7 +80,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const body = asObject(payload);
     const error = asObject(body.error);
-    throw new Error(String(error.message ?? body.detail ?? body.error ?? `Request failed (${response.status})`));
+    throw new OnboardingApiError(String(error.message ?? body.detail ?? body.error ?? `Request failed (${response.status})`), {
+      code: typeof error.code === "string" ? error.code : undefined,
+      status: response.status,
+      detail: error.detail ?? body.detail,
+      connectorInvoked: typeof error.connectorInvoked === "boolean" ? error.connectorInvoked : undefined
+    });
   }
   return payload as T;
 }

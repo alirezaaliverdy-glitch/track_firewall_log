@@ -15,16 +15,17 @@ test.after(async () => { await prisma.$disconnect(); });
 test("unverified registration has an explicit honest API and UI contract", () => {
   assert.match(routes, /sessions\/:sessionId\/register-unverified/);
   assert.match(client, /registerUnverifiedOnboarding/);
-  assert.match(page, /ثبت اولیه بدون تست اتصال/);
+  assert.match(page, /onboarding.actions.registerUnverified/);
+  assert.match(page, /onboarding.messages.unverifiedWarning/);
   assert.match(page, /verificationStatus === "unverified"/);
   assert.match(page, /connectorInvoked === false/);
 });
 
 test("onboarding form makes required identity fields explicit and blocks an empty device name before the request", () => {
-  assert.match(page, /نام دستگاه \*/);
-  assert.match(page, /placeholder="مثال: edge-switch-01"/);
-  assert.match(page, /نام دستگاه الزامی است؛ متن کم‌رنگ داخل کادر فقط نمونه است/);
-  assert.match(page, /validateRegistration\(true\)/);
+  assert.match(page, /t\("onboarding.fields.name"\)/);
+  assert.match(page, /placeholder=\{t\("onboarding.placeholders.name"\)\}/);
+  assert.match(page, /t\("onboarding.errors.nameRequired"\)/);
+  assert.match(page, /validateIdentity\(\)/);
   assert.match(page, /aria-invalid=\{invalidField === "name"\}/);
   assert.match(page, /role="alert" className="state-card is-error"/);
 });

@@ -1,5 +1,14 @@
 # CODEX_HANDOFF.md
 
+**Phase B - device onboarding and workspace simplification (2026-07-19)**
+
+- Preserved Phase A commit 11923753ea8e00feda6a4ff25a20b529ade47132 and added Phase B only on top; no reset, revert, amend, squash, schema rewrite, API duplication, store duplication, or workflow-system replacement was performed.
+- Simplified Device Onboarding around the existing onboarding session, credential, device, asset, and Action Center contracts: identity, credential/test, review; verified registration still requires connector-backed preview readiness, and unverified registration remains explicit with connectorInvoked=false and offline/unknown semantics.
+- Kept Cisco modern-first SSH behavior and the per-device legacy compatibility approval under Advanced. Backend routes/connectors/templates/PolicyGuard/protected lab settings were not changed.
+- Simplified Device Workspace to six primary tabs: Overview, Interfaces, Configuration, Actions, Monitoring, History. The first viewport now presents Connection, Identity, Interfaces summary, and Recommended next action; vendor capability details stay under Advanced, and empty values render as not collected rather than fabricated zeros.
+- Added typed onboarding API error mapping on the client, balanced English/Persian locale keys, and Workflow Lab verified/unverified workspace fixture states.
+- Validation passed: root npm run build, npm run test:i18n, npm run test:utf8, npm run test:workflows, backend npm run build, backend npm run validate:command-catalog, backend mocked/source Phase B test, and git diff --check. Vite large-chunk and Git CRLF normalization warnings are unchanged/non-blocking.
+
 **Workflow foundation Phase A - reusable UI primitives and DEV lab (2026-07-19)**
 
 - Added presentation-only workflow primitives under src/components/workflows/: stepper, state callout, review summary, result timeline, and primary action. They accept existing workflow/action states and do not introduce a backend state machine.
