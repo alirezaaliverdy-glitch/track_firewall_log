@@ -1,3 +1,10 @@
+**Cisco IOS Classic support - Action Center slice (2026-07-19)**
+
+- IOS Classic read-only and safe-write operations now flow through the existing Cisco operation registry, command catalog, Cisco planner, ActionPlan preview, PolicyGuard, and Cisco SSH2 connector wrapper; no second Cisco connector or frontend SSH path was added.
+- Added controlled CLI command specs for high-value read-only actions, configuration backup, and safe write workflows such as interface description/state, IPv4 interface addressing, VLANs, access/trunk VLANs, static routes, NTP, Syslog, and save configuration. Reload/erase/destructive workflows remain planned, not executable.
+- Sensitive running/startup configuration evidence is routed through the redacting CLI runner. PolicyGuard now validates Cisco generic catalog actions against the registered SSH Cisco device and stored credential.
+- Validation passed for this slice: backend build, command catalog validation, focused Cisco Action Center mocked tests, and focused Cisco source/mocked connector tests.
+
 **Cisco IOS Classic support - inventory and capability profile slice (2026-07-19)**
 
 - Added typed IOS Classic collection/profile evidence on top of the existing Cisco SSH2 connector. Optional IOS commands now produce partial/not_supported/unknown capability states instead of failing the whole collection or changing device connectivity.

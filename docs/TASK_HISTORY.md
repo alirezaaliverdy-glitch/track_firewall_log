@@ -1,3 +1,9 @@
+## 2026-07-19 - Cisco IOS Classic Action Center integration
+
+- Added controlled Cisco Action Center operations for IOS Classic and IOS-XE through the existing registry/planner/catalog/connector path, including read-only show commands, backup, and scoped safe-write workflows.
+- Updated PolicyGuard to validate Cisco generic catalog actions against registered Cisco SSH devices and credentials, and routed sensitive configuration evidence through Cisco CLI redaction.
+- Validation: backend npm run build; backend npm run validate:command-catalog; focused Cisco Action Center test 4/4; focused Cisco source/mocked tests 15/15.
+
 ## 2026-07-19 - Cisco IOS Classic inventory and capabilities
 
 - Added safe optional IOS Classic command collection through the existing SSH2 command path and stored structured collection/profile evidence under Device capabilities.

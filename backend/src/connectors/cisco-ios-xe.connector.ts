@@ -2,6 +2,7 @@ import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { CiscoConnectorError, ciscoIosXeSshConnector, isCiscoIosXeSshCandidate } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, DeviceConnectionTestResult, DeviceConnector } from "./types.js";
 import { ciscoReadCommand } from "./cisco/ios-xe/cisco-iosxe.templates.js";
+import type { CiscoCliCommandSpec } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { findCiscoOperation, type CiscoOperationDefinition } from "../cisco/cisco-operation-registry.js";
 
 function metadata(plan: ActionPlan) {
@@ -16,12 +17,33 @@ function metadata(plan: ActionPlan) {
 function executableOperation(plan: ActionPlan): CiscoOperationDefinition {
   const meta = metadata(plan);
   const operation = findCiscoOperation(String(meta.catalogCommandId ?? meta.executionTemplateRef ?? ""));
-  if (!operation || operation.state !== "implemented" || operation.commandIds.length === 0) {
+  if (!operation || operation.state !== "implemented" || (operation.commandIds.length === 0 && !operation.buildCommandSpecs)) {
     throw new Error("Cisco operation is not registered for controlled execution.");
   }
   return operation;
 }
 
+
+function actionParameters(plan: ActionPlan) {
+  const parameters = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson)
+    ? plan.parametersJson as Record<string, unknown>
+    : {};
+  const meta = metadata(plan);
+  const normalizedParams = meta.normalizedParams && typeof meta.normalizedParams === "object" && !Array.isArray(meta.normalizedParams)
+    ? meta.normalizedParams as Record<string, unknown>
+    : {};
+  return { ...normalizedParams, ...parameters };
+}
+
+function specsForOperation(operation: CiscoOperationDefinition, plan: ActionPlan): CiscoCliCommandSpec[] {
+  if (operation.buildCommandSpecs) return operation.buildCommandSpecs(actionParameters(plan));
+  return operation.commandIds.map((commandId) => ({
+    commandId,
+    command: ciscoReadCommand(commandId),
+    write: false,
+    redactOutput: commandId === "runningConfig" || commandId === "startupConfig"
+  }));
+}
 async function connection(device: Device): Promise<DeviceConnectionTestResult> {
   try {
     const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["platform"]);
@@ -46,7 +68,7 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
         { name: "platform_detection", status: supported ? "ok" : "warning", code: diagnostic.code, message: diagnostic.userMessage }
       ],
       warnings: result.warnings.map((message) => ({ code: "CISCO_WARNING", message })),
-      capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: supported, canExecuteWriteActions: false },
+      capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: supported, canExecuteWriteActions: true },
       diagnostic: diagnostic as unknown as Record<string, unknown>,
       message: diagnostic.userMessage
     };
@@ -73,7 +95,7 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
         { name: "prompt", status: failedStage === "prompt" ? "failed" : "warning", code: failedStage === "prompt" ? diagnostic?.code : undefined, message: failedStage === "prompt" ? diagnostic?.userMessage : undefined }
       ],
       warnings: [],
-      capabilities: { canConnect: false, canRunBasicReadOnly: false, canReadSystem: false, canExecuteWriteActions: false },
+      capabilities: { canConnect: false, canRunBasicReadOnly: false, canReadSystem: false, canExecuteWriteActions: true },
       errorCode: diagnostic?.code ?? source.code ?? "CISCO_SSH_CONNECT_FAILED",
       diagnostic: diagnostic as unknown as Record<string, unknown> | undefined,
       message: diagnostic?.userMessage ?? source.message ?? "Cisco SSH connection failed."
@@ -93,7 +115,7 @@ export const ciscoIosXeConnector: DeviceConnector = {
       canTestConnection: true,
       canCollectStatus: true,
       canReadSystem: true,
-      canExecuteWriteActions: false,
+      canExecuteWriteActions: true,
       canExecuteChangeSshPort: false,
       supportedActions: [ActionType.generic_security_action]
     };
@@ -102,27 +124,31 @@ export const ciscoIosXeConnector: DeviceConnector = {
   async dryRun(plan): Promise<ConnectorDryRun> {
     const operation = executableOperation(plan);
     return {
-      plannedCommands: operation.commandIds.map(ciscoReadCommand),
-      validationWarnings: [`Read-only Cisco IOS-XE operation: ${operation.titleEn}.`],
+      plannedCommands: specsForOperation(operation, plan).map((spec) => spec.command),
+      validationWarnings: [`Controlled Cisco SSH2 operation: ${operation.titleEn}.`],
       affectedPorts: [],
       affectedServices: [],
-      rollbackSteps: [],
+      rollbackSteps: operation.rollback.available ? operation.rollback.steps : [],
       riskLevel: plan.riskLevel,
       requiresApproval: true,
-      commandSpecs: operation.commandIds.map((commandId) => ({ template: commandId, command: ciscoReadCommand(commandId), write: false, target: { deviceId: plan.deviceId, operationId: operation.id } })),
+      commandSpecs: specsForOperation(operation, plan).map((spec) => ({ template: spec.commandId, command: spec.command, write: spec.write === true, target: { deviceId: plan.deviceId, operationId: operation.id } })),
       exactTarget: { deviceId: plan.deviceId }
     };
   },
   async execute(plan, device): Promise<ConnectorExecutionResult> {
     const operation = executableOperation(plan);
-    const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, operation.commandIds);
+    const specs = specsForOperation(operation, plan);
+    const mustUseSpecRunner = specs.some((spec) => spec.write === true || spec.redactOutput === true);
+    const result = operation.commandIds.length > 0 && !operation.buildCommandSpecs && !mustUseSpecRunner
+      ? await ciscoIosXeSshConnector.runReadOnlyCommands(device, operation.commandIds)
+      : await ciscoIosXeSshConnector.runCliCommands(device, specs);
     return {
       executed: result.connectorInvoked,
       actionType: plan.actionType,
       deviceId: device.id,
       commands: result.results.map((entry) => ({ template: entry.commandId, stdout: entry.stdout, stderr: entry.stderr, exitCode: entry.exitCode })),
       warnings: result.warnings,
-      rollbackJson: { available: false, outcome: "read_only_no_rollback_required" }
+      rollbackJson: operation.rollback.available ? { available: true, steps: operation.rollback.steps, outcome: operation.readOnly ? "read_only_no_rollback_required" : "change_executed_manual_rollback_available" } : { available: false, outcome: operation.readOnly ? "read_only_no_rollback_required" : "manual_rollback_required" }
     };
   },
   async rollback(plan, device): Promise<ConnectorExecutionResult> {

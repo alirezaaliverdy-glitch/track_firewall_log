@@ -5,6 +5,8 @@ export const CISCO_IOSXE_READ_COMMANDS = Object.freeze({
   interfacesErrors: "show interfaces counters errors",
   interfacesDetailed: "show interfaces",
   runningConfigHostname: "show running-config | include ^hostname",
+  runningConfig: "show running-config",
+  startupConfig: "show startup-config",
   ipInterfaceBrief: "show ip interface brief",
   vlanBrief: "show vlan brief",
   trunk: "show interfaces trunk",

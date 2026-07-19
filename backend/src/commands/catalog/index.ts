@@ -80,16 +80,16 @@ const fullControlFortiGateItems = FORTIGATE_FULL_CONTROL_REGISTRY.map((entry) =>
 
 const ciscoParam = (key: string): CommandParam => param(key, key, `Cisco parameter ${key}.`, key.toLowerCase().includes("vlan") || key.toLowerCase().includes("asn") || key.toLowerCase().includes("group") || key.toLowerCase().includes("id") ? "number" : key.toLowerCase().includes("ip") || key.toLowerCase().includes("hop") || key.toLowerCase().includes("server") ? "ip" : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("network") || key.toLowerCase().includes("source") ? "cidr" : "string");
 const ciscoCommandCatalogItems = CISCO_OPERATION_REGISTRY.map((operation) => item("cisco", operation.slug, operation.titleFa, operation.titleEn, operation.category, "generic_security_action", (operation.state === "implemented" ? implemented(operation.executionTemplateRef!, {
-  mutates: false,
+  mutates: !operation.readOnly,
   riskLevel: operation.risk as CommandRiskLevel,
-  privilegeLevel: "read",
-  required: [],
-  optionalParams: [],
+  privilegeLevel: operation.readOnly ? "read" : "admin",
+  required: (operation.requiredParams ?? []).map(ciscoParam),
+  optionalParams: (operation.optionalParams ?? []).map(ciscoParam),
   prechecks: operation.prechecks,
   verification: operation.verification,
   rollback: operation.rollback.available ? { available: true, steps: operation.rollback.steps } : { available: false, notAvailableReasonFa: operation.rollback.reason },
   searchKeywordsFa: operation.keywords,
-  descriptionFa: `${operation.titleFa} through the controlled Cisco IOS-XE SSH connector and Action Center review flow.`
+  descriptionFa: `${operation.titleFa} through the controlled Cisco SSH connector and Action Center review flow.`
 }) : operation.state === "manualOnly" ? manual({
   mutates: !operation.readOnly,
   riskLevel: operation.risk as CommandRiskLevel,

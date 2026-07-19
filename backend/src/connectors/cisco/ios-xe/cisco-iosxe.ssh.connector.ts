@@ -8,7 +8,7 @@ import { ciscoReadCommand, type CiscoReadCommandId } from "./cisco-iosxe.templat
 import type { CiscoConnectionEvidence, CiscoConnectionStage, CiscoConnectorDiagnostic, CiscoSshCompatibilityProfile } from "./cisco-iosxe.types.js";
 
 export type CiscoIosXeCommandResult = {
-  commandId: CiscoReadCommandId;
+  commandId: string;
   command: string;
   stdout: string;
   stderr: string;
@@ -16,7 +16,23 @@ export type CiscoIosXeCommandResult = {
   durationMs: number;
 };
 
+export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean };
+
+export function redactCiscoCliOutput(output: string) {
+  return output
+    .replace(/^(\s*enable\s+(?:secret|password)\s+)(.+)$/gim, "$1[REDACTED]")
+    .replace(/^(\s*username\s+\S+\s+(?:privilege\s+\d+\s+)?(?:secret|password)\s+)(.+)$/gim, "$1[REDACTED]")
+    .replace(/^(\s*snmp-server\s+community\s+)(\S+)/gim, "$1[REDACTED]")
+    .replace(/^(\s*tacacs-server\s+key\s+)(.+)$/gim, "$1[REDACTED]")
+    .replace(/^(\s*radius-server\s+key\s+)(.+)$/gim, "$1[REDACTED]")
+    .replace(/^(\s*key-string\s+)(.+)$/gim, "$1[REDACTED]")
+    .replace(/(password|passphrase|private[-_ ]?key|secret)\s*[=:]\s*\S+/gi, "$1=[REDACTED]");
+}
 type DiagnosticState = Pick<CiscoConnectorDiagnostic, "connectorInvoked" | "transportConnected" | "authenticated" | "shellOpened" | "compatibilityProfile" | "legacyCompatibilityRequested" | "legacyCompatibilityApplied" | "connectionPhase">;
+
+function initialDiagnosticState(compatibilityProfile: CiscoSshCompatibilityProfile): DiagnosticState {
+  return { connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile, legacyCompatibilityRequested: compatibilityProfile === "legacy_cisco", legacyCompatibilityApplied: false, connectionPhase: "input" };
+}
 
 type ResolvedDeviceCredential = {
   name?: string;
@@ -294,8 +310,7 @@ export class CiscoIosXeSshConnector {
 
   async runReadOnlyCommands(device: Device, commandIds: CiscoReadCommandId[]): Promise<{ connectorInvoked: boolean; results: CiscoIosXeCommandResult[]; warnings: string[]; connection: CiscoConnectionEvidence }> {
     const compatibilityProfile = ciscoCompatibilityProfile(device);
-    const legacyCompatibilityRequested = compatibilityProfile === "legacy_cisco";
-    let state: DiagnosticState = { connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile, legacyCompatibilityRequested, legacyCompatibilityApplied: false, connectionPhase: "input" };
+    let state: DiagnosticState = initialDiagnosticState(compatibilityProfile);
     if (!isCiscoIosXeSshCandidate(device)) throw connectorError("CISCO_DEVICE_UNSUPPORTED", "input", "The selected device is not a Cisco SSH candidate.", state, 400, false);
     const credential = await this.dependencies.credentialResolver(device, compatibilityProfile);
     state = { ...state, connectorInvoked: true, connectionPhase: "tcp" };
@@ -342,6 +357,63 @@ export class CiscoIosXeSshConnector {
           code: semantic === "connected_supported" ? "CISCO_CONNECTED_SUPPORTED" : "CISCO_CONNECTED_UNSUPPORTED",
           stage: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? "platform_detection" : "command", retryable: false,
           userMessage: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? `Cisco SSH succeeded, but platform ${platform.platform} is not supported by the current Cisco automation path.` : "Cisco interactive SSH and read-only command execution succeeded.",
+          remediation: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? REMEDIATION.platform_detection : [], ...state,
+          connectionPhase: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? "platform_detection" : "command"
+        };
+        return { connectorInvoked: true, results, warnings: initialized.warnings, connection: { semantic, diagnostic, promptMode: initialized.promptMode, compatibilityProfile, legacyCompatibilityRequested: diagnostic.legacyCompatibilityRequested, legacyCompatibilityApplied: diagnostic.legacyCompatibilityApplied, connectionPhase: diagnostic.connectionPhase } };
+      } finally { session.close(); }
+    } catch (error) { throw mapSshError(error, state); }
+    finally { try { client.end(); } finally { if (!socket.destroyed) socket.destroy(); } }
+  }
+  async runCliCommands(device: Device, specs: CiscoCliCommandSpec[]): Promise<{ connectorInvoked: boolean; results: CiscoIosXeCommandResult[]; warnings: string[]; connection: CiscoConnectionEvidence }> {
+    if (!isCiscoIosXeSshCandidate(device)) throw connectorError("CISCO_DEVICE_UNSUPPORTED", "input", "Device is not a Cisco SSH target.", initialDiagnosticState(ciscoCompatibilityProfile(device)), 400, false);
+    if (specs.length === 0) throw connectorError("CISCO_COMMAND_MISSING", "input", "At least one Cisco command spec is required.", initialDiagnosticState(ciscoCompatibilityProfile(device)), 400, false);
+    const compatibilityProfile = ciscoCompatibilityProfile(device);
+    const credential = await resolveDeviceCredential(device, compatibilityProfile);
+    let state: DiagnosticState = initialDiagnosticState(compatibilityProfile);
+    state = { ...state, connectorInvoked: true, connectionPhase: "tcp" };
+    let socket: Socket;
+    try {
+      socket = await this.dependencies.tcpConnect(device.host, device.managementPort, this.tcpTimeoutMs);
+      state = { ...state, transportConnected: true, connectionPhase: "ssh_negotiation" };
+    } catch (error) { throw mapSshError(error, state); }
+
+    const client = this.dependencies.clientFactory();
+    try {
+      const stream = await new Promise<ClientChannel>((resolve, reject) => {
+        let settled = false;
+        const finish = (callback: () => void) => { if (settled) return; settled = true; callback(); };
+        client.once("ready", () => {
+          state = { ...state, authenticated: true, connectionPhase: "authentication" };
+          client.shell({ term: "vt100", cols: 160, rows: 48 }, (error, channel) => {
+            if (error) return finish(() => reject(connectorError("CISCO_SHELL_OPEN_FAILED", "shell", "Cisco SSH authenticated but an interactive CLI shell could not be opened.", state, 502, true, error)));
+            state = { ...state, shellOpened: true, connectionPhase: "shell" };
+            finish(() => resolve(channel));
+          });
+        });
+        client.on("keyboard-interactive", (_name, _instructions, _language, prompts, finishPrompts) => finishPrompts(prompts.map(() => credential.password ?? "")));
+        client.once("error", (error) => finish(() => reject(mapSshError(error, state))));
+        client.once("close", () => finish(() => reject(connectorError("CISCO_SSH_CLOSED", state.authenticated ? "shell" : "ssh_negotiation", "The Cisco SSH connection closed before the interactive session was ready.", state, 502, true))));
+        const connectConfig = ciscoConnectConfig(device, credential, compatibilityProfile, socket);
+        state = { ...state, legacyCompatibilityApplied: Boolean(connectConfig.algorithms), connectionPhase: "ssh_negotiation" };
+        client.connect(connectConfig);
+      });
+      state = { ...state, connectionPhase: "prompt" };
+      const session = new CiscoInteractiveSession(stream, state, this.outputLimitBytes, this.promptTimeoutMs, this.commandTimeoutMs);
+      try {
+        const initialized = await session.initialize("enableSecret" in credential && typeof credential.enableSecret === "string" ? credential.enableSecret : undefined);
+        const results: CiscoIosXeCommandResult[] = [];
+        for (const spec of specs) {
+          const commandResult = await session.runCommand(spec.command, spec.strict === true);
+          results.push({ commandId: spec.commandId, command: spec.command, ...commandResult, stdout: spec.redactOutput ? redactCiscoCliOutput(commandResult.stdout) : commandResult.stdout, stderr: spec.redactOutput ? redactCiscoCliOutput(commandResult.stderr) : commandResult.stderr });
+        }
+        const platformOutput = results.find((item) => item.commandId === "platform")?.stdout;
+        const platform = platformOutput ? detectCiscoPlatform(platformOutput) : null;
+        const semantic = platformOutput ? ciscoConnectionSemantic(platformOutput) : "connected_supported";
+        const diagnostic: CiscoConnectorDiagnostic = {
+          code: semantic === "connected_supported" ? "CISCO_CONNECTED_SUPPORTED" : "CISCO_CONNECTED_UNSUPPORTED",
+          stage: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? "platform_detection" : "command", retryable: false,
+          userMessage: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? `Cisco SSH succeeded, but platform ${platform.platform} is not supported by the current Cisco automation path.` : "Cisco interactive SSH and controlled CLI execution succeeded.",
           remediation: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? REMEDIATION.platform_detection : [], ...state,
           connectionPhase: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? "platform_detection" : "command"
         };

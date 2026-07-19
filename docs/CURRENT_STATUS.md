@@ -1,3 +1,10 @@
+## Cisco IOS Classic Action Center integration (2026-07-19)
+
+- IOS Classic now uses the existing Action Center execution path for read-only diagnostics, backup, and scoped safe-write Cisco workflows. The generated catalog exposes required parameters and mutating risk correctly from the single Cisco operation registry.
+- The Cisco planner and connector wrapper support server-built CLI specs, preview exact commands, require approval for writes, invoke the existing SSH2 interactive connector on execution, and redact sensitive configuration output before evidence is returned.
+- Destructive/high-risk roadmap actions such as reload, erase, delete VLAN, bulk shutdown, and restore remain planned and non-executable until protected PolicyGuard contracts are explicitly completed.
+- Validation: backend build, command catalog validation, focused Cisco Action Center mocked tests, and focused Cisco source/mocked connector tests.
+
 ## Cisco IOS Classic inventory and capability profile (2026-07-19)
 
 - IOS Classic now has a typed read-only collection bundle for system, inventory, interfaces, health, network, configuration metadata, security/services, and per-device capability states.

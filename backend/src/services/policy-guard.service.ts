@@ -157,7 +157,7 @@ async function credentialExists(device: Device | null) {
   return false;
 }
 
-function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge") {
+function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge" | "cisco") {
   if (!device) return false;
   const deviceVendor = String(device.vendor ?? "").toLowerCase();
   if (vendor === "mikrotik") {
@@ -165,6 +165,9 @@ function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate"
   }
   if (vendor === "fortigate") {
     return device.protocol === "ssh" && (device.type === "fortigate" || deviceVendor.includes("forti"));
+  }
+  if (vendor === "cisco") {
+    return device.protocol === "ssh" && deviceVendor.includes("cisco");
   }
   return device.protocol === "ssh" && (device.type === "linux_edge" || deviceVendor.includes("linux"));
 }
@@ -346,6 +349,16 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     });
   }
 
+  const metadata = asObject(parameters.metadata);
+  const isCiscoCatalogAction = plan.actionType === ActionType.generic_security_action && (metadata.connectorType === "cisco-ios-xe-ssh" || metadata.vendor === "cisco" || parameters.vendor === "cisco");
+  if (isCiscoCatalogAction) {
+    if (!plan.deviceId) errors.push("Cisco catalog action requires deviceId.");
+    if (plan.deviceId && !device) errors.push("Cisco catalog action requires a valid registered device.");
+    if (device && !String(device.vendor ?? "").toLowerCase().includes("cisco")) errors.push("Cisco catalog action requires a Cisco device.");
+    if (device && device.protocol !== "ssh") errors.push("Cisco catalog action requires SSH protocol.");
+    if (device && !await credentialExists(device)) errors.push("Cisco catalog action requires an existing credential for the target device.");
+    if (device && !connectorExists(device, "cisco")) errors.push("Cisco catalog action requires the registered Cisco SSH connector.");
+  }
   if (DEVICE_REQUIRED_ACTIONS.has(plan.actionType)) {
     if (!plan.deviceId) errors.push(`${plan.actionType} requires deviceId.`);
     if (plan.deviceId && !device) errors.push(`${plan.actionType} requires a valid registered device.`);
