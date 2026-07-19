@@ -68,7 +68,7 @@ const sessions = new Map<string, OnboardingSession>();
 const SENSITIVE_KEYS = /password|passphrase|private.?key|token|api.?key|secret/i;
 const SUPPORTED_PLATFORMS: Record<OnboardingVendor, string[]> = {
   linux: ["linux"],
-  cisco: ["cisco-ios-xe"],
+  cisco: ["cisco-ios-xe", "cisco-ios-classic", "cisco-nx-os", "cisco-asa"],
   fortigate: ["fortios"],
   mikrotik: ["routeros"]
 };
@@ -220,7 +220,7 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
       platform: String(input.platform ?? defaultPlatform(vendor)),
       connectionMethod: method,
       name: String(input.name ?? existing?.name ?? ""),
-      host: String(input.host ?? existing?.host ?? ""),
+      host: normalizeManagementAddress(String(input.host ?? existing?.host ?? "")),
       managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method)),
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
       enableCredentialId: String(input.enableCredentialId ?? ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).enableCredentialId ?? "")),
@@ -256,7 +256,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     platform: String(input.platform ?? (nextVendor === session.draft.vendor ? session.draft.platform : defaultPlatform(nextVendor))),
     connectionMethod: nextMethod,
     name: String(input.name ?? session.draft.name).trim(),
-    host: String(input.host ?? session.draft.host).trim(),
+    host: normalizeManagementAddress(String(input.host ?? session.draft.host).trim()),
     managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod))),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
@@ -316,6 +316,9 @@ export async function testOnboardingConnection(id: string) {
         connected: result.connectorInvoked && Boolean(platformResult),
         connectorInvoked: result.connectorInvoked,
         connectorType: ciscoIosXeSshConnector.connectorType,
+        legacyCompatibilityRequested: result.connection.diagnostic.legacyCompatibilityRequested,
+        legacyCompatibilityApplied: result.connection.diagnostic.legacyCompatibilityApplied,
+        connectionPhase: result.connection.diagnostic.connectionPhase,
         readOnlyProbe: "show version",
         durationMs: platformResult?.durationMs ?? 0,
         warnings: result.warnings,
@@ -349,7 +352,10 @@ export async function testOnboardingConnection(id: string) {
       connectorInvoked: ciscoDiagnostic?.connectorInvoked ?? session.test?.connectorInvoked === true,
       connectorType: session.test?.connectorType,
       error: safeError instanceof Error ? safeError.message : "Connection test failed.",
-      diagnostic: ciscoDiagnostic
+      diagnostic: ciscoDiagnostic,
+      legacyCompatibilityRequested: ciscoDiagnostic?.legacyCompatibilityRequested ?? session.draft.ciscoLegacyCompatibilityApproved === true,
+      legacyCompatibilityApplied: ciscoDiagnostic?.legacyCompatibilityApplied ?? false,
+      connectionPhase: ciscoDiagnostic?.connectionPhase ?? (session.test?.connectorInvoked === true ? "ssh_negotiation" : "input")
     };
     fail(session, credentialInvalid ? "credential_invalid" : "connection_failed", credentialInvalid ? "credential" : "connection", safeError);
     await persistSession(session);
@@ -365,9 +371,11 @@ export async function detectOnboardingPlatform(id: string) {
     const detection = detectCiscoPlatform(session.privateEvidence.showVersion ?? "");
     session.detection = detection;
     if (!detection.supported || detection.platform !== "cisco-ios-xe") {
-      fail(session, "platform_unsupported", "platform", `Detected platform ${detection.platform} is not supported by the Cisco IOS-XE onboarding path.`);
+      session.draft.platform = detection.platform;
+      session.result = { recoverable: true, status: "platform_unsupported", error: `Detected platform ${detection.platform} is not supported by the Cisco IOS-XE automation path.`, connectivityVerified: true, connectorInvoked: session.test?.connectorInvoked === true, platform: detection.platform };
+      const response = touch(session, "platform_unsupported", "review");
       await persistSession(session);
-      throw new Error(`Detected platform ${detection.platform} is not supported by the Cisco IOS-XE onboarding path.`);
+      return response;
     }
     session.draft.platform = detection.platform;
   } else {
@@ -465,12 +473,73 @@ export class OnboardingDuplicateDeviceError extends Error {
   get route() { return `/assets/devices/${this.deviceId}`; }
 }
 
+export class OnboardingManagementIpConflictError extends Error {
+  constructor(public readonly managementIp: string, public readonly deviceId: string | null, public readonly assetId: string | null) {
+    super("Another device or asset already owns this management address.");
+  }
+
+  get route() { return this.deviceId ? `/assets/devices/${this.deviceId}` : undefined; }
+}
+
+function normalizeManagementAddress(value: string) {
+  const raw = value.trim().toLowerCase();
+  const ipv4 = raw.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4) return raw;
+  const octets = ipv4.slice(1).map((item) => Number(item));
+  return octets.every((item) => Number.isInteger(item) && item >= 0 && item <= 255) ? octets.join(".") : raw;
+}
+
+function sameVendor(a: string | null | undefined, b: string) {
+  return String(a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function mergeReactivatedCapabilities(existing: unknown, next: Record<string, unknown>) {
+  const merged = { ...((existing && typeof existing === "object" && !Array.isArray(existing)) ? existing as Record<string, unknown> : {}), ...next };
+  delete merged.inventoryStatus;
+  const inventory = merged.inventory && typeof merged.inventory === "object" && !Array.isArray(merged.inventory) ? { ...merged.inventory as Record<string, unknown> } : null;
+  if (inventory) {
+    delete inventory.status;
+    delete inventory.removedAt;
+    delete inventory.removedReason;
+    delete inventory.reason;
+    if (Object.keys(inventory).length > 0) merged.inventory = inventory;
+    else delete merged.inventory;
+  }
+  return merged;
+}
+
+type RegistrationTarget = { deviceId: string | null; assetId: string | null; reactivated: boolean };
+
+async function resolveOnboardingRegistrationTarget(tx: Prisma.TransactionClient, draft: Draft, sessionDeviceId?: string): Promise<RegistrationTarget> {
+  const managementIp = normalizeManagementAddress(draft.host);
+  const asset = await tx.asset.findUnique({ where: { managementIp }, include: { device: true } });
+  const devices = await tx.device.findMany({ where: { host: { equals: managementIp, mode: "insensitive" } }, orderBy: { updatedAt: "desc" }, take: 10 });
+  const byId = new Map<string, typeof devices[number]>();
+  for (const device of devices) byId.set(device.id, device);
+  if (asset?.device) byId.set(asset.device.id, asset.device);
+  if (sessionDeviceId) {
+    const existing = byId.get(sessionDeviceId) ?? await tx.device.findUnique({ where: { id: sessionDeviceId } });
+    if (existing) byId.set(existing.id, existing);
+  }
+  const candidates = [...byId.values()];
+  const reusable = candidates.find((device) => {
+    if (sessionDeviceId && device.id === sessionDeviceId) return true;
+    const sameAddress = normalizeManagementAddress(device.host) === managementIp && device.managementPort === draft.managementPort;
+    return sameAddress && (sameVendor(device.vendor, draft.vendor) || archivedInventory(device.capabilities));
+  }) ?? null;
+  const conflicting = candidates.find((device) => device.id !== reusable?.id && normalizeManagementAddress(device.host) === managementIp && !archivedInventory(device.capabilities));
+  if (conflicting) throw new OnboardingManagementIpConflictError(managementIp, conflicting.id, asset?.id ?? null);
+  if (asset?.device && reusable?.id !== asset.device.id && !archivedInventory(asset.device.capabilities)) {
+    throw new OnboardingManagementIpConflictError(managementIp, asset.device.id, asset.id);
+  }
+  return { deviceId: sessionDeviceId ?? reusable?.id ?? null, assetId: asset?.id ?? null, reactivated: Boolean(reusable && archivedInventory(reusable.capabilities)) || asset?.managedState === "archived" };
+}
 function validateUnverifiedDraft(session: OnboardingSession, input: Record<string, unknown>) {
   assertNoSecrets(input);
   const vendor = input.vendor === undefined ? session.draft.vendor : normalizeVendor(input.vendor);
   const platform = String(input.platform ?? (vendor === session.draft.vendor ? session.draft.platform : defaultPlatform(vendor))).trim();
   const name = String(input.name ?? session.draft.name).trim();
-  const host = String(input.host ?? session.draft.host).trim();
+  const host = normalizeManagementAddress(String(input.host ?? session.draft.host).trim());
   const managementPort = Number(input.managementPort ?? session.draft.managementPort);
   const environment = String(input.environment ?? session.draft.environment) as Draft["environment"];
   const connectionMethod = String(input.connectionMethod ?? session.draft.connectionMethod) === "api" ? "api" : "ssh";
@@ -494,20 +563,10 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const draft = validateUnverifiedDraft(session, input);
   const normalizedVendor = draft.vendor.toLowerCase();
-  const duplicate = await prisma.device.findFirst({
-    where: {
-      ...(session.deviceId ? { id: { not: session.deviceId } } : {}),
-      vendor: { equals: normalizedVendor, mode: "insensitive" },
-      host: { equals: draft.host, mode: "insensitive" },
-      managementPort: draft.managementPort
-    },
-    select: { id: true, capabilities: true }
-  });
-  if (duplicate && !archivedInventory(duplicate.capabilities)) throw new OnboardingDuplicateDeviceError(duplicate.id);
 
   touch(session, "saving", "save");
   const createdAt = now();
-  const capabilities = json({
+  const nextCapabilities: Record<string, unknown> = {
     onboarding: {
       sessionId: session.id,
       verificationStatus: "unverified",
@@ -517,10 +576,15 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       createdAt,
       ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),
       ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
-    }
-  });
+    },
+    ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),
+    ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
+  };
   try {
     const persisted = await prisma.$transaction(async (tx) => {
+      const target = await resolveOnboardingRegistrationTarget(tx, draft, session.deviceId);
+      const existingDevice = target.deviceId ? await tx.device.findUnique({ where: { id: target.deviceId } }) : null;
+      const wasUpdate = Boolean(target.deviceId);
       const data = {
         name: draft.name,
         vendor: normalizedVendor,
@@ -531,11 +595,11 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
         environment: draft.environment as DeviceEnvironment,
         tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
         status: DeviceStatus.unknown,
-        capabilities,
+        capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, nextCapabilities)),
         credentialId: draft.credentialId || null
       };
-      const device = session.deviceId
-        ? await tx.device.update({ where: { id: session.deviceId }, data })
+      const device = target.deviceId
+        ? await tx.device.update({ where: { id: target.deviceId }, data })
         : await tx.device.create({ data });
       const { asset } = await syncDeviceRecordToAsset(tx, device);
       let siteId: string | undefined;
@@ -560,12 +624,12 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       await tx.auditLog.create({
         data: {
           deviceId: device.id,
-          action: session.deviceId ? "device.onboarding_unverified_updated" : "device.onboarding_unverified_created",
+          action: wasUpdate ? "device.onboarding_unverified_updated" : "device.onboarding_unverified_created",
           targetType: "Device",
           targetId: device.id,
           dryRun: false,
           approvalStatus: "not_required",
-          metadata: json({ verificationStatus: "unverified", connectorInvoked: false, connectionVerified: false, assetId: asset.id, siteId, locationId })
+          metadata: json({ verificationStatus: "unverified", connectorInvoked: false, connectionVerified: false, assetId: asset.id, siteId, locationId, reactivated: target.reactivated })
         }
       });
       return { device, asset };
@@ -598,16 +662,6 @@ export async function commitOnboardingSession(id: string) {
   }
   touch(session, "saving", "save");
   const draft = session.draft;
-  const duplicate = await prisma.device.findFirst({
-    where: {
-      ...(session.deviceId ? { id: { not: session.deviceId } } : {}),
-      vendor: { equals: draft.vendor, mode: "insensitive" },
-      host: { equals: draft.host, mode: "insensitive" },
-      managementPort: draft.managementPort
-    },
-    select: { id: true, capabilities: true }
-  });
-  if (duplicate && !archivedInventory(duplicate.capabilities)) throw new OnboardingDuplicateDeviceError(duplicate.id);
 
   const capabilities: Record<string, unknown> = {
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
@@ -620,17 +674,19 @@ export async function commitOnboardingSession(id: string) {
     capabilities.ciscoDiscovery = session.discovery;
   }
   try {
-    const wasUpdate = Boolean(session.deviceId);
     const persisted = await prisma.$transaction(async (tx) => {
+      const target = await resolveOnboardingRegistrationTarget(tx, draft, session.deviceId);
+      const existingDevice = target.deviceId ? await tx.device.findUnique({ where: { id: target.deviceId } }) : null;
+      const wasUpdate = Boolean(target.deviceId);
       const data = {
         name: draft.name, vendor: draft.vendor, type: deviceType(draft.vendor), host: draft.host,
         managementPort: draft.managementPort, protocol: DeviceProtocol.ssh, credentialId: draft.credentialId,
         environment: draft.environment as DeviceEnvironment,
         tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
-        status: DeviceStatus.online, capabilities: json(capabilities)
+        status: DeviceStatus.online, capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, capabilities))
       };
-      const device = session.deviceId
-        ? await tx.device.update({ where: { id: session.deviceId }, data })
+      const device = target.deviceId
+        ? await tx.device.update({ where: { id: target.deviceId }, data })
         : await tx.device.create({ data });
       const { asset } = await syncDeviceRecordToAsset(tx, device);
       let siteId: string | undefined;
@@ -658,7 +714,7 @@ export async function commitOnboardingSession(id: string) {
         data: {
           deviceId: device.id, action: wasUpdate ? "device.onboarding_verified_updated" : "device.onboarding_verified_created",
           targetType: "Device", targetId: device.id, dryRun: false, approvalStatus: "not_required",
-          metadata: json({ verificationStatus: "verified", connectorInvoked: true, connectionVerified: true, assetId: asset.id, healthSnapshotId: health.id, siteId, locationId })
+          metadata: json({ verificationStatus: "verified", connectorInvoked: true, connectionVerified: true, assetId: asset.id, healthSnapshotId: health.id, siteId, locationId, reactivated: target.reactivated })
         }
       });
       return { device, asset, health };

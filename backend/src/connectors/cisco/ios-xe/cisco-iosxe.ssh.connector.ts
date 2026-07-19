@@ -2,7 +2,6 @@ import { createConnection, type Socket } from "node:net";
 import { Client, type ClientChannel, type ConnectConfig } from "ssh2";
 import { DeviceProtocol, type Device } from "@prisma/client";
 import { env } from "../../../config/env.js";
-import { resolveCredentialById, resolveCredentialByName, type ResolvedDeviceCredential } from "../../../services/credential.service.js";
 import { detectCiscoPlatform } from "./cisco-iosxe.parsers.js";
 import { detectCiscoPrompt, normalizeCiscoTerminalOutput, stripCiscoEchoAndPrompt } from "./cisco-iosxe.prompt.js";
 import { ciscoReadCommand, type CiscoReadCommandId } from "./cisco-iosxe.templates.js";
@@ -17,7 +16,17 @@ export type CiscoIosXeCommandResult = {
   durationMs: number;
 };
 
-type DiagnosticState = Pick<CiscoConnectorDiagnostic, "connectorInvoked" | "transportConnected" | "authenticated" | "shellOpened" | "compatibilityProfile">;
+type DiagnosticState = Pick<CiscoConnectorDiagnostic, "connectorInvoked" | "transportConnected" | "authenticated" | "shellOpened" | "compatibilityProfile" | "legacyCompatibilityRequested" | "legacyCompatibilityApplied" | "connectionPhase">;
+
+type ResolvedDeviceCredential = {
+  name?: string;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+  sudo: boolean;
+  enableSecret?: string;
+};
 
 const REMEDIATION: Record<CiscoConnectionStage, string[]> = {
   input: ["Select a Cisco SSH device and a stored credential reference."],
@@ -43,6 +52,9 @@ export class CiscoConnectorError extends Error {
   readonly userMessage: string;
   readonly remediation: string[];
   readonly compatibilityProfile: CiscoSshCompatibilityProfile;
+  readonly legacyCompatibilityRequested: boolean;
+  readonly legacyCompatibilityApplied: boolean;
+  readonly connectionPhase: CiscoConnectionStage;
   readonly internalCause?: unknown;
 
   constructor(diagnostic: CiscoConnectorDiagnostic, readonly statusCode = 400, internalCause?: unknown) {
@@ -58,6 +70,9 @@ export class CiscoConnectorError extends Error {
     this.userMessage = diagnostic.userMessage;
     this.remediation = diagnostic.remediation;
     this.compatibilityProfile = diagnostic.compatibilityProfile;
+    this.legacyCompatibilityRequested = diagnostic.legacyCompatibilityRequested;
+    this.legacyCompatibilityApplied = diagnostic.legacyCompatibilityApplied;
+    this.connectionPhase = diagnostic.connectionPhase;
     Object.defineProperty(this, "internalCause", { value: internalCause, enumerable: false });
   }
 
@@ -67,7 +82,10 @@ export class CiscoConnectorError extends Error {
       connectorInvoked: this.connectorInvoked, transportConnected: this.transportConnected,
       authenticated: this.authenticated, shellOpened: this.shellOpened,
       userMessage: this.userMessage, remediation: this.remediation,
-      compatibilityProfile: this.compatibilityProfile
+      compatibilityProfile: this.compatibilityProfile,
+      legacyCompatibilityRequested: this.legacyCompatibilityRequested,
+      legacyCompatibilityApplied: this.legacyCompatibilityApplied,
+      connectionPhase: this.connectionPhase
     };
   }
 }
@@ -93,6 +111,7 @@ export function ciscoConnectionSemantic(showVersionOutput: string) {
 }
 
 async function resolveDeviceCredential(device: Pick<Device, "credentialId" | "credentialRef" | "capabilities">, profile: CiscoSshCompatibilityProfile) {
+  const { resolveCredentialById, resolveCredentialByName } = await import("../../../services/credential.service.js");
   let credential: ResolvedDeviceCredential | null = null;
   if (device.credentialId) {
     credential = await resolveCredentialById(device.credentialId);
@@ -101,7 +120,7 @@ async function resolveDeviceCredential(device: Pick<Device, "credentialId" | "cr
     credential = await resolveCredentialByName(device.credentialRef);
   }
   if (!credential) throw connectorError("CISCO_SSH_CREDENTIAL_MISSING", "input", "A stored credential reference is required for Cisco SSH.", {
-      connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile: profile
+      connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile: profile, legacyCompatibilityRequested: profile === "legacy_cisco", legacyCompatibilityApplied: false, connectionPhase: "input"
     }, 400, false);
   const capabilities = device.capabilities && typeof device.capabilities === "object" && !Array.isArray(device.capabilities)
     ? device.capabilities as Record<string, unknown> : {};
@@ -109,7 +128,7 @@ async function resolveDeviceCredential(device: Pick<Device, "credentialId" | "cr
   if (!enableCredentialId) return credential;
   const enableCredential = await resolveCredentialById(enableCredentialId);
   if (!enableCredential?.password) throw connectorError("CISCO_ENABLE_CREDENTIAL_INVALID", "input", "The selected enable credential is missing or is not a password credential.", {
-    connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile: profile
+    connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile: profile, legacyCompatibilityRequested: profile === "legacy_cisco", legacyCompatibilityApplied: false, connectionPhase: "input"
   }, 400, false);
   return { ...credential, enableSecret: enableCredential.password } as ResolvedDeviceCredential & { enableSecret: string };
 }
@@ -118,10 +137,10 @@ export const CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE = {
   key: "legacy_cisco" as const,
   label: "Legacy Cisco IOS Compatibility Profile",
   algorithms: {
-    kex: { prepend: ["diffie-hellman-group14-sha1", "diffie-hellman-group-exchange-sha1"], append: [], remove: [] },
-    serverHostKey: { prepend: ["ssh-rsa"], append: [], remove: [] },
-    cipher: { prepend: ["aes128-cbc", "aes192-cbc", "aes256-cbc", "3des-cbc"], append: [], remove: [] },
-    hmac: { prepend: ["hmac-sha1", "hmac-sha1-96"], append: [], remove: [] }
+    kex: { append: ["diffie-hellman-group14-sha1"], prepend: [], remove: [] },
+    serverHostKey: { append: ["ssh-rsa"], prepend: [], remove: [] },
+    cipher: { append: ["aes128-cbc", "aes192-cbc", "aes256-cbc", "3des-cbc"], prepend: [], remove: [] },
+    hmac: { append: ["hmac-sha1", "hmac-sha1-96"], prepend: [], remove: [] }
   } satisfies NonNullable<ConnectConfig["algorithms"]>
 };
 
@@ -247,9 +266,12 @@ export class CiscoInteractiveSession {
   close() { try { this.stream.end(); } catch { try { this.stream.close(); } catch { /* already closed */ } } }
 }
 
+type CredentialResolver = (device: Pick<Device, "credentialId" | "credentialRef" | "capabilities">, profile: CiscoSshCompatibilityProfile) => Promise<ResolvedDeviceCredential>;
+
 type ConnectorDependencies = {
-  clientFactory: () => Client;
-  tcpConnect: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+  clientFactory?: () => Client;
+  tcpConnect?: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+  credentialResolver?: CredentialResolver;
 };
 
 export class CiscoIosXeSshConnector {
@@ -259,18 +281,28 @@ export class CiscoIosXeSshConnector {
   readonly promptTimeoutMs = 10_000;
   readonly commandTimeoutMs = 20_000;
 
-  constructor(private readonly dependencies: ConnectorDependencies = { clientFactory: () => new Client(), tcpConnect: openTcpSocket }) {}
+  private readonly dependencies: Required<ConnectorDependencies>;
+
+  constructor(dependencies: ConnectorDependencies = {}) {
+    this.dependencies = {
+      clientFactory: () => new Client(),
+      tcpConnect: openTcpSocket,
+      credentialResolver: resolveDeviceCredential,
+      ...dependencies
+    };
+  }
 
   async runReadOnlyCommands(device: Device, commandIds: CiscoReadCommandId[]): Promise<{ connectorInvoked: boolean; results: CiscoIosXeCommandResult[]; warnings: string[]; connection: CiscoConnectionEvidence }> {
     const compatibilityProfile = ciscoCompatibilityProfile(device);
-    let state: DiagnosticState = { connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile };
+    const legacyCompatibilityRequested = compatibilityProfile === "legacy_cisco";
+    let state: DiagnosticState = { connectorInvoked: false, transportConnected: false, authenticated: false, shellOpened: false, compatibilityProfile, legacyCompatibilityRequested, legacyCompatibilityApplied: false, connectionPhase: "input" };
     if (!isCiscoIosXeSshCandidate(device)) throw connectorError("CISCO_DEVICE_UNSUPPORTED", "input", "The selected device is not a Cisco SSH candidate.", state, 400, false);
-    const credential = await resolveDeviceCredential(device, compatibilityProfile);
-    state = { ...state, connectorInvoked: true };
+    const credential = await this.dependencies.credentialResolver(device, compatibilityProfile);
+    state = { ...state, connectorInvoked: true, connectionPhase: "tcp" };
     let socket: Socket;
     try {
       socket = await this.dependencies.tcpConnect(device.host, device.managementPort, this.tcpTimeoutMs);
-      state = { ...state, transportConnected: true };
+      state = { ...state, transportConnected: true, connectionPhase: "ssh_negotiation" };
     } catch (error) { throw mapSshError(error, state); }
 
     const client = this.dependencies.clientFactory();
@@ -279,18 +311,21 @@ export class CiscoIosXeSshConnector {
         let settled = false;
         const finish = (callback: () => void) => { if (settled) return; settled = true; callback(); };
         client.once("ready", () => {
-          state = { ...state, authenticated: true };
+          state = { ...state, authenticated: true, connectionPhase: "authentication" };
           client.shell({ term: "vt100", cols: 160, rows: 48 }, (error, channel) => {
             if (error) return finish(() => reject(connectorError("CISCO_SHELL_OPEN_FAILED", "shell", "Cisco SSH authenticated but an interactive CLI shell could not be opened.", state, 502, true, error)));
-            state = { ...state, shellOpened: true };
+            state = { ...state, shellOpened: true, connectionPhase: "shell" };
             finish(() => resolve(channel));
           });
         });
         client.on("keyboard-interactive", (_name, _instructions, _language, prompts, finishPrompts) => finishPrompts(prompts.map(() => credential.password ?? "")));
         client.once("error", (error) => finish(() => reject(mapSshError(error, state))));
         client.once("close", () => finish(() => reject(connectorError("CISCO_SSH_CLOSED", state.authenticated ? "shell" : "ssh_negotiation", "The Cisco SSH connection closed before the interactive session was ready.", state, 502, true))));
-        client.connect(ciscoConnectConfig(device, credential, compatibilityProfile, socket));
+        const connectConfig = ciscoConnectConfig(device, credential, compatibilityProfile, socket);
+        state = { ...state, legacyCompatibilityApplied: Boolean(connectConfig.algorithms), connectionPhase: "ssh_negotiation" };
+        client.connect(connectConfig);
       });
+      state = { ...state, connectionPhase: "prompt" };
       const session = new CiscoInteractiveSession(stream, state, this.outputLimitBytes, this.promptTimeoutMs, this.commandTimeoutMs);
       try {
         const initialized = await session.initialize("enableSecret" in credential && typeof credential.enableSecret === "string" ? credential.enableSecret : undefined);
@@ -306,9 +341,10 @@ export class CiscoIosXeSshConnector {
           code: semantic === "connected_supported" ? "CISCO_CONNECTED_SUPPORTED" : "CISCO_CONNECTED_UNSUPPORTED",
           stage: platform && !platform.supported ? "platform_detection" : "command", retryable: false,
           userMessage: platform && !platform.supported ? `Cisco SSH succeeded, but platform ${platform.platform} is not supported by the IOS-XE automation path.` : "Cisco interactive SSH and read-only command execution succeeded.",
-          remediation: platform && !platform.supported ? REMEDIATION.platform_detection : [], ...state
+          remediation: platform && !platform.supported ? REMEDIATION.platform_detection : [], ...state,
+          connectionPhase: platform && !platform.supported ? "platform_detection" : "command"
         };
-        return { connectorInvoked: true, results, warnings: initialized.warnings, connection: { semantic, diagnostic, promptMode: initialized.promptMode, compatibilityProfile } };
+        return { connectorInvoked: true, results, warnings: initialized.warnings, connection: { semantic, diagnostic, promptMode: initialized.promptMode, compatibilityProfile, legacyCompatibilityRequested: diagnostic.legacyCompatibilityRequested, legacyCompatibilityApplied: diagnostic.legacyCompatibilityApplied, connectionPhase: diagnostic.connectionPhase } };
       } finally { session.close(); }
     } catch (error) { throw mapSshError(error, state); }
     finally { try { client.end(); } finally { if (!socket.destroyed) socket.destroy(); } }

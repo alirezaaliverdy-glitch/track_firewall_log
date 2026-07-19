@@ -57,14 +57,18 @@ export class OnboardingApiError extends Error {
   status: number;
   detail?: unknown;
   connectorInvoked?: boolean;
+  existingDeviceId?: string;
+  route?: string;
 
-  constructor(message: string, options: { code?: string; status: number; detail?: unknown; connectorInvoked?: boolean }) {
+  constructor(message: string, options: { code?: string; status: number; detail?: unknown; connectorInvoked?: boolean; existingDeviceId?: string; route?: string }) {
     super(message);
     this.name = "OnboardingApiError";
     this.code = options.code;
     this.status = options.status;
     this.detail = options.detail;
     this.connectorInvoked = options.connectorInvoked;
+    this.existingDeviceId = options.existingDeviceId;
+    this.route = options.route;
   }
 }
 
@@ -84,7 +88,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       code: typeof error.code === "string" ? error.code : undefined,
       status: response.status,
       detail: error.detail ?? body.detail,
-      connectorInvoked: typeof error.connectorInvoked === "boolean" ? error.connectorInvoked : undefined
+      connectorInvoked: typeof error.connectorInvoked === "boolean" ? error.connectorInvoked : undefined,
+      existingDeviceId: typeof error.existingDeviceId === "string" ? error.existingDeviceId : typeof asObject(error.detail).existingDeviceId === "string" ? String(asObject(error.detail).existingDeviceId) : undefined,
+      route: typeof error.route === "string" ? error.route : typeof asObject(error.detail).route === "string" ? String(asObject(error.detail).route) : undefined
     });
   }
   return payload as T;

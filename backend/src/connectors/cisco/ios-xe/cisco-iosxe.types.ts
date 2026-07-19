@@ -21,6 +21,9 @@ export type CiscoConnectorDiagnostic = {
   userMessage: string;
   remediation: string[];
   compatibilityProfile: CiscoSshCompatibilityProfile;
+  legacyCompatibilityRequested: boolean;
+  legacyCompatibilityApplied: boolean;
+  connectionPhase: CiscoConnectionStage;
 };
 
 export type CiscoConnectionEvidence = {
@@ -28,4 +31,7 @@ export type CiscoConnectionEvidence = {
   diagnostic: CiscoConnectorDiagnostic;
   promptMode: "user" | "privileged";
   compatibilityProfile: CiscoSshCompatibilityProfile;
+  legacyCompatibilityRequested: boolean;
+  legacyCompatibilityApplied: boolean;
+  connectionPhase: CiscoConnectionStage;
 };

@@ -8,11 +8,13 @@ const onboardingSource = readFileSync(new URL("../src/services/device-onboarding
 test("legacy Cisco IOS SSH profile is explicit and opt-in", () => {
   assert.match(connectorSource, /Legacy Cisco IOS Compatibility Profile/);
   assert.match(connectorSource, /key:\s*"legacy_cisco"/);
-  assert.match(connectorSource, /kex:\s*\{\s*prepend:\s*\["diffie-hellman-group14-sha1"/);
-  assert.match(connectorSource, /serverHostKey:\s*\{\s*prepend:\s*\["ssh-rsa"\]/);
-  assert.match(connectorSource, /hmac:\s*\{\s*prepend:\s*\["hmac-sha1",\s*"hmac-sha1-96"\]/);
+  assert.match(connectorSource, /kex:\s*\{\s*append:\s*\["diffie-hellman-group14-sha1"/);
+  assert.match(connectorSource, /serverHostKey:\s*\{\s*append:\s*\["ssh-rsa"\]/);
+  assert.match(connectorSource, /hmac:\s*\{\s*append:\s*\["hmac-sha1",\s*"hmac-sha1-96"\]/);
   assert.match(connectorSource, /profile === "legacy_cisco"\) config\.algorithms = CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE\.algorithms/);
   assert.match(connectorSource, /ciscoCompatibilityProfile\(device/);
+  assert.match(connectorSource, /legacyCompatibilityApplied/);
+  assert.match(connectorSource, /connectionPhase/);
 });
 
 test("onboarding keeps modern-first Cisco SSH and only retries legacy after approval", () => {

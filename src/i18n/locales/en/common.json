@@ -362,5 +362,12 @@
   "workflowLab.examples.workspaceUnverified.calloutMessage": "The device remains useful for inventory review but stays offline/unknown until a real connector test succeeds.",
   "workspace.status.online": "Online",
   "workspace.status.offline": "Offline",
-  "workspace.status.active": "Active"
+  "workspace.status.active": "Active",
+  "onboarding.messages.platformUnsupported": "SSH connectivity succeeded, but this Cisco platform is not supported for automated IOS-XE discovery. You can open review and register it as unverified.",
+  "onboarding.errors.managementIpConflict": "This management address already belongs to an existing device or asset.",
+  "onboarding.conflict.title": "Management address conflict",
+  "onboarding.conflict.message": "A record with this management address already exists. Open it, edit the address, or cancel registration.",
+  "onboarding.conflict.openExisting": "Open existing device",
+  "onboarding.conflict.editAddress": "Edit address",
+  "onboarding.conflict.cancel": "Cancel"
 }

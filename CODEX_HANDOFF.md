@@ -41,7 +41,7 @@
 ## Device onboarding required-name UX repair (2026-07-18)
 
 - Reproduced the reported `/answers` 400 against persisted Session `0a491d1a-d131-49e9-8cf9-15a603cc99cb`: the selected Credential existed, but the submitted device name was empty. The visible `edge-switch-01` text was only a placeholder, and the backend correctly returned `Device name is required.`
-- Required device identity fields are now explicitly marked. The name placeholder says `Ù…Ø«Ø§Ù„`, empty/invalid values are blocked before the request, the exact Persian validation appears inside the connection form, and focus/scroll moves to the invalid control.
+- Required device identity fields are now explicitly marked. The name placeholder says `مثال`, empty/invalid values are blocked before the request, the exact Persian validation appears inside the connection form, and focus/scroll moves to the invalid control.
 - The server-side validation and controlled connector flow are unchanged. Focused onboarding tests passed 9/9; backend and frontend builds passed. Browser automation was not exposed in this session, so no click-level browser proof is claimed.
 
 ## Direct device/vendor management and ActionPlan history cleanup (2026-07-15)
@@ -63,7 +63,7 @@
 - Fixed the screenshot-reproduced dead end where history-row `Open` changed the deep link but left the operator scrolled below all execution controls. Selecting an ActionPlan now scrolls and focuses the visible review card.
 - History actions now use lifecycle-aware labels (`Review and preview`, `Review and execute`, `Review and retry`, `View result`) and executable pending rows receive primary-button emphasis.
 - Fixed duplicate React keys in structured result rows, which surfaced as console errors for repeated Linux port evidence.
-- Authenticated Playwright proved the requested Persian flow end-to-end: AI Assistant created Linux open-ports ActionPlan -> `Ø±ÙØªÙ† Ø¨Ù‡ Ù…Ø±Ú©Ø² Ø¹Ù…Ù„ÛŒØ§Øª` -> review card in viewport -> preview -> confirm/execute -> dedicated result page with real connector output and `connectorInvoked=true`. No console errors remained, and temporary plans/sessions were deleted.
+- Authenticated Playwright proved the requested Persian flow end-to-end: AI Assistant created Linux open-ports ActionPlan -> `رفتن به مرکز عملیات` -> review card in viewport -> preview -> confirm/execute -> dedicated result page with real connector output and `connectorInvoked=true`. No console errors remained, and temporary plans/sessions were deleted.
 
 ## Dedicated Action result handoff (2026-07-15)
 
@@ -75,7 +75,7 @@
 
 - Fixed the unusable assistant handoff: proposed executable ActionPlans now expose a visible top-of-page `Generate Preview` control in Action Center, followed by `Confirm and Execute` after preview.
 - Added a prominent selected-action handoff card above connection/history content, so operators arriving from the Assistant deep link do not need to search or scroll for approval controls.
-- Authenticated Playwright proved the full Persian flow: select registered Linux device in Assistant, request `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø¨Ø§Ø² Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡`, click `Ø±ÙØªÙ† Ø¨Ù‡ Ù…Ø±Ú©Ø² Ø¹Ù…Ù„ÛŒØ§Øª`, click `Ø³Ø§Ø®Øª Ù¾ÛŒØ´â€ŒÙ†Ù…Ø§ÛŒØ´`, then `ØªØ£ÛŒÛŒØ¯ Ùˆ Ø§Ø¬Ø±Ø§`.
+- Authenticated Playwright proved the full Persian flow: select registered Linux device in Assistant, request `وضعیت پورت های باز رو نشون بده`, click `رفتن به مرکز عملیات`, click `ساخت پیش‌نمایش`, then `تأیید و اجرا`.
 - Real quick-execute returned 200, lifecycle `succeeded`, `connectorInvoked=true`, exit code 0, and live `ss/netstat` stdout. No error boundary or horizontal overflow occurred.
 - All temporary acceptance ActionPlans and AI chat sessions were deleted precisely; ActionPlan count returned to 136.
 
@@ -148,7 +148,7 @@
 - Readiness proof on the healthy user-owned PostgreSQL runtime `127.0.0.1:55432/firewall_log_auth`: long run covered 181 seconds with 10/10 live 200 and 10/10 ready 200; clean body sample showed 10/10 `status=live` and 10/10 `status=ready,databaseReady=true`.
 - Milestone C evidence committed: `9b55d87 fix: restore authentication after database readiness`; MCP opened `/login` and `/dashboard` and showed the authenticated Persian dashboard shell with `/api/auth/me` 200.
 - Limitation: this MCP tool surface has no fill/type/click tools, and the session was already authenticated, so manual credential entry could not be replayed from MCP.
-- Important blocker: the active stable runtime database has zero `DeviceCredential` rows; the required `cisco-f2 â€” admin` Credential Reference is not present. Per Task 20.1A stop condition 4, real Cisco onboarding cannot continue until that saved Credential Reference exists or the original database becomes reachable.
+- Important blocker: the active stable runtime database has zero `DeviceCredential` rows; the required `cisco-f2 — admin` Credential Reference is not present. Per Task 20.1A stop condition 4, real Cisco onboarding cannot continue until that saved Credential Reference exists or the original database becomes reachable.
 - Not claimed: real Cisco connector invocation, Device persistence, animated success, redirect, workspace, dashboard charts, full route matrix, or full acceptance matrix.
 
 ## Task 20.1 - Onboarding workspace/dashboard trace (2026-07-14)
@@ -221,8 +221,8 @@
 ## Task 19.2-A - Visible device registration entry points (2026-07-14)
 
 - Completed Milestone 19.2-A only. No Integrations redesign, external diagnostics, Check-Host adapter, Nmap worker, scan authorization, monitor, finding, or ActionPlan proposal work was started.
-- Dashboard now has a visible `Ø«Ø¨Øª Ø¯Ø³ØªÚ¯Ø§Ù‡ Ø¬Ø¯ÛŒØ¯` primary CTA plus quick actions for network test, domain/IP check, and viewing devices. The Add Device path goes to the existing reusable onboarding engine at `/assets/devices/new`.
-- Product State Contract advanced to `19.2-A` and now keeps implemented Add Device visible in the generated Assets navigation. The Assets children are `Ù†Ù…Ø§ÛŒ Ú©Ù„ÛŒ`, `ØªØ¬Ù‡ÛŒØ²Ø§Øª`, `Ø«Ø¨Øª Ø¯Ø³ØªÚ¯Ø§Ù‡`, and `ÙˆÙ†Ø¯ÙˆØ±Ù‡Ø§`.
+- Dashboard now has a visible `ثبت دستگاه جدید` primary CTA plus quick actions for network test, domain/IP check, and viewing devices. The Add Device path goes to the existing reusable onboarding engine at `/assets/devices/new`.
+- Product State Contract advanced to `19.2-A` and now keeps implemented Add Device visible in the generated Assets navigation. The Assets children are `نمای کلی`, `تجهیزات`, `ثبت دستگاه`, and `وندورها`.
 - Vendor onboarding CTAs now use explicit vendor labels for Cisco, FortiGate, MikroTik, and Linux while still routing through `/assets/vendors/:vendorKey/devices/new`.
 - Safety boundary unchanged: no device mutation, connector execution, credential access, `.env` access, migration mutation, destructive database command, external diagnostic call, or Nmap execution occurred.
 - Validation passed: Prisma validate, focused Product State/onboarding backend tests 9/9, backend build, frontend build, i18n/primary-copy guard, UTF-8 guard, and diff check. A mistaken full backend-suite run also reached 204/205 before failing only on the expected pre-update Product State version assertion; the focused rerun passed after updating the assertion.
@@ -234,7 +234,7 @@
 - Execute clients resolve the latest persisted ActionPlan immediately before both normal and quick execution and send its `actionPlanRevision`. The backend also resolves an older requested revision to the current stored revision and audits that convergence.
 - Assistant now returns one authoritative action contract for `canCreateActionPlan`, `manualOnly`, executability, support/implementation state, execution mode, and ActionPlan lifecycle. The UI consumes that contract and displays the exact plan ID, revision, lifecycle state, and execution mode.
 - The stale-revision regression executed a changed approved plan through a fake connector and proved revision 2, approved/executing revision 2, no stale state, no stale exception, and `connectorInvoked=true`.
-- In the existing authenticated Playwright browser/context, Persian Assistant request `Ù¾ÙˆØ±Øª 546 Ø±Ø§ Ø¨Ø¨Ù†Ø¯` created plan `cmrj3z0dc0009xslv1ba6moxs`, handed it to the exact Action Center route, executed it, and opened its result route. `POST /quick-execute` returned 200, final status was `succeeded`/verified no-change, the connector ran, `connectorInvoked=true`, and the console had zero errors.
+- In the existing authenticated Playwright browser/context, Persian Assistant request `پورت 546 را ببند` created plan `cmrj3z0dc0009xslv1ba6moxs`, handed it to the exact Action Center route, executed it, and opened its result route. `POST /quick-execute` returned 200, final status was `succeeded`/verified no-change, the connector ran, `connectorInvoked=true`, and the console had zero errors.
 - Validation passed: Prisma validate, backend build, command catalog 137, backend 205/205, frontend build, locale/primary-copy checks, UTF-8 guard, and diff check. No `.env`, credential, migration, destructive database operation, or unrelated connector was touched.
 
 ## Task 19.1 Milestone R-G - Global control audit and Playwright acceptance (2026-07-13)
@@ -482,28 +482,28 @@
 - Fixed `/api/action-sessions/:id/build-plan` for completed FortiGate VPN wizard sessions: partial/planned VPN no longer returns a dead-end 409 after required fields are collected.
 - `fortigate_guided_vpn_setup` now creates a persisted preview-only ActionPlan with `vendor=fortigate`, `connectorType=fortigate-ssh`, `source=guided_action_wizard`, `implementationState=partial`, `executionSupport=planned_or_partial`, `executable=false`, missing template names, Persian structured summary, safe CLI outline, verification plan, and rollback plan.
 - Added Prisma enum values `fortigate_guided_vpn_setup` and `fortigate_guided_workflow_preview`. Prisma enum names cannot contain dots, so the requested dotted identity is stored in metadata as `actionType=fortigate.guided_vpn_setup` while the DB action type is `fortigate_guided_vpn_setup`.
-- Added backend execution guards and Action Center UI gating so preview-only guided plans show `Ø§ÛŒÙ† Ø§Ú©Ø´Ù† Ù‡Ù†ÙˆØ² Ø§Ø¬Ø±Ø§ÛŒ ÙˆØ§Ù‚Ø¹ÛŒ Ú©Ø§Ù…Ù„ Ù†Ø¯Ø§Ø±Ø¯.` and never expose confirm/execute; direct execute attempts are blocked before connector invocation.
+- Added backend execution guards and Action Center UI gating so preview-only guided plans show `این اکشن هنوز اجرای واقعی کامل ندارد.` and never expose confirm/execute; direct execute attempts are blocked before connector invocation.
 - FortiGate VPN remains preview-only because the existing compiler does not yet verify the full Phase1/Phase2/route/policy multi-step CLI sequence. No fake execution or success was added, and PSK/password values are masked/excluded from persisted preview/audit payloads.
-- Updated the Guided Action Wizard success state: executable plans show `Ù¾ÛŒØ´â€ŒÙ†Ù…Ø§ÛŒØ´ Ø§Ú©Ø´Ù† Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯.`; preview-only plans show `Ù¾ÛŒØ´â€ŒÙ†Ù…Ø§ÛŒØ´ Ø³Ø§Ø®ØªØ§Ø± Ø§Ú©Ø´Ù† Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯ØŒ Ø§Ù…Ø§ Ø§Ø¬Ø±Ø§ÛŒ ÙˆØ§Ù‚Ø¹ÛŒ Ø§ÛŒÙ† Ø³Ù†Ø§Ø±ÛŒÙˆ Ù‡Ù†ÙˆØ² Ú©Ø§Ù…Ù„ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.` with a `Ù…Ø´Ø§Ù‡Ø¯Ù‡ Ù¾ÛŒØ´â€ŒÙ†Ù…Ø§ÛŒØ´` path.
+- Updated the Guided Action Wizard success state: executable plans show `پیش‌نمایش اکشن ساخته شد.`; preview-only plans show `پیش‌نمایش ساختار اکشن ساخته شد، اما اجرای واقعی این سناریو هنوز کامل نشده است.` with a `مشاهده پیش‌نمایش` path.
 - Validation passed: `npm run prisma:generate`, local enum migration apply, backend `npm run build`, backend `npm test` (140/140), and root `pnpm build` with the existing chunk-size/dynamic-import warnings.
 
 ## Task 17.2B - Guided Wizard for Multi-Step Requests Without Device (2026-07-09)
 
 - Changed the central resolver path so clear multi-step creation requests return `mode=guided_workflow` before generic/manual fallback even when no device is selected.
 - `/api/commands/ai-propose` no longer returns the chat-only "select device first" dead-end for guided requests; it returns a guided blueprint, `deviceId=null`, `vendor=null` when unresolved, and creates no ActionPlan.
-- `/api/action-sessions/start` now supports pending sessions with no device. The wizard first exposes `device_selection` (`Ø§Ù†ØªØ®Ø§Ø¨ Ø¯Ø³ØªÚ¯Ø§Ù‡`), then resolves the selected device from the DB and switches to the matching vendor blueprint.
+- `/api/action-sessions/start` now supports pending sessions with no device. The wizard first exposes `device_selection` (`انتخاب دستگاه`), then resolves the selected device from the DB and switches to the matching vendor blueprint.
 - Bottom chatbot and Command Catalog AI fallback start an ActionSession and navigate to `/guided-actions/:sessionId`; normal ActionPlans are still created only after wizard completion and preview build.
 - Preserved protected execution behavior: no raw AI command execution, no fake success, no connector success without `connectorInvoked=true`, and no changes to quick-controlled lab mode.
 - Validation passed: backend `npm run build`, backend `npm test` (139/139), and root `pnpm build` with the existing large-chunk warning.
 
 ## Task 17.2A - Guided Workflow Routing for Multi-Step Requests (2026-07-09)
 
-- Fixed guided workflow routing so clear multi-step requests such as `Ø¨Ø±Ø§Ù… vpn Ø¨Ø³Ø§Ø²`, `Ø¨Ø±Ø§Ù… vdom Ø¨Ø³Ø§Ø²`, and `zone Ø¨Ø³Ø§Ø²` return `mode=guided_workflow` before generic/custom AI fallback can create an ActionPlan.
+- Fixed guided workflow routing so clear multi-step requests such as `برام vpn بساز`, `برام vdom بساز`, and `zone بساز` return `mode=guided_workflow` before generic/custom AI fallback can create an ActionPlan.
 - `/api/commands/ai-propose` now resolves `selectedDeviceId` from the DB and uses the real device vendor/connector context; FortiGate resolves to `vendor=fortigate` and `connectorType=fortigate-ssh`, not `unknown`.
-- Missing selected device for guided intents returns Persian clarification `Ø§ÙˆÙ„ Ø¯Ø³ØªÚ¯Ø§Ù‡ Ù…Ù‚ØµØ¯ Ø±Ø§ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†.` and creates no `custom_vendor_action`, `generic_security_action`, or `unsupported_vendor` plan.
-- Bottom chatbot now sends selected device context to the same resolver, displays `Ø§ÛŒÙ† Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ú†Ù†Ø¯Ù…Ø±Ø­Ù„Ù‡â€ŒØ§ÛŒ Ø§Ø³Øª. Ø¨Ø±Ø§ÛŒ Ø§Ø¯Ø§Ù…Ù‡ Ø¨Ø§ÛŒØ¯ Ú†Ù†Ø¯ Ù…Ù‚Ø¯Ø§Ø± Ø±Ø§ ÙˆØ§Ø±Ø¯ Ú©Ù†ÛŒØ¯.`, shows `Ø´Ø±ÙˆØ¹ Ø³Ø§Ø®Øª Ù…Ø±Ø­Ù„Ù‡â€ŒØ§ÛŒ`, starts an ActionSession, and opens `/guided-actions/:sessionId`.
+- Missing selected device for guided intents returns Persian clarification `اول دستگاه مقصد را انتخاب کن.` and creates no `custom_vendor_action`, `generic_security_action`, or `unsupported_vendor` plan.
+- Bottom chatbot now sends selected device context to the same resolver, displays `این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید.`, shows `شروع ساخت مرحله‌ای`, starts an ActionSession, and opens `/guided-actions/:sessionId`.
 - Added requested blueprint IDs and routing coverage: FortiGate VPN/VDOM/Zone plus existing Policy/VIP/Route/VLAN; MikroTik/Linux planned guided placeholders open the wizard without fake execution.
-- FortiGate VPN wizard now uses `fortigate_guided_vpn_setup` with `vpnType` as a fixed select in step `Ù†ÙˆØ¹ VPN`; VDOM is planned/high-risk, Zone is implemented via the existing FortiGate create-zone template.
+- FortiGate VPN wizard now uses `fortigate_guided_vpn_setup` with `vpnType` as a fixed select in step `نوع VPN`; VDOM is planned/high-risk, Zone is implemented via the existing FortiGate create-zone template.
 - Preserved protected lab behavior: no raw AI execution, no fake success, no connector success without `connectorInvoked=true`, and no changes to `ACTION_EXECUTION_MODE=quick_controlled` or `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true`.
 - Validation passed: `npm run validate:command-catalog`, backend `npm run build`, backend `npm test` (139/139), and root `pnpm build` with the existing large-chunk warning. Playwright MCP was not available in this session.
 
@@ -511,9 +511,9 @@
 
 - Added backend-owned guided action infrastructure under `backend/src/guided-actions/`: global blueprint types, validators, registry, in-memory ActionSession service, and `/api/action-sessions/*` routes.
 - Added FortiGate guided blueprints for firewall policy creation, address object creation, service object creation, VIP/port forward, static route, IPsec VPN, SSL VPN, VLAN interface creation, and policy enable/disable/move.
-- Fixed the regression for `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§Ù…Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡`: Linux maps to `linux_list_open_ports`; FortiGate maps to `fortigate_show_interfaces` with no invented `srcInterface`/`srcintf`; vendorless ambiguous port requests return a Persian clarification.
+- Fixed the regression for `وضعیت پورت هامو نشون بده`: Linux maps to `linux_list_open_ports`; FortiGate maps to `fortigate_show_interfaces` with no invented `srcInterface`/`srcintf`; vendorless ambiguous port requests return a Persian clarification.
 - Resolver modes now include `guided_workflow`, `clarification`, and `manual_or_not_supported` while preserving executable ActionPlan creation for complete registered templates.
-- Frontend Command Catalog AI fallback opens a Persian `Ø³Ø§Ø®Øª Ù…Ø±Ø­Ù„Ù‡â€ŒØ§ÛŒ Ø§Ú©Ø´Ù†` wizard for guided workflows and still sends execution to Action Center only after plan build/confirmation.
+- Frontend Command Catalog AI fallback opens a Persian `ساخت مرحله‌ای اکشن` wizard for guided workflows and still sends execution to Action Center only after plan build/confirmation.
 - Official Fortinet docs checked for `config firewall address`; remaining FortiGate enums are sourced from existing project templates or marked partial/planned.
 - Validation passed: `npm run validate:command-catalog`, `npm run build`, `npm test` (133/133), and root `pnpm build` with the existing Vite large-chunk warning.
 
@@ -540,7 +540,7 @@
 - FortiGate now has a full-control action registry in `backend/src/fortigate/full-control-registry.ts` with the requested metadata fields: action type, Persian title, category/risk, read/create/update/delete/enable/disable templates, params, prechecks, preview diff, verification commands, rollback template, parser, and UI hints.
 - The registry feeds command catalog items and execution template registration, expanding the FortiGate catalog to CRUD/read/update/delete/enable/disable coverage for interfaces/VLANs, zones, objects/services, firewall policies, VIP/IP pools, routing/DNS/NTP, VPN, admin access, VDOM, HA, and SD-WAN.
 - `fortigate-ssh` remains the only execution path. FortiGate actions still require selected device, structured params, preview/confirmation, PolicyGuard, connector invocation, audit, and real output; success remains tied to `connectorInvoked=true`.
-- Persian resolver coverage now maps acceptance examples such as `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ ÙØ§ÛŒØ±ÙˆØ§Ù„ Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡`, `Ø±ÙˆÛŒ port1 ÙÙ‚Ø· ping ssh ÙØ¹Ø§Ù„ Ú©Ù†`, `ÛŒÙ‡ zone Ø¨Ù‡ Ø§Ø³Ù… DMZ Ø¨Ø³Ø§Ø²`, `policy Ø¬Ø¯ÛŒØ¯ Ø¨Ø±Ø§ÛŒ lan Ø¨Ù‡ dmz Ø¨Ø³Ø§Ø²`, and `ÙˆØ¶Ø¹ÛŒØª vpn Ù‡Ø§Ù…Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` to registered FortiGate ActionPlans rather than generic text.
+- Persian resolver coverage now maps acceptance examples such as `وضعیت پورت های فایروال رو نشون بده`, `روی port1 فقط ping ssh فعال کن`, `یه zone به اسم DMZ بساز`, `policy جدید برای lan به dmz بساز`, and `وضعیت vpn هامو نشون بده` to registered FortiGate ActionPlans rather than generic text.
 - Secrets remain protected: raw PSK/plain secrets are rejected for VPN creation/update; secret-sensitive flows require `pskSecretRef` and never expose PSK/API tokens/passwords in UI/model logs.
 - Migration `20260709120000_task17_1_fortigate_full_control` adds the new FortiGate ActionType/AiIntentType enum values and was applied locally.
 - Validation passed: `npm run prisma:generate`, `npm run validate:command-catalog` (136 items), `npm run build`, `npm test` (125/125), and root `pnpm build` with the existing Vite large-chunk warning.
@@ -570,48 +570,48 @@
 - Daily Check v1 is real, read-only, connector-backed, and rendered as Persian structured sections; success still requires `connectorInvoked=true`.
 - Migration: `20260708120000_fortigate_readonly_discovery` adds `fortigate_daily_check` to both Prisma enums.
 
-## Ù‡Ø¯Ù ÙØ¹Ù„ÛŒ
+## هدف فعلی
 
-- Ø¬Ù‡Øª Ù…Ø­ØµÙˆÙ„: Persian Network & Security Command Center Ø¨Ø§ Ù…Ø³ÛŒØ± `AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`.
-- Ú©Ø§Ø± ÙØ¹Ø§Ù„: Task 16 ØªØ§ Ø§ÛŒÙ†Ø¬Ø§ Ø¨Ø±Ø§ÛŒ Daily Check Ú†Ù†Ø¯ÙˆÙ†Ø¯ÙˆØ±ÛŒØŒ Linux Service HealthØŒ Ø¨Ø§Ø² Ø´Ø¯Ù† Ù†ØªÛŒØ¬Ù‡ Ø¯Ø± ØªØ¨ Ø¬Ø¯ÛŒØ¯ØŒ Ùˆ Action Result UX ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯Ù‡ Ø§Ø³Øª.
+- جهت محصول: Persian Network & Security Command Center با مسیر `AI/Catalog -> ActionPlan -> Preview -> User Confirm -> Connector -> Audit/Result`.
+- کار فعال: Task 16 تا اینجا برای Daily Check چندوندوری، Linux Service Health، باز شدن نتیجه در تب جدید، و Action Result UX تکمیل شده است.
 
-## ØªØºÛŒÛŒØ±Ø§Øª Ø§Ù†Ø¬Ø§Ù…â€ŒØ´Ø¯Ù‡
+## تغییرات انجام‌شده
 
-- Daily Check backend Ø¨Ø±Ø§ÛŒ Linux Ùˆ MikroTik Ø¨Ø§ Ù¾Ø±ÙˆÙØ§ÛŒÙ„â€ŒÙ‡Ø§ÛŒ vendor-aware Ùˆ Ø®Ø±ÙˆØ¬ÛŒ Ø³Ø§Ø®ØªØ§Ø±ÛŒØ§ÙØªÙ‡ Ø³Ø®Øªâ€ŒÚ¯ÛŒØ±Ø§Ù†Ù‡ Ø´Ø¯.
-- UI ÙØ§Ø±Ø³ÛŒ Daily Check Ø§Ø¶Ø§ÙÙ‡/Ø¨Ø§Ø²Ù†ÙˆÛŒØ³ÛŒ Ø´Ø¯ Ùˆ ÙˆØ¶Ø¹ÛŒØª `Ø§Ø¬Ø±Ø§ÛŒ ÙˆØ§Ù‚Ø¹ÛŒ` / `Ú†Ú©â€ŒÙ„ÛŒØ³Øª Ø¯Ø³ØªÛŒ` / `Ø¯Ø± Ø­Ø§Ù„ ØªÙˆØ³Ø¹Ù‡` Ø±Ø§ ØµØ§Ø¯Ù‚Ø§Ù†Ù‡ Ù†Ø´Ø§Ù† Ù…ÛŒâ€ŒØ¯Ù‡Ø¯.
-- Linux Service Health Ø¨Ø§ Ø¯Ø³ØªÙˆØ±Ø§Øª `running/failed/status/important services` Ø¨Ù‡ Ú©Ø§ØªØ§Ù„ÙˆÚ¯ØŒ template registryØŒ plannerØŒ connector Ùˆ UI Ø§Ø¶Ø§ÙÙ‡ Ø´Ø¯.
-- Result UX Ø·ÙˆØ±ÛŒ Ø³Ø®Øªâ€ŒÚ¯ÛŒØ±Ø§Ù†Ù‡ Ø´Ø¯ Ú©Ù‡ Ø¨Ø¹Ø¯ Ø§Ø² Ø§Ø¬Ø±Ø§ÛŒ Ù…ÙˆÙÙ‚ØŒ Ù†ØªÛŒØ¬Ù‡ Ø¯Ø± ØªØ¨ Ø¬Ø¯ÛŒØ¯ Ø¨Ø§Ø² Ø´ÙˆØ¯ Ùˆ Ø¯Ø± ØµÙˆØ±Øª popup block Ù„ÛŒÙ†Ú© fallback Ù†Ø´Ø§Ù† Ø¯Ø§Ø¯Ù‡ Ø´ÙˆØ¯.
-- `ActionResultView` Ùˆ formatterÙ‡Ø§ÛŒ Ù…Ø±ØªØ¨Ø· Ø¨Ø±Ø§ÛŒ Linux/MikroTik/Daily Check Ùˆ Service Health Ø¨Ø§Ø²Ù†ÙˆÛŒØ³ÛŒ Ø´Ø¯Ù†Ø¯.
-- backend build/test Ùˆ frontend build Ù¾Ø§Ø³ Ø´Ø¯Ù†Ø¯Ø› Ø¨Ø±Ø§ÛŒ Ø¹Ø¨ÙˆØ± ØªØ³Øªâ€ŒÙ‡Ø§ÛŒ plan creationØŒ migration enum Ø¬Ø¯ÛŒØ¯ Ø¨Ù‡ Ø¯ÛŒØªØ§Ø¨ÛŒØ³ Ù…Ø­Ù„ÛŒ execute Ø´Ø¯.
+- Daily Check backend برای Linux و MikroTik با پروفایل‌های vendor-aware و خروجی ساختاریافته سخت‌گیرانه شد.
+- UI فارسی Daily Check اضافه/بازنویسی شد و وضعیت `اجرای واقعی` / `چک‌لیست دستی` / `در حال توسعه` را صادقانه نشان می‌دهد.
+- Linux Service Health با دستورات `running/failed/status/important services` به کاتالوگ، template registry، planner، connector و UI اضافه شد.
+- Result UX طوری سخت‌گیرانه شد که بعد از اجرای موفق، نتیجه در تب جدید باز شود و در صورت popup block لینک fallback نشان داده شود.
+- `ActionResultView` و formatterهای مرتبط برای Linux/MikroTik/Daily Check و Service Health بازنویسی شدند.
+- backend build/test و frontend build پاس شدند؛ برای عبور تست‌های plan creation، migration enum جدید به دیتابیس محلی execute شد.
 
-## ÙØ§ÛŒÙ„â€ŒÙ‡Ø§ÛŒ Ù…Ù‡Ù…
+## فایل‌های مهم
 
-- `AGENTS.md`: Ù‚ÙˆØ§Ø¹Ø¯ Ø«Ø§Ø¨Øª Ù¾Ø±ÙˆÚ˜Ù‡ØŒ lab modeØŒ Ù…Ø­Ø¯ÙˆØ¯ÛŒØªâ€ŒÙ‡Ø§ÛŒ Ø§Ø¬Ø±Ø§ÛŒ ÙˆØ§Ù‚Ø¹ÛŒ.
-- `backend/src/daily-check/vendor-daily-check-profiles.ts`: Ù…Ù†Ø¨Ø¹ ÙˆØ§Ø­Ø¯ Ù¾Ø±ÙˆÙØ§ÛŒÙ„ Daily Check Ø¨Ø±Ø§ÛŒ Ù‡Ù…Ù‡ vendorÙ‡Ø§.
-- `backend/src/daily-check/daily-check-engine.ts`: Ø³Ø§Ø®Øª Ø®Ø±ÙˆØ¬ÛŒ Ù†Ù‡Ø§ÛŒÛŒ Daily Check Ø¨Ø§ `overallStatus`, `score`, `sections`, `rawOutputs`.
-- `backend/src/commands/catalog/index.ts`: Ø¢ÛŒØªÙ…â€ŒÙ‡Ø§ÛŒ Ø¬Ø¯ÛŒØ¯ Linux Service Health Ùˆ Daily Check.
-- `backend/src/commands/execution/execution-template-registry.ts`: templateÙ‡Ø§ÛŒ Ø§Ø¬Ø±Ø§ÛŒÛŒ Linux Service Health.
-- `backend/src/connectors/vendors/linux-edge.planner.ts`: command planÙ‡Ø§ÛŒ read-only Ù„ÛŒÙ†ÙˆÚ©Ø³ Ø¨Ø±Ø§ÛŒ Ø³Ø±ÙˆÛŒØ³â€ŒÙ‡Ø§.
-- `backend/src/connectors/linux-ssh.connector.ts`: Ø§Ø¬Ø±Ø§ÛŒ ÙˆØ§Ù‚Ø¹ÛŒ templateÙ‡Ø§ÛŒ Ù„ÛŒÙ†ÙˆÚ©Ø³ÛŒ Ùˆ read-only commands.
-- `src/components/daily-check/DailyCheckPanel.tsx`: Ù¾Ù†Ù„ ÙØ§Ø±Ø³ÛŒ Daily Check.
-- `src/components/services/LinuxServiceHealthPanel.tsx`: Ù¾Ù†Ù„ Ø³Ù„Ø§Ù…Øª Ø³Ø±ÙˆÛŒØ³â€ŒÙ‡Ø§ÛŒ Ù„ÛŒÙ†ÙˆÚ©Ø³.
-- `src/components/actions/ActionCenterPanel.tsx`: Ø§Ø¬Ø±Ø§ÛŒ ActionPlan Ùˆ Ø¨Ø§Ø² Ú©Ø±Ø¯Ù† Ù†ØªÛŒØ¬Ù‡ Ø¯Ø± ØªØ¨ Ø¬Ø¯ÛŒØ¯ Ø¨Ø§ fallback.
-- `src/components/actions/ActionResultView.tsx`: Ù†Ù…Ø§ÛŒØ´ Ø³Ø§Ø®ØªØ§Ø±ÛŒØ§ÙØªÙ‡ Ù†ØªÛŒØ¬Ù‡ Ø§Ø¬Ø±Ø§.
-- `src/features/actions/actionResultFormatter.ts`: formatterÙ‡Ø§ÛŒ Ù†ØªÛŒØ¬Ù‡ Ø¨Ø±Ø§ÛŒ Ø§Ú©Ø´Ù†â€ŒÙ‡Ø§ÛŒ Linux/MikroTik.
+- `AGENTS.md`: قواعد ثابت پروژه، lab mode، محدودیت‌های اجرای واقعی.
+- `backend/src/daily-check/vendor-daily-check-profiles.ts`: منبع واحد پروفایل Daily Check برای همه vendorها.
+- `backend/src/daily-check/daily-check-engine.ts`: ساخت خروجی نهایی Daily Check با `overallStatus`, `score`, `sections`, `rawOutputs`.
+- `backend/src/commands/catalog/index.ts`: آیتم‌های جدید Linux Service Health و Daily Check.
+- `backend/src/commands/execution/execution-template-registry.ts`: templateهای اجرایی Linux Service Health.
+- `backend/src/connectors/vendors/linux-edge.planner.ts`: command planهای read-only لینوکس برای سرویس‌ها.
+- `backend/src/connectors/linux-ssh.connector.ts`: اجرای واقعی templateهای لینوکسی و read-only commands.
+- `src/components/daily-check/DailyCheckPanel.tsx`: پنل فارسی Daily Check.
+- `src/components/services/LinuxServiceHealthPanel.tsx`: پنل سلامت سرویس‌های لینوکس.
+- `src/components/actions/ActionCenterPanel.tsx`: اجرای ActionPlan و باز کردن نتیجه در تب جدید با fallback.
+- `src/components/actions/ActionResultView.tsx`: نمایش ساختاریافته نتیجه اجرا.
+- `src/features/actions/actionResultFormatter.ts`: formatterهای نتیجه برای اکشن‌های Linux/MikroTik.
 
-## Ú©Ø§Ø±Ù‡Ø§ÛŒ Ø¨Ø§Ù‚ÛŒâ€ŒÙ…Ø§Ù†Ø¯Ù‡
+## کارهای باقی‌مانده
 
-- ÙÙˆØ±ÛŒ:
-  - Ù¾Ø§Ú©â€ŒØ³Ø§Ø²ÛŒ mojibakeÙ‡Ø§ÛŒ Ù‚Ø¯ÛŒÙ…ÛŒ Ø¯Ø± ÙØ§ÛŒÙ„â€ŒÙ‡Ø§ÛŒÛŒ Ú©Ù‡ Ø®Ø§Ø±Ø¬ Ø§Ø² Ù…Ø­Ø¯ÙˆØ¯Ù‡ Ù…Ø³ØªÙ‚ÛŒÙ… Task 16 Ù…Ø§Ù†Ø¯Ù‡â€ŒØ§Ù†Ø¯.
-  - Ø§Ú¯Ø± Ù…Ø­ÛŒØ·â€ŒÙ‡Ø§ÛŒ Ø¯ÛŒÚ¯Ø± Ø§Ø² Ø¯ÛŒØªØ§Ø¨ÛŒØ³ Ù…Ø´ØªØ±Ú© Ø§Ø³ØªÙØ§Ø¯Ù‡ Ù…ÛŒâ€ŒÚ©Ù†Ù†Ø¯ØŒ migration Task 16 Ø±ÙˆÛŒ Ø¢Ù†â€ŒÙ‡Ø§ Ù‡Ù… Ø§Ø¹Ù…Ø§Ù„ Ø´ÙˆØ¯.
-- Ù†Ø²Ø¯ÛŒÚ©:
-  - Ø§ÙØ²ÙˆØ¯Ù† formatter Ùˆ UX Ø¹Ù…ÛŒÙ‚â€ŒØªØ± Ø¨Ø±Ø§ÛŒ vendorÙ‡Ø§ÛŒ ØºÛŒØ± Linux/MikroTik ÙˆÙ‚ØªÛŒ connector ÙˆØ§Ù‚Ø¹ÛŒ Ø¢Ù…Ø§Ø¯Ù‡ Ø´Ø¯.
-  - Ø§Ø¶Ø§ÙÙ‡ Ú©Ø±Ø¯Ù† Ù†Ù…Ø§ÛŒØ´ Ù…Ø³ØªÙ‚ÛŒÙ… Ù†ØªÛŒØ¬Ù‡ Daily Check Ø¯Ø± tab Ø¬Ø¯ÛŒØ¯ Ø§Ø² Ø¯Ø§Ø®Ù„ Ù¾Ù†Ù„ Daily CheckØŒ Ø§Ú¯Ø± later execution entrypoint Ù…Ø³ØªÙ‚Ù„ Ø§Ø¶Ø§ÙÙ‡ Ø´ÙˆØ¯.
-- Ø¨Ø¹Ø¯Ø§Ù‹:
-  - connector ÙˆØ§Ù‚Ø¹ÛŒ Ø¨Ø±Ø§ÛŒ FortiGate/Cisco/pfSense/Juniper/Palo Alto/Windows/Docker/Kubernetes.
-  - Ú©ÙˆÚ†Ú©â€ŒØ³Ø§Ø²ÛŒ chunk ÙØ±Ø§Ù†Øªâ€ŒØ§Ù†Ø¯ Ùˆ code-splitting.
+- فوری:
+  - پاک‌سازی mojibakeهای قدیمی در فایل‌هایی که خارج از محدوده مستقیم Task 16 مانده‌اند.
+  - اگر محیط‌های دیگر از دیتابیس مشترک استفاده می‌کنند، migration Task 16 روی آن‌ها هم اعمال شود.
+- نزدیک:
+  - افزودن formatter و UX عمیق‌تر برای vendorهای غیر Linux/MikroTik وقتی connector واقعی آماده شد.
+  - اضافه کردن نمایش مستقیم نتیجه Daily Check در tab جدید از داخل پنل Daily Check، اگر later execution entrypoint مستقل اضافه شود.
+- بعداً:
+  - connector واقعی برای FortiGate/Cisco/pfSense/Juniper/Palo Alto/Windows/Docker/Kubernetes.
+  - کوچک‌سازی chunk فرانت‌اند و code-splitting.
 
-## Ø¯Ø³ØªÙˆØ±Ø§ØªÛŒ Ú©Ù‡ Ø§Ø¬Ø±Ø§ Ø´Ø¯Ù‡
+## دستوراتی که اجرا شده
 
 - `git status --short`
 - `Get-Content AGENTS.md`
@@ -619,34 +619,34 @@
 - `Get-Content docs/CURRENT_STATUS.md`
 - `Get-Content docs/TASK_HISTORY.md`
 - `rg -n "window.open|openActionResultInNewTab|ActionResultView|DailyCheckPanel|LinuxServiceHealthPanel|task16" -S backend src`
-- `npm run prisma:generate` Ø¯Ø± `backend`
-- `npm run validate:command-catalog` Ø¯Ø± `backend`
-- `npm run build` Ø¯Ø± `backend`
-- `npm test` Ø¯Ø± `backend`
+- `npm run prisma:generate` در `backend`
+- `npm run validate:command-catalog` در `backend`
+- `npm run build` در `backend`
+- `npm test` در `backend`
 - `pnpm build`
-- `npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql` Ø¯Ø± `backend`
+- `npx prisma db execute --file prisma/migrations/20260707160000_task16_linux_service_health/migration.sql` در `backend`
 
-## Ù†Ú©ØªÙ‡â€ŒÙ‡Ø§ÛŒ Ù…Ù‡Ù…
+## نکته‌های مهم
 
 - Supported actions execute after user confirmation in lab unrestricted mode.
 - Never mark succeeded unless connectorInvoked=true.
 - Linux and MikroTik are currently the strongest real execution targets.
 - Other vendors may be manual/planned unless connectors are ready.
-- Persian-first flow Ø¨Ø§ÛŒØ¯ Ø­ÙØ¸ Ø´ÙˆØ¯.
-- `ACTION_EXECUTION_MODE=quick_controlled` Ùˆ `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` Ù†Ø¨Ø§ÛŒØ¯ ØªØºÛŒÛŒØ± Ú©Ù†Ù†Ø¯.
-- Ù‡ÛŒÚ† secretØŒ tokenØŒ password ÛŒØ§ `.env` value ÙˆØ§Ø±Ø¯ Ú©Ø¯ØŒ Ø¯Ø§Ú©ØŒ ÛŒØ§ Ø®Ø±ÙˆØ¬ÛŒ Ù†Ø´ÙˆØ¯.
+- Persian-first flow باید حفظ شود.
+- `ACTION_EXECUTION_MODE=quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` نباید تغییر کنند.
+- هیچ secret، token، password یا `.env` value وارد کد، داک، یا خروجی نشود.
 
-- Task 16.2: Command Search AI fallback now routes through `backend/src/ai/ai-template-resolver.ts` before any manual fallback. Persian port-status requests such as `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø±Ùˆ Ù…ÛŒØ®ÙˆØ§Ù… Ø¨Ø¨ÛŒÙ†Ù…` on a Linux device create executable `linux_read_listening_ports` ActionPlans with `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, `executionSupport=connector`, and metadata source `command_search_ai_fallback`. No selected device returns `needs_input` with the Persian device-selection message. Backend build/tests and frontend build passed; frontend keeps the existing large-chunk warning.
+- Task 16.2: Command Search AI fallback now routes through `backend/src/ai/ai-template-resolver.ts` before any manual fallback. Persian port-status requests such as `وضعیت پورت های رو میخوام ببینم` on a Linux device create executable `linux_read_listening_ports` ActionPlans with `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, `executionSupport=connector`, and metadata source `command_search_ai_fallback`. No selected device returns `needs_input` with the Persian device-selection message. Backend build/tests and frontend build passed; frontend keeps the existing large-chunk warning.
 
-- Task 16.3: Persian intent understanding is now deterministic before AI/manual fallback through `backend/src/ai/persian-intent-router.ts`, consumed by `ai-template-resolver`, `/api/commands/ai-propose`, and AI chat mapped-template creation. Linux phrases such as `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø¨Ø§Ø² Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` now create executable `linux_list_open_ports` ActionPlans with `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, `source=ai_mapped_template`, empty `normalizedParams`, and no `sourceIp`/`ipAddress`/`port` validation. Linux service status, firewall status, sudo users, block IP, open port, and MikroTik management services/login logs/block IP map to registered templates. Local enum migration `20260707183000_task16_3_persian_intent_aliases` was applied for validation. `npm run validate:command-catalog`, backend build, backend tests (119/119), and root frontend build passed; `pnpm` remains unavailable in this shell, and Corepack pnpm fails with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`.
+- Task 16.3: Persian intent understanding is now deterministic before AI/manual fallback through `backend/src/ai/persian-intent-router.ts`, consumed by `ai-template-resolver`, `/api/commands/ai-propose`, and AI chat mapped-template creation. Linux phrases such as `وضعیت پورت های باز رو نشون بده` now create executable `linux_list_open_ports` ActionPlans with `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, `source=ai_mapped_template`, empty `normalizedParams`, and no `sourceIp`/`ipAddress`/`port` validation. Linux service status, firewall status, sudo users, block IP, open port, and MikroTik management services/login logs/block IP map to registered templates. Local enum migration `20260707183000_task16_3_persian_intent_aliases` was applied for validation. `npm run validate:command-catalog`, backend build, backend tests (119/119), and root frontend build passed; `pnpm` remains unavailable in this shell, and Corepack pnpm fails with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`.
 
 ## Task 16.3 Runtime Validation Follow-up
 
-- The no-result Command Catalog query `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø¨Ø§Ø² Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` was tested against the local Linux device through the same backend routes the UI uses.
+- The no-result Command Catalog query `وضعیت پورت های باز رو نشون بده` was tested against the local Linux device through the same backend routes the UI uses.
 - Initial validation exposed a regression where top-level ActionPlan control metadata `source=ai_mapped_template` was re-normalized into `sourceIp`, blocking `linux_list_open_ports`.
 - `PolicyGuard` now ignores control-source strings when canonicalizing source IPs, and product metadata now keeps execution `normalizedParams` as the resolver output instead of mixing metadata fields into params.
 - Verified result: `actionType=linux_list_open_ports`, `executionTemplateRef=linux_list_open_ports`, `executionSupport=connector`, `connectorType=linux-ssh`, no missing params, quick execution after confirmation, `connectorInvoked=true`, and visible `ss/netstat` output.
-- Action Center execute buttons now use the exact Persian label `ØªØ§ÛŒÛŒØ¯ Ùˆ Ø§Ø¬Ø±Ø§`.
+- Action Center execute buttons now use the exact Persian label `تایید و اجرا`.
 - Playwright MCP browser tools were not exposed in this session, so browser-click validation was approximated with route-level execution plus UI source/build verification.
 
 ## Task 18.1 Milestone A - Platform IA and App Shell (2026-07-12)
@@ -660,18 +660,18 @@
 - Browser MCP pre-check reached the app but all requested authenticated routes showed the login gate without a valid session; screenshots were captured under `.playwright-mcp/` and only expected `/api/auth/me` 401 console errors appeared.
 - Validation: root frontend `npx pnpm@10 build` passed with the existing Vite large-chunk warning after escalation for npm cache access.
 
-## Task 19.1 Milestone R-A â€” Runtime baseline (2026-07-13)
+## Task 19.1 Milestone R-A — Runtime baseline (2026-07-13)
 
 - Re-read the Task 19.1 runtime specification, stale-repair contract, Playwright acceptance matrix, restored Task 18.2 specification, Task 19 product convergence specification, `AGENTS.md`, and this handoff.
 - Started a new Playwright MCP browser context and verified that the current session is authenticated; no login credential or `.env` value was used.
 - Audited every R-A route and created `docs/TASK_19_1_RUNTIME_BASELINE.md`, `docs/TASK_19_1_BROKEN_CONTROL_REGISTER.md`, and `docs/TASK_19_1_API_FAILURE_REGISTER.md`.
 - Reproduced the port-545 failure through Action Center: the quick-execute request returned flat 409 `COMMAND_PLAN_STALE`; the plan remained `dry_run_ready` and `connectorInvoked=false`.
-- Repeated `Ù¾ÙˆØ±Øª 545 Ø±Ø§ Ø¨Ø¨Ù†Ø¯` for the selected Linux device. Assistant returned 200 and `canCreateActionPlan=true`, but labelled the result manual-only and created no second ActionPlan.
+- Repeated `پورت 545 را ببند` for the selected Linux device. Assistant returned 200 and `canCreateActionPlan=true`, but labelled the result manual-only and created no second ActionPlan.
 - Confirmed missing device onboarding, the Cisco zero-device loop, broken exact-plan handoff, raw proposal JSON, raw API URL errors, English/Persian mixing, and `lang=en dir=ltr` on Persian surfaces.
 - No implementation fix, migration, destructive database operation, device mutation, or external integration call is part of R-A.
-- Next allowed work: R-B only â€” device onboarding, Product State route visibility, and device workspace foundation, followed by its own commit.
+- Next allowed work: R-B only — device onboarding, Product State route visibility, and device workspace foundation, followed by its own commit.
 
-## Task 19.1 Milestone R-B â€” Onboarding and workspace foundation (2026-07-13)
+## Task 19.1 Milestone R-B — Onboarding and workspace foundation (2026-07-13)
 
 - Added one backend onboarding session engine and the required create/get/answers/test/detect/discover/commit APIs. Sessions accept credential references only and reject plaintext secrets.
 - Added a real read-only Cisco IOS-XE SSH connector probe for `show version` plus bounded inventory discovery. It never reports success unless the live connector returned `connectorInvoked=true`.
@@ -757,3 +757,10 @@
 - Registered implemented Cisco IOS-XE read-only operations through the existing Command Catalog, execution-template registry, Cisco planner, Cisco SSH connector, and Action Center workflow. Planned mutating/admin operations are present as non-executable roadmap definitions until templates, prechecks, parsers, verification, and rollback are implemented.
 - Cisco vendor device inventory route now returns active registered Cisco devices instead of a hard-coded empty list.
 - Validation passed: Prisma schema validate, command catalog validation (187 items), backend build, frontend build, i18n parity, UTF-8 guard, diff check, and Cisco fixture tests. Database-bound tests requiring TEST_DATABASE_URL were not run against the local development database.
+## 2026-07-19 - Cisco legacy onboarding and idempotent registration repair
+
+- Fixed Cisco onboarding so the explicit per-session legacy compatibility option reaches the existing ssh2 connector as append-only legacy algorithms, while modern SSH remains the default and authentication failures do not trigger a legacy retry.
+- Test Connection now persists truthful connector invocation and sanitized diagnostics, including connectorInvoked, legacyCompatibilityRequested, legacyCompatibilityApplied, connectionPhase, and structured Cisco error codes.
+- Successful Cisco SSH now opens an interactive shell, disables paging, runs show version, detects IOS-XE, IOS Classic, NX-OS, and ASA separately from automation support, and lets unsupported-but-connected platforms proceed to unverified review.
+- Device registration now normalizes management IPs and transactionally reuses/reactivates matching Device/Asset records, preserving history. True unrelated ownership returns DEVICE_MANAGEMENT_IP_CONFLICT for the UI conflict actions.
+- Validation in progress includes backend build, frontend build/typecheck, Cisco ssh2 fixture tests, onboarding boundary tests, i18n, UTF-8, workflow, and diff checks. No secrets or .env values were printed or changed.

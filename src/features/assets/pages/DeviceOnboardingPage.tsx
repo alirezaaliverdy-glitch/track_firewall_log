@@ -34,6 +34,7 @@ const stepKeys = ["onboarding.steps.identity", "onboarding.steps.credential", "o
 
 type Step = 1 | 2 | 3;
 type InvalidField = "name" | "host" | "port" | null;
+type ConflictState = { route?: string; existingDeviceId?: string };
 
 function initialVendor(params: Record<string, string>) {
   const query = new URLSearchParams(window.location.search).get("vendor");
@@ -52,7 +53,8 @@ function mappedError(failure: unknown, fallbackKey: string, t: TFunction) {
     const code = failure.code ?? "";
     const message = failure.message.toLowerCase();
     let key = "onboarding.errors.generic";
-    if (code.includes("DUPLICATE")) key = "onboarding.errors.duplicate";
+    if (code.includes("DEVICE_MANAGEMENT_IP_CONFLICT") || code.includes("CONFLICT")) key = "onboarding.errors.managementIpConflict";
+    else if (code.includes("DUPLICATE")) key = "onboarding.errors.duplicate";
     else if (code.includes("SESSION")) key = "onboarding.errors.session";
     else if (code.includes("CREDENTIAL") || /auth|password|key/.test(message)) key = "onboarding.errors.auth";
     else if (code.includes("PLATFORM") || /platform|unsupported/.test(message)) key = "onboarding.errors.platform";
@@ -90,6 +92,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const [error, setError] = useState("");
   const [diagnostic, setDiagnostic] = useState("");
   const [invalidField, setInvalidField] = useState<InvalidField>(null);
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
 
   useEffect(() => {
     if (started.current) return;
@@ -126,7 +129,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     if (!activeForm.name.trim()) { setError(t("onboarding.errors.nameRequired")); setInvalidField("name"); nameInput.current?.focus(); return false; }
     if (!activeForm.host.trim()) { setError(t("onboarding.errors.hostRequired")); setInvalidField("host"); hostInput.current?.focus(); return false; }
     if (!Number.isInteger(activeForm.managementPort) || activeForm.managementPort < 1 || activeForm.managementPort > 65535) { setError(t("onboarding.errors.portRange")); setInvalidField("port"); return false; }
-    setError(""); setDiagnostic(""); setInvalidField(null);
+    setError(""); setDiagnostic(""); setInvalidField(null); setConflict(null);
     return true;
   }
 
@@ -159,16 +162,20 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   async function runTest() {
-    setBusy("test"); setError(""); setMessage(""); setDiagnostic("");
+    setBusy("test"); setError(""); setMessage(""); setDiagnostic(""); setConflict(null);
     try {
       let next = await saveAnswersForTest();
       if (!next) return;
       next = await testOnboarding(next.id);
       if (next.test?.connected === true && next.test.connectorInvoked === true) {
         next = await detectOnboarding(next.id);
-        next = await discoverOnboarding(next.id);
-        next = await previewOnboarding(next.id);
-        setMessage(t("onboarding.messages.verified"));
+        if (next.detection && (next.detection as Record<string, unknown>).supported === true) {
+          next = await discoverOnboarding(next.id);
+          next = await previewOnboarding(next.id);
+          setMessage(t("onboarding.messages.verified"));
+        } else {
+          setMessage(t("onboarding.messages.platformUnsupported"));
+        }
       } else {
         setMessage(t("onboarding.messages.notVerified"));
       }
@@ -177,7 +184,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
       const nextError = mappedError(failure, "onboarding.errors.connectionFailed", t);
       setError(nextError.message);
       setDiagnostic(nextError.diagnostic);
-      await getOnboarding(activeSession.id).then((current) => { setSession(current); setForm(current.draft); setStep(3); }).catch(() => undefined);
+      await getOnboarding(activeSession.id).then((current) => { setSession(current); setForm(current.draft); setStep(current.test?.connectorInvoked === true ? 3 : 2); }).catch(() => undefined);
     } finally { setBusy(""); }
   }
 
@@ -188,7 +195,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   async function register() {
-    setBusy("register"); setError(""); setDiagnostic("");
+    setBusy("register"); setError(""); setDiagnostic(""); setConflict(null);
     try {
       const next = verified ? await commitOnboarding(activeSession.id) : await registerUnverifiedOnboarding(activeSession.id, activeForm);
       setSession(next); setForm(next.draft);
@@ -196,6 +203,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     } catch (failure) {
       const nextError = mappedError(failure, "onboarding.errors.registrationFailed", t);
       setError(nextError.message);
+      if (failure instanceof OnboardingApiError && failure.code === "DEVICE_MANAGEMENT_IP_CONFLICT") setConflict({ route: failure.route, existingDeviceId: failure.existingDeviceId });
       setDiagnostic(nextError.diagnostic);
     } finally { setBusy(""); }
   }
@@ -208,6 +216,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
 
       <WorkflowStepper steps={steps} ariaLabel={t("onboarding.steps.label")} />
       {error ? <div role="alert" className="state-card is-error">{error}</div> : null}
+      {conflict ? <div className="state-card" role="group" aria-label={t("onboarding.conflict.title")}><strong>{t("onboarding.conflict.title")}</strong><p>{t("onboarding.conflict.message")}</p><div className="button-row">{conflict.route ? <button className="primary-button" type="button" onClick={() => navigate(conflict.route!)}>{t("onboarding.conflict.openExisting")}</button> : null}<button className="secondary-button" type="button" onClick={() => { setStep(1); setConflict(null); hostInput.current?.focus(); }}>{t("onboarding.conflict.editAddress")}</button><button className="secondary-button" type="button" onClick={() => setConflict(null)}>{t("onboarding.conflict.cancel")}</button></div></div> : null}
       {diagnostic ? <details className="advanced-section"><summary>{t("onboarding.advanced.diagnostics")}</summary><p dir="ltr">{diagnostic}</p></details> : null}
       {message ? <WorkflowStateCallout tone={verified ? "success" : "warning"} title={verified ? t("onboarding.status.verified") : t("onboarding.status.notVerified")} message={message} /> : null}
 

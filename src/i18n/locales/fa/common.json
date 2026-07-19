@@ -362,5 +362,12 @@
   "workflowLab.examples.workspaceUnverified.calloutMessage": "دستگاه برای مرور موجودی قابل استفاده می‌ماند اما تا موفقیت تست واقعی connector در وضعیت offline/unknown می‌ماند.",
   "workspace.status.online": "آنلاین",
   "workspace.status.offline": "آفلاین",
-  "workspace.status.active": "فعال"
+  "workspace.status.active": "فعال",
+  "onboarding.messages.platformUnsupported": "اتصال SSH موفق بود، اما این پلتفرم Cisco برای کشف خودکار IOS-XE پشتیبانی نمی‌شود. می‌توانید مرور را باز کنید و دستگاه را بدون تأیید ثبت کنید.",
+  "onboarding.errors.managementIpConflict": "این آدرس مدیریتی از قبل به یک دستگاه یا دارایی موجود تعلق دارد.",
+  "onboarding.conflict.title": "تداخل آدرس مدیریتی",
+  "onboarding.conflict.message": "رکوردی با این آدرس مدیریتی از قبل وجود دارد. آن را باز کنید، آدرس را ویرایش کنید یا ثبت را لغو کنید.",
+  "onboarding.conflict.openExisting": "باز کردن دستگاه موجود",
+  "onboarding.conflict.editAddress": "ویرایش آدرس",
+  "onboarding.conflict.cancel": "لغو"
 }

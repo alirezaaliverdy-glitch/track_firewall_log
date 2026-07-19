@@ -31,7 +31,7 @@ class ScriptedShell extends EventEmitter {
   send(value: string) { queueMicrotask(() => this.emit("data", Buffer.from(value))); }
 }
 
-const state = { connectorInvoked: true, transportConnected: true, authenticated: true, shellOpened: true, compatibilityProfile: "modern" as const };
+const state = { connectorInvoked: true, transportConnected: true, authenticated: true, shellOpened: true, compatibilityProfile: "modern" as const, legacyCompatibilityRequested: false, legacyCompatibilityApplied: false, connectionPhase: "command" as const };
 
 test("interactive session handles privileged prompt, disables paging, and strips command echo", async () => {
   const shell = new ScriptedShell((value, target) => {
@@ -108,9 +108,9 @@ test("legacy compatibility algorithms are opt-in per device and modern remains d
   assert.equal(ciscoConnectConfig({ host: "192.0.2.1", managementPort: 22 }, credential, "modern").algorithms, undefined);
   const legacyAlgorithms = ciscoConnectConfig({ host: "192.0.2.1", managementPort: 22 }, credential, "legacy_cisco").algorithms;
   assert.equal(CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE.label, "Legacy Cisco IOS Compatibility Profile");
-  assert.deepEqual(legacyAlgorithms?.kex, { prepend: ["diffie-hellman-group14-sha1", "diffie-hellman-group-exchange-sha1"], append: [], remove: [] });
-  assert.deepEqual(legacyAlgorithms?.serverHostKey, { prepend: ["ssh-rsa"], append: [], remove: [] });
-  assert.deepEqual(legacyAlgorithms?.hmac, { prepend: ["hmac-sha1", "hmac-sha1-96"], append: [], remove: [] });
+  assert.deepEqual(legacyAlgorithms?.kex, { append: ["diffie-hellman-group14-sha1"], prepend: [], remove: [] });
+  assert.deepEqual(legacyAlgorithms?.serverHostKey, { append: ["ssh-rsa"], prepend: [], remove: [] });
+  assert.deepEqual(legacyAlgorithms?.hmac, { append: ["hmac-sha1", "hmac-sha1-96"], prepend: [], remove: [] });
 });
 
 function device(credentialId: string, port: number): Device {

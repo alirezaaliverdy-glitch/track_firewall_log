@@ -70,7 +70,7 @@ Last updated: 2026-07-14
 
 ## Task 20 - Real Network Operations Kickoff
 
-- Task 20.1A is partially complete and currently blocked. Database/auth milestones A-C are committed (`afbdd4c`, `f09bb4a`, `9b55d87`), but real Cisco onboarding is stopped because the active stable runtime database has no saved Credential Reference rows and therefore does not contain the required `cisco-f2 â€” admin` reference for `192.168.7.12`.
+- Task 20.1A is partially complete and currently blocked. Database/auth milestones A-C are committed (`afbdd4c`, `f09bb4a`, `9b55d87`), but real Cisco onboarding is stopped because the active stable runtime database has no saved Credential Reference rows and therefore does not contain the required `cisco-f2 — admin` reference for `192.168.7.12`.
 - PostgreSQL default service remains unhealthy from this session: `postgresql-x64-18` is running but `127.0.0.1:5432` TCP fails. The healthy runtime used for proof remains the user-owned PostgreSQL on `127.0.0.1:55432/firewall_log_auth`.
 - New readiness behavior: `/api/health/live` returns 200, `/api/health/ready` returns 200 with `databaseReady=true` when the DB is reachable and structured 503 otherwise. A 181-second proof produced 10/10 live 200 and 10/10 ready 200.
 - MCP auth proof after the repair: `/login` and `/dashboard` opened in the authenticated shell with `/api/auth/me` 200. The MCP surface has no fill/type/click tool, so credential-entry replay could not be performed while the session was already authenticated. A transient `/api/assets` timeout/500 appeared once in backend logs after the MCP dashboard refresh and then retried successfully; do not claim complete no-5xx acceptance yet.
@@ -100,7 +100,7 @@ Last updated: 2026-07-14
 
 ## Task 19.2-A - Visible Device Registration
 
-- Dashboard exposes `Ø«Ø¨Øª Ø¯Ø³ØªÚ¯Ø§Ù‡ Ø¬Ø¯ÛŒØ¯` as a primary action and quick actions now include registration, quick network test, domain/IP check, and device list access.
+- Dashboard exposes `ثبت دستگاه جدید` as a primary action and quick actions now include registration, quick network test, domain/IP check, and device list access.
 - Product State Contract is `19.2-A`; implemented Add Device is no longer hidden from generated Assets navigation.
 - Assets navigation now includes Overview, Devices, Register device, and Vendors. Contextual onboarding routes remain backed by the existing reusable onboarding engine.
 - Cisco, FortiGate, MikroTik, and Linux vendor pages show vendor-specific onboarding CTAs that preselect the vendor through `/assets/vendors/:vendorKey/devices/new`.
@@ -304,7 +304,7 @@ Last updated: 2026-07-14
 
 - Completed FortiGate VPN guided sessions now build a useful preview-only ActionPlan instead of returning 409 when execution templates are incomplete.
 - Preview-only VPN plans are persisted with `executionSupport=planned_or_partial`, `implementationState=partial`, `executable=false`, `source=guided_action_wizard`, missing template names, Persian structured preview, safe CLI outline, verification plan, and rollback plan.
-- Action Center disables execution for preview-only guided plans and shows `Ø§ÛŒÙ† Ø§Ú©Ø´Ù† Ù‡Ù†ÙˆØ² Ø§Ø¬Ø±Ø§ÛŒ ÙˆØ§Ù‚Ø¹ÛŒ Ú©Ø§Ù…Ù„ Ù†Ø¯Ø§Ø±Ø¯.` while keeping preview/debug/verification data visible.
+- Action Center disables execution for preview-only guided plans and shows `این اکشن هنوز اجرای واقعی کامل ندارد.` while keeping preview/debug/verification data visible.
 - Raw PSK/password values are not persisted in the plan preview; manual PSK input is represented only as `[secret]`.
 - FortiGate VPN execution remains partial/planned until full Phase1/Phase2/route/policy templates and verification parser are verified. Protected quick-controlled execution behavior is unchanged.
 - Validation passed: Prisma generation, local enum migration apply, backend build, backend tests 140/140, and frontend `pnpm build` with existing Vite warnings.
@@ -312,7 +312,7 @@ Last updated: 2026-07-14
 ## Task 17.2B Guided Wizard First for Multi-Step Requests
 
 - Multi-step creation requests now always route to `guided_workflow` before generic/manual fallback, including when no device is selected in the main chat.
-- Missing selected device is handled inside the wizard. `/api/action-sessions/start` can create a pending session, and the first step is `device_selection` (`Ø§Ù†ØªØ®Ø§Ø¨ Ø¯Ø³ØªÚ¯Ø§Ù‡`); after selection, the backend resolves vendor/connector context from the DB.
+- Missing selected device is handled inside the wizard. `/api/action-sessions/start` can create a pending session, and the first step is `device_selection` (`انتخاب دستگاه`); after selection, the backend resolves vendor/connector context from the DB.
 - Bottom chatbot and Command Catalog AI fallback start an ActionSession and open `/guided-actions/:sessionId`; they do not create normal ActionPlans, `custom_vendor_action`, `generic_security_action`, or `unsupported_vendor` for guided workflows.
 - ActionPlans are still created only after wizard completion and build-preview, then execution remains Action Center confirmation -> PolicyGuard -> connector -> audit/result.
 - Validation passed: backend build, backend tests 139/139, and frontend `pnpm build` with the existing chunk-size warning.
@@ -321,8 +321,8 @@ Last updated: 2026-07-14
 
 - Multi-step operational requests are now guarded before generic AI/manual fallback. VPN, VDOM, Zone, Policy/Rule, VIP/NAT/Port Forward, Interface/VLAN, and Route creation phrases route to `guided_workflow` when a matching vendor blueprint exists.
 - Selected device context is now sent from Command Search Ask AI and bottom chatbot, and the backend resolves `selectedDeviceId` against the DB before trusting UI vendor hints. FortiGate selected devices resolve to `fortigate`/`fortigate-ssh`; MikroTik resolves to `mikrotik`; Linux resolves to `linux`.
-- If a guided request has no selected device, the resolver returns `clarification` with `Ø§ÙˆÙ„ Ø¯Ø³ØªÚ¯Ø§Ù‡ Ù…Ù‚ØµØ¯ Ø±Ø§ Ø§Ù†ØªØ®Ø§Ø¨ Ú©Ù†.` and creates no `vendor=unknown`, `custom_vendor_action`, or `unsupported_vendor` ActionPlan.
-- Bottom chatbot guided requests now show the Persian multi-step message and `Ø´Ø±ÙˆØ¹ Ø³Ø§Ø®Øª Ù…Ø±Ø­Ù„Ù‡â€ŒØ§ÛŒ`; clicking it starts an ActionSession and opens `/guided-actions/:sessionId`.
+- If a guided request has no selected device, the resolver returns `clarification` with `اول دستگاه مقصد را انتخاب کن.` and creates no `vendor=unknown`, `custom_vendor_action`, or `unsupported_vendor` ActionPlan.
+- Bottom chatbot guided requests now show the Persian multi-step message and `شروع ساخت مرحله‌ای`; clicking it starts an ActionSession and opens `/guided-actions/:sessionId`.
 - Current guided workflow availability: FortiGate Policy/Zone/Route/VLAN/Object/Service are executable where existing compiler templates support them; FortiGate VPN and VDOM are partial/planned and do not build executable plans; MikroTik/Linux guided placeholders open the wizard but remain planned.
 - Validation passed: catalog validation, backend build, backend tests 139/139, and frontend `pnpm build` with the existing large chunk warning.
 
@@ -340,7 +340,7 @@ Last updated: 2026-07-14
 - Added a global Guided Action Blueprint system and ActionSession API. Multi-step requests now return `guided_workflow` instead of being forced into broken single-template missing-field plans.
 - FortiGate guided workflow registry now covers policy creation, address object creation, service object creation, VIP/port forward, static route, IPsec VPN, SSL VPN, VLAN interface creation, and policy enable/disable/move.
 - Executable FortiGate guided workflows are limited to compiler-backed templates. VPN/SSL VPN and incomplete multi-step variants remain partial/planned and do not fake ActionPlan success.
-- The port-status bug is fixed: `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§Ù…Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` on Linux maps to `linux_list_open_ports`; on FortiGate maps to `fortigate_show_interfaces` and never invents `srcInterface`.
+- The port-status bug is fixed: `وضعیت پورت هامو نشون بده` on Linux maps to `linux_list_open_ports`; on FortiGate maps to `fortigate_show_interfaces` and never invents `srcInterface`.
 - Command Catalog Ask AI now returns the new modes: `executable_action_plan`, `needs_input`, `guided_workflow`, `clarification`, and `manual_or_not_supported`.
 - Frontend Command Catalog opens a Persian guided action wizard for `guided_workflow` and hands built plans back to Action Center.
 - Validation passed: command catalog validation, backend build, backend tests (133/133), frontend `pnpm build`.
@@ -412,8 +412,8 @@ Task 16.3 is complete for deterministic Persian intent routing across AI chat an
 ## What Works
 
 - AI-supported Persian requests that map to registered templates create executable ActionPlans instead of vague manual proposals.
-- Command Catalog AI fallback maps Persian Linux port-status phrases such as `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø±Ùˆ Ù…ÛŒØ®ÙˆØ§Ù… Ø¨Ø¨ÛŒÙ†Ù…` to `linux_list_open_ports` with `executionTemplateRef=linux_list_open_ports` and `connectorType=linux-ssh`.
-- Persian deterministic intent routing maps `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø¨Ø§Ø² Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` to executable `linux_list_open_ports` with empty params, `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, and metadata source `ai_mapped_template`.
+- Command Catalog AI fallback maps Persian Linux port-status phrases such as `وضعیت پورت های رو میخوام ببینم` to `linux_list_open_ports` with `executionTemplateRef=linux_list_open_ports` and `connectorType=linux-ssh`.
+- Persian deterministic intent routing maps `وضعیت پورت های باز رو نشون بده` to executable `linux_list_open_ports` with empty params, `executionTemplateRef=linux_list_open_ports`, `connectorType=linux-ssh`, and metadata source `ai_mapped_template`.
 - Linux mapped requests for firewall status, service status, sudo users, block IP, and open port now validate only the resolved template params. Open-port listing no longer requires `sourceIp`, `ipAddress`, or `port`.
 - MikroTik mapped requests for management services, login logs, and block IP now use executable alias action types backed by registered RouterOS templates.
 - Command Catalog AI fallback now returns honest modes: `executable_action_plan`, `needs_input`, `guided_workflow`, `clarification`, and `manual_or_not_supported`.
@@ -493,9 +493,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 
 ## Task 16.3 Runtime Validation Follow-up
 
-- The local no-result Command Catalog flow for `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø¨Ø§Ø² Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` now creates and executes a real connector-backed `linux_list_open_ports` ActionPlan without stale `sourceIp` validation.
+- The local no-result Command Catalog flow for `وضعیت پورت های باز رو نشون بده` now creates and executes a real connector-backed `linux_list_open_ports` ActionPlan without stale `sourceIp` validation.
 - Verified route-level flow: search count 0 -> AI fallback `mode=executable_action_plan` -> `actionType=linux_list_open_ports` -> `executionTemplateRef=linux_list_open_ports` -> `executionSupport=connector` -> `connectorType=linux-ssh` -> validation passed -> quick execution succeeded with `connectorInvoked=true` and visible `ss/netstat` output.
-- Action Center execute buttons now show the exact Persian label `ØªØ§ÛŒÛŒØ¯ Ùˆ Ø§Ø¬Ø±Ø§`.
+- Action Center execute buttons now show the exact Persian label `تایید و اجرا`.
 - Top-level ActionPlan control metadata such as `source=ai_mapped_template` must not be canonicalized into network fields such as `sourceIp`.
 - Additional validation: `cd backend && npm run build`; `cd backend && npm run validate:command-catalog`; `cd backend && npm test` passed with 119/119 tests; root `npm run build` passed with the existing Vite large-chunk warning. `pnpm` is not available on PATH in this shell.
 
@@ -622,3 +622,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Cisco support now has a central operation registry and generated catalog/action definitions. Implemented read-only IOS-XE commands execute through Action Center; configuration/admin areas remain planned and non-executable until safe contracts are added.
 - `/api/vendors/cisco/devices` reports active registered Cisco devices from inventory/detection evidence instead of returning a mock empty list.
 - Current validation passed for schema, catalog, backend/frontend builds, i18n, UTF-8, diff check, and Cisco parser/fixture coverage. Isolated DB tests still require TEST_DATABASE_URL.
+## 2026-07-19 - Cisco legacy onboarding and idempotent registration repair
+
+- Fixed Cisco onboarding so the explicit per-session legacy compatibility option reaches the existing ssh2 connector as append-only legacy algorithms, while modern SSH remains the default and authentication failures do not trigger a legacy retry.
+- Test Connection now persists truthful connector invocation and sanitized diagnostics, including connectorInvoked, legacyCompatibilityRequested, legacyCompatibilityApplied, connectionPhase, and structured Cisco error codes.
+- Successful Cisco SSH now opens an interactive shell, disables paging, runs show version, detects IOS-XE, IOS Classic, NX-OS, and ASA separately from automation support, and lets unsupported-but-connected platforms proceed to unverified review.
+- Device registration now normalizes management IPs and transactionally reuses/reactivates matching Device/Asset records, preserving history. True unrelated ownership returns DEVICE_MANAGEMENT_IP_CONFLICT for the UI conflict actions.
+- Validation in progress includes backend build, frontend build/typecheck, Cisco ssh2 fixture tests, onboarding boundary tests, i18n, UTF-8, workflow, and diff checks. No secrets or .env values were printed or changed.

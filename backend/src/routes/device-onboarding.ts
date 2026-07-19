@@ -12,6 +12,7 @@ import {
   retryOnboardingSession,
   testOnboardingConnection,
   OnboardingDuplicateDeviceError,
+  OnboardingManagementIpConflictError,
   OnboardingCredentialInvalidError
 } from "../services/device-onboarding.service.js";
 import { CiscoConnectorError } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
@@ -26,6 +27,18 @@ function statusCode(error: unknown) {
           : 400;
 }
 
+function conflictPayload(error: OnboardingManagementIpConflictError) {
+  return {
+    error: {
+      code: "DEVICE_MANAGEMENT_IP_CONFLICT",
+      message: error.message,
+      existingDeviceId: error.deviceId,
+      existingAssetId: error.assetId,
+      route: error.route,
+      detail: { managementIp: error.managementIp, existingDeviceId: error.deviceId, existingAssetId: error.assetId, route: error.route }
+    }
+  };
+}
 export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: Record<string, unknown> }>("/api/device-onboarding/sessions", async (request, reply) => {
     try { return reply.code(201).send(await createOnboardingSession(request.body ?? {})); }
@@ -69,13 +82,17 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/commit", async (request, reply) => {
     try { return await commitOnboardingSession(request.params.sessionId); }
-    catch (error) { return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_COMMIT_BLOCKED", message: error instanceof Error ? error.message : "Save failed." } }); }
+    catch (error) {
+      if (error instanceof OnboardingManagementIpConflictError) return reply.code(409).send(conflictPayload(error));
+      return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_COMMIT_BLOCKED", message: error instanceof Error ? error.message : "Save failed." } });
+    }
   });
   app.post<{ Params: { sessionId: string }; Body: Record<string, unknown> }>("/api/device-onboarding/sessions/:sessionId/register-unverified", async (request, reply) => {
     try { return await registerUnverifiedOnboardingSession(request.params.sessionId, request.body ?? {}); }
     catch (error) {
+      if (error instanceof OnboardingManagementIpConflictError) return reply.code(409).send(conflictPayload(error));
       if (error instanceof OnboardingDuplicateDeviceError) {
-        return reply.code(409).send({ error: { code: "ONBOARDING_DEVICE_DUPLICATE", message: error.message, existingDeviceId: error.deviceId, route: error.route } });
+        return reply.code(409).send({ error: { code: "DEVICE_MANAGEMENT_IP_CONFLICT", message: error.message, existingDeviceId: error.deviceId, route: error.route, detail: { existingDeviceId: error.deviceId, route: error.route } } });
       }
       return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_UNVERIFIED_REGISTRATION_FAILED", message: error instanceof Error ? error.message : "Unverified registration failed.", connectorInvoked: false } });
     }
