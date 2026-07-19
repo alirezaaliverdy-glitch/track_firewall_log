@@ -373,6 +373,7 @@ export default function AiSecurityAssistantPanel() {
     setStructuredResponse(null);
     setActionDebug(null);
     setCreatedPlanId(null);
+    setGuidedStart(null);
     setError(null);
     setTechnicalError(null);
     setAssessment(null);
@@ -538,12 +539,13 @@ export default function AiSecurityAssistantPanel() {
         setEvidenceMetadata(response.evidenceMetadata);
         setExecutionState({ support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle });
         setCreatedPlanId(response.actionPlan?.id ?? null);
-        if (response.mode === "guided_workflow" && response.blueprintId) {
-          if (response.actionSessionId) {
-            const url = response.guidedActionUrl ?? `/guided-actions/${encodeURIComponent(response.actionSessionId)}`;
-            navigate(url);
-            return;
-          }
+        const canOfferGuidedStart = response.mode === "guided_workflow" &&
+          Boolean(response.blueprintId) &&
+          response.actionContract.implementationState === "implemented" &&
+          response.actionContract.executionSupport === "connector" &&
+          response.missingFields.length > 0 &&
+          Boolean(response.deviceId ?? selectedDeviceId);
+        if (canOfferGuidedStart && response.blueprintId) {
           const guided = {
             blueprintId: response.blueprintId,
             initialValues: response.initialValues ?? {},
@@ -552,14 +554,6 @@ export default function AiSecurityAssistantPanel() {
             initialRequest: trimmed,
           };
           setGuidedStart(guided);
-          startGuidedSession(guided)
-            .then((session) => {
-              navigate(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
-            })
-            .catch((err: unknown) => {
-              setError("شروع ساخت مرحله‌ای انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
-              setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در شروع Workflow");
-            });
         }
         if (response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);

@@ -1,3 +1,11 @@
+**AI Assistant guided-action redirect fix (2026-07-19)**
+
+- Root cause: AI chat created Guided Action sessions during message handling and the Assistant navigated as soon as `actionSessionId` existed. Generic/custom intent fallback could also match vendor catalog rows with `generic_security_action`, incorrectly promoting unsupported Cisco/custom requests into executable-looking actions.
+- Chat now never creates a Guided Action session. It only exposes a guided-start candidate for selected-device, connector-backed, verified catalog actions that are implemented and still require parameters; informational, read-only, custom, partial, planned, and unsupported requests stay as Assistant responses.
+- Frontend navigation now happens only inside the explicit `Start guided action` button handler. New prompts, target-device switches, and chat clearing reset stale intent, ActionPlan, execution, and guided-start state.
+- Action Center, approval, PolicyGuard, connector invocation, audit, and protected lab settings were not changed.
+- Validation passed: backend build, frontend `pnpm build`, focused AI target-device tests 13/13, command catalog validation, i18n, UTF-8, workflow guard, and `git diff --check`. Backend `npm test` was attempted and stopped at the required `TEST_DATABASE_URL_REQUIRED` safety gate.
+
 **AI Assistant target-device context fix (2026-07-19)**
 
 - AI Assistant chat now rebuilds context on every prompt from the currently selected Device record and includes target vendor, platform, capabilities, health, inventory, connection state, app routes, workflow state, and target-scoped supported catalog actions.

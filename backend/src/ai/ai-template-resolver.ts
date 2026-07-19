@@ -206,6 +206,10 @@ function findCatalogItemByIntent(vendor: string, actionType: string) {
     ?? null;
 }
 
+function canUseCatalogActionType(actionType: string) {
+  return actionType !== "generic_security_action" && actionType !== "custom_vendor_action";
+}
+
 function missingFieldsForItem(item: CommandCatalogItem | null, params: Record<string, unknown>) {
   if (!item) return [];
   return item.requiredParams
@@ -386,7 +390,7 @@ export function resolveAiTemplate(input: {
     ?? "generic";
 
   const resolvedActionType = resolveActionAlias(input.userText, rawActionType, canonicalVendor);
-  const item = findCatalogItemByIntent(canonicalVendor, resolvedActionType);
+  const item = canUseCatalogActionType(resolvedActionType) ? findCatalogItemByIntent(canonicalVendor, resolvedActionType) : null;
   const mergedParams = { ...(item?.defaultParams ?? {}), ...normalizedParams };
   const missingFields = missingFieldsForItem(item, mergedParams);
   const template = item?.executionTemplateRef ? getExecutionTemplate(item.executionTemplateRef) : null;

@@ -1,3 +1,10 @@
+## AI Assistant guided-action redirect fix (2026-07-19)
+
+- Assistant chat no longer creates Guided Action sessions or navigates based on returned session/action IDs. Guided navigation is behind an explicit start button only.
+- Generic/custom fallback no longer promotes `generic_security_action` or `custom_vendor_action` into vendor catalog rows; unsupported, partial, custom, informational, and read-only prompts remain reviewable Assistant responses unless they map to a verified ActionPlan path.
+- Guided-start eligibility is limited to the selected device as source of truth: verified catalog action, implemented, connector-backed, selected device supports the connector, and required parameters are still missing.
+- Validation: backend build; frontend `pnpm build`; focused AI target-device tests 13/13; command catalog validation; i18n; UTF-8; workflow guard; `git diff --check`. Full backend `npm test` remains gated by missing isolated `TEST_DATABASE_URL`.
+
 ## AI Assistant target-device context fix (2026-07-19)
 
 - The selected target device is now the AI Assistant source of truth. Each prompt rebuilds backend context from that Device and target-scopes vendor, platform, capabilities, health, inventory, connection state, routes, workflow state, and supported catalog actions.

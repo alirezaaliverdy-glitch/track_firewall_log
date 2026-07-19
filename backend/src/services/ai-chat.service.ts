@@ -10,7 +10,6 @@ import { routeCatalogIntent } from "../actions/intent-router.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
 import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
-import { startGuidedActionSession } from "../guided-actions/session-service.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { env } from "../config/env.js";
 
@@ -116,6 +115,12 @@ function isControlledCatalogAction(actionType: string) {
 
 function isCustomProposal(actionType: string) {
   return actionType === AiIntentType.custom_vendor_action || actionType === AiIntentType.generic_security_action;
+}
+
+function selectedDeviceSupportsConnector(device: { protocol?: string | null } | null, connectorType: string | null) {
+  if (!device || !connectorType) return false;
+  if (connectorType.endsWith("-ssh")) return device.protocol === "ssh";
+  return true;
 }
 
 function unsupportedForSelectedDeviceMessageFa(input: { deviceName?: string | null; reasonFa: string; selectedDevice: { vendor: string; type: string } | null; }) {
@@ -310,18 +315,17 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     } : null,
   };
   const resolvedDebug = { ...debug, deviceId: selectedDevice?.id ?? actionPlan?.deviceId ?? debug.deviceId, missingFields: actionPlan ? [] : debug.missingFields, canCreateActionPlan, reason: canCreateActionPlan ? null : debug.reason, blockedReason: canCreateActionPlan ? null : debug.blockedReason };
-  const parameterizedBlueprintId = resolutionMissing.length > 0 && resolution.catalogItem ? catalogGuidedBlueprintId(resolution.catalogItem.id) : null;
-  const guidedBlueprintId = resolution.mode === "guided_workflow" && resolution.blueprintId ? resolution.blueprintId : parameterizedBlueprintId;
-  const guidedSession = guidedBlueprintId
-    ? startGuidedActionSession({
-        blueprintId: guidedBlueprintId,
-        deviceId: selectedDevice?.id ?? null,
-        vendor: selectedDevice ? resolution.canonicalVendor : null,
-        initialRequest: message,
-        initialValues: resolution.initialValues ?? resolution.normalizedParams ?? {},
-      })
-    : null;
-  const guidedSessionValue = guidedSession?.ok ? guidedSession.value : null;
+  const canStartParameterizedGuidedAction = Boolean(
+    selectedDevice &&
+    resolution.catalogItem?.supportState === "verified" &&
+    resolution.implementationState === "implemented" &&
+    resolution.executionSupport === "connector" &&
+    resolution.executionTemplateRef &&
+    selectedDeviceSupportsConnector(selectedDevice, resolution.connectorType) &&
+    resolutionMissing.length > 0,
+  );
+  const parameterizedBlueprintId = canStartParameterizedGuidedAction && resolution.catalogItem ? catalogGuidedBlueprintId(resolution.catalogItem.id) : null;
+  const guidedBlueprintId = parameterizedBlueprintId;
   const nextStepFa = actionPlan
     ? executionSupport === "connector" ? "برای بازبینی و تأیید به مرکز عملیات بروید." : "پیشنهاد را در مرکز عملیات به‌صورت دستی بررسی کنید."
     : resolutionMissing.length ? missingFieldsMessageFa(resolutionMissing) : resolution.reasonFa;
@@ -331,7 +335,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const assistantText = actionPlan && executionSupport === "connector"
     ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
     : resolutionMissing.length ? nextStepFa : selectedDeviceUnsupportedMessage ?? providerResponse.assistantMessage;
-  const responseMode = guidedBlueprintId ? "guided_workflow" : resolution.mode;
+  const responseMode = guidedBlueprintId ? "guided_workflow" : resolution.mode === "guided_workflow" ? "manual_or_not_supported" : resolution.mode;
   const guidedAssistantText = guidedBlueprintId
     ? "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید."
     : resolution.mode === "clarification" ? nextStepFa : assistantText;
@@ -350,9 +354,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     mode: responseMode,
     blueprintId: guidedBlueprintId ?? null,
     initialValues: resolution.initialValues ?? resolution.normalizedParams ?? null,
-    actionSessionId: guidedSessionValue?.sessionId ?? null,
-    actionSession: guidedSessionValue,
-    guidedActionUrl: guidedSessionValue?.sessionId ? `/guided-actions/${encodeURIComponent(guidedSessionValue.sessionId)}` : null,
+    actionSessionId: null,
+    actionSession: null,
+    guidedActionUrl: null,
     vendor: resolution.canonicalVendor,
     connectorType: resolution.connectorType,
     deviceId: selectedDevice?.id ?? null,

@@ -83,9 +83,9 @@ test("frontend source has action-library route, dashboard shortcut, filters, and
   assert.match(library, /catalogBlueprintId\(item\)/);
   assert.match(library, /guidedBlueprintId/);
   assert.doesNotMatch(library, /expanded && item\.requiredParams/);
-  assert.match(assistant, /response\.actionSessionId/);
-  assert.match(assistant, /response\.guidedActionUrl/);
-  assert.match(assistant, /navigate\(url\)/);
+  assert.match(assistant, /canOfferGuidedStart/);
+  assert.match(assistant, /guidedStart && <button[^>]*onClick=\{startGuidedWorkflow\}/);
+  assert.doesNotMatch(assistant, /response\.actionSessionId[\s\S]*navigate/);
   assert.match(actionCenter, /Backup is disabled for Quick Controlled execution\./);
   assert.doesNotMatch(actionState, /The action changed after its preview/);
   assert.doesNotMatch(actionCenter, /backup\/export preflight required/i);

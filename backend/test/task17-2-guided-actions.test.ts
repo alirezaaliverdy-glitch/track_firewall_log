@@ -52,7 +52,7 @@ test("FortiGate VPN setup resolves to partial guided workflow with fixed dropdow
   assert.ok(scenario?.options?.length);
 });
 
-test("Persian and English VPN chat intents create FortiGate guided ActionSessions", async (t) => {
+test("Persian and English VPN chat intents stay in Assistant without auto-created Guided ActionSessions", async (t) => {
   const app = await buildApp({ authRequired: false });
   const device = await prisma.device.create({
     data: {
@@ -91,21 +91,15 @@ test("Persian and English VPN chat intents create FortiGate guided ActionSession
     assert.equal(response.statusCode, 200, response.body);
     const body = response.json();
     if (typeof body.sessionId === "string") chatSessionIds.push(body.sessionId);
-    assert.equal(body.mode, "guided_workflow");
-    assert.equal(body.blueprintId, "fortigate_guided_vpn_setup");
+    assert.equal(body.mode, "manual_or_not_supported");
+    assert.equal(body.blueprintId, null);
     assert.equal(body.vendor, "fortigate");
     assert.equal(body.connectorType, "fortigate-ssh");
     assert.equal(body.actionPlan, null);
     assert.equal(body.shouldCreateActionPlan, false);
-    assert.equal(typeof body.actionSessionId, "string");
-    assert.equal(body.guidedActionUrl, `/guided-actions/${encodeURIComponent(body.actionSessionId)}`);
-    assert.equal(body.actionSession.sessionId, body.actionSessionId);
-    assert.equal(body.actionSession.deviceId, device.id);
-    assert.equal(body.actionSession.currentStep.id, "vpn_type");
-
-    const build = await app.inject({ method: "POST", url: `/api/action-sessions/${body.actionSessionId}/build-plan`, payload: {} });
-    assert.equal(build.statusCode, 422, build.body);
-    assert.equal(build.json().error, "VALIDATION_FAILED");
+    assert.equal(body.actionSessionId, null);
+    assert.equal(body.guidedActionUrl, null);
+    assert.equal(body.actionSession, null);
   }
 });
 
@@ -736,7 +730,7 @@ test("AI propose guided request without device starts session with device-select
   assert.equal(start.json().deviceId, null);
 });
 
-test("Bottom chatbot FortiGate VPN returns guided workflow and no ActionPlan", async (t) => {
+test("Bottom chatbot FortiGate VPN stays in Assistant and creates no ActionSession or ActionPlan", async (t) => {
   const app = await buildApp({ authRequired: false });
   const device = await prisma.device.create({
     data: {
@@ -770,8 +764,11 @@ test("Bottom chatbot FortiGate VPN returns guided workflow and no ActionPlan", a
   });
   assert.equal(response.statusCode, 200, response.body);
   const body = response.json();
-  assert.equal(body.mode, "guided_workflow");
-  assert.equal(body.blueprintId, "fortigate_guided_vpn_setup");
+  assert.equal(body.mode, "manual_or_not_supported");
+  assert.equal(body.blueprintId, null);
   assert.equal(typeof body.assistantMessage, "string");
   assert.equal(body.actionPlan, null);
+  assert.equal(body.actionSessionId, null);
+  assert.equal(body.guidedActionUrl, null);
+  assert.equal(body.actionSession, null);
 });

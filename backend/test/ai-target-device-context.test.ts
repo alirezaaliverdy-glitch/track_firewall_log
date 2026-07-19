@@ -76,3 +76,67 @@ test("frontend assistant clears previous intent and guided action state when tar
   assert.match(source, /setCreatedPlanId\(null\);\s+setGuidedStart\(null\);\s+setLastIntent\(null\);\s+setActionDebug\(null\);\s+setExecutionState\(null\);\s+setStructuredResponse\(null\);/);
   assert.match(source, /sendAiMessage\(sessionId, trimmed, selectedDeviceId \|\| undefined/);
 });
+
+test("memory and status requests stay inside Assistant without guided workflow or ActionPlan handoff", () => {
+  const source = read("../src/ai/ai-template-resolver.ts");
+  assert.match(source, /rawActionType[\s\S]*generic_security_action/);
+  assert.match(source, /canUseCatalogActionType\(resolvedActionType\) \? findCatalogItemByIntent/);
+
+  const chat = read("../src/services/ai-chat.service.ts");
+  assert.match(chat, /responseMode = guidedBlueprintId \? "guided_workflow" : resolution\.mode === "guided_workflow" \? "manual_or_not_supported" : resolution\.mode/);
+  assert.match(chat, /actionSessionId: null/);
+  assert.match(chat, /guidedActionUrl: null/);
+});
+
+test("unsupported selected-device requests stay reviewable in Assistant", () => {
+  const source = read("../src/ai/ai-template-resolver.ts");
+  assert.match(source, /canUseCatalogActionType\(actionType: string\)/);
+  assert.match(source, /actionType !== "generic_security_action" && actionType !== "custom_vendor_action"/);
+  assert.doesNotMatch(source, /findCatalogItemByIntent\(canonicalVendor, resolvedActionType\);/);
+
+  const chat = read("../src/services/ai-chat.service.ts");
+  assert.match(chat, /selectedDeviceUnsupportedMessage/);
+  assert.match(chat, /suggestSupportedActionsForAssistantTarget\(input\.selectedDevice\)/);
+});
+
+test("custom proposals do not create or redirect to a Guided Action session", () => {
+  const chat = read("../src/services/ai-chat.service.ts");
+  assert.doesNotMatch(chat, /import \{ startGuidedActionSession \}/);
+  assert.doesNotMatch(chat, /startGuidedActionSession\(\{[\s\S]*initialRequest: message/);
+  assert.match(chat, /actionSession: null/);
+
+  const assistant = read("../../src/components/ai/AiSecurityAssistantPanel.tsx");
+  assert.doesNotMatch(assistant, /response\.actionSessionId[\s\S]*navigate/);
+  assert.doesNotMatch(assistant, /startGuidedSession\(guided\)[\s\S]*\.then\(\(session\)[\s\S]*navigate/);
+});
+
+test("executable multi-step action exposes an explicit start button only", () => {
+  const chat = read("../src/services/ai-chat.service.ts");
+  assert.match(chat, /canStartParameterizedGuidedAction/);
+  assert.match(chat, /resolution\.catalogItem\?\.supportState === "verified"/);
+  assert.match(chat, /resolution\.implementationState === "implemented"/);
+  assert.match(chat, /resolution\.executionSupport === "connector"/);
+  assert.match(chat, /resolutionMissing\.length > 0/);
+
+  const assistant = read("../../src/components/ai/AiSecurityAssistantPanel.tsx");
+  assert.match(assistant, /canOfferGuidedStart/);
+  assert.match(assistant, /response\.missingFields\.length > 0/);
+  assert.match(assistant, /guidedStart && <button[^>]*onClick=\{startGuidedWorkflow\}/);
+});
+
+test("Guided Action navigation happens only after explicit confirmation", () => {
+  const assistant = read("../../src/components/ai/AiSecurityAssistantPanel.tsx");
+  const submitBlock = assistant.slice(assistant.indexOf("const submit ="), assistant.indexOf("const startGuidedWorkflow ="));
+  assert.doesNotMatch(submitBlock, /navigate\(/);
+  assert.doesNotMatch(submitBlock, /startGuidedSession\(/);
+  const startBlock = assistant.slice(assistant.indexOf("const startGuidedWorkflow ="));
+  assert.match(startBlock, /startGuidedSession\(guidedStart\)/);
+  assert.match(startBlock, /navigate\(`\/guided-actions\/\$\{encodeURIComponent\(session\.sessionId\)\}`\)/);
+});
+
+test("switching target devices clears old intent, ActionPlan and guided-session context", () => {
+  const assistant = read("../../src/components/ai/AiSecurityAssistantPanel.tsx");
+  assert.match(assistant, /previousTargetDeviceId\.current === selectedDeviceId/);
+  assert.match(assistant, /viewGeneration\.current \+= 1/);
+  assert.match(assistant, /setSessionId\(null\);[\s\S]*setMessages\(\[\]\);[\s\S]*setLastIntent\(null\);[\s\S]*setExecutionState\(null\);[\s\S]*setStructuredResponse\(null\);[\s\S]*setActionDebug\(null\);[\s\S]*setCreatedPlanId\(null\);[\s\S]*setGuidedStart\(null\);/);
+});

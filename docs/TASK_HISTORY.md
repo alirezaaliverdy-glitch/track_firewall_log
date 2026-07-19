@@ -1,3 +1,11 @@
+## 2026-07-19 - AI Assistant guided-action redirect fix
+
+- Reproduced the current flow in source from prompt handling through selected-device context, resolver normalization, ActionPlan/session creation, and Assistant navigation. The unintended redirect came from backend chat allocating a guided session plus frontend submit handling navigating immediately when session data existed.
+- Restricted resolver fallback so generic/custom intent types cannot bind to vendor catalog rows with `generic_security_action`; this prevents unsupported/custom Cisco-style requests from becoming executable-looking catalog actions.
+- Removed Assistant chat-side Guided Action session creation and limited guided-start candidates to verified, implemented, connector-backed catalog actions for the selected device with missing required parameters. Existing Action Center review/approval/execution remains unchanged.
+- Removed frontend auto-start/auto-navigation from submit handling. The Assistant now clears stale guided/action state on chat clear, prompt submit, and target switch, shows an explicit start button only for eligible multi-step parameter collection, and navigates only after that click.
+- Validation: backend npm run build; frontend pnpm build; backend source test `tsx --test test/ai-target-device-context.test.ts` 13/13; backend npm run validate:command-catalog; root npm run test:i18n; root npm run test:utf8; root npm run test:workflows; git diff --check. Backend npm test was attempted and correctly refused without TEST_DATABASE_URL.
+
 ## 2026-07-19 - AI Assistant target-device context
 
 - Added a target-context builder for AI Assistant prompts and wired chat context creation to selectedDeviceId on every request.
