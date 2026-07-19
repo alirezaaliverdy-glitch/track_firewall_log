@@ -1,3 +1,9 @@
+## 2026-07-19 - Cisco IOS Classic inventory and capabilities
+
+- Added safe optional IOS Classic command collection through the existing SSH2 command path and stored structured collection/profile evidence under Device capabilities.
+- Broadened Cisco read-only capability/platform metadata to include IOS Classic and adjusted workspace/Asset projection to use saved collection evidence when cache tables are absent.
+- Validation: backend npm run build; backend npm run validate:command-catalog; focused Cisco tests 18/18.
+
 ## 2026-07-19 - Cisco IOS Classic discovery and verification
 
 - Root cause addressed: IOS Classic detection was successful, but platform support was restricted to cisco-ios-xe, so connected devices were classified as connected_unsupported before inventory and verification could progress.

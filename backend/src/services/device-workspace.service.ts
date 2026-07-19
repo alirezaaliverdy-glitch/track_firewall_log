@@ -58,10 +58,28 @@ export async function getDeviceWorkspace(reference: string) {
     actions: actions.map((item) => point(item.updatedAt, item.status === "succeeded" ? 1 : item.status === "failed" ? 0 : 0.5, item.status)).reverse(),
     recentChanges: audit.map((item) => ({ timestamp: item.createdAt, label: item.action })).reverse()
   };
-  const vendorKey = device?.type === "linux_edge" ? "linux" : String(device?.type ?? directAsset?.vendor?.slug ?? "unknown");
-  const capabilityList = Array.isArray(capabilityCache?.capabilitiesJson) ? capabilityCache.capabilitiesJson.map((item) => asObject(item)) : [];
-  const supportedCiscoDomains = new Set(capabilityList.filter((item) => item.implementationState === "implemented" || item.supportState === "verified" || item.mode === "read").map((item) => String(item.domain ?? item.key ?? "")));
+  const vendorKey = device?.vendor === "cisco" ? "cisco" : device?.type === "linux_edge" ? "linux" : String(device?.type ?? directAsset?.vendor?.slug ?? "unknown");
+  const cisco = asObject(deviceCapabilities.cisco);
+  const ciscoCollection = asObject(cisco.collection);
+  const ciscoSystem = asObject(ciscoCollection.system);
+  const ciscoInterfaces = asObject(ciscoCollection.interfaces);
+  const ciscoHealth = asObject(ciscoCollection.health);
+  const ciscoNetwork = asObject(ciscoCollection.network);
+  const ciscoProfile = asObject(cisco.capabilityProfile ?? ciscoCollection.capabilityProfile);
+  const ciscoCapabilityGroups = asObject(ciscoProfile.groups);
+  const ciscoFacts = Object.keys(ciscoCollection).length > 0
+    ? { ...ciscoSystem, interfaces: asObject(ciscoInterfaces).summary ?? [], switchports: asObject(ciscoInterfaces).switchports ?? [], health: ciscoHealth, network: ciscoNetwork, collection: ciscoCollection }
+    : asObject(cisco.facts);
+  const workspaceFacts = capabilityCache?.factsJson ?? (Object.keys(ciscoFacts).length > 0 ? ciscoFacts : null);
+  const workspaceDetection = capabilityCache?.detectionJson ?? (Object.keys(ciscoDetection).length > 0 ? ciscoDetection : null);
+  const workspaceCapabilityList = Array.isArray(capabilityCache?.capabilitiesJson)
+    ? capabilityCache.capabilitiesJson.map((item) => asObject(item))
+    : Object.entries(ciscoCapabilityGroups).map(([domain, state]) => ({ domain, key: String(domain).toLowerCase(), state, mode: state === "read_only" ? "read" : "capability" }));
   const section = (key: string, titleFa: string, titleEn: string, hasData: boolean, requirement: string, nextAction: string) => ({ key, titleFa, titleEn, state: hasData ? "available" : "no_data", reason: hasData ? null : "No verified collection has been stored for this capability.", requirement, nextAction });
+  const ciscoSection = (key: string, group: string, titleFa: string, titleEn: string) => {
+    const capabilityState = String(ciscoCapabilityGroups[group] ?? "unknown");
+    return { ...section(key, titleFa, titleEn, capabilityState !== "unknown", "Refresh verified Cisco capabilities.", "Run safe read-only Cisco validation."), capabilityState };
+  };
   const vendorSections = vendorKey === "linux" ? [
     section("cpu", "پردازنده و بار", "CPU and load", metricSamples.some((item) => /cpu|load/i.test(item.metricKey)), "Run a verified Linux health collection.", "Refresh Linux monitoring."),
     section("memory", "حافظه و Swap", "Memory and swap", metricSamples.some((item) => /memory|mem|swap/i.test(item.metricKey)), "Run a verified Linux health collection.", "Refresh Linux monitoring."),
@@ -71,8 +89,22 @@ export async function getDeviceWorkspace(reference: string) {
     section("firewall", "فایروال", "Firewall", actions.some((item) => /firewall|port|block/i.test(item.actionType)), "Run a registered firewall inspection.", "Open Action Center or the command catalog."),
     section("authentication", "احراز هویت", "Authentication", findings.some((item) => /auth|login|ssh/i.test(`${item.category} ${item.title}`)), "Collect authentication telemetry.", "Start Linux monitoring."),
   ] : vendorKey === "cisco" ? [
-    ["inventory", "موجودی", "Inventory"], ["interfaces", "اینترفیس‌ها", "Interfaces"], ["vlans", "VLANها", "VLANs"], ["trunks", "Trunkها", "Trunks"], ["etherchannel", "EtherChannel", "EtherChannel"], ["spanning", "Spanning Tree", "Spanning tree"], ["routing", "مسیریابی", "Routing"], ["acl", "ACL و امنیت", "ACL and security"]
-  ].filter(([key]) => [...supportedCiscoDomains].some((value) => value.toLowerCase().includes(key))).map(([key, titleFa, titleEn]) => section(key, titleFa, titleEn, Object.keys(asObject(capabilityCache?.factsJson)).length > 0, "Refresh verified IOS-XE capabilities.", "Run safe read-only Cisco validation.")) : [
+    ciscoSection("system", "System", "System", "System"),
+    ciscoSection("inventory", "Inventory", "Inventory", "Inventory"),
+    ciscoSection("interfaces", "Interfaces", "Interfaces", "Interfaces"),
+    ciscoSection("switching", "Switching", "Switching", "Switching"),
+    ciscoSection("vlan", "VLAN", "VLAN", "VLAN"),
+    ciscoSection("routing", "Routing", "Routing", "Routing"),
+    ciscoSection("acl", "ACL", "ACL", "ACL"),
+    ciscoSection("nat", "NAT", "NAT", "NAT"),
+    ciscoSection("dhcp", "DHCP", "DHCP", "DHCP"),
+    ciscoSection("aaa", "AAA", "AAA", "AAA"),
+    ciscoSection("monitoring", "Monitoring", "Monitoring", "Monitoring"),
+    ciscoSection("backup", "Backup", "Backup", "Backup"),
+    ciscoSection("diagnostics", "Diagnostics", "Diagnostics", "Diagnostics"),
+    ciscoSection("security", "Security", "Security", "Security"),
+    ciscoSection("services", "Services", "Services", "Services")
+  ] : [
     section("interfaces", "اینترفیس‌ها", "Interfaces", actions.some((item) => /interface/i.test(item.actionType)), "Run a verified interface read.", "Use the registered vendor catalog."),
     section("routing", "مسیریابی", "Routing", actions.some((item) => /route/i.test(item.actionType)), "Run a verified routing read.", "Use the registered vendor catalog."),
     section("firewall", "فایروال و Policy", "Firewall and policy", actions.some((item) => /firewall|policy|nat|address/i.test(item.actionType)), "Run a verified policy inspection.", "Use the registered vendor catalog."),
@@ -111,8 +143,8 @@ export async function getDeviceWorkspace(reference: string) {
     overview: {
       name: device?.name ?? directAsset?.name,
       vendor: device?.vendor ?? directAsset?.vendor?.name ?? "unknown",
-      platform: capabilityCache?.platformKey ?? onboarding.platform ?? ciscoDetection.platform ?? directAsset?.platform?.name ?? device?.type ?? "unknown",
-      version: asObject(capabilityCache?.factsJson).version ?? ciscoDetection.version ?? null,
+      platform: capabilityCache?.platformKey ?? ciscoCollection.platform ?? onboarding.platform ?? ciscoDetection.platform ?? directAsset?.platform?.name ?? device?.type ?? "unknown",
+      version: asObject(workspaceFacts).iosVersion ?? asObject(workspaceFacts).version ?? ciscoDetection.version ?? null,
       site: directAsset?.site?.name ?? null,
       location: directAsset?.location?.name ?? null,
       managementIp: directAsset?.managementIp ?? device?.host ?? null,
@@ -120,9 +152,9 @@ export async function getDeviceWorkspace(reference: string) {
       healthScore: health?.score ?? null,
       healthState: health?.state ?? directAsset?.healthState ?? device?.status ?? "unknown",
       connectorState: onboarding.connectorType ? "verified" : latestStatus?.status ?? "unknown",
-      connectorType: onboarding.connectorType ?? capabilityCache?.connectorType ?? null,
+      connectorType: onboarding.connectorType ?? capabilityCache?.connectorType ?? (Object.keys(ciscoCollection).length > 0 ? "cisco-ios-xe-ssh" : null),
       lastContact: latestStatus?.checkedAt ?? directAsset?.lastSeenAt ?? null,
-      lastSuccessfulCollection: collections.find((item) => item.status === "succeeded" || item.status === "completed")?.completedAt ?? null,
+      lastSuccessfulCollection: collections.find((item) => item.status === "succeeded" || item.status === "completed")?.completedAt ?? ciscoCollection.collectedAt ?? null,
       findingsBySeverity: severityCounts,
       pendingActions: actions.filter((item) => PENDING_ACTION_STATES.includes(item.status as typeof PENDING_ACTION_STATES[number])).length,
       recentChanges: audit.slice(0, 5),
@@ -144,6 +176,16 @@ export async function getDeviceWorkspace(reference: string) {
       warnings: capabilityCache.warningsJson,
       refreshedAt: capabilityCache.refreshedAt,
       expiresAt: capabilityCache.expiresAt
+    } : Object.keys(cisco).length > 0 ? {
+      vendorKey: "cisco",
+      platformKey: String(ciscoCollection.platform ?? ciscoDetection.platform ?? "cisco-unknown"),
+      connectorType: Object.keys(ciscoCollection).length > 0 ? "cisco-ios-xe-ssh" : undefined,
+      detection: workspaceDetection,
+      capabilities: workspaceCapabilityList,
+      facts: workspaceFacts,
+      warnings: asObject(ciscoCollection).warnings ?? [],
+      refreshedAt: typeof ciscoCollection.collectedAt === "string" ? ciscoCollection.collectedAt : undefined,
+      expiresAt: undefined
     } : null,
     collections,
     charts,

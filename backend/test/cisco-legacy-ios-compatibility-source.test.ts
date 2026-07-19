@@ -18,8 +18,8 @@ test("legacy Cisco IOS SSH profile is explicit and opt-in", () => {
 });
 
 test("onboarding keeps modern-first Cisco SSH and only retries legacy after approval", () => {
-  assert.match(onboardingSource, /runReadOnlyCommands\(asDevice\(session, "modern"\), \["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"\]\)/);
+  assert.match(onboardingSource, /runReadOnlyCommands\(asDevice\(session, "modern"\), \[\.\.\.CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS\]\)/);
   assert.match(onboardingSource, /session\.draft\.ciscoLegacyCompatibilityApproved !== true/);
-  assert.match(onboardingSource, /runReadOnlyCommands\(asDevice\(session, "legacy_cisco"\), \["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"\]\)/);
+  assert.match(onboardingSource, /runReadOnlyCommands\(asDevice\(session, "legacy_cisco"\), \[\.\.\.CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS\]\)/);
   assert.match(onboardingSource, /sshCompatibilityProfile: "legacy_cisco"/);
 });

@@ -16,14 +16,14 @@ function ciscoRead(key: string, domain: string, titleEn: string, titleFa: string
     titleFa,
     titleEn,
     vendorKey: "cisco",
-    platformKeys: ["cisco-ios-xe"],
+    platformKeys: ["cisco-ios-xe", "cisco-ios-classic"],
     domain,
     mode: "read",
     risk: "low",
     permission: "cisco.read",
     connectorTypes: ["cisco-iosxe-ssh"],
-    supportedVersions: "Cisco IOS XE 17.x Catalyst 9300 command-reference verified for parser family",
-    requiredFacts: ["platform=cisco-ios-xe", "sshReachable=true"],
+    supportedVersions: "Cisco IOS-XE 17.x and Cisco IOS Classic shared read-only command family",
+    requiredFacts: ["platform=cisco-ios-xe|cisco-ios-classic", "sshReachable=true"],
     inputSchema: { type: "object", additionalProperties: false },
     outputSchema: { type: "object" },
     preflightTemplate: "detect-cisco-iosxe-platform",
@@ -49,8 +49,8 @@ export const CAPABILITY_REGISTRY: CapabilityDefinition[] = [
   ciscoRead("cisco.stp.read", "switching", "Spanning-tree summary", "خلاصه STP", "show spanning-tree summary", "show-spanning-tree-summary-iosxe.txt"),
   ciscoRead("cisco.routing.table.read", "routing", "Routing table", "جدول مسیریابی", "show ip route", "show-ip-route-iosxe.txt"),
   ciscoRead("cisco.security.acl.read", "security", "Access lists", "ACL ها", "show access-lists", "show-access-lists-iosxe.txt"),
-  { key: "cisco.vlan.create", titleFa: "ساخت VLAN", titleEn: "Create VLAN", vendorKey: "cisco", platformKeys: ["cisco-ios-xe"], domain: "switching", mode: "mutate", risk: "medium", permission: "cisco.vlan.change", connectorTypes: ["cisco-iosxe-ssh"], supportedVersions: "planned", requiredFacts: ["platform=cisco-ios-xe"], inputSchema: { type: "object" }, outputSchema: { type: "object" }, preflightTemplate: null, actionTemplate: null, verificationTemplate: null, rollbackSupport: "planned", implementationState: "planned", sourceRefs: ciscoSources, parserVersion: "none", fixtureRefs: [] },
-  { key: "cisco.etherchannel.create", titleFa: "ساخت EtherChannel", titleEn: "Create EtherChannel", vendorKey: "cisco", platformKeys: ["cisco-ios-xe"], domain: "switching", mode: "mutate", risk: "high", permission: "cisco.etherchannel.change", connectorTypes: ["cisco-iosxe-ssh"], supportedVersions: "planned", requiredFacts: ["platform=cisco-ios-xe"], inputSchema: { type: "object" }, outputSchema: { type: "object" }, preflightTemplate: null, actionTemplate: null, verificationTemplate: null, rollbackSupport: "planned", implementationState: "planned", sourceRefs: ciscoSources, parserVersion: "none", fixtureRefs: [] }
+  { key: "cisco.vlan.create", titleFa: "ساخت VLAN", titleEn: "Create VLAN", vendorKey: "cisco", platformKeys: ["cisco-ios-xe", "cisco-ios-classic"], domain: "switching", mode: "mutate", risk: "medium", permission: "cisco.vlan.change", connectorTypes: ["cisco-iosxe-ssh"], supportedVersions: "planned", requiredFacts: ["platform=cisco-ios-xe"], inputSchema: { type: "object" }, outputSchema: { type: "object" }, preflightTemplate: null, actionTemplate: null, verificationTemplate: null, rollbackSupport: "planned", implementationState: "planned", sourceRefs: ciscoSources, parserVersion: "none", fixtureRefs: [] },
+  { key: "cisco.etherchannel.create", titleFa: "ساخت EtherChannel", titleEn: "Create EtherChannel", vendorKey: "cisco", platformKeys: ["cisco-ios-xe", "cisco-ios-classic"], domain: "switching", mode: "mutate", risk: "high", permission: "cisco.etherchannel.change", connectorTypes: ["cisco-iosxe-ssh"], supportedVersions: "planned", requiredFacts: ["platform=cisco-ios-xe"], inputSchema: { type: "object" }, outputSchema: { type: "object" }, preflightTemplate: null, actionTemplate: null, verificationTemplate: null, rollbackSupport: "planned", implementationState: "planned", sourceRefs: ciscoSources, parserVersion: "none", fixtureRefs: [] }
 ];
 
 export function getCapabilitiesForVendor(vendorKey: string) { return CAPABILITY_REGISTRY.filter((capability) => capability.vendorKey === vendorKey); }

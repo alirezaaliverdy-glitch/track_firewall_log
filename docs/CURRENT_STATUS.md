@@ -1,3 +1,9 @@
+## Cisco IOS Classic inventory and capability profile (2026-07-19)
+
+- IOS Classic now has a typed read-only collection bundle for system, inventory, interfaces, health, network, configuration metadata, security/services, and per-device capability states.
+- Saved Cisco capability evidence feeds the existing workspace projection and Asset sync without schema changes, duplicate APIs, or a second Cisco connector.
+- Validation for this slice: backend build, command catalog validation, focused Cisco tests 18/18.
+
 ## Cisco IOS Classic discovery and verification (2026-07-19)
 
 - IOS Classic no longer falls into connected_unsupported when SSH and read-only Cisco evidence succeed; it is supported alongside IOS-XE in the existing Cisco SSH2 connector path.

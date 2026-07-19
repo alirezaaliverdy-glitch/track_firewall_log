@@ -1,3 +1,10 @@
+**Cisco IOS Classic support - inventory and capability profile slice (2026-07-19)**
+
+- Added typed IOS Classic collection/profile evidence on top of the existing Cisco SSH2 connector. Optional IOS commands now produce partial/not_supported/unknown capability states instead of failing the whole collection or changing device connectivity.
+- Onboarding discovery now runs the expanded safe read-only inventory set and saves cisco.collection, cisco.capabilityProfile, inventoryStatus, and capabilityStatus into the existing Device capabilities JSON.
+- Device Workspace and Asset projection now reuse saved Cisco collection evidence when optional capability-cache rows are absent, so hostname, serial, platform, interface summary, health, network, and capability groups can render from the existing Device/Asset contract.
+- Validation passed: backend build, command catalog validation, focused Cisco tests 18/18, and prior git diff --check remains clean for the scoped changes.
+
 **Cisco IOS Classic support - discovery and verification slice (2026-07-19)**
 
 - IOS Classic is now treated as a supported Cisco automation platform after a real SSH shell command succeeds; NX-OS/ASA/FTD/XR remain connected-but-unsupported.

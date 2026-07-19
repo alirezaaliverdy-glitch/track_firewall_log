@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, Prisma, type Device } from "@prisma/client";
 import { CiscoConnectorError, ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
-import { detectCiscoPlatform, isSupportedCiscoAutomationPlatform, parseCiscoInterfacesStatus, parseCiscoIpInterfaceBrief, parseCiscoSystemFacts, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
+import { buildCiscoIosCollection, CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS, CISCO_IOS_CLASSIC_INVENTORY_COMMANDS } from "../connectors/cisco/ios-xe/cisco-iosxe.inventory.js";
+import { detectCiscoPlatform, isSupportedCiscoAutomationPlatform } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
 import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
@@ -302,13 +303,13 @@ export async function testOnboardingConnection(id: string) {
       let result: Awaited<ReturnType<typeof ciscoIosXeSshConnector.runReadOnlyCommands>>;
       let legacyRetry = false;
       try {
-        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "modern"), ["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"]);
+        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "modern"), [...CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS]);
       } catch (error) {
         const diagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
         const negotiationFailed = diagnostic?.stage === "ssh_negotiation" || diagnostic?.code === "CISCO_SSH_NEGOTIATION_FAILED";
         if (!negotiationFailed || session.draft.ciscoLegacyCompatibilityApproved !== true) throw error;
         legacyRetry = true;
-        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "legacy_cisco"), ["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"]);
+        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "legacy_cisco"), [...CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS]);
       }
       const platformResult = result.results.find((item) => item.commandId === "platform") ?? result.results[0];
       const outputById = Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout]));
@@ -400,28 +401,30 @@ export async function discoverOnboardingInventory(id: string) {
   touch(session, "discovery_running", "discover");
   try {
     if (session.draft.vendor === "cisco") {
-      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, session.draft.ciscoLegacyCompatibilityApproved ? "legacy_cisco" : "modern"), ["inventory", "interfacesStatus", "ipInterfaceBrief", "vlanBrief"]);
+      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, session.draft.ciscoLegacyCompatibilityApproved ? "legacy_cisco" : "modern"), [...CISCO_IOS_CLASSIC_INVENTORY_COMMANDS]);
       if (!result.connectorInvoked) throw new Error("Cisco inventory connector was not invoked.");
-      const byId = Object.fromEntries(result.results.map((item) => [item.commandId, item]));
       const evidenceOutputs = { ...session.privateEvidence.ciscoOutputs, ...Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout])) };
-      const system = parseCiscoSystemFacts(evidenceOutputs.platform ?? session.privateEvidence.showVersion ?? "", evidenceOutputs.inventory ?? "", evidenceOutputs.runningConfigHostname ?? "");
-      const ipInterfaces = parseCiscoIpInterfaceBrief(evidenceOutputs.ipInterfaceBrief ?? "");
+      session.privateEvidence.ciscoOutputs = evidenceOutputs;
+      const collection = buildCiscoIosCollection(evidenceOutputs, result.warnings);
       session.discovery = {
         connectorInvoked: true,
         connectorType: ciscoIosXeSshConnector.connectorType,
         commandsVerified: Array.from(new Set([...Object.keys(evidenceOutputs), ...result.results.map((item) => item.commandId)])),
         inventoryAvailable: Boolean((evidenceOutputs.inventory ?? "").trim()),
-        system,
-        hostname: system.hostname,
-        model: system.model,
-        serialNumber: system.serialNumber,
-        iosVersion: system.iosVersion,
-        uptime: system.uptime,
-        imageName: system.imageName,
-        interfaceCount: Math.max(parseCiscoInterfacesStatus(byId.interfacesStatus?.stdout ?? "").length, ipInterfaces.length),
-        ipInterfaces,
-        vlanCount: parseCiscoVlans(byId.vlanBrief?.stdout ?? "").length,
-        capabilities: ["system.version.read", "system.inventory.read", "interfaces.status.read", "interfaces.ip.brief.read", "vlan.read"],
+        inventoryStatus: collection.inventoryStatus,
+        capabilityStatus: collection.capabilityStatus,
+        system: collection.system,
+        hostname: collection.system.hostname,
+        model: collection.system.model,
+        serialNumber: collection.system.serialNumber,
+        iosVersion: collection.system.iosVersion,
+        uptime: collection.system.uptime,
+        imageName: collection.system.imageName,
+        interfaceCount: collection.interfaces.summary.length || collection.interfaces.switchports.length,
+        ipInterfaces: collection.interfaces.summary,
+        vlanCount: collection.network.vlans.entries.length,
+        collection,
+        capabilities: collection.capabilityProfile.groups,
         warnings: result.warnings
       };
     } else {
@@ -682,7 +685,7 @@ export async function commitOnboardingSession(id: string) {
     ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
   };
   if (draft.vendor === "cisco") {
-    capabilities.cisco = { showVersion: session.privateEvidence.showVersion, outputs: session.privateEvidence.ciscoOutputs ?? {}, facts: session.discovery?.system ?? {} };
+    capabilities.cisco = { showVersion: session.privateEvidence.showVersion, outputs: session.privateEvidence.ciscoOutputs ?? {}, facts: session.discovery?.system ?? {}, collection: session.discovery?.collection ?? null, capabilityProfile: (session.discovery?.collection as { capabilityProfile?: unknown } | undefined)?.capabilityProfile ?? null, inventoryStatus: session.discovery?.inventoryStatus ?? "partial", capabilityStatus: session.discovery?.capabilityStatus ?? "partial" };
     capabilities.ciscoDetection = session.detection;
     capabilities.ciscoDiscovery = session.discovery;
   }

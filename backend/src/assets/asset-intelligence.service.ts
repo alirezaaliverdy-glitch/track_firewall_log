@@ -175,14 +175,24 @@ export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, devi
     throw new Error(`Ambiguous Asset projection for Device ${device.id}; no automatic change was made.`);
   }
   const source = await upsertSource(tx, "existing_devices");
+  const capabilities = object(device.capabilities);
+  const cisco = object(capabilities.cisco);
+  const ciscoCollection = object(cisco.collection);
+  const ciscoSystem = object(ciscoCollection.system);
+  const ciscoFacts = object(cisco.facts);
+  const ciscoDetection = object(capabilities.ciscoDetection);
+  const collectedHostname = String(ciscoSystem.hostname ?? ciscoFacts.hostname ?? ciscoDetection.hostname ?? device.name).trim() || device.name;
+  const collectedSerial = String(ciscoSystem.serialNumber ?? ciscoFacts.serialNumber ?? "").trim() || null;
+  const collectedPlatform = String(ciscoCollection.platform ?? ciscoDetection.platform ?? device.type).trim() || device.type;
   const vendorId = await upsertNameModel(tx, "assetVendor", device.vendor);
-  const platformId = await upsertNameModel(tx, "assetPlatform", device.type);
+  const platformId = await upsertNameModel(tx, "assetPlatform", collectedPlatform);
   const roleId = await upsertNameModel(tx, "assetRole", device.type === "linux_edge" ? "Linux Server" : "Network Device");
   const existing = linked[0] ?? unlinked[0];
   const data = {
     name: device.name,
-    hostname: device.name,
+    hostname: collectedHostname,
     managementIp: device.host,
+    serial: collectedSerial,
     managedState: "managed",
     healthState: device.status,
     deviceId: device.id,
@@ -192,7 +202,7 @@ export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, devi
     sourceId: source.id,
     lastSeenAt: new Date(),
     tagsJson: toJson(device.tags),
-    metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort })
+    metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort, cisco: { inventoryStatus: cisco.inventoryStatus ?? null, capabilityStatus: cisco.capabilityStatus ?? null, platform: collectedPlatform } })
   };
   const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
   await tx.assetIpAddress.upsert({
