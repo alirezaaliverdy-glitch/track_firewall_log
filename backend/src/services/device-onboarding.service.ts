@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, Prisma, type Device } from "@prisma/client";
 import { CiscoConnectorError, ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
-import { detectCiscoPlatform, parseCiscoInterfacesStatus, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
+import { detectCiscoPlatform, isSupportedCiscoAutomationPlatform, parseCiscoInterfacesStatus, parseCiscoIpInterfaceBrief, parseCiscoSystemFacts, parseCiscoVlans } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { prisma } from "../db/prisma.js";
 import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
@@ -58,7 +58,7 @@ type OnboardingSession = {
   discovery: Record<string, unknown> | null;
   preview: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
-  privateEvidence: { showVersion?: string };
+  privateEvidence: { showVersion?: string; ciscoOutputs?: Record<string, string> };
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -302,16 +302,18 @@ export async function testOnboardingConnection(id: string) {
       let result: Awaited<ReturnType<typeof ciscoIosXeSshConnector.runReadOnlyCommands>>;
       let legacyRetry = false;
       try {
-        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "modern"), ["platform"]);
+        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "modern"), ["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"]);
       } catch (error) {
         const diagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
         const negotiationFailed = diagnostic?.stage === "ssh_negotiation" || diagnostic?.code === "CISCO_SSH_NEGOTIATION_FAILED";
         if (!negotiationFailed || session.draft.ciscoLegacyCompatibilityApproved !== true) throw error;
         legacyRetry = true;
-        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "legacy_cisco"), ["platform"]);
+        result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "legacy_cisco"), ["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"]);
       }
-      const platformResult = result.results[0];
+      const platformResult = result.results.find((item) => item.commandId === "platform") ?? result.results[0];
+      const outputById = Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout]));
       session.privateEvidence.showVersion = platformResult?.stdout ?? "";
+      session.privateEvidence.ciscoOutputs = outputById;
       session.test = {
         connected: result.connectorInvoked && Boolean(platformResult),
         connectorInvoked: result.connectorInvoked,
@@ -370,9 +372,9 @@ export async function detectOnboardingPlatform(id: string) {
   if (session.draft.vendor === "cisco") {
     const detection = detectCiscoPlatform(session.privateEvidence.showVersion ?? "");
     session.detection = detection;
-    if (!detection.supported || detection.platform !== "cisco-ios-xe") {
+    if (!isSupportedCiscoAutomationPlatform(detection.platform)) {
       session.draft.platform = detection.platform;
-      session.result = { recoverable: true, status: "platform_unsupported", error: `Detected platform ${detection.platform} is not supported by the Cisco IOS-XE automation path.`, connectivityVerified: true, connectorInvoked: session.test?.connectorInvoked === true, platform: detection.platform };
+      session.result = { recoverable: true, status: "platform_unsupported", error: `Detected platform ${detection.platform} is not supported by the current Cisco automation path.`, connectivityVerified: true, connectorInvoked: session.test?.connectorInvoked === true, platform: detection.platform };
       const response = touch(session, "platform_unsupported", "review");
       await persistSession(session);
       return response;
@@ -401,12 +403,23 @@ export async function discoverOnboardingInventory(id: string) {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, session.draft.ciscoLegacyCompatibilityApproved ? "legacy_cisco" : "modern"), ["inventory", "interfacesStatus", "ipInterfaceBrief", "vlanBrief"]);
       if (!result.connectorInvoked) throw new Error("Cisco inventory connector was not invoked.");
       const byId = Object.fromEntries(result.results.map((item) => [item.commandId, item]));
+      const evidenceOutputs = { ...session.privateEvidence.ciscoOutputs, ...Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout])) };
+      const system = parseCiscoSystemFacts(evidenceOutputs.platform ?? session.privateEvidence.showVersion ?? "", evidenceOutputs.inventory ?? "", evidenceOutputs.runningConfigHostname ?? "");
+      const ipInterfaces = parseCiscoIpInterfaceBrief(evidenceOutputs.ipInterfaceBrief ?? "");
       session.discovery = {
         connectorInvoked: true,
         connectorType: ciscoIosXeSshConnector.connectorType,
-        commandsVerified: result.results.map((item) => item.commandId),
-        inventoryAvailable: Boolean(byId.inventory?.stdout.trim()),
-        interfaceCount: parseCiscoInterfacesStatus(byId.interfacesStatus?.stdout ?? "").length,
+        commandsVerified: Array.from(new Set([...Object.keys(evidenceOutputs), ...result.results.map((item) => item.commandId)])),
+        inventoryAvailable: Boolean((evidenceOutputs.inventory ?? "").trim()),
+        system,
+        hostname: system.hostname,
+        model: system.model,
+        serialNumber: system.serialNumber,
+        iosVersion: system.iosVersion,
+        uptime: system.uptime,
+        imageName: system.imageName,
+        interfaceCount: Math.max(parseCiscoInterfacesStatus(byId.interfacesStatus?.stdout ?? "").length, ipInterfaces.length),
+        ipInterfaces,
         vlanCount: parseCiscoVlans(byId.vlanBrief?.stdout ?? "").length,
         capabilities: ["system.version.read", "system.inventory.read", "interfaces.status.read", "interfaces.ip.brief.read", "vlan.read"],
         warnings: result.warnings
@@ -669,7 +682,7 @@ export async function commitOnboardingSession(id: string) {
     ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
   };
   if (draft.vendor === "cisco") {
-    capabilities.cisco = { showVersion: session.privateEvidence.showVersion };
+    capabilities.cisco = { showVersion: session.privateEvidence.showVersion, outputs: session.privateEvidence.ciscoOutputs ?? {}, facts: session.discovery?.system ?? {} };
     capabilities.ciscoDetection = session.detection;
     capabilities.ciscoDiscovery = session.discovery;
   }

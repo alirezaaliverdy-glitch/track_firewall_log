@@ -94,7 +94,7 @@ test("platform semantics preserve connected-but-unsupported classic IOS and NX-O
   const classic = readFileSync(new URL("../src/connectors/cisco/ios-xe/fixtures/show-version-classic-ios.txt", import.meta.url), "utf8");
   const nxos = readFileSync(new URL("../src/connectors/cisco/ios-xe/fixtures/show-version-nxos.txt", import.meta.url), "utf8");
   const iosxe = readFileSync(new URL("../src/connectors/cisco/ios-xe/fixtures/show-version-iosxe.txt", import.meta.url), "utf8");
-  assert.equal(ciscoConnectionSemantic(classic), "connected_unsupported");
+  assert.equal(ciscoConnectionSemantic(classic), "connected_supported");
   assert.equal(ciscoConnectionSemantic(nxos), "connected_unsupported");
   assert.equal(ciscoConnectionSemantic(iosxe), "connected_supported");
 });

@@ -1,3 +1,10 @@
+**Cisco IOS Classic support - discovery and verification slice (2026-07-19)**
+
+- IOS Classic is now treated as a supported Cisco automation platform after a real SSH shell command succeeds; NX-OS/ASA/FTD/XR remain connected-but-unsupported.
+- Cisco onboarding now carries show version, show inventory, hostname include, and show ip interface brief evidence from Test Connection into detection/discovery, preserving connectorInvoked and per-session legacy SSH compatibility.
+- Parsed and persisted initial IOS Classic facts include hostname, model, serial number, IOS version, image name, uptime, boot image when present, platform family, and IP interface brief entries. Verification still requires SSH plus real read-only Cisco output.
+- Validation passed for this slice: backend build, focused Cisco ssh2/source/parser tests, and git diff --check. The broader database-backed interactive test remains gated by TEST_DATABASE_URL_REQUIRED, as intended by the test database safety guard.
+
 **Cisco legacy IOS SSH compatibility fix (2026-07-19)**
 
 - Tightened the opt-in `legacy_cisco` SSH compatibility profile into a named `Legacy Cisco IOS Compatibility Profile`; modern Cisco SSH remains the default and no onboarding, Action Center, PolicyGuard, catalog, or protected lab execution behavior was weakened.

@@ -118,11 +118,11 @@ test("legacy Cisco fails negotiation when disabled and succeeds when explicitly 
   try {
     const result = await connector().runReadOnlyCommands(device(legacyFixture.port, true), ["platform"]);
     assert.equal(result.connectorInvoked, true);
-    assert.equal(result.connection.semantic, "connected_unsupported");
+    assert.equal(result.connection.semantic, "connected_supported");
     assert.equal(result.connection.legacyCompatibilityRequested, true);
     assert.equal(result.connection.legacyCompatibilityApplied, true);
     assert.equal(result.connection.compatibilityProfile, "legacy_cisco");
-    assert.equal(result.connection.diagnostic.code, "CISCO_CONNECTED_UNSUPPORTED");
+    assert.equal(result.connection.diagnostic.code, "CISCO_CONNECTED_SUPPORTED");
     assert.match(result.results[0].stdout, /Cisco IOS Software/);
   } finally {
     await new Promise<void>((resolve) => legacyFixture.server.close(() => resolve()));

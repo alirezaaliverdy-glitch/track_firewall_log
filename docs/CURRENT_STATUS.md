@@ -1,3 +1,9 @@
+## Cisco IOS Classic discovery and verification (2026-07-19)
+
+- IOS Classic no longer falls into connected_unsupported when SSH and read-only Cisco evidence succeed; it is supported alongside IOS-XE in the existing Cisco SSH2 connector path.
+- Onboarding stores sanitized Cisco discovery evidence and initial parsed system/interface facts without exposing credentials or weakening global SSH algorithms.
+- Current validation for this slice: backend build, focused Cisco ssh2/source/parser tests, and git diff --check. Database-backed connector tests still require an explicit isolated TEST_DATABASE_URL.
+
 ## Cisco Legacy IOS SSH Compatibility Fix (2026-07-19)
 
 - The `legacy_cisco` profile is now the named Legacy Cisco IOS Compatibility Profile and explicitly prepends `diffie-hellman-group14-sha1`, `ssh-rsa`, CBC ciphers, and SHA-1 HMACs only for approved legacy Cisco devices.

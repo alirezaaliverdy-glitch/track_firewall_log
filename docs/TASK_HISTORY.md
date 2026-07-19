@@ -1,3 +1,9 @@
+## 2026-07-19 - Cisco IOS Classic discovery and verification
+
+- Root cause addressed: IOS Classic detection was successful, but platform support was restricted to cisco-ios-xe, so connected devices were classified as connected_unsupported before inventory and verification could progress.
+- Added IOS Classic to the existing Cisco automation support boundary, carried safe identification commands through onboarding, and persisted parsed initial system/interface facts into the existing Device capabilities payload.
+- Validation: backend npm run build; focused Cisco ssh2/source/parser tests 16/16; git diff --check. DB-backed interactive connector test refused to run without TEST_DATABASE_URL, preserving the safety gate.
+
 ## 2026-07-19 - Cisco legacy IOS SSH compatibility
 
 - Converted the opt-in legacy Cisco SSH algorithm override into a named Legacy Cisco IOS Compatibility Profile.

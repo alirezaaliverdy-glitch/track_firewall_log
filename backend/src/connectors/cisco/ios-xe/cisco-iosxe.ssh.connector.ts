@@ -2,7 +2,7 @@ import { createConnection, type Socket } from "node:net";
 import { Client, type ClientChannel, type ConnectConfig } from "ssh2";
 import { DeviceProtocol, type Device } from "@prisma/client";
 import { env } from "../../../config/env.js";
-import { detectCiscoPlatform } from "./cisco-iosxe.parsers.js";
+import { detectCiscoPlatform, isSupportedCiscoAutomationPlatform } from "./cisco-iosxe.parsers.js";
 import { detectCiscoPrompt, normalizeCiscoTerminalOutput, stripCiscoEchoAndPrompt } from "./cisco-iosxe.prompt.js";
 import { ciscoReadCommand, type CiscoReadCommandId } from "./cisco-iosxe.templates.js";
 import type { CiscoConnectionEvidence, CiscoConnectionStage, CiscoConnectorDiagnostic, CiscoSshCompatibilityProfile } from "./cisco-iosxe.types.js";
@@ -107,7 +107,7 @@ export function ciscoCompatibilityProfile(device: Pick<Device, "capabilities">):
 }
 
 export function ciscoConnectionSemantic(showVersionOutput: string) {
-  return detectCiscoPlatform(showVersionOutput).supported ? "connected_supported" as const : "connected_unsupported" as const;
+  return isSupportedCiscoAutomationPlatform(detectCiscoPlatform(showVersionOutput).platform) ? "connected_supported" as const : "connected_unsupported" as const;
 }
 
 async function resolveDeviceCredential(device: Pick<Device, "credentialId" | "credentialRef" | "capabilities">, profile: CiscoSshCompatibilityProfile) {
@@ -332,17 +332,18 @@ export class CiscoIosXeSshConnector {
         const results: CiscoIosXeCommandResult[] = [];
         for (const commandId of commandIds) {
           const command = ciscoReadCommand(commandId);
-          results.push({ commandId, command, ...(await session.runCommand(command)) });
+          const strict = commandId === "platform";
+          results.push({ commandId, command, ...(await session.runCommand(command, strict)) });
         }
         const platformOutput = results.find((item) => item.commandId === "platform")?.stdout;
         const platform = platformOutput ? detectCiscoPlatform(platformOutput) : null;
         const semantic = platformOutput ? ciscoConnectionSemantic(platformOutput) : "connected_supported";
         const diagnostic: CiscoConnectorDiagnostic = {
           code: semantic === "connected_supported" ? "CISCO_CONNECTED_SUPPORTED" : "CISCO_CONNECTED_UNSUPPORTED",
-          stage: platform && !platform.supported ? "platform_detection" : "command", retryable: false,
-          userMessage: platform && !platform.supported ? `Cisco SSH succeeded, but platform ${platform.platform} is not supported by the IOS-XE automation path.` : "Cisco interactive SSH and read-only command execution succeeded.",
-          remediation: platform && !platform.supported ? REMEDIATION.platform_detection : [], ...state,
-          connectionPhase: platform && !platform.supported ? "platform_detection" : "command"
+          stage: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? "platform_detection" : "command", retryable: false,
+          userMessage: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? `Cisco SSH succeeded, but platform ${platform.platform} is not supported by the current Cisco automation path.` : "Cisco interactive SSH and read-only command execution succeeded.",
+          remediation: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? REMEDIATION.platform_detection : [], ...state,
+          connectionPhase: platform && !isSupportedCiscoAutomationPlatform(platform.platform) ? "platform_detection" : "command"
         };
         return { connectorInvoked: true, results, warnings: initialized.warnings, connection: { semantic, diagnostic, promptMode: initialized.promptMode, compatibilityProfile, legacyCompatibilityRequested: diagnostic.legacyCompatibilityRequested, legacyCompatibilityApplied: diagnostic.legacyCompatibilityApplied, connectionPhase: diagnostic.connectionPhase } };
       } finally { session.close(); }

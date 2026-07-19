@@ -10,9 +10,9 @@ const pageSource = readFileSync(new URL("../../src/features/assets/pages/DeviceO
 test("Cisco legacy compatibility is carried through onboarding session boundaries", () => {
   assert.match(serviceSource, /ciscoLegacyCompatibilityApproved:\s*\(input\.ciscoLegacyCompatibilityApproved === true\)/);
   assert.match(serviceSource, /ciscoLegacyCompatibilityApproved:\s*input\.ciscoLegacyCompatibilityApproved === undefined \? session\.draft\.ciscoLegacyCompatibilityApproved === true : input\.ciscoLegacyCompatibilityApproved === true/);
-  assert.match(serviceSource, /runReadOnlyCommands\(asDevice\(session, "modern"\), \["platform"\]\)/);
+  assert.match(serviceSource, /runReadOnlyCommands\(asDevice\(session, "modern"\), \["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"\]\)/);
   assert.match(serviceSource, /session\.draft\.ciscoLegacyCompatibilityApproved !== true/);
-  assert.match(serviceSource, /runReadOnlyCommands\(asDevice\(session, "legacy_cisco"\), \["platform"\]\)/);
+  assert.match(serviceSource, /runReadOnlyCommands\(asDevice\(session, "legacy_cisco"\), \["platform", "inventory", "runningConfigHostname", "ipInterfaceBrief"\]\)/);
   assert.match(serviceSource, /sshCompatibilityProfile: "legacy_cisco"/);
   assert.match(pageSource, /change\("ciscoLegacyCompatibilityApproved", event\.target\.checked\)/);
   assert.match(apiSource, /ciscoLegacyCompatibilityApproved\?: boolean/);

@@ -1,9 +1,9 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { CAPABILITY_REGISTRY } from "../src/vendors/capability.registry.js";
-import { detectCiscoPlatform, parseCiscoAccessLists, parseCiscoEtherChannels, parseCiscoInterfacesStatus, parseCiscoVlans } from "../src/connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
+import { detectCiscoPlatform, parseCiscoAccessLists, parseCiscoEtherChannels, parseCiscoInterfacesStatus, parseCiscoIpInterfaceBrief, parseCiscoSystemFacts, parseCiscoVlans } from "../src/connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { detectCiscoPrompt, stripCiscoEchoAndPrompt } from "../src/connectors/cisco/ios-xe/cisco-iosxe.prompt.js";
 import { parseLinuxHealthOutput } from "../src/monitoring/linux/linux-health.parser.js";
 import { scoreLinuxHealth } from "../src/monitoring/linux/linux-health-score.js";
@@ -19,7 +19,7 @@ test("Task 18.2A detects Cisco platform families conservatively", () => {
   assert.ok(iosxe.confidence >= 80);
   const classic = detectCiscoPlatform(ciscoFixture("show-version-classic-ios.txt"));
   assert.equal(classic.platform, "cisco-ios-classic");
-  assert.equal(classic.supported, false);
+  assert.equal(classic.supported, true);
   const nxos = detectCiscoPlatform(ciscoFixture("show-version-nxos.txt"));
   assert.equal(nxos.platform, "cisco-nx-os");
   assert.equal(nxos.supported, false);
@@ -27,11 +27,16 @@ test("Task 18.2A detects Cisco platform families conservatively", () => {
 
 test("Task 18.2A parses Cisco read-only fixtures", () => {
   assert.equal(parseCiscoInterfacesStatus(ciscoFixture("show-interfaces-status-iosxe.txt")).length, 2);
+  const classicFacts = parseCiscoSystemFacts(ciscoFixture("show-version-classic-ios.txt"));
+  assert.equal(classicFacts.platform, "cisco-ios-classic");
+  assert.equal(classicFacts.model, "WS-C3560CX-8PC-S");
+  assert.equal(classicFacts.iosVersion, "15.2(7)E8");
+  assert.equal(classicFacts.uptime, "1 year, 2 weeks");
+  assert.equal(parseCiscoIpInterfaceBrief("Interface IP-Address OK? Method Status Protocol\nVlan1 192.168.7.12 YES manual up up")[0]?.name, "Vlan1");
   assert.equal(parseCiscoVlans(ciscoFixture("show-vlan-brief-iosxe.txt"))[1]?.vlanId, 120);
   assert.equal(parseCiscoEtherChannels(ciscoFixture("show-etherchannel-summary-iosxe.txt"))[0]?.protocol, "LACP");
   assert.equal(parseCiscoAccessLists(ciscoFixture("show-access-lists-iosxe.txt")).filter((line) => line.action === "deny").length, 1);
 });
-
 test("Task 18.2A prompt parser and output cleanup stay read-only safe", () => {
   assert.equal(detectCiscoPrompt("Switch#").mode, "privileged");
   assert.equal(detectCiscoPrompt("Switch(config)#").mode, "config");
