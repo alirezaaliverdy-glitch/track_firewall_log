@@ -830,3 +830,12 @@
 - The fallback is vendor-agnostic and still uses the selected device context as source of truth. It is explicitly `manualOnly`, `executionSupport=manual`, `executable=false`, has no connector/template reference, and cannot bypass the existing Action Center, approval, policy, and audit pipeline.
 - Informational/read-only chat remains inside the Assistant because the fallback requires an operational verb and a selected device; supported executable catalog actions still create normal connector-backed ActionPlans.
 - Validation: backend build, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and `git diff --check` passed. Full backend suite was attempted with `TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/firewall_log_analyzer_test`; it ran 298 tests with 232 pass and 66 fail because the isolated test database does not exist plus older unrelated source-contract expectations.
+
+## 2026-07-19 - AI Assistant selected-vendor ActionPlan coverage follow-up
+
+- Re-traced the Assistant path from selected device context through resolver, chat response, `/commands/ai-propose`, ActionPlan persistence, and Action Center controls.
+- Fixed the still-visible gap for selected-device overview prompts such as "what do you know about my router": the resolver now maps device overview/status/health requests to the best registered read-only target action for the selected vendor, e.g. MikroTik daily check, when a safe connector template exists.
+- Broadened custom fallback detection from a short verb list to selected-device planning signals, so unmatched device-scoped requests create a reviewable `custom_vendor_action` ActionPlan instead of returning `actionPlan: null`.
+- Added the same review-only custom ActionPlan fallback to `/api/commands/ai-propose`, preserving selected-device vendor context in that path too.
+- Controlled execution is unchanged: only verified catalog items with registered template and connector metadata become executable. Custom AI proposals remain review-only until a backend template/connector contract is added.
+- Validation passed: backend build, command catalog validation (191 items), targeted AI routing/context tests (23/23), frontend build, i18n, UTF-8, workflow, and diff check. Full backend suite was attempted with the isolated test URL; it ran 301 tests with 235 pass and 66 fail because `firewall_log_analyzer_test` is not present plus older unrelated source-contract expectations.

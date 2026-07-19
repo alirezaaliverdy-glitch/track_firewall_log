@@ -132,6 +132,14 @@ function hasOperationalVerb(message: string) {
   ].some((term) => text.includes(term));
 }
 
+function hasDevicePlanSignal(message: string) {
+  const text = normalizedChatText(message);
+  return hasOperationalVerb(message) || [
+    "device", "router", "switch", "firewall", "server", "host", "vendor", "status", "health", "diagnostic", "overview", "about",
+    "دستگاه", "روتر", "سوییچ", "سوئیچ", "فایروال", "سرور", "وندور", "وضعیت", "سلامت", "بررسی", "چک", "تحلیل", "درباره", "چی میدونی", "چه میدونی",
+  ].some((term) => text.includes(term));
+}
+
 function shouldCreateReviewOnlyActionPlan(input: {
   message: string;
   selectedDevice: { id: string } | null;
@@ -144,7 +152,7 @@ function shouldCreateReviewOnlyActionPlan(input: {
     !input.supportedActionForPlan &&
     input.resolution.mode === "manual_or_not_supported" &&
     input.resolutionMissing.length === 0 &&
-    hasOperationalVerb(input.message)
+    hasDevicePlanSignal(input.message)
   );
 }
 

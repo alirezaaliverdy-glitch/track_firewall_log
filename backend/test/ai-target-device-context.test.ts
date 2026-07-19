@@ -45,7 +45,8 @@ test("supported actions are filtered to Cisco, FortiGate, MikroTik or Linux sele
 test("AI resolver source prevents stale cross-vendor catalog fallback", () => {
   const source = read("../src/ai/ai-template-resolver.ts");
   assert.match(source, /normalizeAiVendor\(input\.targetDeviceContext\?\.device\?\.vendor\)[\s\S]*normalizeAiVendor\(input\.selectedDevice\?\.type\)[\s\S]*normalizeAiVendor\(input\.selectedDevice\?\.vendor\)/);
-  assert.match(source, /resolveTargetSupportedAction\(input\.userText, targetSupportedActions\(input\.targetDeviceContext\)\)/);
+  assert.match(source, /const selectedTargetActions = targetSupportedActions\(input\.targetDeviceContext\)/);
+  assert.match(source, /resolveTargetSupportedAction\(input\.userText, selectedTargetActions\)/);
   assert.match(source, /routePersianIntent\(\{[\s\S]*selectedDeviceId: input\.selectedDevice\?\.id[\s\S]*selectedVendor,/);
   assert.match(source, /vendor === "generic" \? COMMAND_CATALOG\.find\(\(entry\) => entry\.actionType === actionType\) : null/);
   assert.doesNotMatch(source, /\?\? COMMAND_CATALOG\.find\(\(entry\) => entry\.actionType === actionType\)\s+\?\? null/);
@@ -108,7 +109,7 @@ test("unsupported selected-device requests stay reviewable in Assistant", () => 
 test("custom operational selected-device requests create review-only ActionPlans", () => {
   const chat = read("../src/services/ai-chat.service.ts");
   assert.match(chat, /shouldCreateReviewOnlyActionPlan/);
-  assert.match(chat, /hasOperationalVerb/);
+  assert.match(chat, /hasDevicePlanSignal/);
   assert.match(chat, /!input\.supportedActionForPlan/);
   assert.match(chat, /input\.resolution\.mode === "manual_or_not_supported"/);
   assert.match(chat, /actionType: "custom_vendor_action"/);
@@ -117,6 +118,25 @@ test("custom operational selected-device requests create review-only ActionPlans
   assert.match(chat, /executionSupport: "manual"/);
   assert.match(chat, /executable: false/);
   assert.match(chat, /reviewOnly: true/);
+});
+
+test("selected-device overview questions are routed to registered read-only target actions", () => {
+  const resolver = read("../src/ai/ai-template-resolver.ts");
+  assert.match(resolver, /resolveDefaultReadOnlyTargetAction/);
+  assert.match(resolver, /isDeviceOverviewRequest/);
+  assert.match(resolver, /action\.readOnly !== false/);
+  assert.match(resolver, /action\.executionTemplateRef/);
+  assert.match(resolver, /resolveTargetSupportedAction\(input\.userText, selectedTargetActions\)[\s\S]*resolveDefaultReadOnlyTargetAction\(input\.userText, selectedTargetActions\)/);
+});
+
+test("command catalog AI propose creates review-only custom ActionPlans for unmatched selected-device requests", () => {
+  const route = read("../src/routes/command-catalog.ts");
+  assert.match(route, /actionType: "custom_vendor_action"/);
+  assert.match(route, /source: "ai_custom_proposal"/);
+  assert.match(route, /implementationState: "manualOnly"/);
+  assert.match(route, /executionSupport: "manual"/);
+  assert.match(route, /executable: false/);
+  assert.match(route, /actionPlanId: actionPlan\.id/);
 });
 
 test("custom proposals do not create or redirect to a Guided Action session", () => {

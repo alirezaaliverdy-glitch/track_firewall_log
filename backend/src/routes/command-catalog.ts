@@ -244,11 +244,62 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    const actionPlan = await proposeActionPlan({
+      source: "ai",
+      requestedBy: request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined,
+      deviceId: selectedDeviceId,
+      vendor: resolution.canonicalVendor,
+      actionType: "custom_vendor_action",
+      riskLevel: "medium",
+      parametersJson: {
+        ...resolution.normalizedParams,
+        vendor: resolution.canonicalVendor,
+        userRequest,
+        source: "ai_custom_proposal",
+        implementationState: "manualOnly",
+        executionSupport: "manual",
+        supportState: "manual_only",
+        supportReasonKey: "support.reason.manualReview",
+        executable: false,
+        connectorType: null,
+        executionTemplateRef: null,
+        normalizedParams: resolution.normalizedParams,
+        requiredParamsSatisfied: true,
+        missingFields: resolution.missingFields,
+        requiresExplicitReview: true,
+        metadata: {
+          source: "ai_custom_proposal",
+          catalogCommandId: null,
+          catalogVersion: COMMAND_CATALOG_VERSION,
+          catalogTitleFa: "پیشنهاد سفارشی هوش مصنوعی",
+          vendor: resolution.canonicalVendor,
+          actionType: "custom_vendor_action",
+          requestedActionType: resolution.canonicalActionType,
+          implementationState: "manualOnly",
+          executionSupport: "manual",
+          supportState: "manual_only",
+          supportReasonKey: "support.reason.manualReview",
+          executable: false,
+          connectorType: null,
+          executionTemplateRef: null,
+          normalizedParams: resolution.normalizedParams,
+          requiredParamsSatisfied: true,
+          missingFields: resolution.missingFields,
+          previewGenerated: false,
+          executed: false,
+          connectorInvoked: false,
+          lastExecutionStatus: "not_started",
+          reviewOnly: true
+        }
+      }
+    });
+
     return reply.code(200).send({
       mode: "manual_or_not_supported",
-      messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.",
+      actionPlanId: actionPlan.id,
+      messageFa: "پیشنهاد سفارشی قابل بازبینی ساخته شد. این برنامه بدون template ثبت‌شده اجرایی نیست و باید در مرکز عملیات بررسی شود.",
       draft,
-      actionPlan: null,
+      actionPlan,
       resolution,
     });
   });

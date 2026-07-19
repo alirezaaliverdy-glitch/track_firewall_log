@@ -777,3 +777,13 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Kept informational/status prompts chat-only and kept supported MikroTik/Cisco/FortiGate/Linux catalog actions on the existing executable ActionPlan path.
 - Added regression coverage that the chat service creates review-only custom ActionPlans while the resolver still avoids fake executable catalog matches.
 - Validation: backend build, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend suite was attempted with an isolated test URL but failed because `firewall_log_analyzer_test` is not present and several older unrelated source-contract tests fail.
+
+## 2026-07-19 - AI Assistant selected-vendor ActionPlan coverage follow-up
+
+- Root cause: the previous fallback still depended on a short operational-verb list and only covered the chat service, so selected-device overview prompts and `/commands/ai-propose` could still return the old "not ready" shape.
+- Added a resolver-level default read-only target action for selected-device overview/status/health requests. It picks only read-only supported actions with connector and execution-template metadata from the selected device's supported action list.
+- Broadened chat fallback matching to device planning signals such as router/device/status/health/about, so device-scoped unmatched requests create a review-only `custom_vendor_action` ActionPlan.
+- Added the same review-only custom ActionPlan creation to `/api/commands/ai-propose` after executable catalog matching fails.
+- Preserved controlled execution: custom AI proposals are Action Center records for review, but cannot preview/execute until a verified backend template/connector contract exists. Existing supported vendor actions still execute through the normal ActionPlan, PolicyGuard, connector, and audit path.
+- Added regression coverage for MikroTik overview -> `mikrotik_daily_check`, selected-device default read-only mapping, and command-catalog custom ActionPlan fallback.
+- Validation: backend build, command catalog validation, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend suite was attempted and failed only in the known environment/unrelated areas: 235/301 passed, 66 failed because the isolated test database is absent plus older source-contract tests.

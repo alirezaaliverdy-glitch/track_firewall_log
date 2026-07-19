@@ -47,6 +47,17 @@ test("MikroTik change SSH port uses selected target context and creates an Actio
   assert.deepEqual(resolution.missingFields, []);
 });
 
+test("MikroTik device overview question maps to a registered read-only ActionPlan candidate", () => {
+  const resolution = resolveForTarget("what do you know about my router", targetDevice({ id: "mt-info", vendor: "MikroTik", type: "mikrotik" }));
+
+  assert.equal(resolution.mode, "executable_action_plan");
+  assert.equal(resolution.canonicalVendor, "mikrotik");
+  assert.equal(resolution.canonicalActionType, "mikrotik_daily_check");
+  assert.equal(resolution.catalogCommandId, "mikrotik.daily-check");
+  assert.equal(resolution.connectorType, "mikrotik-ssh");
+  assert.equal(resolution.executionSupport, "connector");
+});
+
 test("Cisco create VLAN uses selected Cisco context and does not need text vendor inference", () => {
   const resolution = resolveForTarget("create VLAN 123", targetDevice({ id: "sw-1", vendor: "Cisco", type: "cisco_switch" }));
 

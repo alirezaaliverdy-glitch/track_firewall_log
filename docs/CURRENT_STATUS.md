@@ -689,3 +689,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - The fallback is not executable: metadata records `manualOnly`, `executionSupport=manual`, `executable=false`, no connector/template, no preview, no execution, and no Guided Action session.
 - Informational prompts remain chat-only because the fallback requires an operational verb.
 - Validation passed for backend build, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check. Full backend tests were attempted; 232/298 passed and 66 failed due to the missing isolated `firewall_log_analyzer_test` database and older unrelated source-contract expectations.
+
+## 2026-07-19 - AI Assistant selected-vendor ActionPlan coverage
+
+- Selected-device overview/status prompts now route to registered read-only vendor actions when available, so a MikroTik router overview becomes a safe `mikrotik_daily_check` ActionPlan candidate instead of the generic "not ready" response.
+- Unmatched selected-device requests now create review-only custom ActionPlans from both chat and `/commands/ai-propose`; neither path returns `actionPlan: null` for a device-scoped custom proposal.
+- Executability remains controlled by backend catalog metadata: verified support, connector support, registered execution template, selected device protocol, PolicyGuard, approval, audit, and connector evidence are still required.
+- Raw AI-generated commands are still not executable. To make a new custom request executable, add a registered backend catalog item/template/connector handler for that vendor.
+- Validation passed for backend build, command catalog validation, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check. Full backend tests were attempted; 235/301 passed and 66 failed due to the missing isolated `firewall_log_analyzer_test` database and older unrelated source-contract expectations.

@@ -289,6 +289,50 @@ function resolveTargetSupportedAction(userText: string, actions: readonly AiReso
   return best && best.score >= 2 ? best.action : null;
 }
 
+function isDeviceOverviewRequest(userText: string) {
+  const text = normalizeUserText(userText);
+  const asksAboutSelectedDevice = includesAny(text, [
+    "what do you know", "about my device", "about this device", "device overview", "device status", "system status", "health", "daily check", "diagnostic", "summary",
+    "چی میدونی", "چه میدونی", "درباره دستگاه", "درباره روتر", "از روترم", "روترم", "دستگاهم", "وضعیت دستگاه", "سلامت دستگاه", "چک روزانه", "بررسی کلی", "تحلیل کامل",
+  ]);
+  const mutating = includesAny(text, [
+    "configure", "create", "add", "change", "delete", "remove", "enable", "disable", "restart", "reload", "apply",
+    "تنظیم", "بساز", "ایجاد", "اضافه", "تغییر", "حذف", "فعال", "غیرفعال", "ریستارت", "اعمال",
+  ]);
+  return asksAboutSelectedDevice && !mutating;
+}
+
+function resolveDefaultReadOnlyTargetAction(userText: string, actions: readonly AiResolverSupportedAction[]) {
+  if (!isDeviceOverviewRequest(userText)) return null;
+  const candidates = actions.filter((action) =>
+    action.readOnly !== false &&
+    action.connectorType &&
+    action.executionTemplateRef &&
+    (action.requiredParams ?? []).length === 0
+  );
+  const priorityTerms = [
+    "daily-check",
+    "diagnostics",
+    "diagnostic",
+    "health",
+    "system-status",
+    "show-health",
+    "show-version",
+    "resources",
+    "status",
+  ];
+  let best: { action: AiResolverSupportedAction; score: number } | null = null;
+  for (const action of candidates) {
+    const haystack = actionText(action);
+    let score = 1;
+    priorityTerms.forEach((term, index) => {
+      if (haystack.includes(normalizeUserText(term))) score += priorityTerms.length - index;
+    });
+    if (!best || score > best.score) best = { action, score };
+  }
+  return best?.action ?? null;
+}
+
 function numberAfter(text: string, keys: string[]) {
   for (const key of keys) {
     const match = new RegExp(`\\b${key}\\b\\s*(?:to|=|:)?\\s*(\\d{1,5})`, "i").exec(text);
@@ -461,7 +505,9 @@ export function resolveAiTemplate(input: {
     }
   }
 
-  const targetAction = resolveTargetSupportedAction(input.userText, targetSupportedActions(input.targetDeviceContext));
+  const selectedTargetActions = targetSupportedActions(input.targetDeviceContext);
+  const targetAction = resolveTargetSupportedAction(input.userText, selectedTargetActions)
+    ?? resolveDefaultReadOnlyTargetAction(input.userText, selectedTargetActions);
   if (targetAction) {
     const targetCatalogItem = COMMAND_CATALOG.find((entry) => entry.id === targetAction.id && entry.supportState === "verified") ?? null;
     const targetTemplate = targetCatalogItem?.executionTemplateRef ? getExecutionTemplate(targetCatalogItem.executionTemplateRef) : null;
