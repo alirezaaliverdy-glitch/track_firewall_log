@@ -1,3 +1,11 @@
+## 2026-07-19 - AI Assistant structured ActionPlan architecture
+
+- Added the shared AI structured planner that decomposes selected-device requests into backend-validated vendor steps instead of requiring every workflow to exist as one catalog item.
+- Preserved execution controls: AI plans never include executable raw CLI, unsupported steps are blocked, missing fields are surfaced for guided input, and backend Action Center remains the only execution path after preview and approval.
+- Updated chat routing to keep informational requests chat-only, preserve existing guided workflows behind explicit confirmation, and attach structured plan metadata to supported/custom proposals.
+- Updated Action Center review UI to show structured step status, missing parameters, blocked reasons, catalog/action ids, and backend registry execution status.
+- Validation: backend npm run build; root npm run build; focused backend planner/routing/target-device/vendor-isolation/Action Center/guided tests 96/96; backend command catalog validation; root i18n, UTF-8, workflow guard; git diff check.
+
 ## 2026-07-19 - AI Assistant ActionPlan creation regression
 
 - Fixed the regression from the guided-routing guard where valid implemented catalog actions with missing parameters no longer created ActionPlans.

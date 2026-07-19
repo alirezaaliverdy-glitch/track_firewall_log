@@ -1,3 +1,12 @@
+**AI Assistant structured ActionPlan architecture (2026-07-19)**
+
+- Root cause: chat planning still treated AI requests as either one exact catalog action or one opaque custom/manual proposal. Multi-step or non-prebuilt workflows lost per-step backend validation, so the Assistant could snap to the nearest catalog concept and could not clearly separate executable, parameter-missing, and blocked capabilities.
+- Added a shared structured planner contract: selected Device context is the only vendor/platform source, AI can propose structured steps, each step is resolved against the selected vendor registry/templates, and every step records intent, deviceId, vendor/platform, parameters, dependencies, risk, verification, rollback metadata, missing fields, blocked reason, backend validation, and `rawCommandExecution=false`.
+- Chat keeps informational requests chat-only, keeps true Guided Action workflows behind explicit start, creates normal executable ActionPlans for exact supported catalog matches, and creates review-only structured ActionPlans for unmatched operational selected-device requests so unsupported steps are visible but cannot execute.
+- Action Center now displays structured AI steps, executable/needs-parameter/blocked status, missing parameters, blocked reasons, catalog/action identifiers, and registry-only backend execution status. PolicyGuard, approvals, connectors, audit, credential references, and protected lab settings are unchanged.
+- Validation passed: backend build, frontend build, focused planner/routing/target-device/vendor-isolation/Action Center/guided tests 96/96, command catalog validation, i18n, UTF-8, workflow guard, and `git diff --check`.
+- Remaining unsupported capabilities are blocked in the plan: Linux restart/reload service execution, full composite one-click multi-step executor, and any vendor capability without a registered backend template/connector handler.
+
 **AI Assistant ActionPlan creation regression fix (2026-07-19)**
 
 - Root cause: the guided-routing fix made chat-side ActionPlan creation require `executable_action_plan` with zero missing fields, so valid implemented catalog actions that need parameters, such as Cisco VLAN creation and FortiGate policy creation, stayed as guided/chat responses without a proposed ActionPlan.

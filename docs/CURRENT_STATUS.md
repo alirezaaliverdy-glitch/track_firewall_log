@@ -1,3 +1,11 @@
+## AI Assistant structured ActionPlan architecture (2026-07-19)
+
+- AI Assistant planning now separates plan creation from execution eligibility. Selected Device context is the source of truth for vendor/platform/capabilities, and generated steps are resolved only through that vendor's backend registry/templates.
+- Structured AI plans record executable steps, missing parameters, blocked unsupported capabilities, dependencies, risk, verification, rollback metadata, approval requirement, and `rawCommandExecution=false`.
+- Exact supported single actions still create executable ActionPlans through the existing Action Center path. Unmatched operational prompts create review-only structured ActionPlans; informational prompts remain chat-only.
+- Action Center displays structured step status and keeps execution behind preview, explicit approval, PolicyGuard, connector invocation, and audit.
+- Validation: backend build; frontend build; focused planner/routing/target-device/vendor-isolation/Action Center/guided tests 96/96; command catalog validation; i18n; UTF-8; workflow guard; git diff check.
+
 ## AI Assistant ActionPlan creation regression fix (2026-07-19)
 
 - Supported selected-device catalog requests create proposed ActionPlans again, including parameterized actions that still need guided completion. Cisco `create VLAN` resolves only through the exact `cisco.create-vlan` operation, and FortiGate `create policy` resolves through the implemented FortiGate catalog before guided fallback.

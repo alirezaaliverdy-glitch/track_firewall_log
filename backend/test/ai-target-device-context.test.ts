@@ -89,7 +89,8 @@ test("memory and status requests stay inside Assistant without guided workflow o
   assert.match(source, /canUseCatalogActionType\(resolvedActionType\) \? findCatalogItemByIntent/);
 
   const chat = read("../src/services/ai-chat.service.ts");
-  assert.match(chat, /responseMode = guidedBlueprintId \? "guided_workflow" : resolution\.mode === "guided_workflow" \? "manual_or_not_supported" : resolution\.mode/);
+  assert.match(chat, /!informationalChatOnly[\s\S]*resolution\.mode === "needs_input"/);
+  assert.match(chat, /responseMode = informationalChatOnly[\s\S]*\? "manual_or_not_supported"/);
   assert.match(chat, /actionSessionId: null/);
   assert.match(chat, /guidedActionUrl: null/);
 });
@@ -110,8 +111,10 @@ test("any unmatched selected-device chat request creates a review-only ActionPla
   const chat = read("../src/services/ai-chat.service.ts");
   assert.match(chat, /shouldCreateReviewOnlyActionPlan/);
   assert.match(chat, /!input\.canCreateSupportedActionPlan/);
-  assert.match(chat, /input\.resolution\.mode === "manual_or_not_supported" \|\| input\.resolution\.mode === "guided_workflow"/);
+  assert.match(chat, /input\.structuredPlan\.kind === "action_plan"/);
+  assert.match(chat, /input\.resolution\.mode === "manual_or_not_supported"/);
   assert.match(chat, /customReviewOnlyActionPlanParameters/);
+  assert.match(chat, /aiStructuredPlan/);
   assert.match(chat, /actionType: "custom_vendor_action"/);
   assert.match(chat, /source: "ai_custom_proposal"/);
   assert.match(chat, /implementationState: "manualOnly"/);

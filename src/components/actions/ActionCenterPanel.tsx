@@ -359,6 +359,8 @@ function actionLabel(action: ActionPlan) {
 function ProposalDetails({ action }: { action: ActionPlan }) {
   const params = normalizeObject(action.parametersJson);
   const metadata = normalizeObject(params.metadata);
+  const structuredPlan = normalizeObject(metadata.aiStructuredPlan ?? params.aiStructuredPlan);
+  const structuredSteps = normalizeArray<Record<string, unknown>>(structuredPlan.steps);
   if (metadata.source === "guided_action_wizard") {
     const missingTemplates = textArray(metadata.missingTemplates ?? params.missingTemplates);
     const preview = normalizeObject(params.structuredPreview ?? normalizeObject(action.dryRunJson).preview);
@@ -395,6 +397,7 @@ function ProposalDetails({ action }: { action: ActionPlan }) {
   if (action.actionType !== "custom_vendor_action" && action.actionType !== "generic_security_action") return null;
   const rows = [
     ["Execution support", params.executionSupport],
+    ["Step eligibility", structuredPlan.executionEligibility],
     ["Expected impact", params.expectedImpact],
     ["Missing fields", textArray(params.missingFields).join(", ")],
     ["Suggested prechecks", textArray(params.suggestedPrechecks).join(" | ")],
@@ -412,6 +415,35 @@ function ProposalDetails({ action }: { action: ActionPlan }) {
           </div>
         ))}
       </dl>
+      {structuredSteps.length > 0 && (
+        <div className="mt-4 rounded border border-zinc-800 bg-black/20">
+          <div className="grid grid-cols-[3rem_minmax(0,1fr)_8rem_8rem] gap-2 border-b border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-400">
+            <span>#</span>
+            <span>Step</span>
+            <span>Status</span>
+            <span>Backend</span>
+          </div>
+          <div className="divide-y divide-zinc-800">
+            {structuredSteps.map((step, index) => {
+              const missing = textArray(step.missingFields).join(", ");
+              const blocked = String(step.blockedReason ?? step.unsupportedCapability ?? "");
+              return (
+                <div key={String(step.id ?? index)} className="grid grid-cols-[3rem_minmax(0,1fr)_8rem_8rem] gap-2 px-3 py-2 text-xs text-zinc-300">
+                  <span className="font-mono text-zinc-500">{String(step.order ?? index + 1)}</span>
+                  <span className="min-w-0">
+                    <span className="block break-words font-medium text-zinc-100">{String(step.intent ?? step.actionType ?? "step")}</span>
+                    <span className="mt-1 block break-words text-zinc-500">{String(step.catalogCommandId ?? step.actionType ?? "unsupported capability")}</span>
+                    {missing ? <span className="mt-1 block break-words text-yellow-200">Missing: {missing}</span> : null}
+                    {blocked ? <span className="mt-1 block break-words text-red-200">{blocked}</span> : null}
+                  </span>
+                  <span>{String(step.status ?? "blocked").replace(/_/g, " ")}</span>
+                  <span>{step.rawCommandExecution === false ? "registry only" : "blocked"}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

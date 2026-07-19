@@ -11,6 +11,7 @@ import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
 import { COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
 import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
+import { buildAiStructuredActionPlan, type AiStructuredActionPlan } from "../ai/ai-action-planner.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { env } from "../config/env.js";
 
@@ -123,11 +124,13 @@ function shouldCreateReviewOnlyActionPlan(input: {
   resolution: ReturnType<typeof resolveAiTemplate>;
   canCreateSupportedActionPlan: boolean;
   resolutionMissing: string[];
+  structuredPlan: AiStructuredActionPlan;
 }) {
   return Boolean(
     input.selectedDevice &&
     !input.canCreateSupportedActionPlan &&
-    (input.resolution.mode === "manual_or_not_supported" || input.resolution.mode === "guided_workflow") &&
+    input.structuredPlan.kind === "action_plan" &&
+    input.resolution.mode === "manual_or_not_supported" &&
     input.resolutionMissing.length === 0
   );
 }
@@ -139,6 +142,7 @@ function customReviewOnlyActionPlanParameters(input: {
   resolution: ReturnType<typeof resolveAiTemplate>;
   structuredIntent: StructuredAiIntent | null;
   resolutionMissing: string[];
+  structuredPlan: AiStructuredActionPlan;
 }) {
   const aiParameters = asObject(input.structuredIntent?.parameters);
   const suggestedPrechecks = input.structuredIntent?.suggestedPrechecks ?? [];
@@ -166,6 +170,7 @@ function customReviewOnlyActionPlanParameters(input: {
     requiresExplicitReview: true,
     backendExecutionRequired: true,
     rawCommandExecution: false,
+    structuredPlan: input.structuredPlan,
     executionNotes: "Review-only custom ActionPlan. Execution requires a registered backend template and connector handler.",
   };
 
@@ -186,6 +191,7 @@ function customReviewOnlyActionPlanParameters(input: {
     normalizedParams: input.resolution.normalizedParams,
     requiredParamsSatisfied: true,
     missingFields: input.resolutionMissing,
+    aiStructuredPlan: input.structuredPlan,
     customProposal,
     metadata: {
       source: "ai_custom_proposal",
@@ -206,6 +212,11 @@ function customReviewOnlyActionPlanParameters(input: {
       normalizedParams: input.resolution.normalizedParams,
       requiredParamsSatisfied: true,
       missingFields: input.resolutionMissing,
+      aiStructuredPlan: input.structuredPlan,
+      structuredStepCount: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.steps.length : 0,
+      executableStepCount: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.executableStepCount : 0,
+      blockedStepCount: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.blockedStepCount : 0,
+      executionEligibility: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.executionEligibility : "chat_only",
       expectedImpact,
       suggestedPrechecks,
       suggestedVerification,
@@ -406,9 +417,16 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     targetDeviceContext: context.targetDeviceContext,
     aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null,
   });
+  const structuredPlan = buildAiStructuredActionPlan({
+    message,
+    selectedDevice,
+    targetDeviceContext: context.targetDeviceContext,
+  });
+  const informationalChatOnly = structuredPlan.kind === "chat_only" && structuredPlan.reason === "informational";
   const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
   const supportedActionForPlan = resolution.catalogItem ?? resolution.targetSupportedAction ?? null;
   const canCreateSupportedActionPlan = Boolean(
+    !informationalChatOnly &&
     selectedDevice &&
     supportedActionForPlan &&
     resolution.implementationState === "implemented" &&
@@ -420,7 +438,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     selectedDevice,
     resolution,
     canCreateSupportedActionPlan,
-    resolutionMissing
+    resolutionMissing,
+    structuredPlan
   });
   const actionVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;
   const actionRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? "medium";
@@ -428,14 +447,14 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const actionSupportReasonKey = resolution.catalogItem?.supportReasonKey ?? "support.reason.verified";
   const actionTitleFa = resolution.catalogItem?.titleFa ?? resolution.targetSupportedAction?.titleFa ?? resolution.canonicalActionType;
   const actionPlan = canCreateSupportedActionPlan && selectedDevice && supportedActionForPlan
-    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
+    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, aiStructuredPlan: structuredPlan, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, aiStructuredPlan: structuredPlan, structuredStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.steps.length : 0, executableStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.executableStepCount : 0, blockedStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.blockedStepCount : 0, executionEligibility: structuredPlan.kind === "action_plan" ? structuredPlan.executionEligibility : "single_action", previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
     : canCreateReviewOnlyActionPlan && selectedDevice
-      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customReviewOnlyActionPlanParameters({ message, actionVendor, actionRiskLevel, resolution, structuredIntent: effectiveStructuredIntent, resolutionMissing }) })
+      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customReviewOnlyActionPlanParameters({ message, actionVendor, actionRiskLevel, resolution, structuredIntent: effectiveStructuredIntent, resolutionMissing, structuredPlan }) })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
-  const executionSupport = resolution.executionSupport;
-  const implementationState = resolution.implementationState;
+  const executionSupport = informationalChatOnly ? "manual" : resolution.executionSupport;
+  const implementationState = informationalChatOnly ? "manualOnly" : resolution.implementationState;
   const canCreateActionPlan = Boolean(actionPlan);
   const manualOnly = implementationState === "manualOnly" || executionSupport !== "connector";
   const executable = canCreateActionPlan && !manualOnly && resolution.mode === "executable_action_plan";
@@ -477,7 +496,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
       : "پیشنهاد سفارشی قابل بازبینی ساخته شد. این برنامه اجرایی نیست و باید در مرکز عملیات دستی بررسی شود."
     : resolutionMissing.length ? nextStepFa : selectedDeviceUnsupportedMessage ?? providerResponse.assistantMessage;
-  const responseMode = guidedBlueprintId ? "guided_workflow" : resolution.mode === "guided_workflow" ? "manual_or_not_supported" : resolution.mode;
+  const responseMode = informationalChatOnly
+    ? "manual_or_not_supported"
+    : guidedBlueprintId ? "guided_workflow" : resolution.mode === "guided_workflow" ? "manual_or_not_supported" : resolution.mode;
   const guidedAssistantText = guidedBlueprintId
     ? "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید."
     : resolution.mode === "clarification" ? nextStepFa : assistantText;
