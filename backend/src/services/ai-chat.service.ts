@@ -132,6 +132,98 @@ function shouldCreateReviewOnlyActionPlan(input: {
   );
 }
 
+function customReviewOnlyActionPlanParameters(input: {
+  message: string;
+  actionVendor: string;
+  actionRiskLevel: string;
+  resolution: ReturnType<typeof resolveAiTemplate>;
+  structuredIntent: StructuredAiIntent | null;
+  resolutionMissing: string[];
+}) {
+  const aiParameters = asObject(input.structuredIntent?.parameters);
+  const suggestedPrechecks = input.structuredIntent?.suggestedPrechecks ?? [];
+  const suggestedVerification = input.structuredIntent?.suggestedVerification ?? [];
+  const suggestedRollback = input.structuredIntent?.suggestedRollback ?? [];
+  const expectedImpact = input.structuredIntent?.expectedImpact || input.resolution.reasonFa;
+  const proposedIntentType = input.structuredIntent?.intentType ?? input.resolution.canonicalActionType;
+  const proposalSteps = [
+    ...suggestedPrechecks.map((step) => ({ phase: "precheck", text: step })),
+    ...suggestedVerification.map((step) => ({ phase: "verification", text: step })),
+    ...suggestedRollback.map((step) => ({ phase: "rollback", text: step })),
+  ];
+  const customProposal = {
+    requestedOperation: input.message,
+    proposedIntentType,
+    vendor: input.actionVendor,
+    riskLevel: input.actionRiskLevel,
+    expectedImpact,
+    suggestedPrechecks,
+    suggestedVerification,
+    suggestedRollback,
+    proposalSteps,
+    aiExplanation: input.structuredIntent?.explanation ?? null,
+    destructive: Boolean(input.structuredIntent?.destructive),
+    requiresExplicitReview: true,
+    backendExecutionRequired: true,
+    rawCommandExecution: false,
+    executionNotes: "Review-only custom ActionPlan. Execution requires a registered backend template and connector handler.",
+  };
+
+  return {
+    ...aiParameters,
+    ...input.resolution.normalizedParams,
+    ...customProposal,
+    vendor: input.actionVendor,
+    userRequest: input.message,
+    source: "ai_custom_proposal",
+    implementationState: "manualOnly",
+    executionSupport: "manual",
+    supportState: "manual_only",
+    supportReasonKey: "support.reason.manualReview",
+    executable: false,
+    connectorType: null,
+    executionTemplateRef: null,
+    normalizedParams: input.resolution.normalizedParams,
+    requiredParamsSatisfied: true,
+    missingFields: input.resolutionMissing,
+    customProposal,
+    metadata: {
+      source: "ai_custom_proposal",
+      catalogCommandId: null,
+      catalogVersion: COMMAND_CATALOG_VERSION,
+      catalogTitleFa: "\u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0633\u0641\u0627\u0631\u0634\u06cc \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06cc",
+      vendor: input.actionVendor,
+      actionType: "custom_vendor_action",
+      requestedActionType: input.resolution.canonicalActionType,
+      proposedIntentType,
+      implementationState: "manualOnly",
+      executionSupport: "manual",
+      supportState: "manual_only",
+      supportReasonKey: "support.reason.manualReview",
+      executable: false,
+      connectorType: null,
+      executionTemplateRef: null,
+      normalizedParams: input.resolution.normalizedParams,
+      requiredParamsSatisfied: true,
+      missingFields: input.resolutionMissing,
+      expectedImpact,
+      suggestedPrechecks,
+      suggestedVerification,
+      suggestedRollback,
+      proposalSteps,
+      destructive: Boolean(input.structuredIntent?.destructive),
+      requiresExplicitReview: true,
+      backendExecutionRequired: true,
+      rawCommandExecution: false,
+      previewGenerated: false,
+      executed: false,
+      connectorInvoked: false,
+      lastExecutionStatus: "not_started",
+      reviewOnly: true
+    }
+  };
+}
+
 function selectedDeviceSupportsConnector(device: { protocol?: string | null } | null, connectorType: string | null) {
   if (!device || !connectorType) return false;
   if (connectorType.endsWith("-ssh")) return device.protocol === "ssh";
@@ -338,7 +430,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const actionPlan = canCreateSupportedActionPlan && selectedDevice && supportedActionForPlan
     ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
     : canCreateReviewOnlyActionPlan && selectedDevice
-      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, vendor: actionVendor, userRequest: message, source: "ai_custom_proposal", implementationState: "manualOnly", executionSupport: "manual", supportState: "manual_only", supportReasonKey: "support.reason.manualReview", executable: false, connectorType: null, executionTemplateRef: null, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, missingFields: resolutionMissing, requiresExplicitReview: true, metadata: { source: "ai_custom_proposal", catalogCommandId: null, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: "پیشنهاد سفارشی هوش مصنوعی", vendor: actionVendor, actionType: "custom_vendor_action", requestedActionType: resolution.canonicalActionType, implementationState: "manualOnly", executionSupport: "manual", supportState: "manual_only", supportReasonKey: "support.reason.manualReview", executable: false, connectorType: null, executionTemplateRef: null, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started", reviewOnly: true } } })
+      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customReviewOnlyActionPlanParameters({ message, actionVendor, actionRiskLevel, resolution, structuredIntent: effectiveStructuredIntent, resolutionMissing }) })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;

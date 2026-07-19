@@ -111,12 +111,19 @@ test("any unmatched selected-device chat request creates a review-only ActionPla
   assert.match(chat, /shouldCreateReviewOnlyActionPlan/);
   assert.match(chat, /!input\.canCreateSupportedActionPlan/);
   assert.match(chat, /input\.resolution\.mode === "manual_or_not_supported" \|\| input\.resolution\.mode === "guided_workflow"/);
+  assert.match(chat, /customReviewOnlyActionPlanParameters/);
   assert.match(chat, /actionType: "custom_vendor_action"/);
   assert.match(chat, /source: "ai_custom_proposal"/);
   assert.match(chat, /implementationState: "manualOnly"/);
   assert.match(chat, /executionSupport: "manual"/);
   assert.match(chat, /executable: false/);
   assert.match(chat, /reviewOnly: true/);
+  assert.match(chat, /expectedImpact/);
+  assert.match(chat, /suggestedPrechecks/);
+  assert.match(chat, /suggestedVerification/);
+  assert.match(chat, /suggestedRollback/);
+  assert.match(chat, /rawCommandExecution: false/);
+  assert.match(chat, /backendExecutionRequired: true/);
 });
 
 test("selected-device overview questions are routed to registered read-only target actions", () => {

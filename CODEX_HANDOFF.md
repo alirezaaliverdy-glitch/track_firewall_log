@@ -855,3 +855,12 @@
 - Action Center now displays catalog titles from ActionPlan metadata for generic Cisco operation wrappers, so operators see the real operation name instead of `generic security action`.
 - Controlled execution is unchanged: execution still requires a verified catalog item, registered template, selected-device connector, preview, user confirmation, PolicyGuard, connector invocation, and audit evidence.
 - Validation passed: targeted AI routing/context tests (27/27), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and diff check. Full backend `npm test` still stops at `TEST_DATABASE_URL_REQUIRED` without touching the development database.
+
+## 2026-07-19 - AI Assistant custom proposal catalog scoring repair
+
+- Root cause: target-catalog matching still counted generic Cisco wrapper text such as `generic_security_action` and weak lexical overlap from ids/categories, so new vendor-specific requests could be coerced to the nearest prepared command instead of becoming a custom proposal.
+- The shared resolver now normalizes action ids/templates with separators, ignores generic wrapper action types as match evidence, requires an exact title/id/alias phrase or stronger lexical evidence, and keeps selected-device vendor context as the source of truth.
+- Unprepared selected-device requests now consistently resolve to review-only `custom_vendor_action` proposals for Cisco, MikroTik, FortiGate, and Linux, while supported actions such as Cisco `create VLAN`, FortiGate `create policy`, MikroTik SSH port change, and Linux service status still resolve to connector-backed ActionPlan candidates.
+- Custom ActionPlans now preserve AI proposal details in ActionPlan parameters/metadata: expected impact, prechecks, verification, rollback, proposed intent, and explicit review-only/backend-execution-required flags.
+- Smoke coverage manually checked three unprepared requests per vendor through the resolver; all returned `mode=manual_or_not_supported`, `catalogCommandId=null`, and `actionType=custom_vendor_action`.
+- Validation passed: targeted AI routing/context tests (31/31), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, and workflow checks. Full backend `npm test` still stops at `TEST_DATABASE_URL_REQUIRED`; a Prisma chat smoke could not run because the isolated `firewall_log_analyzer_test` database does not exist, and the live API returned `unauthorized` without a browser session.

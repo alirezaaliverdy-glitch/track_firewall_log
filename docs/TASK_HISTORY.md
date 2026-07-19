@@ -804,3 +804,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added regression coverage for Cisco `چند تا vlan دارم` and `چن تا ویلن دارم`, both resolving to `cisco.show-vlan-brief`, plus the existing Cisco create VLAN and MikroTik cross-vendor safeguards.
 - Updated Action Center presentation so metadata-backed Cisco operation titles are shown instead of the generic wrapper action type.
 - Validation: targeted AI routing/context tests (27/27), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend `npm test` stopped at `TEST_DATABASE_URL_REQUIRED`.
+
+## 2026-07-19 - AI Assistant custom ActionPlan proposal scoring repair
+
+- Root cause: after the custom ActionPlan fallback was added, target-catalog scoring could still treat weak overlap as a supported action match. Cisco generic wrappers were especially vulnerable because `generic_security_action` leaked `security` into match evidence.
+- Fixed the shared resolver to normalize separators in action ids/types, ignore generic wrapper action types as evidence, require exact phrase evidence or stronger lexical evidence, and keep selected-device scoped supported actions as the only match source.
+- Added regression tests for three unprepared prompts each on Cisco, MikroTik, FortiGate, and Linux; all must stay custom/manual with `catalogCommandId=null`.
+- Enriched chat-created custom ActionPlans with AI proposal details in parameters and metadata while preserving the existing Action Center, approval, PolicyGuard, connector, and audit pipeline.
+- Validation: targeted AI routing/context tests (31/31), backend build, command catalog validation, frontend build, i18n, UTF-8, and workflow checks passed. Full backend suite still requires an existing isolated test database.

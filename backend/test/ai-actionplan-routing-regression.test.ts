@@ -146,3 +146,71 @@ test("resolver does not infer another vendor from prompt text when a target is s
   assert.notEqual(resolution.connectorType, "cisco-ios-xe-ssh");
   assert.equal(resolution.mode, "manual_or_not_supported");
 });
+
+test("unprepared Cisco requests become custom proposals instead of nearest catalog matches", () => {
+  const prompts = [
+    "enable dhcp snooping on vlan 10",
+    "configure storm control on access ports",
+    "enable port security on interface gi1/0/1",
+  ];
+
+  for (const prompt of prompts) {
+    const resolution = resolveForTarget(prompt, targetDevice({ id: "sw-custom", vendor: "Cisco", type: "cisco_switch" }));
+    assert.equal(resolution.canonicalVendor, "cisco", prompt);
+    assert.equal(resolution.mode, "manual_or_not_supported", prompt);
+    assert.equal(resolution.catalogCommandId, null, prompt);
+    assert.equal(resolution.executionTemplateRef, null, prompt);
+    assert.equal(resolution.executionSupport, "manual", prompt);
+  }
+});
+
+test("unprepared MikroTik requests become custom proposals instead of nearest catalog matches", () => {
+  const prompts = [
+    "create queue for guest wifi",
+    "enable safe mode before config changes",
+    "configure dns over https",
+  ];
+
+  for (const prompt of prompts) {
+    const resolution = resolveForTarget(prompt, targetDevice({ id: "mt-custom", vendor: "MikroTik", type: "mikrotik" }));
+    assert.equal(resolution.canonicalVendor, "mikrotik", prompt);
+    assert.equal(resolution.mode, "manual_or_not_supported", prompt);
+    assert.equal(resolution.catalogCommandId, null, prompt);
+    assert.equal(resolution.executionTemplateRef, null, prompt);
+    assert.equal(resolution.executionSupport, "manual", prompt);
+  }
+});
+
+test("unprepared FortiGate requests become custom proposals instead of nearest catalog matches", () => {
+  const prompts = [
+    "enable admin two factor authentication",
+    "configure ssl inspection profile",
+    "create automation stitch for quarantine",
+  ];
+
+  for (const prompt of prompts) {
+    const resolution = resolveForTarget(prompt, targetDevice({ id: "fg-custom", vendor: "Fortinet", type: "fortigate" }));
+    assert.equal(resolution.canonicalVendor, "fortigate", prompt);
+    assert.equal(resolution.mode, "manual_or_not_supported", prompt);
+    assert.equal(resolution.catalogCommandId, null, prompt);
+    assert.equal(resolution.executionTemplateRef, null, prompt);
+    assert.equal(resolution.executionSupport, "manual", prompt);
+  }
+});
+
+test("unprepared Linux requests become custom proposals instead of nearest catalog matches", () => {
+  const prompts = [
+    "install unattended upgrades",
+    "harden sysctl network settings",
+    "configure logrotate for nginx",
+  ];
+
+  for (const prompt of prompts) {
+    const resolution = resolveForTarget(prompt, targetDevice({ id: "lin-custom", vendor: "Linux", type: "linux_edge" }));
+    assert.equal(resolution.canonicalVendor, "linux", prompt);
+    assert.equal(resolution.mode, "manual_or_not_supported", prompt);
+    assert.equal(resolution.catalogCommandId, null, prompt);
+    assert.equal(resolution.executionTemplateRef, null, prompt);
+    assert.equal(resolution.executionSupport, "manual", prompt);
+  }
+});

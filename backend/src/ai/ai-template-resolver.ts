@@ -278,21 +278,49 @@ function targetSupportedActions(context: AiResolverTargetContext | null | undefi
 }
 
 function tokenizeActionText(value: string) {
-  return normalizeIntentVocabulary(normalizeUserText(value))
+  return normalizeActionSearchText(value)
     .split(" ")
     .map((word) => word.trim())
     .filter((word) => word.length >= 3 && !TARGET_ACTION_STOP_WORDS.has(word));
 }
 
+function normalizeActionSearchText(value: string) {
+  return normalizeIntentVocabulary(normalizeUserText(value).replace(/[_./-]+/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function actionText(action: AiResolverSupportedAction) {
-  return normalizeIntentVocabulary(normalizeUserText([
+  const actionType = canUseCatalogActionType(action.actionType) ? action.actionType : null;
+  return normalizeActionSearchText([
     action.id,
-    action.actionType,
+    actionType,
     action.titleFa,
     action.titleEn,
     action.category,
     ...(action.aliases ?? []),
-  ].filter(Boolean).join(" ")));
+  ].filter(Boolean).join(" "));
+}
+
+function targetActionPhrases(action: AiResolverSupportedAction) {
+  const actionType = canUseCatalogActionType(action.actionType) ? action.actionType : null;
+  return [
+    action.id,
+    actionType,
+    action.titleFa,
+    action.titleEn,
+    ...(action.aliases ?? []),
+  ]
+    .filter(Boolean)
+    .flatMap((value) => {
+      const phrase = normalizeActionSearchText(String(value));
+      return [phrase, phrase.replace(/^(cisco|fortigate|mikrotik|linux)\s+/, "")];
+    })
+    .filter((phrase, index, values) =>
+      phrase.length >= 3 &&
+      phrase.split(" ").filter((word) => word.trim().length >= 3).length >= 2 &&
+      values.indexOf(phrase) === index
+    );
 }
 
 function isMutatingRequest(userText: string) {
@@ -312,11 +340,11 @@ function isReadOnlyRequest(userText: string) {
 }
 
 function resolveTargetSupportedAction(userText: string, actions: readonly AiResolverSupportedAction[]) {
-  const text = normalizeIntentVocabulary(normalizeUserText(userText));
+  const text = normalizeActionSearchText(userText);
   const requestTokens = tokenizeActionText(userText);
   const readOnlyRequest = isReadOnlyRequest(userText);
   const mutatingRequest = isMutatingRequest(userText);
-  let best: { action: AiResolverSupportedAction; score: number } | null = null;
+  let best: { action: AiResolverSupportedAction; score: number; lexicalScore: number; phraseScore: number } | null = null;
 
   for (const action of actions) {
     const actionReadOnly = action.readOnly !== false && action.mutating !== true;
@@ -325,15 +353,16 @@ function resolveTargetSupportedAction(userText: string, actions: readonly AiReso
     if (mutatingRequest && !readOnlyRequest && actionReadOnly) continue;
 
     const haystack = actionText(action);
-    const aliases = (action.aliases ?? []).map((alias) => normalizeIntentVocabulary(normalizeUserText(alias))).filter(Boolean);
-    const titleEn = normalizeIntentVocabulary(normalizeUserText(action.titleEn ?? ""));
-    const titleFa = normalizeIntentVocabulary(normalizeUserText(action.titleFa ?? ""));
+    const phrases = targetActionPhrases(action);
     let score = 0;
     let lexicalScore = 0;
+    let phraseScore = 0;
 
-    if (titleEn.length >= 3 && text.includes(titleEn)) { score += 8; lexicalScore += 8; }
-    if (titleFa.length >= 3 && text.includes(titleFa)) { score += 8; lexicalScore += 8; }
-    if (aliases.some((alias) => alias.length >= 3 && text.includes(alias))) { score += 8; lexicalScore += 8; }
+    if (phrases.some((phrase) => text.includes(phrase))) {
+      score += 8;
+      lexicalScore += 8;
+      phraseScore += 8;
+    }
     for (const token of requestTokens) {
       if (haystack.includes(token)) { score += 1; lexicalScore += 1; }
       if (readOnlyRequest && actionReadOnly && token === "vlan" && haystack.includes("vlan")) score += 6;
@@ -342,7 +371,12 @@ function resolveTargetSupportedAction(userText: string, actions: readonly AiReso
     if (readOnlyRequest && actionReadOnly) score += 3;
     if (mutatingRequest && actionMutating) score += 4;
 
-    if (!best || score > best.score) best = { action, score };
+    const strongMatch = phraseScore > 0
+      || lexicalScore >= 2
+      || (readOnlyRequest && !mutatingRequest && actionReadOnly && requestTokens.includes("vlan") && haystack.includes("vlan"));
+    if (!strongMatch) continue;
+
+    if (!best || score > best.score) best = { action, score, lexicalScore, phraseScore };
   }
 
   return best && best.score >= 2 ? best.action : null;
@@ -695,10 +729,14 @@ export function resolveAiTemplate(input: {
     };
   }
 
+  const fallbackActionType = canonicalVendor !== "generic" && !canUseCatalogActionType(resolvedActionType)
+    ? "custom_vendor_action"
+    : resolvedActionType;
+
   return {
     mode: "manual_or_not_supported",
     canonicalVendor,
-    canonicalActionType: resolvedActionType,
+    canonicalActionType: fallbackActionType,
     catalogCommandId: null,
     executionTemplateRef: null,
     connectorType: null,

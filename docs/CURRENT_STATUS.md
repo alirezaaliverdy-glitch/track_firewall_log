@@ -713,3 +713,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Persian VLAN spellings (`ویلن`, `ویلان`, `وی لن`) normalize to `vlan`; `چند تا vlan دارم` and `چن تا ویلن دارم` resolve to the read-only executable `cisco.show-vlan-brief` plan, while `create VLAN 123` remains `cisco.create-vlan`.
 - Action Center uses catalog metadata titles for generic Cisco wrappers, so the selected action and history rows show the operation title rather than `generic security action`.
 - Validation passed: targeted AI routing/context tests (27/27), backend build, command catalog validation, frontend build, i18n, UTF-8, workflow, and diff check. Full backend test remains gated by missing `TEST_DATABASE_URL`.
+
+## 2026-07-19 - AI Assistant custom proposal catalog scoring
+
+- Fixed nearest-catalog coercion for unprepared selected-device prompts. The resolver no longer scores generic wrapper action types such as `generic_security_action`, and action id/type phrase matching now handles separators without falling back across vendors.
+- Supported catalog actions still create connector-backed ActionPlan candidates; unmatched Cisco, MikroTik, FortiGate, and Linux requests now become review-only `custom_vendor_action` proposals with no catalog id, no template, and no connector execution.
+- Custom proposal ActionPlans now carry expected impact, prechecks, verification, rollback, proposed intent, and explicit review-only/backend-execution-required metadata for Action Center review.
+- Validation passed: targeted AI routing/context tests (31/31), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, and workflow checks.
+- Full backend `npm test` remains blocked by missing `TEST_DATABASE_URL`; a DB-backed chat smoke could not run because `firewall_log_analyzer_test` does not exist, and live `/api/devices` returned unauthorized without a browser session.
