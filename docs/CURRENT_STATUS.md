@@ -1,3 +1,9 @@
+## AI Assistant target-device context fix (2026-07-19)
+
+- The selected target device is now the AI Assistant source of truth. Each prompt rebuilds backend context from that Device and target-scopes vendor, platform, capabilities, health, inventory, connection state, routes, workflow state, and supported catalog actions.
+- Stale Cisco/vendor context, previous intents, and previous guided-action state are no longer reused when the operator switches targets or sends a new prompt. Unsupported requests return selected-device suggestions instead of cross-vendor ActionPlans.
+- Validation: backend build, frontend build, focused AI target-device context test 7/7, command catalog validation, i18n parity/Persian copy, UTF-8/mojibake, workflow guard, and git diff --check.
+
 ## Cisco IOS Classic localized workspace (2026-07-19)
 
 - The device overview now separates connection, verification, inventory, capability, health, interfaces, and last successful collection. Cisco identifiers render LTR while Persian labels remain RTL and natural.

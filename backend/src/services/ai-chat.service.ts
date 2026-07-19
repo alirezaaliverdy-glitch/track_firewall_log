@@ -1,6 +1,7 @@
 import { AiChatRole, AiIntentType, AiRiskLevel, type Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { buildSecurityOrchestratorContext } from "../ai/context/security-orchestrator-context.js";
+import { suggestSupportedActionsForAssistantTarget } from "../ai/context/assistant-target-context.js";
 import { createAiActionIntent, parseAiIntent, type ParsedIntent } from "./ai-intent.service.js";
 import { getAiProviderStatus, runAiProvider, type StructuredAiIntent } from "./ai-provider.service.js";
 import { proposeActionPlan } from "./action-plan.service.js";
@@ -117,6 +118,14 @@ function isCustomProposal(actionType: string) {
   return actionType === AiIntentType.custom_vendor_action || actionType === AiIntentType.generic_security_action;
 }
 
+function unsupportedForSelectedDeviceMessageFa(input: { deviceName?: string | null; reasonFa: string; selectedDevice: { vendor: string; type: string } | null; }) {
+  const suggestions = suggestSupportedActionsForAssistantTarget(input.selectedDevice).slice(0, 5);
+  const names = suggestions.map((action) => action.titleFa || action.titleEn || action.id).filter(Boolean);
+  const suffix = names.length ? ` \u067e\u06cc\u0634\u0646\u0647\u0627\u062f\u0647\u0627\u06cc \u0645\u0639\u062a\u0628\u0631 \u0628\u0631\u0627\u06cc \u0627\u06cc\u0646 \u062f\u0633\u062a\u06af\u0627\u0647: ${names.join("\u060c ")}.` : " \u0628\u0631\u0627\u06cc \u0627\u06cc\u0646 \u062f\u0633\u062a\u06af\u0627\u0647 \u0641\u0639\u0644\u0627 \u0627\u0642\u062f\u0627\u0645 \u0627\u062c\u0631\u0627\u06cc\u06cc \u0645\u0639\u062a\u0628\u0631\u06cc \u062f\u0631 \u06a9\u0627\u062a\u0627\u0644\u0648\u06af \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.";
+  const device = input.deviceName ? `\u062f\u0633\u062a\u06af\u0627\u0647 "${input.deviceName}"` : "\u062f\u0633\u062a\u06af\u0627\u0647 \u0627\u0646\u062a\u062e\u0627\u0628\u200c\u0634\u062f\u0647";
+  return `${device} \u062a\u0646\u0647\u0627 \u0645\u0646\u0628\u0639 \u0645\u0639\u062a\u0628\u0631 \u0627\u06cc\u0646 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0627\u0633\u062a. ${input.reasonFa}${suffix}`;
+}
+
 function intentDebug(input: {
   intent: Awaited<ReturnType<typeof createAiActionIntent>> | undefined;
   structuredIntent: StructuredAiIntent | null;
@@ -189,7 +198,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const earlySelectedDevice = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId } }) : null;
   const earlyResolution = resolveAiTemplate({ userText: message, selectedDevice: earlySelectedDevice });
   const deterministicResolved = earlyResolution.mode === "executable_action_plan" || earlyResolution.mode === "guided_workflow" || Boolean(earlyResolution.catalogItem && earlyResolution.missingFields.length > 0);
-  const context = await buildSecurityOrchestratorContext();
+  const context = await buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId });
   const catalogMatch = routeCatalogIntent(message);
   const providerCandidate = deterministicResolved
     ? {
@@ -249,7 +258,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         contextWindow: {
           generatedAt: context.generatedAt,
           recentWindowMinutes: context.recentWindowMinutes,
-          evidence: context.evidencePack.metadata
+          evidence: context.evidencePack.metadata,
+          selectedDeviceId: input.deviceId ?? null,
+          targetDeviceContext: context.targetDeviceContext
         }
       })
     }
@@ -264,11 +275,12 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     ? await createAiActionIntent({
         sessionId: session.id,
         messageId: assistantMessage.id,
+        deviceId: input.deviceId,
         parsedIntent
       })
     : undefined;
   const debug = intentDebug({ intent: actionIntent, structuredIntent: effectiveStructuredIntent });
-  const selectedDeviceId = input.deviceId ?? actionIntent?.deviceId;
+  const selectedDeviceId = input.deviceId;
   const selectedDevice = earlySelectedDevice ?? (selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null);
   const resolution = resolveAiTemplate({ userText: message, selectedDevice, aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null });
   const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
@@ -313,9 +325,12 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const nextStepFa = actionPlan
     ? executionSupport === "connector" ? "برای بازبینی و تأیید به مرکز عملیات بروید." : "پیشنهاد را در مرکز عملیات به‌صورت دستی بررسی کنید."
     : resolutionMissing.length ? missingFieldsMessageFa(resolutionMissing) : resolution.reasonFa;
+  const selectedDeviceUnsupportedMessage = selectedDevice && executionSupport !== "connector"
+    ? unsupportedForSelectedDeviceMessageFa({ deviceName: selectedDevice.name, reasonFa: resolution.reasonFa, selectedDevice })
+    : null;
   const assistantText = actionPlan && executionSupport === "connector"
     ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
-    : resolutionMissing.length ? nextStepFa : providerResponse.assistantMessage;
+    : resolutionMissing.length ? nextStepFa : selectedDeviceUnsupportedMessage ?? providerResponse.assistantMessage;
   const responseMode = guidedBlueprintId ? "guided_workflow" : resolution.mode;
   const guidedAssistantText = guidedBlueprintId
     ? "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید."
@@ -351,6 +366,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     actionDebug: resolvedDebug,
     providerStatus: getAiProviderStatus(providerResponse.error),
     evidenceMetadata: context.evidencePack.metadata,
+    targetDeviceContext: context.targetDeviceContext,
     structured: {
       assistantMessage: providerResponse.assistantMessage,
       shouldCreateIntent: providerResponse.shouldCreateIntent,

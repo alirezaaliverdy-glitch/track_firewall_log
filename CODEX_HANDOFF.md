@@ -1,3 +1,10 @@
+**AI Assistant target-device context fix (2026-07-19)**
+
+- AI Assistant chat now rebuilds context on every prompt from the currently selected Device record and includes target vendor, platform, capabilities, health, inventory, connection state, app routes, workflow state, and target-scoped supported catalog actions.
+- Action generation is fail-closed to the selected device: stale vendor hints, old ActionIntents, and previous guided actions are cleared or ignored; unsupported requests explain the mismatch and suggest actions valid for that target only.
+- The backend still creates ActionPlans through the existing ActionPlan/Action Center pipeline; no duplicate APIs, stores, connectors, or frontend SSH path were added.
+- Validation passed: backend build, frontend build, focused AI target-device context test, command catalog validation, i18n, UTF-8, workflow guard, and git diff --check.
+
 **Cisco IOS Classic support - localized workspace slice (2026-07-19)**
 
 - Device Workspace now presents Cisco IOS Classic connection, verification, inventory, capability, health, interface, and last-successful-collection states separately with localized English/Persian labels and LTR rendering for addresses, versions, serials, hostnames, and Cisco identifiers.

@@ -335,6 +335,7 @@ export default function AiSecurityAssistantPanel() {
   const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null; canCreateActionPlan: boolean; manualOnly: boolean; executable: boolean; executionMode: string; lifecycle: { actionPlanId: string; status: string; planRevision: number; planState: string } | null } | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const previousTargetDeviceId = useRef<string | null>(null);
   const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string | null; deviceId: string | null; initialRequest: string }>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
@@ -396,6 +397,26 @@ export default function AiSecurityAssistantPanel() {
       else if (next.length === 1) setSelectedDeviceId(next[0].id);
     }).catch(() => setDevices([]));
   }, []);
+
+  useEffect(() => {
+    if (previousTargetDeviceId.current === null) {
+      previousTargetDeviceId.current = selectedDeviceId;
+      return;
+    }
+    if (previousTargetDeviceId.current === selectedDeviceId) return;
+    previousTargetDeviceId.current = selectedDeviceId;
+    viewGeneration.current += 1;
+    setSessionId(null);
+    setMessages([]);
+    setLastIntent(null);
+    setExecutionState(null);
+    setStructuredResponse(null);
+    setActionDebug(null);
+    setCreatedPlanId(null);
+    setGuidedStart(null);
+    setError(null);
+    setTechnicalError(null);
+  }, [selectedDeviceId]);
 
   const safeMessages = useMemo(() => normalizeArray<AiMessage>(messages).map(normalizeAiMessage), [messages]);
   const topSourceIps = normalizeArray<{ srcIp: string | null; count: number }>(summary?.events.topSourceIps);
@@ -481,6 +502,10 @@ export default function AiSecurityAssistantPanel() {
     setError(null);
     setCreatedPlanId(null);
     setGuidedStart(null);
+    setLastIntent(null);
+    setActionDebug(null);
+    setExecutionState(null);
+    setStructuredResponse(null);
     const optimisticUser = normalizeAiMessage({
       id: `local-${Date.now()}`,
       sessionId: sessionId ?? "",

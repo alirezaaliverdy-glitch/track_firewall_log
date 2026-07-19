@@ -202,7 +202,7 @@ function resolveActionAlias(userText: string, rawActionType: string, canonicalVe
 
 function findCatalogItemByIntent(vendor: string, actionType: string) {
   return COMMAND_CATALOG.find((entry) => entry.vendor === vendor && entry.actionType === actionType)
-    ?? COMMAND_CATALOG.find((entry) => entry.actionType === actionType)
+    ?? (vendor === "generic" ? COMMAND_CATALOG.find((entry) => entry.actionType === actionType) : null)
     ?? null;
 }
 

@@ -1,3 +1,10 @@
+## 2026-07-19 - AI Assistant target-device context
+
+- Added a target-context builder for AI Assistant prompts and wired chat context creation to selectedDeviceId on every request.
+- Restricted resolver catalog fallback so selected Cisco, FortiGate, MikroTik, and Linux targets cannot inherit another vendor's stale action match.
+- Cleared prior intent, ActionPlan handoff, and guided-action state on target switch and new prompt; unsupported actions now suggest valid actions for the selected device only.
+- Validation: backend npm run build; frontend npm run build; backend npx tsx --test test/ai-target-device-context.test.ts; backend npm run validate:command-catalog; root npm run test:i18n; root npm run test:utf8; root npm run test:workflows; git diff --check.
+
 ## 2026-07-19 - Cisco IOS Classic localized workspace
 
 - Localized the Cisco device workspace state model and overview cards for connection, verification, inventory, health, interfaces, capability summary, raw diagnostics, and Action Center/backup entry points.
