@@ -123,9 +123,20 @@ test("selected-device overview questions are routed to registered read-only targ
   const resolver = read("../src/ai/ai-template-resolver.ts");
   assert.match(resolver, /resolveDefaultReadOnlyTargetAction/);
   assert.match(resolver, /isDeviceOverviewRequest/);
+  assert.match(resolver, /isReadOnlyRequest/);
+  assert.match(resolver, /isMutatingRequest/);
+  assert.match(resolver, /if \(readOnlyRequest && !mutatingRequest && actionMutating\) continue/);
   assert.match(resolver, /action\.readOnly !== false/);
   assert.match(resolver, /action\.executionTemplateRef/);
   assert.match(resolver, /resolveTargetSupportedAction\(input\.userText, selectedTargetActions\)[\s\S]*resolveDefaultReadOnlyTargetAction\(input\.userText, selectedTargetActions\)/);
+});
+
+test("Action Center displays catalog titles for generic Cisco operation wrappers", () => {
+  const workspace = read("../../src/components/actions/ActionCenterWorkspace.tsx");
+  assert.match(workspace, /function actionDisplayName/);
+  assert.match(workspace, /metadata\.catalogTitleFa/);
+  assert.match(workspace, /actionDisplayName\(selected, isFa\)/);
+  assert.match(workspace, /actionDisplayName\(item, isFa\)/);
 });
 
 test("command catalog AI propose creates review-only custom ActionPlans for unmatched selected-device requests", () => {

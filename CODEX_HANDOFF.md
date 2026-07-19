@@ -847,3 +847,11 @@
 - Supported backend catalog actions remain on the normal executable ActionPlan path; the fallback is vendor-agnostic, uses the selected device context, has no connector/template/session, and stays `manualOnly`/`executionSupport=manual`/`executable=false`.
 - Validation passed after the fix: targeted AI routing/context tests (24/24), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and `git diff --check`.
 - Full backend `npm test` was attempted and stopped at the repository safety guard because `TEST_DATABASE_URL` is not set; no local development database was touched.
+## 2026-07-19 - AI Assistant read-only versus mutating intent split
+
+- Fixed the follow-up regression where selected-device read-only questions such as "how many VLANs do I have?" could score the mutating Cisco `create-vlan` action because both actions shared the `vlan` token and Cisco catalog rows use the generic action wrapper.
+- Target action matching now classifies read-only versus mutating language first, removes generic verbs from lexical scoring, requires a real domain/title/alias token match, and normalizes Persian VLAN spellings such as `ویلن`/`ویلان` to `vlan`.
+- Cisco VLAN count/list requests now map to the executable read-only `cisco.show-vlan-brief` ActionPlan. Cisco VLAN creation still maps to `cisco.create-vlan`; cross-vendor text such as "on Cisco create VLAN" on a MikroTik target no longer falls into an unrelated MikroTik mutating action.
+- Action Center now displays catalog titles from ActionPlan metadata for generic Cisco operation wrappers, so operators see the real operation name instead of `generic security action`.
+- Controlled execution is unchanged: execution still requires a verified catalog item, registered template, selected-device connector, preview, user confirmation, PolicyGuard, connector invocation, and audit evidence.
+- Validation passed: targeted AI routing/context tests (27/27), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and diff check. Full backend `npm test` still stops at `TEST_DATABASE_URL_REQUIRED` without touching the development database.

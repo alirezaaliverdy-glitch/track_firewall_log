@@ -121,7 +121,15 @@ function normalizeUserText(value: string) {
 }
 
 function includesAny(text: string, values: string[]) {
-  return values.some((value) => text.includes(normalizeUserText(value)));
+  const normalizedText = normalizeIntentVocabulary(text);
+  return values.some((value) => normalizedText.includes(normalizeIntentVocabulary(normalizeUserText(value))));
+}
+
+function normalizeIntentVocabulary(text: string) {
+  return text
+    .replace(/وی\s*لن/g, "vlan")
+    .replace(/ویلان/g, "vlan")
+    .replace(/ویلن/g, "vlan");
 }
 
 function connectorTypeForVendor(vendor: string | null | undefined) {
@@ -231,15 +239,38 @@ const TARGET_ACTION_STOP_WORDS = new Set([
   "an",
   "and",
   "any",
+  "add",
+  "apply",
+  "change",
+  "config",
+  "configure",
+  "create",
+  "delete",
+  "disable",
+  "enable",
   "for",
   "from",
   "me",
   "my",
   "on",
   "please",
+  "remove",
+  "set",
   "something",
   "the",
   "to",
+  "update",
+  "اضافه",
+  "اعمال",
+  "ایجاد",
+  "بساز",
+  "تغییر",
+  "تنظیم",
+  "حذف",
+  "ساخت",
+  "فعال",
+  "غیرفعال",
+  "کانفیگ",
 ]);
 
 function targetSupportedActions(context: AiResolverTargetContext | null | undefined) {
@@ -247,41 +278,69 @@ function targetSupportedActions(context: AiResolverTargetContext | null | undefi
 }
 
 function tokenizeActionText(value: string) {
-  return normalizeUserText(value)
+  return normalizeIntentVocabulary(normalizeUserText(value))
     .split(" ")
     .map((word) => word.trim())
     .filter((word) => word.length >= 3 && !TARGET_ACTION_STOP_WORDS.has(word));
 }
 
 function actionText(action: AiResolverSupportedAction) {
-  return normalizeUserText([
+  return normalizeIntentVocabulary(normalizeUserText([
     action.id,
     action.actionType,
     action.titleFa,
     action.titleEn,
     action.category,
     ...(action.aliases ?? []),
-  ].filter(Boolean).join(" "));
+  ].filter(Boolean).join(" ")));
+}
+
+function isMutatingRequest(userText: string) {
+  const text = normalizeUserText(userText);
+  return includesAny(text, [
+    "configure", "config", "create", "add", "change", "set", "update", "delete", "remove", "enable", "disable", "restart", "reload", "apply", "assign", "rename",
+    "تنظیم", "کانفیگ", "بساز", "ساخت", "ایجاد", "اضافه", "تغییر", "عوض", "حذف", "پاک", "فعال", "غیرفعال", "ریستارت", "اعمال", "اختصاص", "نام گذاری", "نام‌گذاری",
+  ]);
+}
+
+function isReadOnlyRequest(userText: string) {
+  const text = normalizeUserText(userText);
+  return includesAny(text, [
+    "show", "list", "count", "how many", "how much", "status", "check", "review", "display", "what", "which", "get", "tell me",
+    "نمایش", "نشان", "نشون", "لیست", "فهرست", "تعداد", "چند", "چندتا", "چن تا", "چنتا", "دارم", "وضعیت", "چک", "بررسی", "ببین", "بده", "بگو", "کدام", "کدوم",
+  ]);
 }
 
 function resolveTargetSupportedAction(userText: string, actions: readonly AiResolverSupportedAction[]) {
-  const text = normalizeUserText(userText);
+  const text = normalizeIntentVocabulary(normalizeUserText(userText));
   const requestTokens = tokenizeActionText(userText);
+  const readOnlyRequest = isReadOnlyRequest(userText);
+  const mutatingRequest = isMutatingRequest(userText);
   let best: { action: AiResolverSupportedAction; score: number } | null = null;
 
   for (const action of actions) {
-    const haystack = actionText(action);
-    const aliases = (action.aliases ?? []).map((alias) => normalizeUserText(alias)).filter(Boolean);
-    const titleEn = normalizeUserText(action.titleEn ?? "");
-    const titleFa = normalizeUserText(action.titleFa ?? "");
-    let score = 0;
+    const actionReadOnly = action.readOnly !== false && action.mutating !== true;
+    const actionMutating = action.mutating === true || action.readOnly === false;
+    if (readOnlyRequest && !mutatingRequest && actionMutating) continue;
+    if (mutatingRequest && !readOnlyRequest && actionReadOnly) continue;
 
-    if (titleEn.length >= 3 && text.includes(titleEn)) score += 8;
-    if (titleFa.length >= 3 && text.includes(titleFa)) score += 8;
-    if (aliases.some((alias) => alias.length >= 3 && text.includes(alias))) score += 8;
+    const haystack = actionText(action);
+    const aliases = (action.aliases ?? []).map((alias) => normalizeIntentVocabulary(normalizeUserText(alias))).filter(Boolean);
+    const titleEn = normalizeIntentVocabulary(normalizeUserText(action.titleEn ?? ""));
+    const titleFa = normalizeIntentVocabulary(normalizeUserText(action.titleFa ?? ""));
+    let score = 0;
+    let lexicalScore = 0;
+
+    if (titleEn.length >= 3 && text.includes(titleEn)) { score += 8; lexicalScore += 8; }
+    if (titleFa.length >= 3 && text.includes(titleFa)) { score += 8; lexicalScore += 8; }
+    if (aliases.some((alias) => alias.length >= 3 && text.includes(alias))) { score += 8; lexicalScore += 8; }
     for (const token of requestTokens) {
-      if (haystack.includes(token)) score += 1;
+      if (haystack.includes(token)) { score += 1; lexicalScore += 1; }
+      if (readOnlyRequest && actionReadOnly && token === "vlan" && haystack.includes("vlan")) score += 6;
     }
+    if (lexicalScore === 0) continue;
+    if (readOnlyRequest && actionReadOnly) score += 3;
+    if (mutatingRequest && actionMutating) score += 4;
 
     if (!best || score > best.score) best = { action, score };
   }

@@ -70,6 +70,27 @@ test("Cisco create VLAN uses selected Cisco context and does not need text vendo
   assert.equal(resolution.normalizedParams.vlanId, 123);
 });
 
+test("Cisco VLAN count request maps to read-only VLAN brief instead of create VLAN", () => {
+  const resolution = resolveForTarget("چند تا vlan دارم", targetDevice({ id: "sw-vlan", vendor: "Cisco", type: "cisco_switch" }));
+
+  assert.equal(resolution.mode, "executable_action_plan");
+  assert.equal(resolution.canonicalVendor, "cisco");
+  assert.equal(resolution.catalogCommandId, "cisco.show-vlan-brief");
+  assert.equal(resolution.executionTemplateRef, "cisco_show_vlan_brief");
+  assert.equal(resolution.executionSupport, "connector");
+  assert.deepEqual(resolution.missingFields, []);
+  assert.notEqual(resolution.catalogCommandId, "cisco.create-vlan");
+});
+
+test("Cisco Persian VLAN spelling maps to read-only VLAN brief", () => {
+  const resolution = resolveForTarget("چن تا ویلن دارم", targetDevice({ id: "sw-vilan", vendor: "Cisco", type: "cisco_switch" }));
+
+  assert.equal(resolution.mode, "executable_action_plan");
+  assert.equal(resolution.catalogCommandId, "cisco.show-vlan-brief");
+  assert.equal(resolution.executionTemplateRef, "cisco_show_vlan_brief");
+  assert.equal(resolution.executionSupport, "connector");
+});
+
 test("FortiGate create policy uses selected target catalog and creates an ActionPlan candidate", () => {
   const resolution = resolveForTarget("create policy", targetDevice({ id: "fg-1", vendor: "Fortinet", type: "fortigate" }));
 

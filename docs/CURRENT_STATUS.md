@@ -705,3 +705,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Existing supported actions are unchanged and still create executable connector-backed ActionPlans. Custom fallback plans are review-only and cannot execute raw AI commands.
 - Validation passed: backend build, command catalog validation (191 items), targeted AI routing/context tests (24/24), frontend build, i18n, UTF-8, workflow, and diff check.
 - Full backend `npm test` was attempted and stopped at `TEST_DATABASE_URL_REQUIRED`, so no local development database was touched.
+
+## 2026-07-19 - AI Assistant intent split for read-only Cisco VLAN questions
+
+- The latest chatbot defect was a resolver scoring issue: a read-only VLAN count/list question could match Cisco `create-vlan` because `vlan` was the strongest shared token and generic mutating verbs were counted as lexical evidence.
+- The resolver now separates read-only and mutating requests before target-catalog selection, ignores generic verbs as match evidence, and requires a real domain/title/alias token match.
+- Persian VLAN spellings (`ویلن`, `ویلان`, `وی لن`) normalize to `vlan`; `چند تا vlan دارم` and `چن تا ویلن دارم` resolve to the read-only executable `cisco.show-vlan-brief` plan, while `create VLAN 123` remains `cisco.create-vlan`.
+- Action Center uses catalog metadata titles for generic Cisco wrappers, so the selected action and history rows show the operation title rather than `generic security action`.
+- Validation passed: targeted AI routing/context tests (27/27), backend build, command catalog validation, frontend build, i18n, UTF-8, workflow, and diff check. Full backend test remains gated by missing `TEST_DATABASE_URL`.

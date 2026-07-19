@@ -796,3 +796,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added regression coverage for the screenshot-style MikroTik prompt `کار هامو نشون بده` and updated source-contract coverage for unconditional selected-device fallback.
 - Validation: targeted AI routing/context tests (24/24), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and diff check passed.
 - Full backend `npm test` was attempted and stopped at `TEST_DATABASE_URL_REQUIRED`; the project safety guard prevented using the local development database.
+
+## 2026-07-19 - AI Assistant read-only/mutating catalog routing
+
+- Root cause: target-catalog scoring did not separate read-only questions from mutating requests. A Cisco VLAN count/list question could be interpreted as the multi-step `create-vlan` operation, and a cross-vendor "create" phrase could score unrelated mutating actions on the selected target.
+- Added read-only/mutating intent gates in the shared resolver, removed generic verbs from action-token scoring, required domain/title/alias evidence, and normalized Persian VLAN spellings to the same `vlan` token.
+- Added regression coverage for Cisco `چند تا vlan دارم` and `چن تا ویلن دارم`, both resolving to `cisco.show-vlan-brief`, plus the existing Cisco create VLAN and MikroTik cross-vendor safeguards.
+- Updated Action Center presentation so metadata-backed Cisco operation titles are shown instead of the generic wrapper action type.
+- Validation: targeted AI routing/context tests (27/27), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend `npm test` stopped at `TEST_DATABASE_URL_REQUIRED`.
