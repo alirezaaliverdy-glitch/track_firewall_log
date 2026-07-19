@@ -28,8 +28,10 @@ test("supported actions are filtered to Cisco, FortiGate, MikroTik or Linux sele
   const source = read("../src/ai/context/assistant-target-context.ts");
   assert.match(source, /const vendor = vendorForAssistantTarget\(device\)/);
   assert.match(source, /action\.vendor === vendor && action\.supportState === "verified"/);
+  assert.match(source, /action\.vendor === vendor && action\.supported && action\.supportsExecution/);
   assert.match(source, /executionTemplateRef: action\.executionTemplateRef/);
   assert.match(source, /requiredParams: action\.requiredParams\.map\(\(field\) => field\.key\)/);
+  assert.match(source, /source: "legacy_action_catalog"/);
 
   const catalog = read("../src/commands/catalog/index.ts");
   assert.match(catalog, /item\("linux", "open-ports"/);
@@ -42,10 +44,12 @@ test("supported actions are filtered to Cisco, FortiGate, MikroTik or Linux sele
 
 test("AI resolver source prevents stale cross-vendor catalog fallback", () => {
   const source = read("../src/ai/ai-template-resolver.ts");
-  assert.match(source, /normalizeAiVendor\(input\.selectedDevice\?\.type\)[\s\S]*normalizeAiVendor\(input\.selectedDevice\?\.vendor\)/);
+  assert.match(source, /normalizeAiVendor\(input\.targetDeviceContext\?\.device\?\.vendor\)[\s\S]*normalizeAiVendor\(input\.selectedDevice\?\.type\)[\s\S]*normalizeAiVendor\(input\.selectedDevice\?\.vendor\)/);
+  assert.match(source, /resolveTargetSupportedAction\(input\.userText, targetSupportedActions\(input\.targetDeviceContext\)\)/);
   assert.match(source, /routePersianIntent\(\{[\s\S]*selectedDeviceId: input\.selectedDevice\?\.id[\s\S]*selectedVendor,/);
   assert.match(source, /vendor === "generic" \? COMMAND_CATALOG\.find\(\(entry\) => entry\.actionType === actionType\) : null/);
   assert.doesNotMatch(source, /\?\? COMMAND_CATALOG\.find\(\(entry\) => entry\.actionType === actionType\)\s+\?\? null/);
+  assert.doesNotMatch(source, /inferVendorFromText\(input\.userText\)/);
 });
 
 test("AI chat rebuilds context from the current selected device on every prompt", () => {
@@ -55,6 +59,7 @@ test("AI chat rebuilds context from the current selected device on every prompt"
   assert.match(source, /const selectedDeviceId = input\.deviceId;/);
   assert.doesNotMatch(source, /const selectedDeviceId = input\.deviceId \?\? actionIntent\?\.deviceId/);
   assert.match(source, /targetDeviceContext: context\.targetDeviceContext/);
+  assert.match(source, /targetDeviceContext: context\.targetDeviceContext,[\s\S]*aiIntent:/);
   assert.match(source, /suggestSupportedActionsForAssistantTarget\(input\.selectedDevice\)/);
 });
 
@@ -92,7 +97,8 @@ test("unsupported selected-device requests stay reviewable in Assistant", () => 
   const source = read("../src/ai/ai-template-resolver.ts");
   assert.match(source, /canUseCatalogActionType\(actionType: string\)/);
   assert.match(source, /actionType !== "generic_security_action" && actionType !== "custom_vendor_action"/);
-  assert.doesNotMatch(source, /findCatalogItemByIntent\(canonicalVendor, resolvedActionType\);/);
+  assert.match(source, /canUseCatalogActionType\(resolvedActionType\) \? findCatalogItemByIntent\(canonicalVendor, resolvedActionType\) : null/);
+  assert.match(source, /catalogCommandId: null,[\s\S]*executionTemplateRef: null,[\s\S]*catalogItem: null/);
 
   const chat = read("../src/services/ai-chat.service.ts");
   assert.match(chat, /selectedDeviceUnsupportedMessage/);

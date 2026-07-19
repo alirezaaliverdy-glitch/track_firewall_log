@@ -674,3 +674,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Successful Cisco SSH now opens an interactive shell, disables paging, runs show version, detects IOS-XE, IOS Classic, NX-OS, and ASA separately from automation support, and lets unsupported-but-connected platforms proceed to unverified review.
 - Device registration now normalizes management IPs and transactionally reuses/reactivates matching Device/Asset records, preserving history. True unrelated ownership returns DEVICE_MANAGEMENT_IP_CONFLICT for the UI conflict actions.
 - Validation in progress includes backend build, frontend build/typecheck, Cisco ssh2 fixture tests, onboarding boundary tests, i18n, UTF-8, workflow, and diff checks. No secrets or .env values were printed or changed.
+
+## 2026-07-19 - AI Assistant vendor context routing
+
+- Assistant action routing now preserves selected-device context through context building, intent resolution, target-scoped catalog matching, and ActionPlan creation.
+- The selected device is the source of truth for vendor/platform/capabilities/supported actions; prompt text is not used to infer or switch vendor.
+- Supported executable MikroTik, Cisco, FortiGate, and Linux target actions can create reviewable ActionPlans again. Unsupported/custom requests stay in Assistant chat with no ActionPlan or Guided Action redirect.
+- Validation passed for backend build, command catalog validation, targeted routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check. Full backend tests still need an existing isolated test database; the attempted run failed because `firewall_log_analyzer_test` is absent.

@@ -1,4 +1,5 @@
 import { COMMAND_CATALOG, type CommandCatalogItem } from "../../commands/catalog/index.js";
+import { VENDOR_COMMAND_CATALOG } from "../../actions/catalog/index.js";
 import { normalizeVendor, type NormalizedVendor } from "../../services/ai-normalization.js";
 
 export type AssistantTargetDeviceRecord = {
@@ -72,14 +73,23 @@ function healthSummary(capabilities: Record<string, unknown>, statusChecks: Assi
   };
 }
 
+function connectorTypeForVendor(vendor: string) {
+  if (vendor === "fortigate") return "fortigate-ssh";
+  if (vendor === "mikrotik") return "mikrotik-ssh";
+  if (vendor === "linux") return "linux-ssh";
+  if (vendor === "cisco") return "cisco-ios-xe-ssh";
+  return null;
+}
+
 export function supportedActionsForAssistantTarget(
   device: Pick<AssistantTargetDeviceRecord, "vendor" | "type"> | null | undefined,
   catalog: readonly CommandCatalogItem[] = COMMAND_CATALOG
 ) {
   const vendor = vendorForAssistantTarget(device);
-  return catalog
+  const commandCatalogActions = catalog
     .filter((action) => action.vendor === vendor && action.supportState === "verified")
     .map((action) => ({
+      source: "command_catalog" as const,
       id: action.id,
       actionType: action.actionType,
       titleFa: action.titleFa,
@@ -91,7 +101,29 @@ export function supportedActionsForAssistantTarget(
       connectorType: action.connectorType,
       executionTemplateRef: action.executionTemplateRef,
       requiredParams: action.requiredParams.map((field) => field.key),
+      optionalParams: action.optionalParams.map((field) => field.key),
+      aliases: [...action.tagsFa, ...action.searchKeywordsFa, action.titleFa, action.titleEn],
     }));
+  const commandActionIds = new Set(commandCatalogActions.map((action) => action.id));
+  const legacyControlledActions = VENDOR_COMMAND_CATALOG
+    .filter((action) => action.vendor === vendor && action.supported && action.supportsExecution && !commandActionIds.has(action.id))
+    .map((action) => ({
+      source: "legacy_action_catalog" as const,
+      id: action.id,
+      actionType: String(action.actionType),
+      titleFa: action.title,
+      titleEn: action.title,
+      category: action.category,
+      riskLevel: action.risk,
+      readOnly: action.readOnly,
+      mutating: !action.readOnly,
+      connectorType: connectorTypeForVendor(action.vendor),
+      executionTemplateRef: null,
+      requiredParams: action.requiredParams,
+      optionalParams: action.optionalParams,
+      aliases: [...action.aliases, ...action.faAliases, action.title],
+    }));
+  return [...commandCatalogActions, ...legacyControlledActions];
 }
 
 export function suggestSupportedActionsForAssistantTarget(device: Pick<AssistantTargetDeviceRecord, "vendor" | "type"> | null | undefined, limit = 6) {

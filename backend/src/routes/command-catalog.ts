@@ -7,6 +7,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
+import { buildAssistantTargetContextFromRecord } from "../ai/context/assistant-target-context.js";
 
 const bool = (value: unknown) => value === "true" ? true : value === "false" ? false : undefined;
 const deviceVendor = (device: { type: string; vendor: string }) => {
@@ -132,9 +133,11 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
 
     const selectedVendor = request.body.selectedVendor ?? request.body.currentVendor ?? request.body.vendor;
     const resolvedVendor = deviceVendor(device);
+    const targetDeviceContext = buildAssistantTargetContextFromRecord(device);
     const resolution = resolveAiTemplate({
       userText: userRequest,
       selectedDevice: device,
+      targetDeviceContext,
       detectedVendor: resolvedVendor,
       currentVendor: resolvedVendor ?? selectedVendor,
       selectedConnectorType: request.body.selectedConnectorType,
@@ -142,6 +145,9 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       searchFilters: request.body.searchFilters ?? null,
     });
     const executableItem = resolution.catalogItem?.supportState === "verified" && selectedDeviceSupportsConnector(device, resolution.connectorType) ? resolution.catalogItem : null;
+    const executableAction = (executableItem ?? resolution.targetSupportedAction ?? null) && selectedDeviceSupportsConnector(device, resolution.connectorType)
+      ? (executableItem ?? resolution.targetSupportedAction ?? null)
+      : null;
     const draft = {
       titleFa: executableItem?.titleFa ?? "پیشنهاد سفارشی هوش مصنوعی",
       status: "draft",
@@ -188,22 +194,30 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
 
     if (request.body.createActionPlan === false) return reply.code(201).send({ mode: "manual_or_not_supported", messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.", draft, actionPlan: null, resolution });
 
-    if (executableItem) {
+    if (executableAction) {
       const normalizedParams = resolution.normalizedParams;
       const requiredParamsSatisfied = resolution.missingFields.length === 0;
-      const createMappedPlan = () => proposeActionPlan({ source: "ai", requestedBy: request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined, deviceId: selectedDeviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: executableItem.supportState, supportReasonKey: executableItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied, missingFields: resolution.missingFields, metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: executableItem.supportState, supportReasonKey: executableItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied, missingFields: resolution.missingFields, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
+      const planVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;
+      const planActionType = resolution.catalogItem?.actionType ?? resolution.canonicalActionType;
+      const planRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? "medium";
+      const planSupportState = resolution.catalogItem?.supportState ?? "verified";
+      const planSupportReasonKey = resolution.catalogItem?.supportReasonKey ?? "support.reason.verified";
+      const planTitleFa = resolution.catalogItem?.titleFa ?? resolution.targetSupportedAction?.titleFa ?? resolution.canonicalActionType;
+      const createMappedPlan = () => proposeActionPlan({ source: "ai", requestedBy: request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined, deviceId: selectedDeviceId, vendor: planVendor, actionType: planActionType, riskLevel: planRiskLevel, parametersJson: { ...normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: planSupportState, supportReasonKey: planSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied, missingFields: resolution.missingFields, metadata: { catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: planTitleFa, vendor: planVendor, actionType: planActionType, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: planSupportState, supportReasonKey: planSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied, missingFields: resolution.missingFields, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
       if (resolution.missingFields.length) {
-        const declaredFields = executableItem.requiredParams.filter((field) => resolution.missingFields.includes(field.key));
-        const blueprintId = catalogGuidedBlueprintId(executableItem.id);
+        const declaredFields = executableItem
+          ? executableItem.requiredParams.filter((field) => resolution.missingFields.includes(field.key))
+          : resolution.missingFields.map((field) => ({ key: field, labelFa: field, helpFa: field, type: "string" }));
+        const blueprintId = executableItem ? catalogGuidedBlueprintId(executableItem.id) : null;
         const actionPlan = await createMappedPlan();
         return reply.code(201).send({
-          mode: "guided_workflow",
+          mode: blueprintId ? "guided_workflow" : "needs_input",
           actionPlanId: actionPlan.id,
           blueprintId,
           initialValues: resolution.normalizedParams,
           reasonFa: missingFieldsMessageFa(resolution.missingFields),
           messageFa: missingFieldsMessageFa(resolution.missingFields),
-          vendor: executableItem.vendor,
+          vendor: planVendor,
           connectorType: resolution.connectorType,
           deviceId: selectedDeviceId,
           templateRef: resolution.executionTemplateRef,

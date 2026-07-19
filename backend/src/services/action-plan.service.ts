@@ -447,7 +447,8 @@ async function ensureControlledCatalogAction(plan: ActionPlan) {
     return { controlled: true, catalogCommandId: productCatalog.item.id, source: "command_catalog", executionTemplateRef: productCatalog.item.executionTemplateRef, connectorType: productCatalog.item.connectorType, vendor: productCatalog.item.vendor };
   }
   const productEntries = COMMAND_CATALOG.filter((item) => item.actionType === plan.actionType);
-  if (productEntries.length > 0 && !productEntries.some((item) => item.supportState === "verified")) {
+  const legacyCatalogPlan = String(previewMetadata.catalogCommandId ?? "").startsWith("legacy:");
+  if (!legacyCatalogPlan && productEntries.length > 0 && !productEntries.some((item) => item.supportState === "verified")) {
     throw new ActionExecutionError("CATALOG_COMMAND_NOT_VERIFIED", "This action is not verified for execution.", 409);
   }
   const legacyControlled = Boolean(getActionCatalogEntry(plan.actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);

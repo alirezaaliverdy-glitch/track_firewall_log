@@ -815,3 +815,11 @@
 - Successful Cisco SSH now opens an interactive shell, disables paging, runs show version, detects IOS-XE, IOS Classic, NX-OS, and ASA separately from automation support, and lets unsupported-but-connected platforms proceed to unverified review.
 - Device registration now normalizes management IPs and transactionally reuses/reactivates matching Device/Asset records, preserving history. True unrelated ownership returns DEVICE_MANAGEMENT_IP_CONFLICT for the UI conflict actions.
 - Validation in progress includes backend build, frontend build/typecheck, Cisco ssh2 fixture tests, onboarding boundary tests, i18n, UTF-8, workflow, and diff checks. No secrets or .env values were printed or changed.
+
+## 2026-07-19 - AI Assistant selected-device vendor routing repair
+
+- Fixed global Assistant routing so the selected target device context is passed into deterministic intent resolution and catalog matching.
+- The resolver now uses `targetDeviceContext.device.vendor` plus target-scoped supported actions as the source of truth, and no longer infers vendor from prompt text or uses the old Cisco-only fallback.
+- Target-supported command-catalog and legacy controlled-catalog actions can create ActionPlans for MikroTik, Cisco, FortiGate, and Linux supported actions; unsupported/custom prompts remain chat-only.
+- Preserved Action Center, approval, audit, connector-selection, and guided-action confirmation behavior. Frontend navigation remains explicit-confirmation only.
+- Validation: backend build, command catalog validation, targeted backend routing/context tests, frontend build, i18n, UTF-8, workflow, and `git diff --check` passed. Full backend test run was attempted but the local `firewall_log_analyzer_test` database does not exist, causing DB-bound failures unrelated to this change.

@@ -13,6 +13,34 @@ export type AiResolverDevice = {
   protocol?: string;
 };
 
+export type AiResolverSupportedAction = {
+  source?: "command_catalog" | "legacy_action_catalog";
+  id: string;
+  actionType: string;
+  titleFa?: string;
+  titleEn?: string;
+  category?: string;
+  riskLevel?: string;
+  readOnly?: boolean;
+  mutating?: boolean;
+  connectorType?: string | null;
+  executionTemplateRef?: string | null;
+  requiredParams?: string[];
+  optionalParams?: string[];
+  aliases?: string[];
+};
+
+export type AiResolverTargetContext = {
+  device?: {
+    id?: string;
+    vendor?: string;
+    platform?: string | null;
+    capabilities?: unknown;
+  };
+  capabilities?: unknown;
+  supportedActions?: AiResolverSupportedAction[];
+};
+
 export type AiTemplateResolution = {
   mode: "executable_action_plan" | "needs_input" | "guided_workflow" | "clarification" | "manual_or_not_supported";
   canonicalVendor: string;
@@ -27,6 +55,7 @@ export type AiTemplateResolution = {
   confidence: number;
   reasonFa: string;
   catalogItem: CommandCatalogItem | null;
+  targetSupportedAction?: AiResolverSupportedAction | null;
   blueprintId?: string;
   initialValues?: Record<string, unknown>;
   missingGuidedFields?: GuidedActionField[];
@@ -138,16 +167,6 @@ function inferredVendorFromAction(actionType: string): string | null {
   return null;
 }
 
-function inferVendorFromText(userText: string): string | null {
-  const compact = normalizeUserText(userText).replace(/[\s_-]+/g, "");
-  for (const [alias, vendor] of Object.entries(VENDOR_ALIASES)) {
-    if (compact.includes(alias)) return vendor;
-  }
-  if (compact.includes("لینوکس")) return "linux";
-  if (compact.includes("میکروتیک") || compact.includes("ميکروتيک")) return "mikrotik";
-  return null;
-}
-
 function normalizeParams(parameters: Record<string, unknown>) {
   const next = { ...parameters };
   delete next.missingFields;
@@ -207,16 +226,102 @@ function findCatalogItemByIntent(vendor: string, actionType: string) {
     ?? null;
 }
 
-function findCatalogItemById(id: string) {
-  return COMMAND_CATALOG.find((entry) => entry.id === id) ?? null;
+const TARGET_ACTION_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "any",
+  "for",
+  "from",
+  "me",
+  "my",
+  "on",
+  "please",
+  "something",
+  "the",
+  "to",
+]);
+
+function targetSupportedActions(context: AiResolverTargetContext | null | undefined) {
+  return Array.isArray(context?.supportedActions) ? context.supportedActions : [];
 }
 
-function resolveSelectedDeviceCatalogItem(userText: string, vendor: string) {
+function tokenizeActionText(value: string) {
+  return normalizeUserText(value)
+    .split(" ")
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 3 && !TARGET_ACTION_STOP_WORDS.has(word));
+}
+
+function actionText(action: AiResolverSupportedAction) {
+  return normalizeUserText([
+    action.id,
+    action.actionType,
+    action.titleFa,
+    action.titleEn,
+    action.category,
+    ...(action.aliases ?? []),
+  ].filter(Boolean).join(" "));
+}
+
+function resolveTargetSupportedAction(userText: string, actions: readonly AiResolverSupportedAction[]) {
   const text = normalizeUserText(userText);
-  if (vendor === "cisco" && includesAny(text, ["vlan"]) && includesAny(text, ["create", "add", "configure", "build", "Ø¨Ø³Ø§Ø²", "Ø§ÛŒØ¬Ø§Ø¯ Ú©Ù†", "Ø§Ø¶Ø§ÙÙ‡ Ú©Ù†"])) {
-    return findCatalogItemById("cisco.create-vlan");
+  const requestTokens = tokenizeActionText(userText);
+  let best: { action: AiResolverSupportedAction; score: number } | null = null;
+
+  for (const action of actions) {
+    const haystack = actionText(action);
+    const aliases = (action.aliases ?? []).map((alias) => normalizeUserText(alias)).filter(Boolean);
+    const titleEn = normalizeUserText(action.titleEn ?? "");
+    const titleFa = normalizeUserText(action.titleFa ?? "");
+    let score = 0;
+
+    if (titleEn.length >= 3 && text.includes(titleEn)) score += 8;
+    if (titleFa.length >= 3 && text.includes(titleFa)) score += 8;
+    if (aliases.some((alias) => alias.length >= 3 && text.includes(alias))) score += 8;
+    for (const token of requestTokens) {
+      if (haystack.includes(token)) score += 1;
+    }
+
+    if (!best || score > best.score) best = { action, score };
   }
-  return null;
+
+  return best && best.score >= 2 ? best.action : null;
+}
+
+function numberAfter(text: string, keys: string[]) {
+  for (const key of keys) {
+    const match = new RegExp(`\\b${key}\\b\\s*(?:to|=|:)?\\s*(\\d{1,5})`, "i").exec(text);
+    if (match?.[1]) return Number(match[1]);
+  }
+  return undefined;
+}
+
+function lastNumber(text: string) {
+  const matches = Array.from(text.matchAll(/\b\d{1,5}\b/g));
+  const last = matches.at(-1)?.[0];
+  return last ? Number(last) : undefined;
+}
+
+function normalizeTargetActionParams(action: AiResolverSupportedAction, userText: string, params: Record<string, unknown>) {
+  const text = normalizeUserText(userText);
+  const next = { ...params };
+  const fields = new Set([...(action.requiredParams ?? []), ...(action.optionalParams ?? [])]);
+  const serviceName = extractServiceName(text);
+
+  if (!next.serviceName && serviceName && fields.has("serviceName")) next.serviceName = serviceName;
+  if (!next.serviceName && fields.has("serviceName") && includesAny(text, ["ssh", "secure shell"])) next.serviceName = "ssh";
+  if (!next.service && typeof next.serviceName === "string") next.service = next.serviceName;
+
+  if (next.newPort === undefined && fields.has("newPort")) next.newPort = numberAfter(text, ["newport", "port"]) ?? lastNumber(text);
+  if (next.port === undefined && fields.has("port")) next.port = numberAfter(text, ["port"]) ?? lastNumber(text);
+  if (next.vlanId === undefined && fields.has("vlanId")) next.vlanId = numberAfter(text, ["vlan"]) ?? lastNumber(text);
+
+  return normalizeParams(next);
+}
+
+function missingFieldsForTargetAction(action: AiResolverSupportedAction, params: Record<string, unknown>) {
+  return (action.requiredParams ?? []).filter((field) => params[field] === undefined || params[field] === "");
 }
 
 function canUseCatalogActionType(actionType: string) {
@@ -251,9 +356,11 @@ export function resolveAiTemplate(input: {
   searchFilters?: Record<string, unknown> | null;
   aiIntent?: { intentType?: unknown; parameters?: Record<string, unknown> } | null;
   params?: Record<string, unknown>;
+  targetDeviceContext?: AiResolverTargetContext | null;
 }): AiTemplateResolution {
   const selectedVendor =
-    normalizeAiVendor(input.selectedDevice?.type)
+    normalizeAiVendor(input.targetDeviceContext?.device?.vendor)
+    ?? normalizeAiVendor(input.selectedDevice?.type)
     ?? normalizeAiVendor(input.selectedDevice?.vendor)
     ?? normalizeAiVendor(input.currentVendor)
     ?? normalizeAiVendor(input.detectedVendor);
@@ -354,30 +461,41 @@ export function resolveAiTemplate(input: {
     }
   }
 
-  const selectedDeviceCatalogItem = selectedVendor ? resolveSelectedDeviceCatalogItem(input.userText, selectedVendor) : null;
-  if (selectedDeviceCatalogItem?.supportState === "verified" && selectedDeviceCatalogItem.executionTemplateRef) {
-    const template = getExecutionTemplate(selectedDeviceCatalogItem.executionTemplateRef);
-    const mergedParams = { ...selectedDeviceCatalogItem.defaultParams, ...(input.params ?? {}) };
-    const missingFields = missingFieldsForItem(selectedDeviceCatalogItem, mergedParams);
-    if (template) {
+  const targetAction = resolveTargetSupportedAction(input.userText, targetSupportedActions(input.targetDeviceContext));
+  if (targetAction) {
+    const targetCatalogItem = COMMAND_CATALOG.find((entry) => entry.id === targetAction.id && entry.supportState === "verified") ?? null;
+    const targetTemplate = targetCatalogItem?.executionTemplateRef ? getExecutionTemplate(targetCatalogItem.executionTemplateRef) : null;
+    const executionTemplateRef = targetCatalogItem?.executionTemplateRef ?? targetAction.executionTemplateRef ?? null;
+    const connectorType = targetCatalogItem?.connectorType ?? targetAction.connectorType ?? connectorTypeForVendor(selectedVendor);
+    const mergedParams = normalizeTargetActionParams(targetAction, input.userText, {
+      ...(targetCatalogItem?.defaultParams ?? {}),
+      ...(input.params ?? {}),
+    });
+    const missingFields = targetCatalogItem
+      ? missingFieldsForItem(targetCatalogItem, mergedParams)
+      : missingFieldsForTargetAction(targetAction, mergedParams);
+    const commandCatalogReady = Boolean(targetCatalogItem?.executionTemplateRef && targetTemplate);
+    const legacyCatalogReady = targetAction.source === "legacy_action_catalog";
+
+    if (commandCatalogReady || legacyCatalogReady) {
       return {
         mode: missingFields.length ? "needs_input" : "executable_action_plan",
-        canonicalVendor: selectedDeviceCatalogItem.vendor,
-        canonicalActionType: selectedDeviceCatalogItem.actionType,
-        catalogCommandId: selectedDeviceCatalogItem.id,
-        executionTemplateRef: selectedDeviceCatalogItem.executionTemplateRef,
-        connectorType: selectedDeviceCatalogItem.connectorType,
+        canonicalVendor: selectedVendor ?? normalizeAiVendor(input.targetDeviceContext?.device?.vendor) ?? "generic",
+        canonicalActionType: targetCatalogItem?.actionType ?? targetAction.actionType,
+        catalogCommandId: legacyCatalogReady ? "legacy:" + targetAction.id : targetCatalogItem?.id ?? targetAction.id,
+        executionTemplateRef,
+        connectorType,
         implementationState: "implemented",
         executionSupport: "connector",
         normalizedParams: mergedParams,
         missingFields,
         confidence: 0.94,
-        reasonFa: missingFields.length ? missingFieldsMessageFa(missingFields) : "Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø¨Ù‡ template Ø§Ø¬Ø±Ø§ÛŒÛŒ Ø«Ø¨Øªâ€ŒØ´Ø¯Ù‡ Ù†Ú¯Ø§Ø´Øª Ø´Ø¯.",
-        catalogItem: selectedDeviceCatalogItem,
+        reasonFa: missingFields.length ? missingFieldsMessageFa(missingFields) : "Mapped to a supported executable action for the selected target device.",
+        catalogItem: targetCatalogItem,
+        targetSupportedAction: targetAction,
       };
     }
   }
-
   const guidedVendor = selectedVendor;
   const guided = guidedVendor && isGuidedOperationalIntent(input.userText) ? resolveGuidedAction({ text: input.userText, vendor: guidedVendor }) : null;
   if (guided) {
@@ -416,13 +534,13 @@ export function resolveAiTemplate(input: {
   }
 
   const canonicalVendor =
-    normalizeAiVendor(input.selectedDevice?.type)
+    normalizeAiVendor(input.targetDeviceContext?.device?.vendor)
+    ?? normalizeAiVendor(input.selectedDevice?.type)
     ?? normalizeAiVendor(input.selectedDevice?.vendor)
     ?? normalizeAiVendor(input.currentVendor)
     ?? normalizeAiVendor(input.detectedVendor)
     ?? normalizeAiVendor(normalizedParams.vendor)
     ?? normalizeAiVendor(normalizedParams.targetDeviceHint)
-    ?? inferVendorFromText(input.userText)
     ?? inferredVendorFromAction(rawActionType)
     ?? "generic";
 

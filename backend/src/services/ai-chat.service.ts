@@ -201,10 +201,16 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     }
   });
 
-  const earlySelectedDevice = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId } }) : null;
-  const earlyResolution = resolveAiTemplate({ userText: message, selectedDevice: earlySelectedDevice });
-  const deterministicResolved = earlyResolution.mode === "executable_action_plan" || earlyResolution.mode === "guided_workflow" || Boolean(earlyResolution.catalogItem && earlyResolution.missingFields.length > 0);
-  const context = await buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId });
+  const [earlySelectedDevice, context] = await Promise.all([
+    input.deviceId ? prisma.device.findUnique({ where: { id: input.deviceId } }) : Promise.resolve(null),
+    buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId }),
+  ]);
+  const earlyResolution = resolveAiTemplate({
+    userText: message,
+    selectedDevice: earlySelectedDevice,
+    targetDeviceContext: context.targetDeviceContext,
+  });
+  const deterministicResolved = earlyResolution.mode === "executable_action_plan" || earlyResolution.mode === "guided_workflow" || Boolean((earlyResolution.catalogItem ?? earlyResolution.targetSupportedAction) && earlyResolution.missingFields.length > 0);
   const catalogMatch = routeCatalogIntent(message);
   const providerCandidate = deterministicResolved
     ? {
@@ -288,19 +294,29 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const debug = intentDebug({ intent: actionIntent, structuredIntent: effectiveStructuredIntent });
   const selectedDeviceId = input.deviceId;
   const selectedDevice = earlySelectedDevice ?? (selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null);
-  const resolution = resolveAiTemplate({ userText: message, selectedDevice, aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null });
+  const resolution = resolveAiTemplate({
+    userText: message,
+    selectedDevice,
+    targetDeviceContext: context.targetDeviceContext,
+    aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null,
+  });
   const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
+  const supportedActionForPlan = resolution.catalogItem ?? resolution.targetSupportedAction ?? null;
   const canCreateSupportedActionPlan = Boolean(
     selectedDevice &&
-    resolution.catalogItem?.supportState === "verified" &&
+    supportedActionForPlan &&
     resolution.implementationState === "implemented" &&
     resolution.executionSupport === "connector" &&
-    resolution.executionTemplateRef &&
     selectedDeviceSupportsConnector(selectedDevice, resolution.connectorType) &&
     (resolution.mode === "executable_action_plan" || resolution.mode === "needs_input"),
   );
-  const actionPlan = canCreateSupportedActionPlan && selectedDevice && resolution.catalogItem
-    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: resolution.catalogItem.vendor, actionType: resolution.canonicalActionType, riskLevel: resolution.catalogItem.riskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: resolution.catalogItem.supportState, supportReasonKey: resolution.catalogItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: resolution.catalogItem.titleFa, vendor: resolution.catalogItem.vendor, actionType: resolution.catalogItem.actionType, implementationState: "implemented", executionSupport: "connector", supportState: resolution.catalogItem.supportState, supportReasonKey: resolution.catalogItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
+  const actionVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;
+  const actionRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? "medium";
+  const actionSupportState = resolution.catalogItem?.supportState ?? "verified";
+  const actionSupportReasonKey = resolution.catalogItem?.supportReasonKey ?? "support.reason.verified";
+  const actionTitleFa = resolution.catalogItem?.titleFa ?? resolution.targetSupportedAction?.titleFa ?? resolution.canonicalActionType;
+  const actionPlan = canCreateSupportedActionPlan && selectedDevice && supportedActionForPlan
+    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;

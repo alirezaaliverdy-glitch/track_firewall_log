@@ -760,3 +760,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Successful Cisco SSH now opens an interactive shell, disables paging, runs show version, detects IOS-XE, IOS Classic, NX-OS, and ASA separately from automation support, and lets unsupported-but-connected platforms proceed to unverified review.
 - Device registration now normalizes management IPs and transactionally reuses/reactivates matching Device/Asset records, preserving history. True unrelated ownership returns DEVICE_MANAGEMENT_IP_CONFLICT for the UI conflict actions.
 - Validation in progress includes backend build, frontend build/typecheck, Cisco ssh2 fixture tests, onboarding boundary tests, i18n, UTF-8, workflow, and diff checks. No secrets or .env values were printed or changed.
+
+## 2026-07-19 - AI Assistant vendor context loss regression
+
+- Root cause: deterministic Assistant resolution received selected device/vendor data inconsistently and fell back to prompt/catalog inference, so non-Cisco selected targets could resolve as `unknown` or custom proposals.
+- Implemented a shared target-context resolver path that receives selected device vendor/platform/capabilities/supported actions/device id and matches only the selected device's supported action catalog.
+- Restored ActionPlan creation for supported executable target actions while keeping unsupported/custom/unmatched prompts inside Assistant chat.
+- Added regression coverage for MikroTik SSH port change, Cisco VLAN creation, FortiGate policy creation, Linux supported service status, unknown/custom chat-only behavior, and cross-vendor prompt text not overriding selected device context.
+- Validation: backend build, command catalog validation, targeted backend tests, frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend suite was attempted and failed because the local isolated test database `firewall_log_analyzer_test` does not exist.
