@@ -1,3 +1,8 @@
+## 2026-07-19 - Cisco legacy IOS SSH compatibility
+
+- Converted the opt-in legacy Cisco SSH algorithm override into a named Legacy Cisco IOS Compatibility Profile.
+- Added explicit support for `diffie-hellman-group14-sha1`, `ssh-rsa`, and SHA-1 HMAC negotiation while keeping the modern profile unchanged and preserving per-device/session approval.
+- Strengthened focused connector/source coverage and ran a sanitized real registered-device SSH test; the connector authenticated, opened a privileged shell, and returned the read-only platform command, then retained the existing `connected_unsupported` classification for classic/non-IOS-XE Cisco.
 # Task History
 
 ## 2026-07-19 - Phase B: device onboarding and workspace simplification
@@ -70,7 +75,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Backend: added `/api/health/live`; aligned `/api/health/ready` to the Task 20.1A shape; moved startup DB retry to a shared helper with 5 attempts, exponential backoff and jitter; reduced Prisma startup stack noise; kept one shared pg Pool, PrismaPg adapter, and Prisma client; auth database failures now return structured 503.
 - Proof: backend built; healthy runtime on `127.0.0.1:55432/firewall_log_auth` produced 10/10 live 200 and 10/10 ready 200 over 181 seconds, plus a clean 10-sample body check with `databaseReady=true`.
 - MCP: `/login` and `/dashboard` opened in the authenticated Persian shell with `/api/auth/me` 200. Manual credential entry was not replayable because the exposed MCP tool surface lacks fill/type/click commands and the browser session was already authenticated.
-- Blocker: the active stable runtime database has no saved Credential References, so the required `cisco-f2 — admin` reference is missing. Task 20.1A stops here by its saved-Credential-Reference stop condition; Cisco onboarding, connector invocation, Device persistence, animated success, redirect, and workspace proof are not claimed.
+- Blocker: the active stable runtime database has no saved Credential References, so the required `cisco-f2 â€” admin` reference is missing. Task 20.1A stops here by its saved-Credential-Reference stop condition; Cisco onboarding, connector invocation, Device persistence, animated success, redirect, and workspace proof are not claimed.
 - Commits: `afbdd4c docs: trace postgres prisma authentication failure`; `f09bb4a fix: stabilize postgres prisma and backend readiness`; `9b55d87 fix: restore authentication after database readiness`.
 
 ## Task 20.1 - Onboarding Workspace Dashboard Trace (2026-07-14)
@@ -130,7 +135,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 ## Task 19.2-A - Visible Device Registration Entry Points (2026-07-14)
 
 - Summary: restored obvious Add Device access without starting the diagnostics/Nmap milestones.
-- Frontend: added Dashboard `ثبت دستگاه جدید` and quick action links; added vendor-specific onboarding labels for Cisco, FortiGate, MikroTik, and Linux; preserved the single onboarding engine at `/assets/devices/new` and vendor-prefilled `/assets/vendors/:vendorKey/devices/new`.
+- Frontend: added Dashboard `Ø«Ø¨Øª Ø¯Ø³ØªÚ¯Ø§Ù‡ Ø¬Ø¯ÛŒØ¯` and quick action links; added vendor-specific onboarding labels for Cisco, FortiGate, MikroTik, and Linux; preserved the single onboarding engine at `/assets/devices/new` and vendor-prefilled `/assets/vendors/:vendorKey/devices/new`.
 - Product State: advanced contract version to `19.2-A` and made `assets.device_onboarding_new` visible in generated Assets navigation because backend, API, route, UI, and tests are implemented.
 - Tests: updated Product State/onboarding regressions to assert Add Device is visible and vendor CTAs are present.
 - Browser: connected Playwright MCP tools were not exposed in this session. Local `npx playwright` with system Chrome/Edge reached only the unauthenticated login gate, so authenticated visual acceptance remains to be rerun with the connected MCP session.
@@ -560,7 +565,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 ## Task 16.3A - Runtime AI Fallback Validation and Source Param Fix (2026-07-07)
 
-- Summary: tested the no-result Command Catalog flow for `وضعیت پورت های باز رو نشون بده` against the local Linux device route path, fixed stale control-source normalization into `sourceIp`, kept executable metadata params clean, and changed Action Center execute buttons to the exact label `تایید و اجرا`.
+- Summary: tested the no-result Command Catalog flow for `ÙˆØ¶Ø¹ÛŒØª Ù¾ÙˆØ±Øª Ù‡Ø§ÛŒ Ø¨Ø§Ø² Ø±Ùˆ Ù†Ø´ÙˆÙ† Ø¨Ø¯Ù‡` against the local Linux device route path, fixed stale control-source normalization into `sourceIp`, kept executable metadata params clean, and changed Action Center execute buttons to the exact label `ØªØ§ÛŒÛŒØ¯ Ùˆ Ø§Ø¬Ø±Ø§`.
 - Areas: `backend/src/services/policy-guard.service.ts`, `backend/src/services/action-plan.service.ts`, `backend/test/task16-ai-resolver-and-fallback.test.ts`, `src/components/actions/ActionCenterPanel.tsx`, docs.
 - Validation: route-level flow verified search count 0 -> AI fallback executable `linux_list_open_ports` -> validation passed -> quick execution succeeded with `connectorInvoked=true` and visible `ss/netstat` output; `cd backend && npm run build`; `cd backend && npm run validate:command-catalog`; `cd backend && npm test` passed with 119/119 tests; root `npm run build` passed with the existing Vite large-chunk warning. `pnpm` is not available on PATH in this shell.
 - Commit: pending.

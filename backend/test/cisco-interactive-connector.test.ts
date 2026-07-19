@@ -6,6 +6,7 @@ import test from "node:test";
 import ssh2 from "ssh2";
 import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, type Device } from "@prisma/client";
 import {
+  CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE,
   CiscoConnectorError,
   CiscoInteractiveSession,
   CiscoIosXeSshConnector,
@@ -105,7 +106,11 @@ test("legacy compatibility algorithms are opt-in per device and modern remains d
   assert.equal(ciscoCompatibilityProfile(legacyDevice), "legacy_cisco");
   const credential = { username: "operator", password: randomUUID(), sudo: false };
   assert.equal(ciscoConnectConfig({ host: "192.0.2.1", managementPort: 22 }, credential, "modern").algorithms, undefined);
-  assert.ok(ciscoConnectConfig({ host: "192.0.2.1", managementPort: 22 }, credential, "legacy_cisco").algorithms);
+  const legacyAlgorithms = ciscoConnectConfig({ host: "192.0.2.1", managementPort: 22 }, credential, "legacy_cisco").algorithms;
+  assert.equal(CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE.label, "Legacy Cisco IOS Compatibility Profile");
+  assert.deepEqual(legacyAlgorithms?.kex, { prepend: ["diffie-hellman-group14-sha1", "diffie-hellman-group-exchange-sha1"], append: [], remove: [] });
+  assert.deepEqual(legacyAlgorithms?.serverHostKey, { prepend: ["ssh-rsa"], append: [], remove: [] });
+  assert.deepEqual(legacyAlgorithms?.hmac, { prepend: ["hmac-sha1", "hmac-sha1-96"], append: [], remove: [] });
 });
 
 function device(credentialId: string, port: number): Device {

@@ -114,10 +114,15 @@ async function resolveDeviceCredential(device: Pick<Device, "credentialId" | "cr
   return { ...credential, enableSecret: enableCredential.password } as ResolvedDeviceCredential & { enableSecret: string };
 }
 
-const LEGACY_CISCO_ALGORITHMS: NonNullable<ConnectConfig["algorithms"]> = {
-  kex: { append: ["diffie-hellman-group14-sha1", "diffie-hellman-group-exchange-sha1"], prepend: [], remove: [] },
-  serverHostKey: { append: ["ssh-rsa"], prepend: [], remove: [] },
-  cipher: { append: ["aes128-cbc", "aes192-cbc", "aes256-cbc", "3des-cbc"], prepend: [], remove: [] }
+export const CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE = {
+  key: "legacy_cisco" as const,
+  label: "Legacy Cisco IOS Compatibility Profile",
+  algorithms: {
+    kex: { prepend: ["diffie-hellman-group14-sha1", "diffie-hellman-group-exchange-sha1"], append: [], remove: [] },
+    serverHostKey: { prepend: ["ssh-rsa"], append: [], remove: [] },
+    cipher: { prepend: ["aes128-cbc", "aes192-cbc", "aes256-cbc", "3des-cbc"], append: [], remove: [] },
+    hmac: { prepend: ["hmac-sha1", "hmac-sha1-96"], append: [], remove: [] }
+  } satisfies NonNullable<ConnectConfig["algorithms"]>
 };
 
 export function ciscoConnectConfig(device: Pick<Device, "host" | "managementPort">, credential: ResolvedDeviceCredential, profile: CiscoSshCompatibilityProfile, socket?: Socket): ConnectConfig {
@@ -129,7 +134,7 @@ export function ciscoConnectConfig(device: Pick<Device, "host" | "managementPort
   if (credential.password) config.password = credential.password;
   if (credential.privateKey) config.privateKey = credential.privateKey;
   if (credential.passphrase) config.passphrase = credential.passphrase;
-  if (profile === "legacy_cisco") config.algorithms = LEGACY_CISCO_ALGORITHMS;
+  if (profile === "legacy_cisco") config.algorithms = CISCO_LEGACY_IOS_COMPATIBILITY_PROFILE.algorithms;
   return config;
 }
 
