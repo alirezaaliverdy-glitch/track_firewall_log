@@ -839,3 +839,11 @@
 - Added the same review-only custom ActionPlan fallback to `/api/commands/ai-propose`, preserving selected-device vendor context in that path too.
 - Controlled execution is unchanged: only verified catalog items with registered template and connector metadata become executable. Custom AI proposals remain review-only until a backend template/connector contract is added.
 - Validation passed: backend build, command catalog validation (191 items), targeted AI routing/context tests (23/23), frontend build, i18n, UTF-8, workflow, and diff check. Full backend suite was attempted with the isolated test URL; it ran 301 tests with 235 pass and 66 fail because `firewall_log_analyzer_test` is not present plus older unrelated source-contract expectations.
+
+## 2026-07-19 - AI Assistant unconditional selected-device ActionPlan fallback
+
+- Fixed the remaining chatbot gap shown by Persian prompts such as `کار هامو نشون بده`: the review-only ActionPlan fallback still depended on a keyword/signal match, so arbitrary selected-device requests could return the old "not ready" Assistant message with no ActionPlan.
+- The chat service now creates a review-only `custom_vendor_action` ActionPlan for any selected-device request after executable catalog matching fails and required resolver fields are complete.
+- Supported backend catalog actions remain on the normal executable ActionPlan path; the fallback is vendor-agnostic, uses the selected device context, has no connector/template/session, and stays `manualOnly`/`executionSupport=manual`/`executable=false`.
+- Validation passed after the fix: targeted AI routing/context tests (24/24), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and `git diff --check`.
+- Full backend `npm test` was attempted and stopped at the repository safety guard because `TEST_DATABASE_URL` is not set; no local development database was touched.

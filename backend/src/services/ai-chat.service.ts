@@ -118,41 +118,17 @@ function isCustomProposal(actionType: string) {
   return actionType === AiIntentType.custom_vendor_action || actionType === AiIntentType.generic_security_action;
 }
 
-function normalizedChatText(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function hasOperationalVerb(message: string) {
-  const text = normalizedChatText(message);
-  return [
-    "configure", "config", "create", "add", "change", "set", "update", "delete", "remove", "enable", "disable",
-    "block", "unblock", "allow", "deny", "open", "close", "restart", "reload", "apply", "make", "build",
-    "تنظیم", "کانفیگ", "بساز", "ساخت", "ایجاد", "اضافه", "تغییر", "عوض", "حذف", "پاک", "فعال", "غیرفعال",
-    "بلاک", "مسدود", "اجازه", "باز", "ببند", "بستن", "ریستارت", "راه اندازی", "راه‌اندازی", "اعمال"
-  ].some((term) => text.includes(term));
-}
-
-function hasDevicePlanSignal(message: string) {
-  const text = normalizedChatText(message);
-  return hasOperationalVerb(message) || [
-    "device", "router", "switch", "firewall", "server", "host", "vendor", "status", "health", "diagnostic", "overview", "about",
-    "دستگاه", "روتر", "سوییچ", "سوئیچ", "فایروال", "سرور", "وندور", "وضعیت", "سلامت", "بررسی", "چک", "تحلیل", "درباره", "چی میدونی", "چه میدونی",
-  ].some((term) => text.includes(term));
-}
-
 function shouldCreateReviewOnlyActionPlan(input: {
-  message: string;
   selectedDevice: { id: string } | null;
   resolution: ReturnType<typeof resolveAiTemplate>;
-  supportedActionForPlan: unknown;
+  canCreateSupportedActionPlan: boolean;
   resolutionMissing: string[];
 }) {
   return Boolean(
     input.selectedDevice &&
-    !input.supportedActionForPlan &&
-    input.resolution.mode === "manual_or_not_supported" &&
-    input.resolutionMissing.length === 0 &&
-    hasDevicePlanSignal(input.message)
+    !input.canCreateSupportedActionPlan &&
+    (input.resolution.mode === "manual_or_not_supported" || input.resolution.mode === "guided_workflow") &&
+    input.resolutionMissing.length === 0
   );
 }
 
@@ -349,10 +325,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     (resolution.mode === "executable_action_plan" || resolution.mode === "needs_input"),
   );
   const canCreateReviewOnlyActionPlan = shouldCreateReviewOnlyActionPlan({
-    message,
     selectedDevice,
     resolution,
-    supportedActionForPlan,
+    canCreateSupportedActionPlan,
     resolutionMissing
   });
   const actionVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;

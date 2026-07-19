@@ -787,3 +787,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Preserved controlled execution: custom AI proposals are Action Center records for review, but cannot preview/execute until a verified backend template/connector contract exists. Existing supported vendor actions still execute through the normal ActionPlan, PolicyGuard, connector, and audit path.
 - Added regression coverage for MikroTik overview -> `mikrotik_daily_check`, selected-device default read-only mapping, and command-catalog custom ActionPlan fallback.
 - Validation: backend build, command catalog validation, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check passed. Full backend suite was attempted and failed only in the known environment/unrelated areas: 235/301 passed, 66 failed because the isolated test database is absent plus older source-contract tests.
+
+## 2026-07-19 - AI Assistant arbitrary selected-device ActionPlans
+
+- Root cause: the widened fallback was still gated by prompt wording. A selected device was present, but arbitrary Persian text without the expected signal terms bypassed review-only ActionPlan creation.
+- Removed the prompt-text signal gate from chat fallback. After selected-device catalog matching fails, the Assistant now creates a review-only `custom_vendor_action` ActionPlan for the selected vendor as long as resolver-required fields are complete.
+- Kept the execution boundary intact: fallback plans have no connector, no execution template, no Guided Action session, and cannot be previewed/executed as raw AI output. Supported catalog matches still use the existing ActionPlan, approval, PolicyGuard, connector, and audit pipeline.
+- Added regression coverage for the screenshot-style MikroTik prompt `کار هامو نشون بده` and updated source-contract coverage for unconditional selected-device fallback.
+- Validation: targeted AI routing/context tests (24/24), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, workflow, and diff check passed.
+- Full backend `npm test` was attempted and stopped at `TEST_DATABASE_URL_REQUIRED`; the project safety guard prevented using the local development database.

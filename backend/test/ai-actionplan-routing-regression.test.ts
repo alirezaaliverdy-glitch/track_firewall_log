@@ -106,6 +106,17 @@ test("unsupported custom request keeps no executable catalog match", () => {
   assert.equal(resolution.executionSupport, "manual");
 });
 
+test("arbitrary selected-device chat text is eligible for review-only custom ActionPlan fallback", () => {
+  const resolution = resolveForTarget("کار هامو نشون بده", targetDevice({ id: "mt-actions", vendor: "MikroTik", type: "mikrotik" }));
+
+  assert.equal(resolution.mode, "manual_or_not_supported");
+  assert.equal(resolution.canonicalVendor, "mikrotik");
+  assert.equal(resolution.catalogCommandId, null);
+  assert.equal(resolution.executionTemplateRef, null);
+  assert.equal(resolution.executionSupport, "manual");
+  assert.equal(resolution.implementationState, "manualOnly");
+});
+
 test("resolver does not infer another vendor from prompt text when a target is selected", () => {
   const resolution = resolveForTarget("on Cisco create VLAN 123", targetDevice({ id: "mt-3", vendor: "MikroTik", type: "mikrotik" }));
 

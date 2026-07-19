@@ -697,3 +697,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Executability remains controlled by backend catalog metadata: verified support, connector support, registered execution template, selected device protocol, PolicyGuard, approval, audit, and connector evidence are still required.
 - Raw AI-generated commands are still not executable. To make a new custom request executable, add a registered backend catalog item/template/connector handler for that vendor.
 - Validation passed for backend build, command catalog validation, targeted AI routing/context tests, frontend build, i18n, UTF-8, workflow, and diff check. Full backend tests were attempted; 235/301 passed and 66 failed due to the missing isolated `firewall_log_analyzer_test` database and older unrelated source-contract expectations.
+
+## 2026-07-19 - AI Assistant selected-device fallback widened
+
+- The remaining chatbot failure was caused by the fallback guard still requiring a device keyword or operational verb. Prompts like `کار هامو نشون بده` with a MikroTik target did not satisfy that guard, so the Assistant answered "not ready" without creating an ActionPlan.
+- Any request with a selected device now creates a review-only custom ActionPlan when no executable backend catalog action matches and resolver-required fields are complete.
+- Existing supported actions are unchanged and still create executable connector-backed ActionPlans. Custom fallback plans are review-only and cannot execute raw AI commands.
+- Validation passed: backend build, command catalog validation (191 items), targeted AI routing/context tests (24/24), frontend build, i18n, UTF-8, workflow, and diff check.
+- Full backend `npm test` was attempted and stopped at `TEST_DATABASE_URL_REQUIRED`, so no local development database was touched.
