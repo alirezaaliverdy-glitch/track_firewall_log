@@ -42,6 +42,52 @@ function date(item: unknown, locale: string, fallback: string) {
   return item ? new Date(String(item)).toLocaleString(locale) : fallback;
 }
 
+function capabilityLabel(status: unknown, t: TFunction) {
+  const key = String(status ?? "unknown").toLowerCase();
+  const labels: Record<string, string> = {
+    supported: t("workspace.values.supported"),
+    read_only: t("workspace.values.readOnly"),
+    write_supported: t("workspace.values.writeSupported"),
+    not_configured: t("workspace.values.notConfigured"),
+    not_supported: t("workspace.values.notSupported"),
+    unknown: t("common.unknown"),
+    requires_privilege: t("workspace.values.requiresPrivilege"),
+    available: t("workspace.values.available"),
+    collected: t("workspace.values.collected"),
+    partial: t("workspace.values.partial"),
+    failed: t("workspace.values.failed"),
+    parser_partial: t("workspace.values.parserPartial"),
+    command_failed: t("workspace.values.commandFailed")
+  };
+  return labels[key] ?? statusLabel(key, t);
+}
+
+function stateTone(status: unknown): "good" | "warning" | "danger" | "neutral" {
+  const key = String(status ?? "unknown").toLowerCase();
+  if (["supported", "read_only", "write_supported", "available", "collected", "verified", "online", "connected"].includes(key)) return "good";
+  if (["failed", "command_failed", "offline"].includes(key)) return "danger";
+  if (["partial", "parser_partial", "requires_privilege", "not_configured", "unknown"].includes(key)) return "warning";
+  return "neutral";
+}
+
+function summarizeCapabilities(items: Record<string, unknown>[], t: TFunction, fallback: string) {
+  if (!items.length) return fallback;
+  const counts = items.reduce<Record<string, number>>((all, item) => {
+    const state = String(item.state ?? item.capabilityState ?? "unknown");
+    all[state] = (all[state] ?? 0) + 1;
+    return all;
+  }, {});
+  return Object.entries(counts).map(([state, count]) => `${capabilityLabel(state, t)}: ${count}`).join(" · ");
+}
+
+function summarizeHealth(health: Record<string, unknown>, fallback: string) {
+  const parts = [
+    health.cpu && typeof health.cpu === "object" ? `CPU ${String(asRecord(health.cpu).fiveSeconds ?? asRecord(health.cpu).oneMinute ?? fallback)}` : "",
+    health.memory && typeof health.memory === "object" ? `Memory ${String(asRecord(health.memory).usedPercent ?? asRecord(health.memory).used ?? fallback)}` : "",
+    health.flash && typeof health.flash === "object" ? `Flash ${String(asRecord(health.flash).free ?? asRecord(health.flash).freeBytes ?? fallback)}` : ""
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : fallback;
+}
 function statusLabel(status: unknown, t: TFunction) {
   const valueText = String(status ?? "unknown");
   const known: Record<string, string> = {
@@ -50,7 +96,14 @@ function statusLabel(status: unknown, t: TFunction) {
     unknown: t("common.unknown"),
     verified: t("workspace.values.verified"),
     unverified: t("workspace.values.pendingVerification"),
-    active: t("workspace.status.active", { defaultValue: "Active" })
+    active: t("workspace.status.active", { defaultValue: "Active" }),
+    connected: t("workspace.status.connected"),
+    needs_review: t("workspace.status.needsReview"),
+    not_verified: t("workspace.status.notVerified"),
+    connection_verified: t("workspace.status.connectionVerified"),
+    platform_detected: t("workspace.status.platformDetected"),
+    discovery_completed: t("workspace.status.discoveryCompleted"),
+    preview_ready: t("workspace.status.previewReady")
   };
   return known[valueText] ?? valueText;
 }
@@ -96,7 +149,15 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const facts = asRecord(currentWorkspace.capabilities?.facts);
   const detection = asRecord(currentWorkspace.capabilities?.detection);
   const capabilityMap = asRecord(currentWorkspace.capabilities?.capabilities);
+  const capabilityList = asArray(currentWorkspace.capabilities?.capabilities).map(asRecord);
+  const collection = asRecord(facts.collection);
+  const healthFacts = asRecord(facts.health);
   const interfaces = asArray(facts.interfaces).length ? asArray(facts.interfaces) : asArray(facts.interfaceStatus).length ? asArray(facts.interfaceStatus) : asArray(capabilityMap.interfaces);
+  const inventoryStatus = collection.inventoryStatus ?? (Object.keys(collection).length ? "collected" : currentWorkspace.asset?.managedState ?? currentWorkspace.device?.status ?? "unknown");
+  const capabilityStatus = collection.capabilityStatus ?? (capabilityList.length ? "available" : "unknown");
+  const capabilitySummary = summarizeCapabilities(capabilityList, t, fallback);
+  const healthSummary = summarizeHealth(healthFacts, fallback);
+  const interfaceSummary = interfaces.length ? t("workspace.values.interfaces", { count: interfaces.length }) : fallback;
   const verifiedDevice = overview.verificationStatus === "verified" || overview.availability === "online";
   const since = Date.now() - rangeHours[timeRange] * 60 * 60 * 1000;
   const chart = (points: WorkspaceChartPoint[]) => points.filter((item) => new Date(item.timestamp).getTime() >= since);
@@ -125,13 +186,13 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   };
 
   function AdvancedWorkspaceDetails() {
-    return <details className="content-panel overview-advanced"><summary>{t("workspace.advanced.title")}</summary><dl className="detail-list"><dt>{t("workspace.labels.connector")}</dt><dd>{value(overview.connectorType, fallback)}</dd><dt>{t("workspace.labels.capabilities")}</dt><dd>{currentWorkspace.capabilities ? t("workspace.values.collected") : fallback}</dd><dt>{t("workspace.labels.collectionHistory")}</dt><dd>{currentWorkspace.collections.length ? String(currentWorkspace.collections.length) : fallback}</dd></dl>{currentWorkspace.vendor.sections.length ? <section><h3>{t("workspace.advanced.vendorSections")}</h3>{currentWorkspace.vendor.sections.map((item) => <div className="list-row" key={item.key}><span>{isFa ? item.titleFa : item.titleEn}</span><StatusBadge value={item.state === "available" ? t("workspace.values.collected") : fallback} tone={item.state === "available" ? "good" : "warning"} /></div>)}</section> : null}</details>;
+    return <details className="content-panel overview-advanced"><summary>{t("workspace.advanced.title")}</summary><dl className="detail-list"><dt>{t("workspace.labels.connector")}</dt><dd dir="ltr">{value(overview.connectorType, fallback)}</dd><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd><dt>{t("workspace.labels.collectionHistory")}</dt><dd>{currentWorkspace.collections.length ? String(currentWorkspace.collections.length) : fallback}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt, locale, fallback)}</dd></dl><div className="button-row"><Link className="secondary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.actions.testConnection")}</Link><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshCapabilities")}</Link><Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link></div>{currentWorkspace.vendor.sections.length ? <section><h3>{t("workspace.advanced.vendorSections")}</h3>{currentWorkspace.vendor.sections.map((item) => { const state = item.capabilityState ?? item.state; return <div className="list-row" key={item.key}><span>{isFa ? item.titleFa : item.titleEn}</span><StatusBadge value={capabilityLabel(state, t)} tone={stateTone(state)} /></div>; })}</section> : null}<details><summary>{t("workspace.advanced.rawDiagnostics")}</summary><pre dir="ltr">{JSON.stringify({ platform: overview.platform, inventoryStatus, capabilityStatus, warnings: currentWorkspace.capabilities?.warnings ?? [], capabilities: capabilityList }, null, 2)}</pre></details></details>;
   }
 
   function OverviewFirstViewport() {
     const setupPath = `/assets/devices/${deviceId}/setup`;
     const nextPath = verifiedDevice ? `/actions?deviceId=${encodeURIComponent(deviceId)}` : setupPath;
-    return <section className="device-overview-first"><article><h2>{t("workspace.cards.connection")}</h2><dl className="detail-list"><dt>{t("workspace.labels.inventoryStatus")}</dt><dd>{statusLabel(currentWorkspace.asset?.managedState ?? currentWorkspace.device?.status ?? "unknown", t)}</dd><dt>{t("workspace.labels.connectionStatus")}</dt><dd>{statusLabel(overview.availability, t)}</dd><dt>{t("workspace.labels.verificationStatus")}</dt><dd>{verifiedDevice ? t("workspace.values.verified") : t("workspace.values.pendingVerification")}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? overview.lastContact, locale, fallback)}</dd><dt>{t("workspace.labels.credentialHealth")}</dt><dd>{currentWorkspace.device?.credentialConfigured ? t("onboarding.credentials.storedReference") : t("onboarding.credentials.needsCredential")}</dd></dl></article><article><h2>{t("workspace.cards.identity")}</h2><dl className="detail-list"><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd><dt>{t("workspace.labels.vendorPlatform")}</dt><dd>{overview.vendor} / {overview.platform}</dd><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd><dt>{t("workspace.labels.hostname")}</dt><dd>{value(detection.hostname ?? facts.hostname ?? currentWorkspace.asset?.hostname, fallback)}</dd><dt>{t("workspace.labels.model")}</dt><dd>{value(detection.model ?? facts.model, fallback)}</dd><dt>{t("workspace.labels.softwareVersion")}</dt><dd>{value(overview.version ?? facts.version, fallback)}</dd><dt>{t("workspace.labels.uptime")}</dt><dd>{value(facts.uptime, fallback)}</dd></dl></article><article><h2>{t("workspace.cards.interfaces")}</h2><p>{interfaces.length ? t("workspace.values.interfaces", { count: interfaces.length }) : fallback}</p><Link className="secondary-link" to={setupPath}>{t("workspace.actions.collectData")}</Link></article><article><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.reviewOrCreate") : t("workspace.actions.testConnection")}</Link></article><AdvancedWorkspaceDetails /></section>;
+    return <section className="device-overview-first"><article><h2>{t("workspace.cards.connection")}</h2><dl className="detail-list"><dt>{t("workspace.labels.connectionStatus")}</dt><dd>{statusLabel(overview.availability, t)}</dd><dt>{t("workspace.labels.verificationStatus")}</dt><dd>{statusLabel(overview.verificationStatus, t)}</dd><dt>{t("workspace.labels.inventoryStatus")}</dt><dd>{capabilityLabel(inventoryStatus, t)}</dd><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? overview.lastContact, locale, fallback)}</dd></dl></article><article><h2>{t("workspace.cards.identity")}</h2><dl className="detail-list"><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd><dt>{t("workspace.labels.hostname")}</dt><dd dir="ltr">{value(detection.hostname ?? facts.hostname ?? currentWorkspace.asset?.hostname, fallback)}</dd><dt>{t("workspace.labels.model")}</dt><dd dir="ltr">{value(detection.model ?? facts.model, fallback)}</dd><dt>{t("workspace.labels.serialNumber")}</dt><dd dir="ltr">{value(facts.serialNumber ?? facts.serial ?? detection.serialNumber, fallback)}</dd><dt>{t("workspace.labels.softwareVersion")}</dt><dd dir="ltr">{value(overview.version ?? facts.iosVersion ?? facts.version, fallback)}</dd><dt>{t("workspace.labels.uptime")}</dt><dd dir="ltr">{value(facts.uptime, fallback)}</dd></dl></article><article><h2>{t("workspace.cards.interfaces")}</h2><p>{interfaceSummary}</p><div className="button-row"><Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{t("workspace.actions.refreshInterfaces")}</Link><Link className="secondary-link" to={setupPath}>{t("workspace.actions.collectData")}</Link></div></article><article><h2>{t("workspace.labels.healthSummary")}</h2><p dir="ltr">{healthSummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></article><article><h2>{t("workspace.labels.capabilitySummary")}</h2><p>{capabilitySummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshCapabilities")}</Link></article><article><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p><div className="button-row"><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link><Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link></div></article><AdvancedWorkspaceDetails /></section>;
   }
 
   function WorkspaceCharts() {

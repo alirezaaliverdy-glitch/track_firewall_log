@@ -108,7 +108,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
           </div>
           {!succeeded && (
             <p className="mt-2 text-sm text-slate-300">
-              {String(result.message ?? result.error ?? result.stderr ?? "بدون connectorInvoked=true یا خروجی معتبر، نتیجه موفق محسوب نمی‌شود.")}
+              {String(result.message ?? result.error ?? result.stderr ?? "بدون ثبت اجرای واقعی کانکتور یا خروجی معتبر، نتیجه موفق محسوب نمی‌شود.")}
             </p>
           )}
         </div>
@@ -121,7 +121,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
           <InfoCard label="مدت زمان" value={formatDuration(action)} />
           <InfoCard label="اجراکننده" value={String(result.executor ?? metadata.executionTemplateRef ?? "-")} />
           {vendor.toLowerCase().includes("forti") && <InfoCard label="کانکتور" value="fortigate-ssh" />}
-          {vendor.toLowerCase().includes("forti") && <InfoCard label="فراخوانی کانکتور" value={metadata.connectorInvoked === true ? "connectorInvoked=true" : "اجرا نشده"} />}
+          {vendor.toLowerCase().includes("forti") && <InfoCard label="فراخوانی کانکتور" value={metadata.connectorInvoked === true ? "ثبت اجرای واقعی کانکتور" : "اجرا نشده"} />}
           {dailySections.length > 0 && <InfoCard label="بحرانی" value={String(countStatus("critical"))} />}
           {dailySections.length > 0 && <InfoCard label="نیازمند بررسی" value={String(countStatus("needs_review"))} />}
           {dailySections.length > 0 && <InfoCard label="ایمن" value={String(countStatus("safe"))} />}

@@ -117,7 +117,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     empty: "ActionPlan مطابق این فیلتر وجود ندارد.",
     loading: "در حال بارگذاری…",
     fullLibrary: "کتابخانه کامل عملیات",
-    connectorRequired: "موفقیت فقط با connectorInvoked=true پذیرفته می‌شود."
+    connectorRequired: "موفقیت فقط وقتی پذیرفته می‌شود که اجرای واقعی کانکتور ثبت شده باشد."
   } : {
     connection: "Connection",
     connectionHelp: "Live SSH and authentication state for the selected device",
@@ -164,7 +164,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     empty: "No ActionPlan matches this filter.",
     loading: "Loading…",
     fullLibrary: "Full action library",
-    connectorRequired: "Success is accepted only when connectorInvoked=true."
+    connectorRequired: "Success is accepted only when real connector execution is recorded."
   };
 
   const lifecycleLabels: Record<ActionLifecycle, string> = isFa ? {
@@ -465,7 +465,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
       {selected && <section className={`operator-result operator-result--${selected.lifecycleState}`} aria-label={copy.result}>
         <header><div><p className="operator-eyebrow">{copy.result}</p><h2>{selected.actionType ? selected.actionType.replace(/_/g, " ") : (isFa ? "اطلاعات موجود نیست" : "Not available")}</h2></div><StatusBadge value={lifecycleLabel(selected.lifecycleState)} tone={selected.lifecycleState === "succeeded" ? "good" : selected.lifecycleState === "failed" ? "danger" : "warning"} /></header>
         <p>{resultMessage(selected, isFa)}</p>
-        <div className="operator-result__proof"><span>{copy.connectorProof}</span><strong>{selected.evidence.connectorInvoked ? "connectorInvoked=true" : "connectorInvoked=false"}</strong><small>{formatDate(selected.updatedAt, locale)}</small></div>
+        <div className="operator-result__proof"><span>{copy.connectorProof}</span><strong>{selected.evidence.connectorInvoked ? (isFa ? "اجرای کانکتور ثبت شد" : "Connector execution recorded") : (isFa ? "فقط پیش‌نمایش یا توقف قبل از اجرا" : "Preview only or stopped before execution")}</strong><small>{formatDate(selected.updatedAt, locale)}</small></div>
         {!selected.support.executable && <div className="state-panel state-panel--error" role="alert"><strong>{isFa ? "غیرقابل اجرا" : "Unsupported action"}</strong><p>{String(selected.support.reason ?? (isFa ? "برای این فروشنده Connector ثبت‌شده‌ای وجود ندارد." : "No registered connector supports this action for the selected vendor."))}</p></div>}
         <div className="operator-result__actions">
           {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}

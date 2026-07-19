@@ -250,7 +250,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           { id: "connection", label: t("onboarding.result.connection"), value: statusText(session, t) },
           { id: "inventory", label: t("onboarding.result.inventory"), value: verified ? t("onboarding.result.verified") : t("onboarding.result.unverified") }
         ]} />
-        {connectionFailed || unverifiedResult ? <WorkflowStateCallout tone="warning" title={t("onboarding.status.notVerified")} message={t("onboarding.messages.unverifiedWarning")} meta={<span dir="ltr">verificationStatus === "unverified" ? connectorInvoked === false</span>} /> : null}
+        {connectionFailed || unverifiedResult ? <WorkflowStateCallout tone="warning" title={t("onboarding.status.notVerified")} message={t("onboarding.messages.unverifiedWarning")} meta={<span>{t("onboarding.messages.unverifiedMeta")}</span>} /> : null}
         <div className="button-row"><button className="secondary-button" type="button" onClick={() => setStep(2)}><ChevronLeft aria-hidden="true" />{t("common.back")}</button><WorkflowPrimaryAction busy={busy === "register"} busyLabel={t("onboarding.actions.registering")} disabled={busy === "register"} onClick={() => void register()} icon={verified ? <CheckCircle2 aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}>{verified ? t("onboarding.actions.registerVerified") : t("onboarding.actions.registerUnverified")}</WorkflowPrimaryAction></div>
       </section>}
     </section>

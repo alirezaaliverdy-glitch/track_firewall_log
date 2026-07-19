@@ -129,7 +129,7 @@ export type DeviceWorkspace = {
     actions: WorkspaceChartPoint[];
     recentChanges: Array<{ timestamp: string; label: string }>;
   };
-  vendor: { key: string; sections: Array<{ key: string; titleFa: string; titleEn: string; state: "available" | "no_data"; reason: string | null; requirement: string; nextAction: string }> };
+  vendor: { key: string; sections: Array<{ key: string; titleFa: string; titleEn: string; state: "available" | "no_data"; capabilityState?: string; reason: string | null; requirement: string; nextAction: string }> };
 };
 
 export type WorkspaceChartPoint = { timestamp: string; value: number; label?: string; unit?: string | null };

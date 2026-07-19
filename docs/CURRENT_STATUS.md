@@ -1,3 +1,9 @@
+## Cisco IOS Classic localized workspace (2026-07-19)
+
+- The device overview now separates connection, verification, inventory, capability, health, interfaces, and last successful collection. Cisco identifiers render LTR while Persian labels remain RTL and natural.
+- Capability groups display typed states and partial/unsupported/failed distinctions rather than empty placeholders when collection has run. Action Center and result pages no longer expose internal connectorInvoked expressions in the main UI.
+- Validation: frontend build, i18n parity/Persian copy, UTF-8 guard, and internal-expression scan.
+
 ## Cisco IOS Classic Action Center integration (2026-07-19)
 
 - IOS Classic now uses the existing Action Center execution path for read-only diagnostics, backup, and scoped safe-write Cisco workflows. The generated catalog exposes required parameters and mutating risk correctly from the single Cisco operation registry.

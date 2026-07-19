@@ -1,3 +1,10 @@
+**Cisco IOS Classic support - localized workspace slice (2026-07-19)**
+
+- Device Workspace now presents Cisco IOS Classic connection, verification, inventory, capability, health, interface, and last-successful-collection states separately with localized English/Persian labels and LTR rendering for addresses, versions, serials, hostnames, and Cisco identifiers.
+- Capability groups now show typed states such as supported, read-only, partial, not configured, not supported, requires privilege, command failed, and parser partial instead of generic not-collected placeholders after collection evidence exists.
+- Removed visible internal expressions such as connectorInvoked=true/false from Action Center/result/onboarding surfaces; raw evidence remains available only under Advanced diagnostics.
+- Validation passed: frontend build, locale parity/Persian primary-copy, UTF-8/mojibake guard, and internal-expression UI scan.
+
 **Cisco IOS Classic support - Action Center slice (2026-07-19)**
 
 - IOS Classic read-only and safe-write operations now flow through the existing Cisco operation registry, command catalog, Cisco planner, ActionPlan preview, PolicyGuard, and Cisco SSH2 connector wrapper; no second Cisco connector or frontend SSH path was added.

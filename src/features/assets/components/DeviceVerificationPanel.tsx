@@ -19,7 +19,7 @@ function date(value: string | null, locale: string) {
 }
 
 export function DeviceVerificationPanel({ deviceId }: { deviceId: string }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const locale = isFa ? "fa-IR" : "en-US";
   const [verification, setVerification] = useState<DeviceVerification | null>(null);
@@ -46,6 +46,16 @@ export function DeviceVerificationPanel({ deviceId }: { deviceId: string }) {
     detect: "Detect platform", discover: "Discover inventory", verify: "Verify and commit", newSession: "Start new session",
     history: "Verification history", replace: "Manage credentials", select: "Select credential", noCredential: "No credential",
     refresh: "Refresh", connected: "Connected", failed: "Failed", empty: "No verification attempt has been recorded."
+  };
+
+  const statusText = (status: string) => {
+    const keys: Record<string, string> = {
+      verified: "workspace.values.verified", failed: "workspace.values.failed", unverified: "workspace.values.pendingVerification",
+      draft: "workspace.status.draft", connection_verified: "workspace.status.connectionVerified", platform_detected: "workspace.status.platformDetected",
+      discovery_completed: "workspace.status.discoveryCompleted", preview_ready: "workspace.status.previewReady", connection_failed: "workspace.status.connectionFailed",
+      discovery_failed: "workspace.status.discoveryFailed", platform_unsupported: "workspace.status.platformUnsupported"
+    };
+    return t(keys[status] ?? "common.unknown");
   };
 
   const load = useCallback(async () => {
@@ -77,11 +87,11 @@ export function DeviceVerificationPanel({ deviceId }: { deviceId: string }) {
     <section className="content-panel verification-panel" aria-labelledby="device-verification-title">
       <div className="verification-panel__header">
         <div><h2 id="device-verification-title">{copy.title}</h2><p>{copy.description}</p></div>
-        <StatusBadge value={verification.verificationStatus} tone={verification.verificationStatus === "verified" ? "good" : verification.verificationStatus === "failed" ? "danger" : "warning"} />
+        <StatusBadge value={statusText(verification.verificationStatus)} tone={verification.verificationStatus === "verified" ? "good" : verification.verificationStatus === "failed" ? "danger" : "warning"} />
       </div>
       <div className="verification-panel__grid">
         <dl className="detail-list">
-          <dt>{copy.status}</dt><dd>{verification.verificationStatus}</dd>
+          <dt>{copy.status}</dt><dd>{statusText(verification.verificationStatus)}</dd>
           <dt>{copy.vendor}</dt><dd>{verification.vendor} / {verification.platform}</dd>
           <dt>{copy.target}</dt><dd dir="ltr">{verification.host}:{verification.port}</dd>
           <dt>{copy.method}</dt><dd>{verification.method}</dd>
@@ -109,7 +119,7 @@ export function DeviceVerificationPanel({ deviceId }: { deviceId: string }) {
       </div>
       <details className="verification-history">
         <summary>{copy.history} ({verification.history.length})</summary>
-        {verification.history.length ? verification.history.map((attempt) => <article key={attempt.sessionId} className="verification-history__item"><div><strong>{attempt.status}</strong><span>{date(attempt.attemptedAt, locale)}</span></div><p>{attempt.connectorType ?? "—"} · {attempt.connectorInvoked ? copy.invoked : copy.notInvoked} · {attempt.connected ? copy.connected : copy.failed}</p>{attempt.error ? <p className="verification-panel__error">{attempt.error}</p> : null}</article>) : <p>{copy.empty}</p>}
+        {verification.history.length ? verification.history.map((attempt) => <article key={attempt.sessionId} className="verification-history__item"><div><strong>{statusText(attempt.status)}</strong><span>{date(attempt.attemptedAt, locale)}</span></div><p>{attempt.connectorType ?? "—"} · {attempt.connectorInvoked ? copy.invoked : copy.notInvoked} · {attempt.connected ? copy.connected : copy.failed}</p>{attempt.error ? <p className="verification-panel__error">{attempt.error}</p> : null}</article>) : <p>{copy.empty}</p>}
       </details>
     </section>
   );

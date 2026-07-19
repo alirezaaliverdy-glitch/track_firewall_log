@@ -1,3 +1,9 @@
+## 2026-07-19 - Cisco IOS Classic localized workspace
+
+- Localized the Cisco device workspace state model and overview cards for connection, verification, inventory, health, interfaces, capability summary, raw diagnostics, and Action Center/backup entry points.
+- Added Persian/English parity keys for Cisco capability states and removed user-visible internal connectorInvoked expressions from onboarding/action result surfaces.
+- Validation: root npm run build; root npm run test:i18n; root npm run test:utf8; internal-expression scan.
+
 ## 2026-07-19 - Cisco IOS Classic Action Center integration
 
 - Added controlled Cisco Action Center operations for IOS Classic and IOS-XE through the existing registry/planner/catalog/connector path, including read-only show commands, backup, and scoped safe-write workflows.
