@@ -99,6 +99,7 @@ function connectorTypeForVendor(vendor: string | null | undefined) {
   if (vendor === "fortigate") return "fortigate-ssh";
   if (vendor === "mikrotik") return "mikrotik-ssh";
   if (vendor === "linux") return "linux-ssh";
+  if (vendor === "cisco") return "cisco-ios-xe-ssh";
   return null;
 }
 
@@ -204,6 +205,18 @@ function findCatalogItemByIntent(vendor: string, actionType: string) {
   return COMMAND_CATALOG.find((entry) => entry.vendor === vendor && entry.actionType === actionType)
     ?? (vendor === "generic" ? COMMAND_CATALOG.find((entry) => entry.actionType === actionType) : null)
     ?? null;
+}
+
+function findCatalogItemById(id: string) {
+  return COMMAND_CATALOG.find((entry) => entry.id === id) ?? null;
+}
+
+function resolveSelectedDeviceCatalogItem(userText: string, vendor: string) {
+  const text = normalizeUserText(userText);
+  if (vendor === "cisco" && includesAny(text, ["vlan"]) && includesAny(text, ["create", "add", "configure", "build", "Ø¨Ø³Ø§Ø²", "Ø§ÛŒØ¬Ø§Ø¯ Ú©Ù†", "Ø§Ø¶Ø§ÙÙ‡ Ú©Ù†"])) {
+    return findCatalogItemById("cisco.create-vlan");
+  }
+  return null;
 }
 
 function canUseCatalogActionType(actionType: string) {
@@ -312,30 +325,6 @@ export function resolveAiTemplate(input: {
     };
   }
 
-  const guidedVendor = selectedVendor;
-  const guided = guidedVendor && isGuidedOperationalIntent(input.userText) ? resolveGuidedAction({ text: input.userText, vendor: guidedVendor }) : null;
-  if (guided) {
-    const blueprint = getGuidedActionBlueprint(guided.blueprintId);
-    const implementationState = blueprint?.implementationState === "implemented" ? "implemented" : blueprint?.implementationState === "partial" ? "planned" : "planned";
-    return {
-      mode: "guided_workflow",
-      canonicalVendor: guidedVendor ?? "generic",
-      canonicalActionType: guided.blueprintId,
-      catalogCommandId: null,
-      executionTemplateRef: null,
-      connectorType: connectorTypeForVendor(guidedVendor),
-      implementationState,
-      executionSupport: implementationState === "implemented" ? "connector" : "not_implemented",
-      normalizedParams: guided.initialValues,
-      missingFields: [],
-      confidence: 0.93,
-      reasonFa: guided.reasonFa,
-      catalogItem: null,
-      blueprintId: guided.blueprintId,
-      initialValues: guided.initialValues,
-    };
-  }
-
   const routed = routePersianIntent({
     text: input.userText,
     selectedDeviceId: input.selectedDevice?.id ?? null,
@@ -363,6 +352,54 @@ export function resolveAiTemplate(input: {
         catalogItem: item,
       };
     }
+  }
+
+  const selectedDeviceCatalogItem = selectedVendor ? resolveSelectedDeviceCatalogItem(input.userText, selectedVendor) : null;
+  if (selectedDeviceCatalogItem?.supportState === "verified" && selectedDeviceCatalogItem.executionTemplateRef) {
+    const template = getExecutionTemplate(selectedDeviceCatalogItem.executionTemplateRef);
+    const mergedParams = { ...selectedDeviceCatalogItem.defaultParams, ...(input.params ?? {}) };
+    const missingFields = missingFieldsForItem(selectedDeviceCatalogItem, mergedParams);
+    if (template) {
+      return {
+        mode: missingFields.length ? "needs_input" : "executable_action_plan",
+        canonicalVendor: selectedDeviceCatalogItem.vendor,
+        canonicalActionType: selectedDeviceCatalogItem.actionType,
+        catalogCommandId: selectedDeviceCatalogItem.id,
+        executionTemplateRef: selectedDeviceCatalogItem.executionTemplateRef,
+        connectorType: selectedDeviceCatalogItem.connectorType,
+        implementationState: "implemented",
+        executionSupport: "connector",
+        normalizedParams: mergedParams,
+        missingFields,
+        confidence: 0.94,
+        reasonFa: missingFields.length ? missingFieldsMessageFa(missingFields) : "Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ø¨Ù‡ template Ø§Ø¬Ø±Ø§ÛŒÛŒ Ø«Ø¨Øªâ€ŒØ´Ø¯Ù‡ Ù†Ú¯Ø§Ø´Øª Ø´Ø¯.",
+        catalogItem: selectedDeviceCatalogItem,
+      };
+    }
+  }
+
+  const guidedVendor = selectedVendor;
+  const guided = guidedVendor && isGuidedOperationalIntent(input.userText) ? resolveGuidedAction({ text: input.userText, vendor: guidedVendor }) : null;
+  if (guided) {
+    const blueprint = getGuidedActionBlueprint(guided.blueprintId);
+    const implementationState = blueprint?.implementationState === "implemented" ? "implemented" : blueprint?.implementationState === "partial" ? "planned" : "planned";
+    return {
+      mode: "guided_workflow",
+      canonicalVendor: guidedVendor ?? "generic",
+      canonicalActionType: guided.blueprintId,
+      catalogCommandId: null,
+      executionTemplateRef: null,
+      connectorType: connectorTypeForVendor(guidedVendor),
+      implementationState,
+      executionSupport: implementationState === "implemented" ? "connector" : "not_implemented",
+      normalizedParams: guided.initialValues,
+      missingFields: [],
+      confidence: 0.93,
+      reasonFa: guided.reasonFa,
+      catalogItem: null,
+      blueprintId: guided.blueprintId,
+      initialValues: guided.initialValues,
+    };
   }
 
   const parsed = parseAiIntent(input.userText);

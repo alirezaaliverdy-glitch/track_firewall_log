@@ -1,3 +1,10 @@
+## 2026-07-19 - AI Assistant ActionPlan creation regression
+
+- Fixed the regression from the guided-routing guard where valid implemented catalog actions with missing parameters no longer created ActionPlans.
+- Resolver now checks selected-device supported catalog matches before guided fallback, keeps generic/custom fallback blocked, and maps Cisco VLAN creation by exact `cisco.create-vlan` operation instead of `generic_security_action`.
+- AI chat and `/api/commands/ai-propose` create proposed ActionPlans for verified connector-backed catalog matches while preserving missing-field metadata and requiring explicit guided/action-center completion before preview or execution.
+- Validation: backend npm run build; root npm run build; backend focused regression test 6/6; backend AI target-device test 13/13; backend command catalog validation; git diff --check. Full backend npm test stopped at the required TEST_DATABASE_URL_REQUIRED guard.
+
 ## 2026-07-19 - AI Assistant guided-action redirect fix
 
 - Reproduced the current flow in source from prompt handling through selected-device context, resolver normalization, ActionPlan/session creation, and Assistant navigation. The unintended redirect came from backend chat allocating a guided session plus frontend submit handling navigating immediately when session data existed.

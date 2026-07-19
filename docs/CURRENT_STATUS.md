@@ -1,3 +1,10 @@
+## AI Assistant ActionPlan creation regression fix (2026-07-19)
+
+- Supported selected-device catalog requests create proposed ActionPlans again, including parameterized actions that still need guided completion. Cisco `create VLAN` resolves only through the exact `cisco.create-vlan` operation, and FortiGate `create policy` resolves through the implemented FortiGate catalog before guided fallback.
+- Unsupported/custom/unmatched prompts, including vague Cisco requests such as `configure something for me`, remain chat-only with no ActionPlan and no vendor generic catalog match.
+- Chat still never creates a Guided Action session or redirects; guided collection remains behind explicit user action. Action Center, approval, PolicyGuard, connector invocation, audit, and protected lab execution settings are unchanged.
+- Validation: backend build; frontend build; new AI ActionPlan routing regression test 6/6; existing AI target-device test 13/13; command catalog validation; `git diff --check`. Full backend `npm test` remains gated by missing isolated `TEST_DATABASE_URL`.
+
 ## AI Assistant guided-action redirect fix (2026-07-19)
 
 - Assistant chat no longer creates Guided Action sessions or navigates based on returned session/action IDs. Guided navigation is behind an explicit start button only.

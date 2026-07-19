@@ -1,3 +1,11 @@
+**AI Assistant ActionPlan creation regression fix (2026-07-19)**
+
+- Root cause: the guided-routing fix made chat-side ActionPlan creation require `executable_action_plan` with zero missing fields, so valid implemented catalog actions that need parameters, such as Cisco VLAN creation and FortiGate policy creation, stayed as guided/chat responses without a proposed ActionPlan.
+- Restored proposed ActionPlan creation for selected-device, verified, implemented, connector-backed catalog matches even when parameters are missing. Missing parameters remain stored as incomplete metadata and still require explicit guided/action-center review before preview or execution.
+- Cisco generic catalog rows remain fail-closed: unsupported/custom Cisco prompts still cannot match by `generic_security_action`; Cisco VLAN is matched only by the exact `cisco.create-vlan` catalog operation, using the selected Cisco SSH device context.
+- No Guided Action session is created by chat, no frontend redirect behavior was reintroduced, and Action Center, PolicyGuard, approval, connector invocation, audit, and protected lab settings were preserved.
+- Validation passed: backend build, frontend build, new AI ActionPlan routing regression test 6/6, existing AI target-device test 13/13, command catalog validation, and `git diff --check`. Full backend `npm test` stopped at the required `TEST_DATABASE_URL_REQUIRED` safety gate.
+
 **AI Assistant guided-action redirect fix (2026-07-19)**
 
 - Root cause: AI chat created Guided Action sessions during message handling and the Assistant navigated as soon as `actionSessionId` existed. Generic/custom intent fallback could also match vendor catalog rows with `generic_security_action`, incorrectly promoting unsupported Cisco/custom requests into executable-looking actions.

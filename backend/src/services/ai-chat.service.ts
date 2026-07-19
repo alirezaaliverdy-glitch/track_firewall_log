@@ -9,6 +9,7 @@ import { normalizeIntentType, normalizeVendor } from "./ai-normalization.js";
 import { routeCatalogIntent } from "../actions/intent-router.js";
 import { VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
+import { COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
 import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-resolver.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { env } from "../config/env.js";
@@ -289,8 +290,17 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const selectedDevice = earlySelectedDevice ?? (selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null);
   const resolution = resolveAiTemplate({ userText: message, selectedDevice, aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null });
   const resolutionMissing = Array.from(new Set([...resolution.missingFields, ...(!selectedDevice && resolution.implementationState === "implemented" ? ["deviceId"] : [])]));
-  const actionPlan = resolution.mode === "executable_action_plan" && resolution.implementationState === "implemented" && resolutionMissing.length === 0 && selectedDevice && resolution.catalogItem
-    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: resolution.canonicalVendor, actionType: resolution.canonicalActionType, riskLevel: resolution.catalogItem.riskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, executionTemplateRef: resolution.executionTemplateRef, connectorType: resolution.connectorType, implementationState: "implemented", executionSupport: "connector", normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
+  const canCreateSupportedActionPlan = Boolean(
+    selectedDevice &&
+    resolution.catalogItem?.supportState === "verified" &&
+    resolution.implementationState === "implemented" &&
+    resolution.executionSupport === "connector" &&
+    resolution.executionTemplateRef &&
+    selectedDeviceSupportsConnector(selectedDevice, resolution.connectorType) &&
+    (resolution.mode === "executable_action_plan" || resolution.mode === "needs_input"),
+  );
+  const actionPlan = canCreateSupportedActionPlan && selectedDevice && resolution.catalogItem
+    ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: resolution.catalogItem.vendor, actionType: resolution.canonicalActionType, riskLevel: resolution.catalogItem.riskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: resolution.catalogItem.supportState, supportReasonKey: resolution.catalogItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: resolution.catalogItem.titleFa, vendor: resolution.catalogItem.vendor, actionType: resolution.catalogItem.actionType, implementationState: "implemented", executionSupport: "connector", supportState: resolution.catalogItem.supportState, supportReasonKey: resolution.catalogItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
@@ -314,7 +324,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       planState: String(actionPlanMetadata.planState ?? "draft"),
     } : null,
   };
-  const resolvedDebug = { ...debug, deviceId: selectedDevice?.id ?? actionPlan?.deviceId ?? debug.deviceId, missingFields: actionPlan ? [] : debug.missingFields, canCreateActionPlan, reason: canCreateActionPlan ? null : debug.reason, blockedReason: canCreateActionPlan ? null : debug.blockedReason };
+  const resolvedDebug = { ...debug, deviceId: selectedDevice?.id ?? actionPlan?.deviceId ?? debug.deviceId, missingFields: actionPlan ? resolutionMissing : debug.missingFields, canCreateActionPlan, reason: canCreateActionPlan ? null : debug.reason, blockedReason: canCreateActionPlan ? null : debug.blockedReason };
   const canStartParameterizedGuidedAction = Boolean(
     selectedDevice &&
     resolution.catalogItem?.supportState === "verified" &&

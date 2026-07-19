@@ -19,6 +19,7 @@ const deviceVendor = (device: { type: string; vendor: string }) => {
   return device.type;
 };
 const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : null;
+const selectedDeviceSupportsConnector = (device: { protocol?: string | null }, connectorType: string | null) => connectorType?.endsWith("-ssh") ? device.protocol === "ssh" : Boolean(connectorType);
 function invalidValue(type: string, value: unknown) {
   if (type === "ip") return typeof value !== "string" || net.isIP(value) === 0;
   if (type === "cidr") { if (typeof value !== "string") return true; const [address, prefix] = value.split("/"); const version = net.isIP(address); const max = version === 4 ? 32 : version === 6 ? 128 : -1; return prefix === undefined || !/^\d+$/.test(prefix) || Number(prefix) > max; }
@@ -38,7 +39,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     }
     const items = searchCatalog({ ...request.query, vendor, readOnly: bool(request.query.readOnly), executable: bool(request.query.executable), includePlanned: bool(request.query.includePlanned) }).filter((item) => {
       if (!device || item.implementationState === "manualOnly") return true;
-      return item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" ? device.protocol === "ssh" : true;
+      return item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" || item.connectorType === "cisco-ios-xe-ssh" ? device.protocol === "ssh" : true;
     });
     return { count: items.length, items };
   });
@@ -140,7 +141,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       selectedDeviceName: request.body.selectedDeviceName ?? device.name,
       searchFilters: request.body.searchFilters ?? null,
     });
-    const executableItem = resolution.catalogItem?.supportState === "verified" ? resolution.catalogItem : null;
+    const executableItem = resolution.catalogItem?.supportState === "verified" && selectedDeviceSupportsConnector(device, resolution.connectorType) ? resolution.catalogItem : null;
     const draft = {
       titleFa: executableItem?.titleFa ?? "پیشنهاد سفارشی هوش مصنوعی",
       status: "draft",
@@ -188,11 +189,16 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (request.body.createActionPlan === false) return reply.code(201).send({ mode: "manual_or_not_supported", messageFa: "برای این درخواست هنوز اجرای خودکار آماده نیست.", draft, actionPlan: null, resolution });
 
     if (executableItem) {
+      const normalizedParams = resolution.normalizedParams;
+      const requiredParamsSatisfied = resolution.missingFields.length === 0;
+      const createMappedPlan = () => proposeActionPlan({ source: "ai", requestedBy: request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined, deviceId: selectedDeviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: executableItem.supportState, supportReasonKey: executableItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied, missingFields: resolution.missingFields, metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: executableItem.supportState, supportReasonKey: executableItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied, missingFields: resolution.missingFields, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
       if (resolution.missingFields.length) {
         const declaredFields = executableItem.requiredParams.filter((field) => resolution.missingFields.includes(field.key));
         const blueprintId = catalogGuidedBlueprintId(executableItem.id);
-        return reply.code(200).send({
+        const actionPlan = await createMappedPlan();
+        return reply.code(201).send({
           mode: "guided_workflow",
+          actionPlanId: actionPlan.id,
           blueprintId,
           initialValues: resolution.normalizedParams,
           reasonFa: missingFieldsMessageFa(resolution.missingFields),
@@ -204,13 +210,12 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
           missingFields: resolution.missingFields,
           fields: declaredFields,
           draft,
-          actionPlan: null,
+          actionPlan,
           resolution,
         });
       }
 
-      const normalizedParams = resolution.normalizedParams;
-      const actionPlan = await proposeActionPlan({ source: "ai", requestedBy: request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined, deviceId: selectedDeviceId, vendor: executableItem.vendor, actionType: executableItem.actionType, riskLevel: executableItem.riskLevel, parametersJson: { ...normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: executableItem.supportState, supportReasonKey: executableItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, metadata: { catalogCommandId: executableItem.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: executableItem.titleFa, vendor: executableItem.vendor, actionType: executableItem.actionType, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: executableItem.supportState, supportReasonKey: executableItem.supportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } });
+      const actionPlan = await createMappedPlan();
       return reply.code(201).send({
         mode: "executable_action_plan",
         actionPlanId: actionPlan.id,
