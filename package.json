@@ -12,7 +12,8 @@
     "docs:check": "powershell -ExecutionPolicy Bypass -File scripts/check-project-memory.ps1",
     "test:i18n": "node --preserve-symlinks-main scripts/check-locale-parity.mjs && node --preserve-symlinks-main scripts/check-persian-primary-copy.mjs",
     "test:utf8": "node scripts/check-utf8-mojibake.mjs",
-    "test:workflows": "node --preserve-symlinks-main scripts/check-workflow-lab-dev-only.mjs"
+    "test:workflows": "node --preserve-symlinks-main scripts/check-workflow-lab-dev-only.mjs",
+    "test:v2-stability": "node scripts/run-v2-stability-tests.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

@@ -1,4 +1,4 @@
-**MASTER_V2 Workflow UI - Phases 0-8 (2026-07-20)**
+**MASTER_V2 Workflow UI - Phases 0-9 (2026-07-20)**
 
 - Phase 0 established a non-destructive baseline on top of existing commit history. The worktree already had tracked task/docs deletions and untracked root prompt docs; they were left untouched and not staged.
 - Baseline validation passed: frontend build, backend build, command catalog validation, i18n parity/Persian copy, UTF-8 guard, workflow guard, non-DB AI planner/target tests, git diff check, and Playwright dashboard smoke. DB-backed Action Center coverage remains gated by `TEST_DATABASE_URL_REQUIRED`.
@@ -10,7 +10,8 @@
 - Phase 6 added an Assistant planning context panel that exposes Chat, Direct Action, and Guided Workflow classification, selected-device vendor/platform scope, contract state, missing fields, and Action Center review handoff without automatic execution or navigation.
 - Phase 7 extended the live operational dashboard with backend workflow-state rollups, per-vendor workflow health for Cisco/MikroTik/FortiGate/Linux/generic, focused non-DB summary coverage, and responsive dashboard panels with useful navigation links.
 - Phase 8 added focused non-DB vendor acceptance coverage proving Linux, Cisco IOS-XE/IOS Classic, MikroTik, and FortiGate direct actions resolve through the shared registry/connectors, guided workflow examples remain selected-vendor scoped and backend-gated, and unsupported Cisco platforms do not reuse IOS-XE/Classic actions.
-- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`, `a2d5df1 feat(workflow): add typed planning contracts`, `21289a5 feat(actions): unify vendor action registry`, `0050767 feat(workflow): execute validated multi-step plans`, `09d7a2f feat(action-center): add inline review and execution`, `1af5825 feat(ai): add device-scoped planning`, `47a3548 feat(dashboard): add operational workflow dashboard`.
+- Phase 9 added `npm run test:v2-stability`, a repeatable no-DB stabilization matrix covering frontend/backend builds, i18n, UTF-8, workflow lab guard, command catalog validation, workflow contracts/engine, unified registry, dashboard rollups, vendor acceptance, AI selected-device routing, and Assistant/Action Center source contracts.
+- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`, `a2d5df1 feat(workflow): add typed planning contracts`, `21289a5 feat(actions): unify vendor action registry`, `0050767 feat(workflow): execute validated multi-step plans`, `09d7a2f feat(action-center): add inline review and execution`, `1af5825 feat(ai): add device-scoped planning`, `47a3548 feat(dashboard): add operational workflow dashboard`, `957150c test(vendors): validate shared workflow acceptance`.
 
 **AI Assistant structured ActionPlan architecture (2026-07-19)**
 
