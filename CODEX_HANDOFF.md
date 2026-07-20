@@ -1,3 +1,11 @@
+**MASTER_V2 Workflow UI - Phases 0-2 (2026-07-20)**
+
+- Phase 0 established a non-destructive baseline on top of existing commit history. The worktree already had tracked task/docs deletions and untracked root prompt docs; they were left untouched and not staged.
+- Baseline validation passed: frontend build, backend build, command catalog validation, i18n parity/Persian copy, UTF-8 guard, workflow guard, non-DB AI planner/target tests, git diff check, and Playwright dashboard smoke. DB-backed Action Center coverage remains gated by `TEST_DATABASE_URL_REQUIRED`.
+- Phase 1 updated only the frontend shell/design surface: Vazirmatn font support, compact operation context, selected-device indicator from existing route/query context, backend/navigation health indicator, and responsive topbar sizing. No execution, connector, PolicyGuard, Action Center, catalog, or backend policy behavior changed.
+- Phase 2 added shared typed workflow/planning contracts under `backend/src/workflow/workflow-contracts.ts` plus non-DB source tests for raw-command exclusion, registered-action executability, and workflow review readiness. No Prisma schema or runtime execution path changed.
+- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`.
+
 **AI Assistant structured ActionPlan architecture (2026-07-19)**
 
 - Root cause: chat planning still treated AI requests as either one exact catalog action or one opaque custom/manual proposal. Multi-step or non-prebuilt workflows lost per-step backend validation, so the Assistant could snap to the nearest catalog concept and could not clearly separate executable, parameter-missing, and blocked capabilities.
