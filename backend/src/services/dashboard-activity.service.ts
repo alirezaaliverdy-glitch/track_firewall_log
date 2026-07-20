@@ -1,6 +1,7 @@
 import { ActionPlanStatus, type ActionPlan, type Device } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { COMMAND_CATALOG } from "../commands/catalog/index.js";
+import { buildVendorWorkflowHealth, dashboardConnectorInvoked, summarizeWorkflowPlans } from "./dashboard-workflow-summary.js";
 
 const TERMINAL = new Set<ActionPlanStatus>([ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back]);
 const PENDING_APPROVAL = new Set<ActionPlanStatus>([ActionPlanStatus.dry_run_ready, ActionPlanStatus.awaiting_approval]);
@@ -24,7 +25,7 @@ function catalogFor(plan: Pick<ActionPlan, "actionType" | "parametersJson">) {
 }
 
 function connectorInvoked(plan: Pick<ActionPlan, "resultJson">) {
-  return object(plan.resultJson).connectorInvoked === true;
+  return dashboardConnectorInvoked(plan);
 }
 
 function projectedSuccess(plan: Pick<ActionPlan, "status" | "resultJson">) {
@@ -127,6 +128,9 @@ export async function getOperationalDashboardActivity() {
     }))
   ].sort((a, b) => new Date(b.timestamp ?? 0).getTime() - new Date(a.timestamp ?? 0).getTime()).slice(0, 10);
 
+  const workflowSummary = summarizeWorkflowPlans(plans);
+  const vendorWorkflowHealth = buildVendorWorkflowHealth({ devices, plans });
+
   return {
     generatedAt: new Date().toISOString(),
     summary: {
@@ -136,8 +140,13 @@ export async function getOperationalDashboardActivity() {
       failedActions: plans.filter((plan) => plan.status === ActionPlanStatus.failed || (plan.status === ActionPlanStatus.succeeded && !connectorInvoked(plan))).length,
       pendingApprovals: plans.filter((plan) => PENDING_APPROVAL.has(plan.status)).length,
       recentDeviceRegistrations: devices.length,
-      latestConfigurationChanges: configurationChanges.length
+      latestConfigurationChanges: configurationChanges.length,
+      runningWorkflows: workflowSummary.running,
+      blockedWorkflows: workflowSummary.needsInput + workflowSummary.failed,
+      readyWorkflows: workflowSummary.readyForReview + workflowSummary.approved
     },
+    workflowSummary,
+    vendorWorkflowHealth,
     recentExecutions,
     successfulActions,
     failedActions,

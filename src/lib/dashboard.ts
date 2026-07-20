@@ -40,6 +40,29 @@ export type DashboardConfigurationChange = {
   timestamp: string | null;
   path: string;
 };
+export type DashboardWorkflowSummary = {
+  draft: number;
+  needsInput: number;
+  readyForReview: number;
+  approved: number;
+  running: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+};
+export type DashboardVendorWorkflowHealth = {
+  vendor: string;
+  label: string;
+  path: string;
+  registeredDevices: number;
+  unverifiedDevices: number;
+  pendingApprovals: number;
+  runningActions: number;
+  failedActions: number;
+  successfulActions: number;
+  lastActivityAt: string | null;
+  attentionScore: number;
+};
 export type OperationalDashboardActivity = {
   generatedAt: string;
   summary: {
@@ -50,7 +73,12 @@ export type OperationalDashboardActivity = {
     pendingApprovals: number;
     recentDeviceRegistrations: number;
     latestConfigurationChanges: number;
+    runningWorkflows?: number;
+    blockedWorkflows?: number;
+    readyWorkflows?: number;
   };
+  workflowSummary?: DashboardWorkflowSummary;
+  vendorWorkflowHealth?: DashboardVendorWorkflowHealth[];
   recentExecutions: DashboardActionItem[];
   successfulActions: DashboardActionItem[];
   failedActions: DashboardActionItem[];

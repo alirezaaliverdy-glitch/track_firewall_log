@@ -5,7 +5,7 @@ import { useAssets } from "@/features/assets/hooks/useAssets";
 import { useFindings } from "@/features/security/hooks/useFindings";
 import { useEffect, useState } from "react";
 import { getLinuxMonitoringSummary, type LinuxSummary } from "@/lib/linuxMonitoring";
-import { getOperationalDashboardActivity, type DashboardActionItem, type DashboardConfigurationChange, type DashboardDeviceRegistration, type OperationalDashboardActivity } from "@/lib/dashboard";
+import { getOperationalDashboardActivity, type DashboardActionItem, type DashboardConfigurationChange, type DashboardDeviceRegistration, type DashboardVendorWorkflowHealth, type DashboardWorkflowSummary, type OperationalDashboardActivity } from "@/lib/dashboard";
 import { Link } from "react-router-dom";
 
 function shortDate(value: string | null) {
@@ -30,6 +30,37 @@ function DeviceRows({ items }: { items: DashboardDeviceRegistration[] }) {
 function ChangeRows({ items }: { items: DashboardConfigurationChange[] }) {
   if (!items.length) return <p>No confirmed configuration change is recorded in the recent activity window.</p>;
   return <ul className="operational-feed">{items.map((item) => <li key={item.id}><div><Link to={item.path}>{item.title}</Link><span>{item.device ? `${item.device.name} · ` : ""}{item.actionType} · {item.source}</span></div><time>{shortDate(item.timestamp)}</time></li>)}</ul>;
+}
+
+function WorkflowStatusStrip({ summary }: { summary: DashboardWorkflowSummary | undefined }) {
+  const empty: DashboardWorkflowSummary = { draft: 0, needsInput: 0, readyForReview: 0, approved: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 };
+  const item = summary ?? empty;
+  const rows = [
+    { label: "Draft", value: item.draft, tone: "neutral", path: "/actions" },
+    { label: "Needs input", value: item.needsInput, tone: "blocked", path: "/actions?status=validation_failed" },
+    { label: "Ready", value: item.readyForReview + item.approved, tone: "pending", path: "/actions/pending" },
+    { label: "Running", value: item.running, tone: "running", path: "/actions?status=executing" },
+    { label: "Succeeded", value: item.succeeded, tone: "success", path: "/actions/history" },
+    { label: "Failed", value: item.failed, tone: "danger", path: "/actions/history?status=failed" },
+  ];
+  return <div className="workflow-status-strip">{rows.map((row) => <Link key={row.label} to={row.path} className={`status-chip status-chip--${row.tone}`}><span>{row.label}</span><strong>{row.value}</strong></Link>)}</div>;
+}
+
+function VendorHealthRows({ items }: { items: DashboardVendorWorkflowHealth[] | undefined }) {
+  const rows = items ?? [];
+  if (!rows.length) return <p>No vendor workflow data is available yet.</p>;
+  return <div className="vendor-health-grid">{rows.map((item) => <Link key={item.vendor} to={item.path} className="vendor-health-card">
+    <header><strong>{item.label}</strong><span>{item.attentionScore > 0 ? "Needs attention" : "Normal"}</span></header>
+    <dl>
+      <div><dt>Devices</dt><dd>{item.registeredDevices}</dd></div>
+      <div><dt>Unverified</dt><dd>{item.unverifiedDevices}</dd></div>
+      <div><dt>Ready</dt><dd>{item.pendingApprovals}</dd></div>
+      <div><dt>Running</dt><dd>{item.runningActions}</dd></div>
+      <div><dt>Failed</dt><dd>{item.failedActions}</dd></div>
+      <div><dt>Success</dt><dd>{item.successfulActions}</dd></div>
+    </dl>
+    <small>Last activity: {shortDate(item.lastActivityAt)}</small>
+  </Link>)}</div>;
 }
 
 export default function DashboardPage() {
@@ -66,10 +97,18 @@ export default function DashboardPage() {
         <article className="metric-panel"><span>Pending approvals</span><strong>{activity?.summary.pendingApprovals ?? 0}</strong></article>
         <article className="metric-panel"><span>Successful actions</span><strong>{activity?.summary.successfulActions ?? 0}</strong></article>
         <article className="metric-panel"><span>Failed actions</span><strong>{activity?.summary.failedActions ?? 0}</strong></article>
+        <article className="metric-panel"><span>Running workflows</span><strong>{activity?.summary.runningWorkflows ?? 0}</strong></article>
+        <article className="metric-panel"><span>Ready workflows</span><strong>{activity?.summary.readyWorkflows ?? 0}</strong></article>
+        <article className="metric-panel"><span>Blocked workflows</span><strong>{activity?.summary.blockedWorkflows ?? 0}</strong></article>
         <article className="metric-panel"><span>Critical findings</span><strong>{findings.stats.critical}</strong></article>
         <article className="metric-panel"><span>Linux attention</span><strong>{linuxAttention === null ? "Unknown" : linuxAttention}</strong></article>
         <article className="metric-panel"><span>Configuration changes</span><strong>{activity?.summary.latestConfigurationChanges ?? 0}</strong></article>
       </div>
+
+      <section className="content-panel">
+        <h2>Workflow control tower</h2>
+        <WorkflowStatusStrip summary={activity?.workflowSummary} />
+      </section>
 
       <section className="content-panel">
         <h2>Immediate operator focus</h2>
@@ -83,6 +122,7 @@ export default function DashboardPage() {
       </section>
 
       <div className="content-grid operational-grid-wide">
+        <section className="content-panel"><h2>Vendor workflow health</h2><VendorHealthRows items={activity?.vendorWorkflowHealth} /></section>
         <section className="content-panel"><h2>Recent executions</h2><ActionRows items={activity?.recentExecutions ?? []} empty="No recent execution has been recorded." /></section>
         <section className="content-panel"><h2>Pending approvals</h2><ActionRows items={activity?.pendingApprovals ?? []} empty="No ActionPlan is waiting for approval." /></section>
         <section className="content-panel"><h2>Failed actions</h2><ActionRows items={activity?.failedActions ?? []} empty="No failed action is recorded in the recent window." /></section>

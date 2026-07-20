@@ -789,7 +789,23 @@ select {
 .operational-feed a { color: #9ff3ff; font-weight: 800; overflow-wrap: anywhere; }
 .operational-feed span { color: var(--app-muted); font-size: var(--text-xs); }
 .operational-feed time { white-space: nowrap; color: var(--app-muted); font-size: var(--text-xs); }
+.workflow-status-strip { display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-3); }
+.workflow-status-strip .status-chip { display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);min-width:0;text-decoration:none; }
+.workflow-status-strip .status-chip span { min-width:0;overflow-wrap:anywhere; }
+.workflow-status-strip .status-chip strong { color:inherit;font-size:var(--text-lg); }
+.vendor-health-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);margin-top:var(--space-3); }
+.vendor-health-card { display:grid;gap:var(--space-3);min-width:0;border:1px solid var(--app-border);border-radius:var(--radius-md);background:rgba(2,10,18,.42);padding:var(--space-3);color:var(--app-text);text-decoration:none; }
+.vendor-health-card:hover { border-color:rgba(44,230,255,.42); }
+.vendor-health-card header { display:flex;align-items:center;justify-content:space-between;gap:var(--space-2); }
+.vendor-health-card header span { color:var(--app-muted);font-size:var(--text-xs); }
+.vendor-health-card dl { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin:0; }
+.vendor-health-card div { min-width:0;border-top:1px solid var(--app-border);padding-top:var(--space-2); }
+.vendor-health-card dt { color:var(--app-muted);font-size:var(--text-xs); }
+.vendor-health-card dd { margin:2px 0 0;color:var(--app-text);font-weight:800; }
+.vendor-health-card small { color:var(--app-muted);font-size:var(--text-xs); }
 @media (max-width: 720px) { .operational-feed li { display: grid; } .operational-feed time { white-space: normal; } }
+@media (max-width: 900px) { .workflow-status-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width: 520px) { .workflow-status-strip { grid-template-columns:1fr; } .vendor-health-card dl { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 .workflow-lab-page { gap: var(--space-5); }
 .workflow-lab-boundary { border-color: rgba(246, 183, 60, .28); background: rgba(246, 183, 60, .06); }
 .workflow-lab-language { display: grid; gap: var(--space-4); }
