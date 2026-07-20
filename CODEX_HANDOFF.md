@@ -5,7 +5,8 @@
 - Phase 1 updated only the frontend shell/design surface: Vazirmatn font support, compact operation context, selected-device indicator from existing route/query context, backend/navigation health indicator, and responsive topbar sizing. No execution, connector, PolicyGuard, Action Center, catalog, or backend policy behavior changed.
 - Phase 2 added shared typed workflow/planning contracts under `backend/src/workflow/workflow-contracts.ts` plus non-DB source tests for raw-command exclusion, registered-action executability, and workflow review readiness. No Prisma schema or runtime execution path changed.
 - Phase 3 added a read-only unified action registry under `backend/src/actions/unified-action-registry.ts` that normalizes command-catalog and legacy controlled-action sources into the shared `RegisteredAction` shape. The resolver is selected-vendor/platform isolated and does not create a new execution path.
-- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`, `a2d5df1 feat(workflow): add typed planning contracts`.
+- Phase 4 added a backend workflow engine primitive under `backend/src/workflow/workflow-engine.ts` with dependency validation, cycle prevention, review/approval transitions, ordered injected execution, connector-evidence success enforcement, dependent-step skipping, and immutable audit events. It does not send AI raw commands or bypass Action Center/PolicyGuard.
+- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`, `a2d5df1 feat(workflow): add typed planning contracts`, `21289a5 feat(actions): unify vendor action registry`.
 
 **AI Assistant structured ActionPlan architecture (2026-07-19)**
 
