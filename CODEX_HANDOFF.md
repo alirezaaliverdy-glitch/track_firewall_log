@@ -4,7 +4,8 @@
 - Baseline validation passed: frontend build, backend build, command catalog validation, i18n parity/Persian copy, UTF-8 guard, workflow guard, non-DB AI planner/target tests, git diff check, and Playwright dashboard smoke. DB-backed Action Center coverage remains gated by `TEST_DATABASE_URL_REQUIRED`.
 - Phase 1 updated only the frontend shell/design surface: Vazirmatn font support, compact operation context, selected-device indicator from existing route/query context, backend/navigation health indicator, and responsive topbar sizing. No execution, connector, PolicyGuard, Action Center, catalog, or backend policy behavior changed.
 - Phase 2 added shared typed workflow/planning contracts under `backend/src/workflow/workflow-contracts.ts` plus non-DB source tests for raw-command exclusion, registered-action executability, and workflow review readiness. No Prisma schema or runtime execution path changed.
-- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`.
+- Phase 3 added a read-only unified action registry under `backend/src/actions/unified-action-registry.ts` that normalizes command-catalog and legacy controlled-action sources into the shared `RegisteredAction` shape. The resolver is selected-vendor/platform isolated and does not create a new execution path.
+- Phase commits so far: `6d40a33 chore(v2): establish safe rebuild baseline`, `c3e03b5 feat(ui): add workflow-first application shell`, `a2d5df1 feat(workflow): add typed planning contracts`.
 
 **AI Assistant structured ActionPlan architecture (2026-07-19)**
 
