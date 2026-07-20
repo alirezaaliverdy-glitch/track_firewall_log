@@ -44,7 +44,7 @@ function fieldValue(value: unknown) {
 }
 
 function terminalLifecycle(value: ActionLifecycle) {
-  return value === "succeeded" || value === "failed" || value === "cancelled";
+  return value === "succeeded" || value === "failed" || value === "skipped" || value === "cancelled";
 }
 
 function reviewParametersFrom(value: Record<string, unknown>) {
@@ -274,10 +274,10 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   const lifecycleLabels: Record<ActionLifecycle, string> = isFa ? {
     draft: "پیش‌نویس", needs_input: "نیازمند اطلاعات", ready_for_confirmation: "آماده تأیید", confirmed: "تأییدشده",
-    executing: "در حال اجرا", succeeded: "موفق", failed: "ناموفق", cancelled: "لغوشده"
+    executing: "در حال اجرا", succeeded: "موفق", failed: "ناموفق", skipped: "ردشده", cancelled: "لغوشده"
   } : {
     draft: "Draft", needs_input: "Needs input", ready_for_confirmation: "Preview ready", confirmed: "Confirmed",
-    executing: "Executing", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled"
+    executing: "Executing", succeeded: "Succeeded", failed: "Failed", skipped: "Skipped", cancelled: "Cancelled"
   };
   const lifecycleLabel = (value: ActionLifecycle) => lifecycleLabels[value] ?? (isFa ? "اطلاعات موجود نیست" : "Not available");
 
@@ -499,7 +499,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     try {
       const response = await clearActionCenterHistory();
       setClearHistoryOpen(false);
-      setSelected((current) => current && ["succeeded", "failed", "cancelled"].includes(current.lifecycleState) ? null : current);
+      setSelected((current) => current && ["succeeded", "failed", "skipped", "cancelled"].includes(current.lifecycleState) ? null : current);
       if (initialActionPlanId) navigate("/actions/history");
       setHistoryNotice(isFa ? `${response.deleted} رکورد نهایی حذف شد؛ ${response.retainedActive} اکشن فعال حفظ شد.` : `${response.deleted} completed records deleted; ${response.retainedActive} active actions preserved.`);
       setOffset(0);

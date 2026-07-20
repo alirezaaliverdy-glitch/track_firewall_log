@@ -18,7 +18,7 @@ function sanitize(value: unknown, key = ""): unknown {
   return typeof value === "string" ? value.replace(/(?:password|passphrase|private.?key|token|api.?key|secret)\s*[:=]\s*\S+/gi, "[redacted]").slice(0, 20_000) : value;
 }
 
-export type ActionCenterLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "cancelled";
+export type ActionCenterLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "skipped" | "cancelled";
 
 export async function clearActionCenterHistory() {
   const terminalStatuses = [ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back];
@@ -30,12 +30,14 @@ export async function clearActionCenterHistory() {
 }
 
 function lifecycle(status: ActionPlanStatus, resultJson: unknown): ActionCenterLifecycle {
+  const result = object(resultJson);
+  if (result.status === "skipped" || result.outcome === "skipped") return "skipped";
   if (status === ActionPlanStatus.proposed) return "draft";
   if (status === ActionPlanStatus.validation_failed) return "needs_input";
   if (status === ActionPlanStatus.awaiting_approval || status === ActionPlanStatus.dry_run_ready) return "ready_for_confirmation";
   if (status === ActionPlanStatus.approved) return "confirmed";
   if (status === ActionPlanStatus.executing) return "executing";
-  if (status === ActionPlanStatus.succeeded) return object(resultJson).connectorInvoked === true ? "succeeded" : "failed";
+  if (status === ActionPlanStatus.succeeded) return result.connectorInvoked === true ? "succeeded" : "failed";
   if (status === ActionPlanStatus.rejected || status === ActionPlanStatus.rolled_back) return "cancelled";
   return "failed";
 }
@@ -56,7 +58,7 @@ function project(plan: CenterPlan) {
   const executionSupport = String(metadata.executionSupport ?? parameters.executionSupport ?? "unknown");
   const executable = supportState === "verified" && executionSupport === "connector" && metadata.executable === true;
   const state = lifecycle(plan.status, plan.resultJson);
-  const terminal = TERMINAL.has(plan.status);
+  const terminal = TERMINAL.has(plan.status) || state === "skipped";
   const connectorInvoked = result.connectorInvoked === true;
   const integrityError = plan.status === ActionPlanStatus.succeeded && !connectorInvoked
     ? "Stored success has no connectorInvoked=true evidence and is projected as failed."
@@ -111,15 +113,15 @@ export async function listActionCenter(input: Record<string, unknown> = {}) {
   const rows = await prisma.actionPlan.findMany({ orderBy: { createdAt: "desc" }, take: 500, include });
   const all = rows.map(project);
   const summary = all.reduce((counts, item) => ({ ...counts, [item.lifecycleState]: counts[item.lifecycleState] + 1 }), {
-    draft: 0, needs_input: 0, ready_for_confirmation: 0, confirmed: 0, executing: 0, succeeded: 0, failed: 0, cancelled: 0
+    draft: 0, needs_input: 0, ready_for_confirmation: 0, confirmed: 0, executing: 0, succeeded: 0, failed: 0, skipped: 0, cancelled: 0
   } as Record<ActionCenterLifecycle, number>);
   const view = String(input.view ?? "all");
   const query = String(input.q ?? "").trim().toLowerCase();
   const status = String(input.status ?? "").trim();
   const deviceId = String(input.deviceId ?? "").trim();
   const filtered = all.filter((item) => {
-    if (view === "pending" && ["succeeded", "failed", "cancelled"].includes(item.lifecycleState)) return false;
-    if (view === "history" && !["succeeded", "failed", "cancelled"].includes(item.lifecycleState)) return false;
+    if (view === "pending" && ["succeeded", "failed", "skipped", "cancelled"].includes(item.lifecycleState)) return false;
+    if (view === "history" && !["succeeded", "failed", "skipped", "cancelled"].includes(item.lifecycleState)) return false;
     if (status && item.lifecycleState !== status && item.status !== status) return false;
     if (deviceId && item.deviceId !== deviceId) return false;
     if (query && !`${item.id} ${item.actionType} ${item.device?.name ?? ""} ${item.device?.vendor ?? ""}`.toLowerCase().includes(query)) return false;

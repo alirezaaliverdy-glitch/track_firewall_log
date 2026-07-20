@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "../db/prisma.js";
 import { ConnectorError } from "../connectors/linux-ssh.connector.js";
 import { isMikroTikAction } from "../actions/mikrotik-action-catalog.js";
-import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
+import { getDeviceConnectors, selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { buildDryRun } from "./dry-run.service.js";
 import { validateActionPlan } from "./policy-guard.service.js";
 import { getActionCatalogEntry } from "../actions/action-catalog.js";
@@ -29,6 +29,8 @@ import { COMMAND_CATALOG, COMMAND_CATALOG_VERSION } from "../commands/catalog/in
 import { buildDailyCheckResult } from "../daily-check/daily-check-engine.js";
 import { buildFortiGateDailyCheck, parseFortiGateReadOnlyResult } from "../fortigate/readonly-result-parser.js";
 import { normalizeFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
+import { getExecutionTemplate, type ExecutionTemplate } from "../commands/execution/execution-template-registry.js";
+import type { ConnectorExecutionResult, DeviceConnector } from "../connectors/types.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -337,6 +339,21 @@ export function actionExecutionFingerprint(plan: Pick<ActionPlan, "actionType" |
 type ExecutionTrace = (stage: string, payload: Record<string, unknown>) => void;
 type ExecutionDependencies = { selectConnector?: typeof selectDeviceConnector; trace?: ExecutionTrace; intent?: "execute" | "preview" };
 
+const CONNECTOR_TYPE_TO_NAME: Record<ExecutionTemplate["connectorType"], DeviceConnector["name"]> = {
+  "linux-ssh": "linux_edge",
+  "mikrotik-ssh": "mikrotik",
+  "fortigate-ssh": "fortigate",
+  "cisco-ios-xe-ssh": "cisco"
+};
+
+type ExecutionPipelineResolution = {
+  template: ExecutionTemplate;
+  connector: DeviceConnector;
+  registeredConnectorName: DeviceConnector["name"];
+  validation: Awaited<ReturnType<typeof validateActionPlan>>;
+  auditEvents: string[];
+};
+
 function connectorErrorLike(error: unknown) {
   return error && typeof error === "object" && "code" in error && "statusCode" in error && "message" in error
     ? error as { code: string; statusCode: number; message: string }
@@ -358,6 +375,11 @@ async function audit(plan: Pick<ActionPlan, "id" | "deviceId">, eventType: strin
       metadataJson: toJson(metadata)
     }
   });
+}
+
+async function audited(plan: Pick<ActionPlan, "id" | "deviceId">, auditEvents: string[], eventType: string, message: string, metadata?: unknown) {
+  auditEvents.push(eventType);
+  return audit(plan, eventType, message, metadata);
 }
 
 function withExecutionMetadata(parametersJson: unknown, patch: Record<string, unknown>) {
@@ -454,6 +476,122 @@ async function ensureControlledCatalogAction(plan: ActionPlan) {
   const legacyControlled = Boolean(getActionCatalogEntry(plan.actionType)) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if (!legacyControlled) throw new ActionExecutionError("ACTION_NOT_IN_CATALOG", "این عملیات در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.", 409);
   return { controlled: true, catalogCommandId: null, source: "legacy_catalog", executionTemplateRef: null, connectorType: null, vendor: vendorFromActionType(plan.actionType) ?? "unknown" };
+}
+
+function resolveExecutionTemplate(plan: ActionPlan, catalogResolution: Awaited<ReturnType<typeof ensureControlledCatalogAction>>) {
+  const metadata = asObject(asObject(plan.parametersJson).metadata);
+  const templateRef = String(catalogResolution.executionTemplateRef ?? metadata.executionTemplateRef ?? plan.actionType);
+  const template = getExecutionTemplate(templateRef);
+  if (!template) {
+    throw new ActionExecutionError("EXECUTION_TEMPLATE_NOT_REGISTERED", "Execution requires a registered backend template.", 409, { templateRef, actionType: plan.actionType });
+  }
+  if (template.actionType !== String(plan.actionType)) {
+    throw new ActionExecutionError("EXECUTION_TEMPLATE_ACTION_MISMATCH", "Registered execution template does not match the ActionPlan action type.", 409, { templateRef, templateActionType: template.actionType, actionType: plan.actionType });
+  }
+  return template;
+}
+
+function registeredConnectorNameFor(template: ExecutionTemplate) {
+  return CONNECTOR_TYPE_TO_NAME[template.connectorType];
+}
+
+function connectorMatchesTemplate(connector: DeviceConnector, template: ExecutionTemplate) {
+  return connector.name === registeredConnectorNameFor(template);
+}
+
+function isRegisteredConnector(connector: DeviceConnector, template: ExecutionTemplate) {
+  return getDeviceConnectors().some((registered) =>
+    registered.name === connector.name &&
+    connectorMatchesTemplate(registered, template) &&
+    registered.supportedActions.includes(template.actionType as ActionType)
+  );
+}
+
+async function resolveExecutionPipeline(input: {
+  plan: ActionPlan;
+  device: Device;
+  connector: DeviceConnector;
+  catalogResolution: Awaited<ReturnType<typeof ensureControlledCatalogAction>>;
+  validation: Awaited<ReturnType<typeof validateActionPlan>>;
+}) {
+  const auditEvents: string[] = [];
+  const template = resolveExecutionTemplate(input.plan, input.catalogResolution);
+  const registeredConnectorName = registeredConnectorNameFor(template);
+  if (!connectorMatchesTemplate(input.connector, template)) {
+    await audited(input.plan, auditEvents, "execution_pipeline_blocked", "Execution refused because the resolved connector does not match the registered template connector.", { template, connector: input.connector.name, registeredConnectorName });
+    throw new ActionExecutionError("CONNECTOR_TEMPLATE_MISMATCH", "Resolved connector does not match the registered execution template.", 409, { templateConnectorType: template.connectorType, connector: input.connector.name });
+  }
+  if (!isRegisteredConnector(input.connector, template)) {
+    await audited(input.plan, auditEvents, "execution_pipeline_blocked", "Execution refused because no registered backend connector supports the template/action pair.", { template, connector: input.connector.name });
+    throw new ActionExecutionError("CONNECTOR_NOT_REGISTERED", "Execution requires a registered backend connector.", 409, { connector: input.connector.name, templateRef: template.id });
+  }
+  if (!input.connector.supportedActions.includes(input.plan.actionType)) {
+    await audited(input.plan, auditEvents, "execution_pipeline_blocked", "Execution refused because the connector does not support the ActionPlan action.", { template, connector: input.connector.name, actionType: input.plan.actionType });
+    throw new ActionExecutionError("CONNECTOR_ACTION_UNSUPPORTED", "Connector does not support this action.");
+  }
+  if (!input.validation.valid) {
+    await audited(input.plan, auditEvents, "execution_pipeline_blocked", "Execution refused by immediate PolicyGuard re-check.", { template, connector: input.connector.name, validation: input.validation });
+    throw new ActionExecutionError("VALIDATION_BLOCKED", "PolicyGuard blocked execution.");
+  }
+  await audited(input.plan, auditEvents, "template_resolved", "Registered execution template resolved.", { template });
+  await audited(input.plan, auditEvents, "connector_contract_resolved", "Registered backend connector resolved for the template.", { templateRef: template.id, connector: input.connector.name, connectorType: template.connectorType, registeredConnectorName });
+  await audited(input.plan, auditEvents, "validation_resolved", "PolicyGuard validation resolved for the execution pipeline.", { valid: input.validation.valid, riskLevel: input.validation.riskLevel, normalizedParameters: input.validation.normalizedParameters });
+  return { template, connector: input.connector, registeredConnectorName, validation: input.validation, auditEvents } satisfies ExecutionPipelineResolution;
+}
+
+function commandEvidence(result: ConnectorExecutionResult) {
+  return result.commands.map((command) => ({
+    template: command.template,
+    exitCode: command.exitCode,
+    stdoutLength: String(command.stdout ?? "").length,
+    stderrLength: String(command.stderr ?? "").length
+  }));
+}
+
+function buildPostExecutionVerification(input: {
+  plan: ActionPlan;
+  pipeline: ExecutionPipelineResolution;
+  result: ConnectorExecutionResult;
+  executionSucceeded: boolean;
+  connectorInvoked: boolean;
+}) {
+  const rollback = asObject(input.result.rollbackJson);
+  const connectorVerification = asObject(rollback.verification);
+  const connectorVerificationOk = Object.keys(connectorVerification).length > 0 ? connectorVerification.ok !== false : true;
+  const exitCodes = input.result.commands.map((command) => command.exitCode).filter((code): code is number => typeof code === "number");
+  const checks = [
+    { key: "template", label: "Template", ok: input.pipeline.template.id.length > 0, value: input.pipeline.template.id },
+    { key: "connector", label: "Connector", ok: connectorMatchesTemplate(input.pipeline.connector, input.pipeline.template), value: input.pipeline.connector.name },
+    { key: "validation", label: "Validation", ok: input.pipeline.validation.valid === true, value: input.pipeline.validation.riskLevel },
+    { key: "execution", label: "Execution", ok: input.result.executed === true && input.connectorInvoked, value: input.result.commands.length },
+    { key: "verification", label: "Verification", ok: input.executionSucceeded && connectorVerificationOk, value: connectorVerification.summary ?? rollback.outcome ?? null },
+    { key: "audit", label: "Audit", ok: input.pipeline.auditEvents.length > 0, value: input.pipeline.auditEvents }
+  ];
+  const ok = checks.every((check) => check.ok);
+  return {
+    ok,
+    status: ok ? "verified" : "failed",
+    template: input.pipeline.template,
+    connector: {
+      name: input.pipeline.connector.name,
+      connectorType: input.pipeline.template.connectorType,
+      registeredConnectorName: input.pipeline.registeredConnectorName
+    },
+    validation: {
+      valid: input.pipeline.validation.valid,
+      riskLevel: input.pipeline.validation.riskLevel
+    },
+    execution: {
+      executed: input.result.executed,
+      connectorInvoked: input.connectorInvoked,
+      commandCount: input.result.commands.length,
+      exitCodes,
+      commands: commandEvidence(input.result)
+    },
+    connectorVerification,
+    checks,
+    rawCommandExecution: false
+  };
 }
 
 function planRevision(metadata: Record<string, unknown>) {
@@ -1191,7 +1329,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   let plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
 
-  try { await ensureControlledCatalogAction(plan); } catch (error) {
+  let catalogResolution: Awaited<ReturnType<typeof ensureControlledCatalogAction>>;
+  try { catalogResolution = await ensureControlledCatalogAction(plan); } catch (error) {
     await audit(plan, "controlled_execution_blocked", "Execution refused by catalog resolution.", { actionType: plan.actionType, code: error instanceof ActionExecutionError ? error.code : "CATALOG_RESOLUTION_FAILED" });
     throw error;
   }
@@ -1294,18 +1433,15 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   }
 
   const validation = await validateActionPlan(plan);
-  if (!validation.valid) {
-    await audit(plan, "execution_failed", "Execution refused by immediate PolicyGuard re-check.", { code: "VALIDATION_BLOCKED", validation });
-    throw new ActionExecutionError("VALIDATION_BLOCKED", "PolicyGuard blocked execution.");
-  }
-  await audit(plan, "policy_guard_passed", "PolicyGuard allowed controlled execution.", { actionType: plan.actionType });
+  const pipeline = await resolveExecutionPipeline({ plan, device, connector, catalogResolution, validation });
+  await audit(plan, "policy_guard_passed", "PolicyGuard allowed controlled execution.", { actionType: plan.actionType, templateRef: pipeline.template.id, connector: connector.name });
   dependencies.trace?.("action_policy_guard_passed", {});
   if (env.actionAllowLabUnrestrictedManagement) {
-    await audit(plan, "policy_allowed_lab_unrestricted", "Lab unrestricted mode allowed the validated template after user confirmation.", { actionType: plan.actionType });
+    await audit(plan, "policy_allowed_lab_unrestricted", "Lab unrestricted mode allowed the validated template after user confirmation.", { actionType: plan.actionType, templateRef: pipeline.template.id, connector: connector.name });
     dependencies.trace?.("action_policy_allowed_lab_unrestricted", {});
   }
-  await audit(plan, "connector_resolved", "Device connector resolved for execution.", { connector: connector.name });
-  dependencies.trace?.("action_connector_resolved", { connectorType: connector.name });
+  await audit(plan, "connector_resolved", "Device connector resolved for execution.", { connector: connector.name, connectorType: pipeline.template.connectorType, templateRef: pipeline.template.id });
+  dependencies.trace?.("action_connector_resolved", { connectorType: connector.name, executionTemplateRef: pipeline.template.id });
 
   const executing = await prisma.actionPlan.update({
     where: { id },
@@ -1317,6 +1453,16 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
         executed: false,
         connectorInvoked: false,
         backupEnabled: false,
+        executionTemplateRef: pipeline.template.id,
+        connectorType: pipeline.template.connectorType,
+        executionPipeline: {
+          template: pipeline.template.id,
+          connector: connector.name,
+          validation: "passed",
+          execution: "running",
+          verification: "pending",
+          audit: "started"
+        },
         previewStale: false,
         staleReason: null,
         executionStartedAt: new Date().toISOString(),
@@ -1326,7 +1472,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     include: includeRelations()
   });
 
-  await audit(executing, "execution_started", "Controlled catalog execution started.", { actionType: plan.actionType, backupEnabled: false });
+  await audit(executing, "execution_started", "Controlled catalog execution started.", { actionType: plan.actionType, templateRef: pipeline.template.id, connector: connector.name, backupEnabled: false });
 
   await audit(executing, "connection_attempt", "Connector execution connection attempt started.", {
     connector: connector.name,
@@ -1380,7 +1526,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     const fortigateReadOnly = String(plan.actionType).startsWith("fortigate_show_") || ["fortigate_route_dns_check", "fortigate_license_status", "fortigate_admin_users"].includes(String(plan.actionType))
       ? parseFortiGateReadOnlyResult(String(plan.actionType), result.commands)
       : null;
-    const resultPayload = {
+    const resultPayload: Record<string, unknown> & { stdout: string; stderr: string; exitCode: number | null } = {
       ...result,
       executed: executionSucceeded,
       outcome: asObject(result.rollbackJson).outcome ?? (executionSucceeded ? "completed" : "failed"),
@@ -1394,22 +1540,46 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
       parsedResult: serviceStatusReadSucceeded ? serviceStatus : dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands, asObject(result.rollbackJson).verification),
+      verification: null,
+      executionEvidence: null,
       resultUrl: `/actions/${id}/result`
     };
+    const verification = buildPostExecutionVerification({ plan, pipeline, result, executionSucceeded, connectorInvoked: true });
+    resultPayload.verification = verification;
+    resultPayload.executionEvidence = {
+      template: { status: "resolved", ref: pipeline.template.id, connectorType: pipeline.template.connectorType, handler: pipeline.template.handler },
+      connector: { status: "invoked", name: connector.name, registered: true },
+      validation: { status: "passed", riskLevel: validation.riskLevel },
+      execution: { status: executionSucceeded ? "success" : "failed", commandCount: result.commands.length, connectorInvoked: true },
+      verification: { status: verification.ok ? "passed" : "failed", checks: verification.checks },
+      audit: { status: "recorded", events: pipeline.auditEvents }
+    };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
+    dependencies.trace?.(verification.ok ? "action_verification_passed" : "action_verification_failed", { connectorInvoked: true, connectorType: connector.name, executionTemplateRef: pipeline.template.id, checks: verification.checks });
     const updated = await prisma.actionPlan.update({
       where: { id },
       data: {
-        status: executionSucceeded ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
+        status: verification.ok ? ActionPlanStatus.succeeded : ActionPlanStatus.failed,
         parametersJson: toJson(withExecutionMetadata(executing.parametersJson, {
-          planState: executionSucceeded ? "completed" : "failed",
-          executed: executionSucceeded,
+          planState: verification.ok ? "completed" : "failed",
+          executed: verification.ok,
           connectorInvoked: true,
           backupEnabled: false,
+          executionTemplateRef: pipeline.template.id,
+          connectorType: pipeline.template.connectorType,
+          verificationStatus: verification.ok ? "passed" : "failed",
+          executionPipeline: {
+            template: "resolved",
+            connector: "invoked",
+            validation: "passed",
+            execution: executionSucceeded ? "success" : "failed",
+            verification: verification.ok ? "passed" : "failed",
+            audit: "recorded"
+          },
           executionCompletedAt: completedAt,
           exitCode: resultPayload.exitCode,
           executor: connector.name,
-          lastExecutionStatus: executionSucceeded ? "succeeded" : "failed"
+          lastExecutionStatus: verification.ok ? "succeeded" : "failed"
         })),
         resultJson: toJson(resultPayload),
         rollbackJson: toJson(result.rollbackJson ?? plan.rollbackJson)
@@ -1419,7 +1589,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
 
     await audit(updated, "connection_success", "Connector execution connection succeeded.", { connector: connector.name });
     dependencies.trace?.("action_execution_result_saved", { connectorInvoked: true, connectorType: connector.name, backupEnabled: false, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
-    await audit(updated, executionSucceeded ? "execution_succeeded" : "execution_failed", executionSucceeded ? "Connector execution succeeded." : "Connector execution did not complete successfully.", resultPayload);
+    await audit(updated, verification.ok ? "post_execution_verification_passed" : "post_execution_verification_failed", verification.ok ? "Post-execution evidence verified." : "Post-execution evidence failed verification.", verification);
+    await audit(updated, verification.ok ? "execution_succeeded" : "execution_failed", verification.ok ? "Connector execution succeeded and evidence verified." : "Connector execution evidence failed verification.", resultPayload);
     return updated;
   } catch (error) {
     const structural = connectorErrorLike(error);
@@ -1437,6 +1608,17 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
           executed: false,
           connectorInvoked: true,
           backupEnabled: false,
+          executionTemplateRef: pipeline.template.id,
+          connectorType: pipeline.template.connectorType,
+          verificationStatus: "failed",
+          executionPipeline: {
+            template: "resolved",
+            connector: "invoked",
+            validation: "passed",
+            execution: "failed",
+            verification: "failed",
+            audit: "recorded"
+          },
           executionCompletedAt: new Date().toISOString(),
           lastExecutionStatus: "failed"
         })),
@@ -1444,6 +1626,14 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
           executed: false,
           connectorInvoked: true,
           backupEnabled: false,
+          executionEvidence: {
+            template: { status: "resolved", ref: pipeline.template.id, connectorType: pipeline.template.connectorType, handler: pipeline.template.handler },
+            connector: { status: "invoked", name: connector.name, registered: true },
+            validation: { status: "passed", riskLevel: validation.riskLevel },
+            execution: { status: "failed", connectorInvoked: true },
+            verification: { status: "failed", error: connectorError.code },
+            audit: { status: "recorded", events: pipeline.auditEvents }
+          },
           error: connectorError.code,
           message: connectorError.message
         })
@@ -1452,6 +1642,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     });
     await audit(updated, "connection_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
     await audit(updated, "command_failed", "Connector command failed or was refused.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
+    await audit(updated, "post_execution_verification_failed", "Post-execution verification failed because the connector call did not return successful evidence.", { code: connectorError.code, message: connectorError.message, connectorInvoked: true, templateRef: pipeline.template.id, connector: connector.name });
+    dependencies.trace?.("action_verification_failed", { connectorInvoked: true, connectorType: connector.name, executionTemplateRef: pipeline.template.id, error: connectorError.code });
     await audit(updated, "execution_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
     throw new ActionExecutionError(connectorError.code, connectorError.message, connectorError.statusCode ?? 409);
   }

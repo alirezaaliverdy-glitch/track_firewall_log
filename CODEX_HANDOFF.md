@@ -1,3 +1,12 @@
+**Real execution pipeline milestone (2026-07-20)**
+
+- Stopped UI expansion and hardened the existing ActionPlan execution path. Execution now fails closed unless the plan resolves to a registered execution template, matching registered backend connector family, fresh PolicyGuard validation, connector execution, post-call verification evidence, and audit records.
+- The runtime connector mapping is centralized for Linux (`linux-ssh` -> `linux_edge`), MikroTik (`mikrotik-ssh` -> `mikrotik`), FortiGate (`fortigate-ssh` -> `fortigate`), and Cisco (`cisco-ios-xe-ssh` -> `cisco`) without renaming connectors or changing protected lab approval behavior.
+- Connector results now persist `verification` and a six-part `executionEvidence` object (`template`, `connector`, `validation`, `execution`, `verification`, `audit`). Success is accepted only when verification passes; connector exceptions and empty/invalid evidence persist failed execution evidence and `post_execution_verification_failed` audit.
+- Action Center status support was minimally extended to recognize `skipped` lifecycle evidence for dependent-step results, while preserving the existing ActionPlan database enum and UI layout. The workflow engine already skips dependent steps after failed prerequisites.
+- Validation passed: backend build, command catalog validation (191 items), frontend build, focused execution/workflow/action-center contract tests. DB-backed execution/route checks remain correctly skipped without `TEST_DATABASE_URL`. Playwright MCP opened `/actions` on `localhost:5173`, title `log-app`, and confirmed the Action Center route rendered.
+- Unrelated tracked docs/task deletions and untracked root prompt docs remain untouched and unstaged.
+
 **MASTER_V2 Workflow UI - Phases 0-9 (2026-07-20)**
 
 - Phase 0 established a non-destructive baseline on top of existing commit history. The worktree already had tracked task/docs deletions and untracked root prompt docs; they were left untouched and not staged.

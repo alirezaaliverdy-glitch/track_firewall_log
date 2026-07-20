@@ -1,6 +1,6 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 
-export type ActionLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "cancelled";
+export type ActionLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "skipped" | "cancelled";
 export type ActionCenterItem = {
   id: string;
   source: string;
@@ -45,7 +45,7 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-const LIFECYCLES = new Set<ActionLifecycle>(["draft", "needs_input", "ready_for_confirmation", "confirmed", "executing", "succeeded", "failed", "cancelled"]);
+const LIFECYCLES = new Set<ActionLifecycle>(["draft", "needs_input", "ready_for_confirmation", "confirmed", "executing", "succeeded", "failed", "skipped", "cancelled"]);
 
 function lifecycle(value: unknown, status: unknown, connectorInvoked: boolean): ActionLifecycle {
   if (LIFECYCLES.has(value as ActionLifecycle)) return value as ActionLifecycle;
@@ -54,6 +54,7 @@ function lifecycle(value: unknown, status: unknown, connectorInvoked: boolean): 
   if (normalized === "approved") return "confirmed";
   if (normalized === "executing") return "executing";
   if (normalized === "succeeded") return connectorInvoked ? "succeeded" : "failed";
+  if (normalized === "skipped") return "skipped";
   if (["failed", "validation_failed", "blocked", "rollback_needed"].includes(normalized)) return normalized === "validation_failed" ? "needs_input" : "failed";
   if (["rejected", "rolled_back", "cancelled", "expired"].includes(normalized)) return "cancelled";
   return "draft";
@@ -68,7 +69,7 @@ export function normalizeActionCenterItem(value: unknown): ActionCenterItem {
   const rawDevice = object(source.device);
   const rawSupport = object(source.support);
   const rawControls = object(source.controls);
-  const terminal = ["succeeded", "failed", "cancelled"].includes(state);
+  const terminal = ["succeeded", "failed", "skipped", "cancelled"].includes(state);
   const executable = rawSupport.executable === true;
   return {
     id: String(source.id ?? ""),
