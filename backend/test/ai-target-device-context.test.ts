@@ -89,8 +89,9 @@ test("memory and status requests stay inside Assistant without guided workflow o
   assert.match(source, /canUseCatalogActionType\(resolvedActionType\) \? findCatalogItemByIntent/);
 
   const chat = read("../src/services/ai-chat.service.ts");
-  assert.match(chat, /!informationalChatOnly[\s\S]*resolution\.mode === "needs_input"/);
-  assert.match(chat, /responseMode = informationalChatOnly[\s\S]*\? "manual_or_not_supported"/);
+  assert.match(chat, /classifyAssistantIntent/);
+  assert.match(chat, /if \(classification\.mode !== "action_request"\)/);
+  assert.match(chat, /actionPlan: null/);
   assert.match(chat, /actionSessionId: null/);
   assert.match(chat, /guidedActionUrl: null/);
 });
@@ -107,8 +108,13 @@ test("unsupported selected-device requests stay reviewable in Assistant", () => 
   assert.match(chat, /suggestSupportedActionsForAssistantTarget\(input\.selectedDevice\)/);
 });
 
-test("any unmatched selected-device chat request creates a review-only ActionPlan", () => {
+test("unmatched selected-device chat stays chat unless classified as an action request", () => {
   const chat = read("../src/services/ai-chat.service.ts");
+  assert.match(chat, /classification\.mode !== "action_request"/);
+  assert.match(chat, /providerIntentIgnored/);
+  assert.match(chat, /actionPlan: null/);
+  assert.match(chat, /shouldCreateActionPlan: false/);
+  assert.match(chat, /responseContract/);
   assert.match(chat, /shouldCreateReviewOnlyActionPlan/);
   assert.match(chat, /!input\.canCreateSupportedActionPlan/);
   assert.match(chat, /input\.structuredPlan\.kind === "action_plan"/);
@@ -180,6 +186,7 @@ test("executable multi-step action exposes an explicit start button only", () =>
 
   const assistant = read("../../src/components/ai/AiSecurityAssistantPanel.tsx");
   assert.match(assistant, /canOfferGuidedStart/);
+  assert.match(assistant, /response\.mode === "action_request"/);
   assert.match(assistant, /response\.missingFields\.length > 0/);
   assert.match(assistant, /guidedStart && <button[^>]*onClick=\{startGuidedWorkflow\}/);
 });

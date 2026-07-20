@@ -14,6 +14,7 @@ import { missingFieldsMessageFa, resolveAiTemplate } from "../ai/ai-template-res
 import { buildAiStructuredActionPlan, type AiStructuredActionPlan } from "../ai/ai-action-planner.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { env } from "../config/env.js";
+import { classifyAssistantIntent, type AssistantIntentClassification } from "../ai/assistant-intent-classifier.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -305,6 +306,25 @@ function intentDebug(input: {
   };
 }
 
+function noActionContract() {
+  return {
+    canCreateActionPlan: false,
+    manualOnly: true,
+    executable: false,
+    executionSupport: "conversation",
+    implementationState: "not_applicable",
+    executionMode: env.actionExecutionMode,
+    lifecycle: null
+  };
+}
+
+function nonActionNextStep(classification: AssistantIntentClassification) {
+  if (classification.requiresClarification) return "درخواست مبهم است؛ اگر قصد تغییر واقعی دارید، عملیات و هدف را صریح بنویسید.";
+  return classification.mode === "device_question"
+    ? "پاسخ فقط از زمینه خواندنی دستگاه انتخاب‌شده استفاده کرد و ActionPlan نساخت."
+    : "پاسخ در حالت گفتگو تولید شد و ActionPlan نساخت.";
+}
+
 export async function chatWithAssistant(input: { sessionId?: string; message: string; deviceId?: string }) {
   const message = input.message.trim();
   if (!message) throw new Error("message is required");
@@ -322,6 +342,88 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     input.deviceId ? prisma.device.findUnique({ where: { id: input.deviceId } }) : Promise.resolve(null),
     buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId }),
   ]);
+  const classification = classifyAssistantIntent({ message, hasSelectedDevice: Boolean(earlySelectedDevice?.id) });
+  if (classification.mode !== "action_request") {
+    const providerResponse = await runAiProvider({ message, context });
+    const answer = classification.requiresClarification
+      ? `${providerResponse.assistantMessage}\n\nIf you want me to plan a real change, state the exact operation, target, and parameters explicitly.`
+      : providerResponse.assistantMessage;
+    const assistantMessage = await prisma.aiChatMessage.create({
+      data: {
+        sessionId: session.id,
+        role: AiChatRole.assistant,
+        content: answer,
+        structuredJson: toJson({
+          schema: "ai_security_assistant_response_contract_v1",
+          mode: classification.mode,
+          answer,
+          actionPlan: null,
+          confidence: Math.min(classification.confidence, providerResponse.confidence),
+          requiresClarification: classification.requiresClarification,
+          classifier: classification,
+          providerIntentIgnored: providerResponse.intent,
+          aiProviderCalled: true,
+          executionAllowed: false,
+          rawCommandExecution: false,
+          contextWindow: {
+            generatedAt: context.generatedAt,
+            recentWindowMinutes: context.recentWindowMinutes,
+            evidence: context.evidencePack.metadata,
+            selectedDeviceId: input.deviceId ?? null,
+            targetDeviceContext: context.targetDeviceContext
+          }
+        })
+      }
+    });
+    return {
+      mode: classification.mode,
+      answer,
+      actionPlan: null,
+      confidence: Math.min(classification.confidence, providerResponse.confidence),
+      requiresClarification: classification.requiresClarification,
+      sessionId: session.id,
+      message: userMessage,
+      assistantMessage: answer,
+      assistantMessageRecord: assistantMessage,
+      shouldCreateActionPlan: false,
+      actionIntent: null,
+      actionContract: noActionContract(),
+      executionSupport: "conversation",
+      implementationState: "not_applicable",
+      blueprintId: null,
+      initialValues: null,
+      actionSessionId: null,
+      actionSession: null,
+      guidedActionUrl: null,
+      vendor: context.targetDeviceContext?.device?.vendor ?? null,
+      connectorType: null,
+      deviceId: earlySelectedDevice?.id ?? null,
+      selectedDeviceName: earlySelectedDevice?.name ?? null,
+      clarification: classification.requiresClarification ? { questionFa: nonActionNextStep(classification), options: [] } : null,
+      mappedTemplate: null,
+      missingFields: [],
+      nextStepFa: nonActionNextStep(classification),
+      warnings: [],
+      resolution: null,
+      actionDebug: null,
+      providerStatus: getAiProviderStatus(providerResponse.error),
+      evidenceMetadata: context.evidencePack.metadata,
+      targetDeviceContext: context.targetDeviceContext,
+      structured: {
+        assistantMessage: answer,
+        shouldCreateIntent: false,
+        intent: null,
+        confidence: Math.min(classification.confidence, providerResponse.confidence)
+      },
+      responseContract: {
+        mode: classification.mode,
+        answer,
+        actionPlan: null,
+        confidence: Math.min(classification.confidence, providerResponse.confidence),
+        requiresClarification: classification.requiresClarification
+      }
+    };
+  }
   const earlyResolution = resolveAiTemplate({
     userText: message,
     selectedDevice: earlySelectedDevice,
@@ -496,15 +598,16 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       ? "برنامه اجرای قابل تأیید ساخته شد. پس از بازبینی می‌توانید آن را در مرکز عملیات تأیید کنید."
       : "پیشنهاد سفارشی قابل بازبینی ساخته شد. این برنامه اجرایی نیست و باید در مرکز عملیات دستی بررسی شود."
     : resolutionMissing.length ? nextStepFa : selectedDeviceUnsupportedMessage ?? providerResponse.assistantMessage;
-  const responseMode = informationalChatOnly
-    ? "manual_or_not_supported"
-    : guidedBlueprintId ? "guided_workflow" : resolution.mode === "guided_workflow" ? "manual_or_not_supported" : resolution.mode;
+  const responseMode = "action_request";
   const guidedAssistantText = guidedBlueprintId
     ? "این درخواست چندمرحله‌ای است. برای ادامه باید چند مقدار را وارد کنید."
     : resolution.mode === "clarification" ? nextStepFa : assistantText;
 
   return {
     sessionId: session.id,
+    answer: guidedAssistantText,
+    confidence: Math.max(classification.confidence, resolution.confidence),
+    requiresClarification: resolutionMissing.length > 0 || resolution.mode === "clarification",
     message: userMessage,
     assistantMessage: guidedAssistantText,
     assistantMessageRecord: assistantMessage,
@@ -539,6 +642,13 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       shouldCreateIntent: providerResponse.shouldCreateIntent,
       intent: effectiveStructuredIntent,
       confidence: providerResponse.confidence
+    },
+    responseContract: {
+      mode: "action_request",
+      answer: guidedAssistantText,
+      actionPlan,
+      confidence: Math.max(classification.confidence, resolution.confidence),
+      requiresClarification: resolutionMissing.length > 0 || resolution.mode === "clarification"
     }
   };
 }

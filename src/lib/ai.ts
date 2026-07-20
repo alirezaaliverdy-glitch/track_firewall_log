@@ -38,6 +38,9 @@ export type AiActionIntent = {
 
 export type AiChatResponse = {
   sessionId: string;
+  answer?: string;
+  confidence?: number;
+  requiresClarification?: boolean;
   message: AiMessage | null;
   assistantMessage: AiMessage | null;
   actionIntent: AiActionIntent | null;
@@ -53,7 +56,7 @@ export type AiChatResponse = {
   missingFields: string[];
   nextStepFa: string;
   warnings: string[];
-  mode: string;
+  mode: "conversation" | "device_question" | "action_request" | string;
   blueprintId: string | null;
   initialValues: Record<string, unknown> | null;
   actionSessionId: string | null;
@@ -481,6 +484,9 @@ export async function sendAiMessage(sessionId: string | null | undefined, messag
       : null;
   return {
     sessionId: String(source.sessionId ?? sessionId ?? ""),
+    answer: typeof source.answer === "string" ? source.answer : undefined,
+    confidence: source.confidence === undefined ? undefined : safeNumber(source.confidence),
+    requiresClarification: source.requiresClarification === undefined ? undefined : Boolean(source.requiresClarification),
     message: source.message ? normalizeAiMessage(source.message) : null,
     assistantMessage,
     actionIntent: source.actionIntent ? normalizeAiIntent(source.actionIntent) : null,

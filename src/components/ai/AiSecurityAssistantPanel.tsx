@@ -636,9 +636,9 @@ export default function AiSecurityAssistantPanel() {
         setStructuredResponse(response.structured);
         setAssistantMode(response.mode);
         setEvidenceMetadata(response.evidenceMetadata);
-        setExecutionState({ support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle });
+        setExecutionState(response.mode === "action_request" ? { support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle } : null);
         setCreatedPlanId(response.actionPlan?.id ?? null);
-        const canOfferGuidedStart = response.mode === "guided_workflow" &&
+        const canOfferGuidedStart = response.mode === "action_request" &&
           Boolean(response.blueprintId) &&
           response.actionContract.implementationState === "implemented" &&
           response.actionContract.executionSupport === "connector" &&

@@ -1,3 +1,12 @@
+**AI Assistant intent routing fix (2026-07-20)**
+
+- Fixed selected-device routing so device selection is context only; every assistant prompt is classified as `conversation`, `device_question`, or `action_request` before any planning code runs.
+- Conversation and read-only device questions now call the configured AI provider and return an explicit response contract with `actionPlan: null`, `shouldCreateActionPlan=false`, no Action Center handoff, and no connector/execution backend path.
+- Action requests now gate the existing catalog/template/ActionPlan path behind explicit operation intent. Vendor-prefixed prompts such as MikroTik SSH-port changes and FortiGate address-object creation classify as action requests, while advice, explanation, safety, greetings, and ambiguous operation fragments stay chat/clarification.
+- Frontend handling was limited to honoring the backend mode contract: chat/device questions clear execution state, and only `action_request` can expose review/guided planning controls. No UI redesign or connector path was added.
+- Validation passed: focused assistant routing/target-device tests 29/29, backend build, command catalog validation (191 items), frontend build, and Playwright MCP on `/assistant`. Browser proof: MikroTik registered action produced an ActionPlan ready for Action Center review without execution; switching to Cisco cleared stale plan state; normal VLAN advice stayed in Assistant with no ActionPlan/review handoff.
+- Unrelated tracked docs/task deletions and untracked root prompt docs remain untouched and unstaged.
+
 **Real execution pipeline milestone (2026-07-20)**
 
 - Stopped UI expansion and hardened the existing ActionPlan execution path. Execution now fails closed unless the plan resolves to a registered execution template, matching registered backend connector family, fresh PolicyGuard validation, connector execution, post-call verification evidence, and audit records.
