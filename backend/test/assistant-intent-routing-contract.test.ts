@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { classifyAssistantIntent, stripExplicitActionMarker } from "../src/ai/assistant-intent-classifier.js";
 
-const chatService = readFileSync(new URL("../src/services/ai-chat.service.ts", import.meta.url), "utf8");
+const chatService = [
+  "../src/services/ai-chat.service.ts",
+  "../src/ai/assistant/assistant-conversation.service.ts",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const aiRoute = readFileSync(new URL("../src/routes/ai.ts", import.meta.url), "utf8");
 const assistantUi = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
 

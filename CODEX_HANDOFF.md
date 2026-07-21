@@ -8,6 +8,14 @@
 - Remaining Phase D work before the phase can close: AI assistant service split and oversized FortiGate compiler / Linux connector extraction, followed by full validation and Playwright acceptance.
 - `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs` directory deletion was preserved and not staged.
 
+**Phase D backend refactor - Assistant split (2026-07-21)**
+
+- Kept `backend/src/services/ai-chat.service.ts` as a compatibility facade and moved the Assistant implementation to `backend/src/ai/assistant/assistant-conversation.service.ts` with an `index.ts` export.
+- Preserved the public `chatWithAssistant`, session listing/detail, and clear-message exports used by `backend/src/routes/ai.ts`.
+- Source-contract tests now inspect the facade plus `backend/src/ai/assistant/assistant-conversation.service.ts`.
+- Validation passed: backend build and focused isolated TAP `C:\tmp\phase-d-ai-focused.tap` with Assistant routing, selected-target context, AI ActionPlan routing regression, and structured planner coverage.
+- Remaining Phase D work before phase close: oversized FortiGate compiler and Linux connector extraction, then full validation and Playwright acceptance.
+
 **Phase C custom command policy engine (2026-07-21)**
 
 - Started from committed Phase B baseline `e43aa9f`.

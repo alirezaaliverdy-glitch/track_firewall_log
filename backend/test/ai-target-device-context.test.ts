@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path: string) => path === "../src/services/ai-chat.service.ts"
+  ? [
+      "../src/services/ai-chat.service.ts",
+      "../src/ai/assistant/assistant-conversation.service.ts",
+    ].map((source) => readFileSync(new URL(source, import.meta.url), "utf8")).join("\n")
+  : readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("assistant target context builder treats the selected device as single source of truth", () => {
   const source = read("../src/ai/context/assistant-target-context.ts");
