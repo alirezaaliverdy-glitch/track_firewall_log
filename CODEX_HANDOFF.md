@@ -1,3 +1,13 @@
+**Phase D backend refactor - Connector and compiler split (2026-07-21)**
+
+- Split oversized FortiGate compiler helpers into `backend/src/fortigate/command-compiler/shared.ts`, guided VPN compilation into `guided-vpn.ts`, and read-only command compilation into `read-only.ts`, while preserving the public `compileFortiGateAction` import path at `backend/src/services/fortigate-command-compiler.ts`.
+- Split Linux connector telemetry command catalogs and firewall parser helpers into `backend/src/connectors/linux/telemetry-commands.ts` and `firewall-parsers.ts`, re-exported from `backend/src/connectors/linux-ssh.connector.ts` to preserve existing imports.
+- Split FortiGate guided-action blueprint helpers and VPN blueprint/preview data into `fortigate-blueprint-shared.ts` and `fortigate-vpn-blueprint.ts`, while preserving `FORTIGATE_GUIDED_BLUEPRINTS`.
+- Phase D size gate passed: no backend TypeScript source file remains above 50 KB.
+- Validation passed: backend build; command catalog validation (191 items); focused connector/compiler TAP `C:\tmp\phase-d-connectors-focused.tap`; final full isolated backend TAP `C:\tmp\phase-d-final-full-backend.tap` with 378 tests, 378 pass, 0 fail, 0 skipped; `git diff --check`.
+- Playwright MCP acceptance passed on `http://localhost:5173/assistant`: authenticated session, visible heading `دستیار هوشمند`, zero console errors, `/firewall-api/auth/session-status` and `/firewall-api/auth/me` returned 200, and CSRF-protected `/firewall-api/ai/chat` returned 200 conversation mode with no ActionPlan for Chat override.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs` directory deletion was preserved and not staged.
+
 **Phase D backend refactor - ActionPlan split (2026-07-21)**
 
 - Started Phase D from committed Phase C baseline `46fceeb`.

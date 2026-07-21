@@ -1,251 +1,45 @@
-import net from "node:net";
 import { ActionType, AiRiskLevel } from "@prisma/client";
 import { getFortiGateControlAction } from "../fortigate/full-control-registry.js";
 import type { FortiOsDialect } from "./fortigate-version.service.js";
 import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
+import {
+  actionName,
+  arrayNames,
+  assertNotBuiltinService,
+  block,
+  cidrList,
+  cidrOrIp,
+  fail,
+  fqdn,
+  ipRange,
+  MANAGED_PREFIX,
+  ipv4,
+  ipv4OrFqdn,
+  managedComment,
+  objectName,
+  policyId,
+  port,
+  portList,
+  quote,
+  readOnly,
+  requireFeature,
+  result,
+  RAW_KEYS,
+  safeName,
+  safeOptionalName,
+  safeProposal,
+  safeText,
+  secretValue,
+  spec,
+  subnet,
+  text,
+  withVdom,
+  type FortiGateCompiledAction,
+} from "../fortigate/command-compiler/shared.js";
 
-export type FortiGateCommandSpec = {
-  template: string;
-  command: string;
-  write: boolean;
-  target: Record<string, unknown>;
-  rollbackSteps: string[];
-  warnings: string[];
-};
-
-export type FortiGateCompiledAction = {
-  commandSpecs: FortiGateCommandSpec[];
-  normalizedParameters: Record<string, unknown>;
-  warnings: string[];
-  rollbackJson: Record<string, unknown>;
-  riskLevel: AiRiskLevel;
-  category: string;
-  requiresBackup: boolean;
-  requiresBreakGlass: boolean;
-  lockoutSensitive: boolean;
-};
-
-const MANAGED_PREFIX = "firewall-log-analyzer";
-const SAFE_NAME = /^[A-Za-z0-9_.:-]{1,79}$/;
-const SAFE_TEXT = /^[A-Za-z0-9_.:\/,@#() +*-]{1,180}$/;
-const SAFE_ID = /^[0-9]{1,10}$/;
-const RAW_KEYS = new Set(["command", "cmd", "shell", "script", "exec", "args", "cli", "rawCli"]);
-const BUILT_IN_SERVICES = new Set(["ALL", "HTTP", "HTTPS", "SSH", "DNS", "PING", "FTP", "SMTP", "POP3", "IMAP", "LDAP", "RDP", "TELNET", "SNMP"]);
-const WEAK_IPSEC_PROPOSAL = /(?:^|-)(?:des|3des|md5|sha1)(?:-|$)/i;
-const APPROVED_IPSEC_PROPOSALS = new Set(["aes256-sha256", "aes256-sha384", "aes256-sha512", "aes128-sha256", "aes128-sha384", "aes128-sha512"]);
-
-function fail(name: string): never {
-  throw new Error(`${name} is invalid or missing.`);
-}
-
-function rejectUnsafe(value: string, key: string) {
-  if (/[\n\r;`|&]|[$][(]|\\$/.test(value)) throw new Error(`${key} contains unsafe characters.`);
-  return value;
-}
-
-function text(params: Record<string, unknown>, key: string, fallback?: string) {
-  const value = typeof params[key] === "string" && String(params[key]).trim() ? String(params[key]).trim() : fallback;
-  return value === undefined ? undefined : rejectUnsafe(value, key);
-}
-
-function safeName(params: Record<string, unknown>, key: string, fallback?: string) {
-  const value = text(params, key, fallback);
-  if (!value || !SAFE_NAME.test(value)) fail(key);
-  return value;
-}
-
-function safeOptionalName(params: Record<string, unknown>, key: string) {
-  const value = text(params, key);
-  if (value !== undefined && !SAFE_NAME.test(value)) fail(key);
-  return value;
-}
-
-function safeText(params: Record<string, unknown>, key: string, fallback?: string) {
-  const value = text(params, key, fallback);
-  if (value !== undefined && !SAFE_TEXT.test(value)) throw new Error(`${key} contains unsupported characters.`);
-  return value;
-}
-
-function arrayNames(params: Record<string, unknown>, key: string, fallback?: string[]) {
-  const raw = Array.isArray(params[key]) ? params[key] : typeof params[key] === "string" ? String(params[key]).split(",") : fallback ?? [];
-  const values = raw.map((item) => safeName({ value: String(item).trim() }, "value")).filter(Boolean);
-  if (values.length === 0) fail(key);
-  return values;
-}
-
-function policyId(params: Record<string, unknown>, key = "policyId") {
-  const value = text(params, key);
-  if (!value || !SAFE_ID.test(value)) fail(key);
-  return value;
-}
-
-function port(params: Record<string, unknown>, key: string) {
-  const value = Number(params[key]);
-  if (!Number.isInteger(value) || value < 1 || value > 65535) fail(key);
-  return value;
-}
-
-function portList(params: Record<string, unknown>, key: string) {
-  const raw = Array.isArray(params[key]) ? params[key].join(",") : String(params[key] ?? "").trim();
-  if (!raw) fail(key);
-  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
-  if (parts.length === 0) fail(key);
-  for (const part of parts) {
-    const [start, end] = part.split("-");
-    const a = Number(start);
-    const b = end === undefined ? a : Number(end);
-    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 1 || b < 1 || a > 65535 || b > 65535 || a > b) fail(key);
-  }
-  return parts.join(",");
-}
-
-function ipv4(value: string, key: string) {
-  if (net.isIP(value) !== 4) fail(key);
-  return value;
-}
-
-function ipv4OrFqdn(value: string, key: string) {
-  if (net.isIP(value) === 4) return value;
-  if (/^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/.test(value)) return value;
-  fail(key);
-}
-
-function cidrOrIp(params: Record<string, unknown>, key: string) {
-  const value = text(params, key) ?? fail(key);
-  const [ip, prefix] = value.split("/");
-  ipv4(ip, key);
-  if (prefix !== undefined) {
-    const n = Number(prefix);
-    if (!Number.isInteger(n) || n < 0 || n > 32 || String(n) !== prefix) fail(key);
-  }
-  return value;
-}
-
-function subnet(params: Record<string, unknown>) {
-  const cidr = text(params, "sourceCidr") ?? text(params, "cidr") ?? text(params, "sourceIp") ?? text(params, "ip") ?? text(params, "address");
-  if (!cidr) fail("cidr");
-  const [ip, prefix] = cidr.split("/");
-  ipv4(ip, "cidr");
-  const bits = prefix === undefined ? 32 : Number(prefix);
-  if (!Number.isInteger(bits) || bits < 0 || bits > 32) fail("cidr");
-  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
-  return `${ip} ${[24, 16, 8, 0].map((shift) => (mask >>> shift) & 255).join(".")}`;
-}
-
-function cidrToSubnet(value: string, key: string) {
-  const addressMask = value.trim().split(/\s+/);
-  if (addressMask.length === 2) {
-    ipv4(addressMask[0], key);
-    ipv4(addressMask[1], key);
-    return `${addressMask[0]} ${addressMask[1]}`;
-  }
-  const [ip, prefix] = value.split("/");
-  ipv4(ip, key);
-  if (prefix === undefined) fail(key);
-  const bits = Number(prefix);
-  if (!Number.isInteger(bits) || bits < 0 || bits > 32 || String(bits) !== prefix) fail(key);
-  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
-  return `${ip} ${[24, 16, 8, 0].map((shift) => (mask >>> shift) & 255).join(".")}`;
-}
-
-function cidrList(params: Record<string, unknown>, key: string) {
-  const raw = Array.isArray(params[key]) ? params[key] : typeof params[key] === "string" ? String(params[key]).split(",") : [];
-  const values = raw.map((item) => String(item).trim()).filter(Boolean);
-  if (values.length === 0) fail(key);
-  return values.map((value) => ({ cidr: value, subnet: cidrToSubnet(value, key) }));
-}
-
-function safeProposal(params: Record<string, unknown>, key = "proposal") {
-  const value = (text(params, key, "aes256-sha256") ?? "aes256-sha256").toLowerCase();
-  if (!/^[A-Za-z0-9-]{3,80}$/.test(value)) fail(key);
-  if (WEAK_IPSEC_PROPOSAL.test(value) && params.allowWeakProposal !== true) throw new Error("Weak FortiGate VPN proposals are blocked unless allowWeakProposal=true.");
-  if (!APPROVED_IPSEC_PROPOSALS.has(value) && params.allowWeakProposal !== true) throw new Error("Only approved AES/SHA2 FortiGate VPN proposals are allowed by default.");
-  return value;
-}
-
-function objectName(prefix: string, index: number) {
-  const safe = prefix.replace(/[^A-Za-z0-9_.:-]/g, "-").slice(0, 64);
-  return `${safe}-${index}`.slice(0, 79);
-}
-
-function secretValue(params: Record<string, unknown>, key: string) {
-  const value = typeof params[key] === "string" && String(params[key]).trim() ? String(params[key]).trim() : undefined;
-  if (value !== undefined && /[\n\r`|;]/.test(value)) throw new Error(`${key} contains unsafe characters.`);
-  return value;
-}
-
-function fqdn(params: Record<string, unknown>) {
-  const value = text(params, "fqdn") ?? text(params, "domain") ?? fail("fqdn");
-  if (!/^\*?(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63}$/.test(value)) fail("fqdn");
-  return value;
-}
-
-function ipRange(params: Record<string, unknown>) {
-  const start = ipv4(text(params, "startIp") ?? text(params, "start") ?? fail("startIp"), "startIp");
-  const end = ipv4(text(params, "endIp") ?? text(params, "end") ?? fail("endIp"), "endIp");
-  return { start, end };
-}
-
-function requireFeature(condition: boolean | undefined, code = "FORTIGATE_UNSUPPORTED_FEATURE") {
-  if (condition === false) throw new Error(code);
-}
-
-function assertNotBuiltinService(name: string) {
-  if (BUILT_IN_SERVICES.has(name.toUpperCase())) throw new Error("Built-in FortiGate services cannot be overwritten or deleted.");
-}
-
-function quote(value: string | number | boolean) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function block(lines: string[]) {
-  return lines.join("\n");
-}
-
-function spec(input: Omit<FortiGateCommandSpec, "write"> & { write?: boolean }): FortiGateCommandSpec {
-  return { ...input, write: input.write ?? true };
-}
-
-function managedComment(comment?: string) {
-  const value = comment?.startsWith(MANAGED_PREFIX) ? comment : `${MANAGED_PREFIX} ${comment ?? "managed fortigate change"}`;
-  return value.slice(0, 180);
-}
-
-function result(input: Omit<FortiGateCompiledAction, "commandSpecs" | "warnings" | "rollbackJson"> & {
-  commandSpecs?: FortiGateCommandSpec[];
-  warnings?: string[];
-  rollbackJson?: Record<string, unknown>;
-}): FortiGateCompiledAction {
-  return {
-    commandSpecs: input.commandSpecs ?? [],
-    warnings: input.warnings ?? [],
-    rollbackJson: input.rollbackJson ?? { type: "manual_review" },
-    ...input
-  };
-}
-
-function readOnly(command: string, category: string) {
-  return result({
-    category,
-    riskLevel: AiRiskLevel.low,
-    normalizedParameters: {},
-    requiresBackup: false,
-    requiresBreakGlass: false,
-    lockoutSensitive: false,
-    commandSpecs: [spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })],
-    rollbackJson: { type: "none_read_only" }
-  });
-}
-
-function withVdom(command: string, vdom?: string) {
-  if (!vdom) return command;
-  return block(["config vdom", `edit ${quote(vdom)}`, command, "end"]);
-}
-
-function actionName(actionType: ActionType) {
-  return String(actionType);
-}
-
+export type { FortiGateCommandSpec, FortiGateCompiledAction } from "../fortigate/command-compiler/shared.js";
+import { compileFortiGateGuidedVpnSetup } from "../fortigate/command-compiler/guided-vpn.js";
+import { compileFortiGateReadOnlyAction } from "../fortigate/command-compiler/read-only.js";
 export function compileFortiGateAction(input: {
   actionType: ActionType;
   parameters: Record<string, unknown>;
@@ -259,217 +53,11 @@ export function compileFortiGateAction(input: {
   const vdom = safeOptionalName(p, "vdom");
   if (p.vdomRequired === true && !vdom) throw new Error("FORTIGATE_VDOM_REQUIRED");
 
-  if (actionType === ActionType.fortigate_daily_check) {
-    const commands = ["get system status", "get system performance status", "show system interface", "get system interface physical", "get router info routing-table all", "get system dns", "show system dns", "show system admin", "show firewall policy", "show firewall address", "show firewall vip", "show firewall ippool", "get vpn ipsec tunnel summary", "diagnose vpn tunnel list", "get vpn ssl monitor", "show vpn ipsec phase1-interface", "show vpn ipsec phase2-interface", "show vpn ssl settings", "get system ha status", "show system ha", "show system vdom", "show system zone"];
-    return result({ category: "daily-check", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate daily check: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_show_interfaces) {
-    const commands = ["show system interface", "get system interface physical"];
-    return result({ category: "interface", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate interfaces: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_route_dns_check) {
-    const commands = ["get router info routing-table all", "get system dns"];
-    return result({ category: "network", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate route dns: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_license_status) {
-    const commands = ["get system status", "show system fortiguard"];
-    return result({ category: "license", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: `fortigate license: ${command}`, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_admin_users) return readOnly("show system admin", "management");
-  if (actionType === ActionType.fortigate_show_system_status) {
-    const commands = ["get system status", "get system performance status"];
-    return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_show_routing_dns) {
-    const commands = ["get router info routing-table all", "get system dns", "show system dns", "show system interface"];
-    return result({ category: "network", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_show_admin_access) {
-    const commands = ["show system admin", "show system interface"];
-    return result({ category: "management", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_show_firewall_policies) {
-    const commands = ["show firewall policy", "show firewall address", "show firewall vip", "show firewall ippool"];
-    return result({ category: "firewall", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_show_vpn_status) {
-    const commands = ["get vpn ipsec tunnel summary", "diagnose vpn tunnel list", "get vpn ssl monitor", "show vpn ipsec phase1-interface", "show vpn ipsec phase2-interface", "show vpn ssl settings"];
-    return result({ category: "vpn", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
-  }
-  if (actionType === ActionType.fortigate_guided_vpn_setup) {
-    const vpn = normalizeFortiGateGuidedVpnParameters(p);
-    const vpnValidation = validateFortiGateGuidedVpnParameters(vpn);
-    if (vpnValidation.issues.length > 0) throw new Error(vpnValidation.issues[0]?.message ?? "FORTIGATE_GUIDED_VPN_PARAMS_INVALID");
-    if (text(vpn, "vpnType", "ipsec_site_to_site") !== "ipsec_site_to_site") throw new Error("FORTIGATE_VPN_MODE_PREVIEW_ONLY");
-    if (text(vpn, "authMethod", "psk") !== "psk") throw new Error("FORTIGATE_VPN_AUTH_PREVIEW_ONLY");
-    if (text(vpn, "psk")) throw new Error("PSK plaintext is not allowed; use pskSecretRef.");
-    const name = safeName(vpn, "vpnName");
-    const phase1Name = safeName(vpn, "phase1Name", name);
-    const phase2Name = safeName(vpn, "phase2Name", `${phase1Name}-p2`);
-    const wanInterface = safeName(vpn, "wanInterface");
-    const lanInterface = safeName(vpn, "lanInterface");
-    const remoteGateway = ipv4OrFqdn(text(vpn, "remoteGateway") ?? fail("remoteGateway"), "remoteGateway");
-    const localSubnet = { cidr: text(vpn, "localSubnet") ?? fail("localSubnet"), subnet: cidrToSubnet(text(vpn, "localSubnet") ?? "", "localSubnet") };
-    const remoteSubnet = { cidr: text(vpn, "remoteSubnet") ?? fail("remoteSubnet"), subnet: cidrToSubnet(text(vpn, "remoteSubnet") ?? "", "remoteSubnet") };
-    const pskSecretRef = text(p, "pskSecretRef") ?? fail("pskSecretRef");
-    const psk = secretValue(p, "pskSecretValue");
-    const proposal = safeProposal(vpn);
-    const dhGroup = safeName(vpn, "dhGroup", "14");
-    const ikeVersion = safeName(vpn, "ikeVersion", "2");
-    const natTraversal = vpn.natTraversal !== false;
-    const createFirewallPolicy = vpn.createFirewallPolicy !== false;
-    const createStaticRoute = vpn.createStaticRoute !== false;
-    const natEnabled = vpn.natEnabled === true;
-    const logTraffic = vpn.logTraffic === true;
-    const enableAfterCreate = vpn.enableAfterCreate !== false;
-    const statusLines = enableAfterCreate ? [] : ["set status disable"];
-    const pskLine = psk ? `set psksecret ${quote(psk)}` : "set psksecret ********";
-    const phase2Names = [phase2Name];
-    const phase2Lines = [
-      "config vpn ipsec phase2-interface",
-      `edit ${quote(phase2Name)}`,
-      `set phase1name ${quote(phase1Name)}`,
-      `set proposal ${proposal}`,
-      `set src-subnet ${localSubnet.subnet}`,
-      `set dst-subnet ${remoteSubnet.subnet}`,
-      ...statusLines,
-      "next",
-      "end"
-    ];
-    const phase1Command = block([
-      "config vpn ipsec phase1-interface",
-      `edit ${quote(phase1Name)}`,
-      `set interface ${quote(wanInterface)}`,
-      `set ike-version ${ikeVersion}`,
-      "set peertype any",
-      "set net-device disable",
-      `set proposal ${proposal}`,
-      `set dhgrp ${dhGroup}`,
-      `set remote-gw ${remoteGateway}`,
-      pskLine,
-      `set nattraversal ${natTraversal ? "enable" : "disable"}`,
-      ...statusLines,
-      "next",
-      "end"
-    ]);
-    const routeCommand = block([
-      "config router static",
-      "edit 0",
-      `set dst ${remoteSubnet.subnet}`,
-      `set device ${quote(phase1Name)}`,
-      ...(vpn.routeDistance !== undefined ? [`set distance ${Number(vpn.routeDistance)}`] : []),
-      "next",
-      "end"
-    ]);
-    const localAddressNames = [safeOptionalName(vpn, "localAddressObjectName") ?? objectName(`${MANAGED_PREFIX}-${name}-local`, 1)];
-    const remoteAddressNames = [safeOptionalName(vpn, "remoteAddressObjectName") ?? objectName(`${MANAGED_PREFIX}-${name}-remote`, 1)];
-    const policyBaseName = safeOptionalName(vpn, "policyName") ?? name;
-    const addressCommand = block([
-      "config firewall address",
-      `edit ${quote(localAddressNames[0])}`,
-      `set subnet ${localSubnet.subnet}`,
-      `set comment ${quote(managedComment(`guided vpn ${name} local ${localSubnet.cidr}`))}`,
-      "next",
-      `edit ${quote(remoteAddressNames[0])}`,
-      `set subnet ${remoteSubnet.subnet}`,
-      `set comment ${quote(managedComment(`guided vpn ${name} remote ${remoteSubnet.cidr}`))}`,
-      "next",
-      "end"
-    ]);
-    const policyCommand = block([
-      "config firewall policy",
-      "edit 0",
-      `set name ${quote(objectName(`${policyBaseName}-lan-to-vpn`, 0))}`,
-      `set srcintf ${quote(lanInterface)}`,
-      `set dstintf ${quote(phase1Name)}`,
-      `set srcaddr ${localAddressNames.map(quote).join(" ")}`,
-      `set dstaddr ${remoteAddressNames.map(quote).join(" ")}`,
-      "set action accept",
-      "set schedule \"always\"",
-      "set service \"ALL\"",
-      `set nat ${natEnabled ? "enable" : "disable"}`,
-      `set logtraffic ${logTraffic ? "all" : "disable"}`,
-      ...statusLines,
-      "next",
-      "edit 0",
-      `set name ${quote(objectName(`${policyBaseName}-vpn-to-lan`, 0))}`,
-      `set srcintf ${quote(phase1Name)}`,
-      `set dstintf ${quote(lanInterface)}`,
-      `set srcaddr ${remoteAddressNames.map(quote).join(" ")}`,
-      `set dstaddr ${localAddressNames.map(quote).join(" ")}`,
-      "set action accept",
-      "set schedule \"always\"",
-      "set service \"ALL\"",
-      "set nat disable",
-      `set logtraffic ${logTraffic ? "all" : "disable"}`,
-      ...statusLines,
-      "next",
-      "end"
-    ]);
-    const verificationCommands = [
-      `show vpn ipsec phase1-interface ${phase1Name}`,
-      `show vpn ipsec phase2-interface ${phase2Name}`,
-      ...(createFirewallPolicy ? [`show firewall policy | grep -f ${name}`] : []),
-      ...(createStaticRoute ? [`get router info routing-table all | grep ${remoteSubnet.cidr}`] : []),
-      "get vpn ipsec tunnel summary"
-    ];
-    const commandSpecs = [
-      spec({ template: "config vpn ipsec phase1-interface/edit <phase1Name>", command: withVdom(phase1Command, vdom), target: { vpnName: name, phase1Name, wanInterface, remoteGateway, vdom }, rollbackSteps: [`delete phase1-interface ${phase1Name}`], warnings: [] }),
-      spec({ template: "config vpn ipsec phase2-interface/edit <phase2Name>", command: withVdom(block(phase2Lines), vdom), target: { vpnName: name, phase1Name, phase2Name, localSubnet: localSubnet.cidr, remoteSubnet: remoteSubnet.cidr, vdom }, rollbackSteps: [`delete phase2-interface ${phase2Name}`], warnings: [] }),
-      ...(createStaticRoute ? [spec({ template: "config router static/edit 0 remote VPN route", command: withVdom(routeCommand, vdom), target: { vpnName: name, phase1Name, remoteSubnet: remoteSubnet.cidr, vdom }, rollbackSteps: ["Remove created static route for the remote VPN subnet by route ID from config snapshot."], warnings: [] })] : []),
-      ...(createFirewallPolicy ? [
-        spec({ template: "config firewall address/edit managed VPN address objects", command: withVdom(addressCommand, vdom), target: { localAddressNames, remoteAddressNames, vdom }, rollbackSteps: [...localAddressNames, ...remoteAddressNames].map((item) => `delete firewall address ${item}`), warnings: [] }),
-        spec({ template: "config firewall policy/edit 0 guided VPN policies", command: withVdom(policyCommand, vdom), target: { lanInterface, tunnelInterface: phase1Name, natEnabled, logTraffic, vdom }, rollbackSteps: ["Delete created firewall policies by name from config snapshot."], warnings: [] })
-      ] : []),
-      ...verificationCommands.map((command) => spec({ template: `verify ${command}`, command: withVdom(command, vdom), write: false, target: { vpnName: name, phase1Name, vdom }, rollbackSteps: [], warnings: [] }))
-    ];
-    return result({
-      category: "vpn",
-      riskLevel: AiRiskLevel.high,
-      normalizedParameters: {
-        vpnType: "ipsec_site_to_site",
-        vpnName: name,
-        phase1Name,
-        phase2Name,
-        wanInterface,
-        lanInterface,
-        remoteGateway,
-        localSubnet: localSubnet.cidr,
-        remoteSubnet: remoteSubnet.cidr,
-        proposal,
-        dhGroup,
-        ikeVersion,
-        natTraversal,
-        pskSecretRef,
-        createFirewallPolicy,
-        createStaticRoute,
-        natEnabled,
-        logTraffic,
-        enableAfterCreate,
-        vdom
-      },
-      requiresBackup: true,
-      requiresBreakGlass: false,
-      lockoutSensitive: false,
-      warnings: [
-        "Backup is disabled for Quick Controlled execution; create a manual backup first if your change window requires it.",
-        "PSK is resolved from an ephemeral secret reference at execution time and is redacted in preview."
-      ],
-      commandSpecs,
-      rollbackJson: {
-        type: "fortigate_guided_ipsec_site_to_site_manual",
-        vpnName: name,
-        phase1Name,
-        phase2Names,
-        localAddressNames: createFirewallPolicy ? localAddressNames : [],
-        remoteAddressNames: createFirewallPolicy ? remoteAddressNames : [],
-        routeRemoval: createStaticRoute ? "Remove created static routes for remote subnets using the pre-change snapshot to identify route IDs." : "not_created",
-        policyRemoval: createFirewallPolicy ? "Delete created policies by displayed names from the pre/post snapshot." : "not_created",
-        secretStored: false,
-        vdom
-      }
-    });
-  }
+  const readOnlyCompiled = compileFortiGateReadOnlyAction(actionType);
+  if (readOnlyCompiled) return readOnlyCompiled;
+
+  if (actionType === ActionType.fortigate_guided_vpn_setup) return compileFortiGateGuidedVpnSetup({ parameters: p, riskLevel: input.riskLevel, dialect: input.dialect });
+
   if (actionType === ActionType.fortigate_show_ha_vdom_zone) {
     const commands = ["get system ha status", "show system ha", "show system vdom", "show system zone"];
     return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
