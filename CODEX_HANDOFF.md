@@ -1,3 +1,15 @@
+**Phase C custom command policy engine (2026-07-21)**
+
+- Started from committed Phase B baseline `e43aa9f`.
+- Added a backend-only custom command policy engine under `backend/src/commands/custom-policy/` with typed policy contracts, a registry, shared hard-deny/secret helpers, and vendor policies for Linux, MikroTik, FortiGate, and Cisco.
+- `validateCustomCommandPlan` now delegates custom allow/deny, missing-field, verification, role/permission, timeout/output-limit, backup, and risk decisions to the registry while preserving the existing facade used by PolicyGuard and connectors.
+- Existing custom connector execution behavior is preserved: catalog templates remain preferred; custom plans still require selected device/vendor/platform binding, preview, explicit approval, PolicyGuard, registered connector dispatch, verification, audit, and real connector evidence before success.
+- Extended Phase C tests for all four vendor policies: valid custom commands outside the static catalog, cross-vendor rejection, secret and catastrophic hard-deny rejection, explicit verification requirement, v2 ordered operations/dependencies, and required role/permission metadata.
+- Live acceptance exposed and fixed a real custom-source normalization bug: `ai_custom_connector_plan` was being normalized into `sourceIp`, causing valid custom previews to fail after policy validation. Added `ai_custom_connector_plan` to both proposal and PolicyGuard control-source handling.
+- Validation passed: focused policy/safety tests 15/15; backend build; frontend build from earlier Phase C validation; command catalog validation (191 items); i18n parity/Persian copy; UTF-8 guard (422 files); workflow lab guard; `git diff --check`; final isolated backend TAP `C:\tmp\phase-c-acceptance-full-backend.tap` with 378 tests, 378 pass, 0 fail, 0 skipped.
+- Playwright MCP acceptance passed after restarting the local backend watcher on port 4000 with current source: authenticated CSRF-protected Assistant request created a custom Linux plan, dry-run/preview returned `dry_run_ready`, `commandSafety=passed`, `requiredPermission=actions.custom.linux`, `requiredRole=operator`, `rawCommandExecution=false`, `connectorInvoked=false`, no `/actions/:id/execute` route call, and current console errors 0.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs` directory deletion was preserved and not staged.
+
 **Phase B AI intent routing and ActionPlan separation (2026-07-21)**
 
 - Started from committed Phase A stabilization baseline `db73fef`.

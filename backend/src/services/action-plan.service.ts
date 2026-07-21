@@ -119,7 +119,7 @@ function timeoutFromDuration(value: unknown) {
 export function normalizeParameters(actionType: ActionType, parameters: Record<string, unknown>) {
   const canonical = normalizeIntent({ ...parameters, actionType });
   delete canonical.actionType;
-  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
+  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
     delete canonical.sourceIp;
     delete canonical.srcInterface;
   }

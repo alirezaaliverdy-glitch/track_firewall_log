@@ -1,5 +1,6 @@
 import { ActionType, AiRiskLevel, type Device } from "@prisma/client";
 import type { ConnectorDryRun } from "../connectors/types.js";
+import { evaluateCustomCommandPolicy } from "../commands/custom-policy/custom-command-policy.registry.js";
 
 export type CustomConnectorVendor = "linux" | "mikrotik" | "fortigate" | "cisco";
 
@@ -56,8 +57,6 @@ const VENDOR_TEMPLATES: Record<CustomConnectorVendor, {
   cisco: { connectorType: "cisco-ios-xe-ssh", executionTemplateRef: "cisco_custom_connector_command" },
 };
 
-const SECRET_PATTERN = /(password|passphrase|private[-_ ]?key|secret|token|api[-_ ]?key)\s*[=:]\s*\S+/i;
-const SHELL_META_PATTERN = /[`$<>]|\$\(|\b(curl|wget|nc|netcat|bash|sh|python|perl|ruby|powershell|cmd\.exe)\b/i;
 const LINUX_SERVICE_PATTERN = /^[a-zA-Z0-9_.@:-]+$/;
 const ROUTEROS_NAME_PATTERN = /^[a-zA-Z0-9_.:-]{1,64}$/;
 
@@ -205,15 +204,6 @@ function synthesizeCommands(input: {
   };
 }
 
-function requestedVendorFromText(message: string): CustomConnectorVendor | null {
-  const text = normalizePrompt(message);
-  if (/\bmikrotik|routeros\b/.test(text)) return "mikrotik";
-  if (/\bfortigate|fortinet|fortios\b/.test(text)) return "fortigate";
-  if (/\blinux|ubuntu|debian|rhel|centos\b/.test(text)) return "linux";
-  if (/\bcisco|iosxe|ios-xe|ios\b/.test(text)) return "cisco";
-  return null;
-}
-
 function orderedOperations(input: { vendor: CustomConnectorVendor; commands: string[]; typedParameters: Record<string, unknown> }) {
   const operationType = String(input.typedParameters.operation ?? `${input.vendor}_custom_command`);
   return input.commands.map((command, index) => ({
@@ -285,100 +275,12 @@ export function buildCustomCommandPlan(input: {
   return basePlan({ message: input.message, device: input.device, parameters: input.parameters });
 }
 
-function commandLines(plan: CustomCommandPlan) {
-  return [...plan.orderedCommands, ...plan.verificationCommands].map((line) => line.trim()).filter(Boolean);
-}
-
-function commonCommandErrors(plan: CustomCommandPlan) {
-  const errors: string[] = [];
-  if (plan.orderedCommands.length === 0 && plan.missingFields.length === 0) errors.push("Custom ActionPlan requires at least one ordered command.");
-  if (plan.orderedCommands.length > 12) errors.push("Custom ActionPlan may contain at most 12 ordered commands.");
-  for (const command of commandLines(plan)) {
-    if (command.length > 320) errors.push("Custom command exceeds maximum length.");
-    if (SECRET_PATTERN.test(command)) errors.push("Custom command appears to contain a secret.");
-  }
-  return errors;
-}
-
-function linuxCommandAllowed(command: string) {
-  if (SHELL_META_PATTERN.test(command) || /[;&|]/.test(command)) return false;
-  return /^(sudo -n )?systemctl (restart|reload|start|stop|enable|disable|is-active|is-enabled|status|show) [a-zA-Z0-9_.@:-]+( --no-pager)?$/.test(command) ||
-    /^(sudo -n )?ufw (status|allow|deny|delete)\b[A-Za-z0-9_ ./'"-]*$/.test(command);
-}
-
-function routerOsCommandAllowed(command: string) {
-  if (!command.startsWith("/")) return false;
-  if (/\/system\s+(reset-configuration|reboot)|\/user\b|\/certificate\b|export\s+show-sensitive|password|remove\s+\[find\]|disable\s+\[find\]/i.test(command)) return false;
-  return /^\/(system identity|system ntp|ip service|ip firewall|interface|ip address|ip route)\b/i.test(command);
-}
-
-function fortigateCommandAllowed(command: string) {
-  if (/execute\s+(reboot|shutdown|factoryreset)|diagnose\s+debug|delete\s+\*|purge|unset\s+password|set\s+password/i.test(command)) return false;
-  return /^(config|edit|set|next|end|show|get)\b/i.test(command);
-}
-
-function ciscoCommandAllowed(command: string) {
-  if (/^(reload|erase|delete|format|copy|write erase)\b|password|secret|enable secret|username\s+\S+\s+secret/i.test(command)) return false;
-  return /^(show|configure terminal|interface\s+\S+|line\s+vty\s+\d+(?:\s+\d+)?|description\s+.+|shutdown|no shutdown|switchport\b.+|ip address\b.+|transport input ssh|end|exit)\b/i.test(command);
-}
-
-function vendorCommandAllowed(vendor: CustomConnectorVendor, command: string) {
-  if (vendor === "linux") return linuxCommandAllowed(command);
-  if (vendor === "mikrotik") return routerOsCommandAllowed(command);
-  if (vendor === "fortigate") return fortigateCommandAllowed(command);
-  return ciscoCommandAllowed(command);
-}
-
 export function validateCustomCommandPlan(input: {
   plan: CustomCommandPlan | null;
   device: Pick<Device, "id" | "type" | "vendor" | "protocol"> | null;
   actionType: ActionType | string;
 }): CustomCommandValidation {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-  const missingFields = Array.from(new Set(input.plan?.missingFields ?? []));
-  if (input.actionType !== ActionType.custom_vendor_action) errors.push("Custom connector execution requires custom_vendor_action.");
-  if (!input.device) errors.push("Custom connector action requires a selected registered device.");
-  if (!input.plan) errors.push("Custom connector action requires a normalized customCommandPlan.");
-  if (!input.plan) return { valid: false, errors, warnings, missingFields, normalizedPlan: null, rollbackJson: {}, };
-
-  const selectedVendor = customVendorFromDevice(input.device);
-  const requestedVendor = requestedVendorFromText(input.plan.intent);
-  const template = customTemplateForVendor(input.plan.vendor);
-  if (!selectedVendor || selectedVendor !== input.plan.vendor) errors.push("Custom command vendor does not match the selected device vendor/platform.");
-  if (requestedVendor && requestedVendor !== input.plan.vendor) errors.push("Custom command text references a different vendor than the selected device.");
-  if (input.device?.protocol !== "ssh") errors.push("Custom connector actions require an SSH-backed registered connector.");
-  if (input.plan.connectorType !== template.connectorType || input.plan.executionTemplateRef !== template.executionTemplateRef) errors.push("Custom command template does not match the selected vendor connector.");
-  errors.push(...commonCommandErrors(input.plan));
-  for (const command of commandLines(input.plan)) {
-    if (!vendorCommandAllowed(input.plan.vendor, command)) errors.push(`Custom command is not allowed for ${input.plan.vendor}: ${command}`);
-  }
-  if (missingFields.length > 0) errors.push(`Missing custom ActionPlan fields: ${missingFields.join(", ")}`);
-  if (input.plan.verificationCommands.length === 0) warnings.push("No explicit verification command was generated; connector verification will rely on exit status and audit evidence.");
-
-  const normalizedPlan = {
-    ...input.plan,
-    backendValidation: {
-      normalized: true as const,
-      vendorPlatformCompatible: Boolean(selectedVendor && selectedVendor === input.plan.vendor),
-      commandSafety: errors.length === 0 ? "passed" as const : "failed" as const,
-    },
-    rawCommandExecution: false as const,
-  };
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-    missingFields,
-    normalizedPlan,
-    rollbackJson: {
-      customConnectorPlan: true,
-      rollbackGuidance: normalizedPlan.rollbackGuidance,
-      verificationCommands: normalizedPlan.verificationCommands,
-      rawCommandExecution: false,
-    },
-  };
+  return evaluateCustomCommandPolicy(input);
 }
 
 export function customDryRun(plan: CustomCommandPlan): ConnectorDryRun {

@@ -59,7 +59,7 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function isActionPlanControlSource(value: unknown) {
-  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard"].includes(value);
+  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan"].includes(value);
 }
 
 function numberParam(parameters: Record<string, unknown>, key: string) {
