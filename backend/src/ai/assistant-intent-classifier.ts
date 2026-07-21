@@ -1,11 +1,25 @@
 export type AssistantIntentMode = "conversation" | "device_question" | "action_request";
+export type AssistantIntentModeOverride = "Auto" | "Chat" | "Action";
 
 export type AssistantIntentClassification = {
   mode: AssistantIntentMode;
   confidence: number;
   requiresClarification: boolean;
   reason: string;
+  reasonCode: string;
+  explicitOverride: boolean;
 };
+
+const ASSISTANT_INTENT_PROVIDER_THRESHOLD = 0.6;
+
+const EXPLICIT_ACTION_PREFIXES = [
+  "\u062f\u0633\u062a\u0648\u0631:",
+  "\u067e\u0631\u0627\u0645\u067e\u062a:",
+  "\u067e\u0631\u0627\u0645\u062a:",
+  "command:",
+  "prompt:",
+  "/action ",
+];
 
 const PERSIAN_DIGITS: Record<string, string> = {
   "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4", "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
@@ -76,6 +90,43 @@ function hasAny(text: string, terms: string[]) {
   });
 }
 
+function result(input: {
+  mode: AssistantIntentMode;
+  confidence: number;
+  requiresClarification: boolean;
+  reasonCode: string;
+  explicitOverride?: boolean;
+}): AssistantIntentClassification {
+  return {
+    mode: input.mode,
+    confidence: input.confidence,
+    requiresClarification: input.requiresClarification,
+    reason: input.reasonCode,
+    reasonCode: input.reasonCode,
+    explicitOverride: input.explicitOverride === true,
+  };
+}
+
+export function normalizeAssistantIntentModeOverride(value: unknown): AssistantIntentModeOverride {
+  if (value === "Chat" || value === "chat") return "Chat";
+  if (value === "Action" || value === "action") return "Action";
+  return "Auto";
+}
+
+export function stripExplicitActionMarker(message: string) {
+  const trimmed = message.trim();
+  const lower = trimmed.toLowerCase();
+  for (const marker of EXPLICIT_ACTION_PREFIXES) {
+    const normalizedMarker = marker.toLowerCase();
+    if (lower.startsWith(normalizedMarker)) return trimmed.slice(marker.length).trim();
+  }
+  return trimmed;
+}
+
+function hasExplicitActionMarker(message: string) {
+  return stripExplicitActionMarker(message) !== message.trim();
+}
+
 function hasActionVerb(text: string) {
   return hasAny(text, ACTION_VERBS);
 }
@@ -117,30 +168,45 @@ function hasOperationObject(text: string) {
   return false;
 }
 
-export function classifyAssistantIntent(input: { message: string; hasSelectedDevice?: boolean }): AssistantIntentClassification {
+export function classifyAssistantIntent(input: { message: string; hasSelectedDevice?: boolean; intentModeOverride?: AssistantIntentModeOverride | string | null }): AssistantIntentClassification {
+  const override = normalizeAssistantIntentModeOverride(input.intentModeOverride);
+  if (override === "Chat") {
+    return result({ mode: "conversation", confidence: 1, requiresClarification: false, reasonCode: "ui_chat_override", explicitOverride: true });
+  }
+  if (override === "Action") {
+    return result({ mode: "action_request", confidence: 1, requiresClarification: false, reasonCode: "ui_action_override", explicitOverride: true });
+  }
+  if (hasExplicitActionMarker(input.message)) {
+    return result({ mode: "action_request", confidence: 1, requiresClarification: false, reasonCode: "explicit_action_marker", explicitOverride: true });
+  }
+
   const text = normalize(input.message);
   const hasSelectedDevice = input.hasSelectedDevice === true;
-  if (!text) return { mode: "conversation", confidence: 1, requiresClarification: true, reason: "empty_message" };
+  if (!text) return result({ mode: "conversation", confidence: 1, requiresClarification: true, reasonCode: "empty_message" });
 
   if (isAdviceAboutAction(text)) {
-    return { mode: "conversation", confidence: 0.9, requiresClarification: false, reason: "advice_or_safety_question" };
+    return result({ mode: "conversation", confidence: 0.9, requiresClarification: false, reasonCode: "advice_or_safety_question" });
   }
 
   if (isChatPhrase(text) && !hasInstructionShape(text)) {
-    return { mode: "conversation", confidence: 0.88, requiresClarification: false, reason: "chat_phrase" };
+    return result({ mode: "conversation", confidence: 0.88, requiresClarification: false, reasonCode: "chat_phrase" });
   }
 
   if (isDeviceQuestion(text, hasSelectedDevice)) {
-    return { mode: "device_question", confidence: 0.86, requiresClarification: false, reason: "read_only_selected_device_question" };
+    return result({ mode: "device_question", confidence: 0.86, requiresClarification: false, reasonCode: "read_only_selected_device_question" });
   }
 
   if (isAmbiguousAction(text)) {
-    return { mode: "conversation", confidence: 0.45, requiresClarification: true, reason: "ambiguous_operation_text" };
+    return result({ mode: "conversation", confidence: 0.45, requiresClarification: true, reasonCode: "ambiguous_operation_text" });
   }
 
   if (hasActionVerb(text) && hasInstructionShape(text) && hasOperationObject(text) && !isAdviceAboutAction(text)) {
-    return { mode: "action_request", confidence: 0.84, requiresClarification: false, reason: "explicit_operation_instruction" };
+    return result({ mode: "action_request", confidence: 0.84, requiresClarification: false, reasonCode: "explicit_operation_instruction" });
   }
 
-  return { mode: "conversation", confidence: hasSelectedDevice ? 0.78 : 0.82, requiresClarification: false, reason: "default_conversation" };
+  return result({ mode: "conversation", confidence: hasSelectedDevice ? 0.78 : 0.82, requiresClarification: false, reasonCode: "default_conversation" });
+}
+
+export function shouldAskProviderForIntentClassification(classification: AssistantIntentClassification) {
+  return classification.confidence < ASSISTANT_INTENT_PROVIDER_THRESHOLD;
 }

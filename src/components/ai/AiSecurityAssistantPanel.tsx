@@ -12,6 +12,7 @@ import {
   normalizeObject,
   sendAiMessage,
   type AiActionIntent,
+  type AiIntentModeOverride,
   type AiMessage,
   type AiProviderStatus,
   type SecuritySummary,
@@ -38,6 +39,8 @@ const EXAMPLES = [
   "FortiGate: create VIP for port 443",
   "MikroTik: change SSH port to 22022 trusted source 192.168.1.0/24",
 ];
+
+const INTENT_MODE_OPTIONS: AiIntentModeOverride[] = ["Auto", "Chat", "Action"];
 
 const safeNumber = (value: unknown): number => {
   const n = Number(value ?? 0);
@@ -431,6 +434,7 @@ export default function AiSecurityAssistantPanel() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [assistantMode, setAssistantMode] = useState<string | null>(null);
+  const [intentModeOverride, setIntentModeOverride] = useState<AiIntentModeOverride>("Auto");
   const previousTargetDeviceId = useRef<string | null>(null);
   const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string | null; deviceId: string | null; initialRequest: string }>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
@@ -478,6 +482,7 @@ export default function AiSecurityAssistantPanel() {
     setHardeningLoading(false);
     setRecommendationWorking(null);
     setInput("");
+    setIntentModeOverride("Auto");
     if (activeSessionId) {
       void clearAiSessionMessages(activeSessionId).catch((reason: unknown) => {
         setTechnicalError(reason instanceof Error ? reason.message : "پاک‌کردن سابقه سمت سرور ناموفق بود.");
@@ -624,6 +629,7 @@ export default function AiSecurityAssistantPanel() {
       selectedVendor: selectedVendor || undefined,
       selectedConnectorType: connectorTypeOf(selectedVendor),
       selectedDeviceName: selectedDevice?.name,
+      intentModeOverride,
     })
       .then((response) => {
         if (generation !== viewGeneration.current) return;
@@ -719,6 +725,22 @@ export default function AiSecurityAssistantPanel() {
               </option>
             ))}
           </select>
+        </div>
+        <div className="flex flex-col gap-1 text-left">
+          <span className="text-xs text-zinc-400">Mode</span>
+          <div className="inline-flex h-9 overflow-hidden rounded-md border border-zinc-700 bg-zinc-950" role="group" aria-label="Assistant mode">
+            {INTENT_MODE_OPTIONS.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setIntentModeOverride(mode)}
+                aria-pressed={intentModeOverride === mode}
+                className={`px-3 text-xs font-semibold transition-colors ${intentModeOverride === mode ? "bg-blue-700 text-white" : "text-zinc-300 hover:bg-zinc-900 hover:text-blue-200"}`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"

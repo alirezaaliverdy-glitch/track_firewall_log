@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { classifyAssistantIntent } from "../src/ai/assistant-intent-classifier.js";
+import { classifyAssistantIntent, stripExplicitActionMarker } from "../src/ai/assistant-intent-classifier.js";
 
 const chatService = readFileSync(new URL("../src/services/ai-chat.service.ts", import.meta.url), "utf8");
+const aiRoute = readFileSync(new URL("../src/routes/ai.ts", import.meta.url), "utf8");
 const assistantUi = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
 
 test("normal chat with a selected Cisco device remains conversation", () => {
@@ -56,6 +57,34 @@ test("explicit custom vendor-specific operation is action_request", () => {
   assert.equal(result.mode, "action_request");
 });
 
+test("explicit action markers force action_request before heuristics", () => {
+  const command = classifyAssistantIntent({ message: "command: restart nginx", hasSelectedDevice: true });
+  assert.equal(command.mode, "action_request");
+  assert.equal(command.reasonCode, "explicit_action_marker");
+  assert.equal(command.explicitOverride, true);
+
+  const persian = classifyAssistantIntent({ message: "\u062f\u0633\u062a\u0648\u0631: \u067e\u0648\u0631\u062a SSH \u0631\u0627 \u0628\u0647 22022 \u062a\u063a\u06cc\u06cc\u0631 \u0628\u062f\u0647", hasSelectedDevice: true });
+  assert.equal(persian.mode, "action_request");
+  assert.equal(stripExplicitActionMarker("prompt: restart nginx"), "restart nginx");
+});
+
+test("quoted or meta command questions do not become actions without prefix marker", () => {
+  const result = classifyAssistantIntent({ message: "\u0627\u06cc\u0646 \u062f\u0633\u062a\u0648\u0631 \u0686\u0647 \u06a9\u0627\u0631\u06cc \u0645\u06cc\u200c\u06a9\u0646\u062f\u061f", hasSelectedDevice: true });
+  assert.notEqual(result.mode, "action_request");
+});
+
+test("UI mode override can force chat or action planning", () => {
+  const chat = classifyAssistantIntent({ message: "command: restart nginx", hasSelectedDevice: true, intentModeOverride: "Chat" });
+  assert.equal(chat.mode, "conversation");
+  assert.equal(chat.reasonCode, "ui_chat_override");
+  assert.equal(chat.explicitOverride, true);
+
+  const action = classifyAssistantIntent({ message: "hello", hasSelectedDevice: true, intentModeOverride: "Action" });
+  assert.equal(action.mode, "action_request");
+  assert.equal(action.reasonCode, "ui_action_override");
+  assert.equal(action.explicitOverride, true);
+});
+
 test("change advice remains conversation even with a selected vendor device", () => {
   const result = classifyAssistantIntent({ message: "Cisco change management best practices?", hasSelectedDevice: true });
   assert.equal(result.mode, "conversation");
@@ -68,11 +97,14 @@ test("ambiguous operation text defaults to clarification, not execution", () => 
 });
 
 test("chat service gates planning behind classifier and returns explicit response contract", () => {
-  assert.match(chatService, /classifyAssistantIntent\(\{ message, hasSelectedDevice: Boolean\(earlySelectedDevice\?\.id\) \}\)/);
+  assert.match(aiRoute, /intentModeOverride/);
+  assert.match(chatService, /classifyAssistantIntent\(\{ message, hasSelectedDevice: Boolean\(earlySelectedDevice\?\.id\), intentModeOverride: input\.intentModeOverride \}\)/);
+  assert.match(chatService, /stripExplicitActionMarker\(message\)/);
   assert.match(chatService, /if \(classification\.mode !== "action_request"\)/);
   assert.match(chatService, /actionPlan: null/);
   assert.match(chatService, /mode: classification\.mode/);
   assert.match(chatService, /requiresClarification: classification\.requiresClarification/);
+  assert.match(chatService, /providerClassificationRequested/);
   assert.match(chatService, /responseContract: \{[\s\S]*mode: "action_request"/);
   assert.match(chatService, /const responseMode = "action_request"/);
 });
@@ -95,6 +127,9 @@ test("non-action branch does not call ActionPlan or execution backend", () => {
 });
 
 test("frontend treats chat and device_question as assistant-only and clears stale plans when switching devices", () => {
+  assert.match(assistantUi, /INTENT_MODE_OPTIONS/);
+  assert.match(assistantUi, /intentModeOverride/);
+  assert.match(assistantUi, /sendAiMessage\(sessionId, trimmed, selectedDeviceId \|\| undefined, \{[\s\S]*intentModeOverride/);
   assert.match(assistantUi, /response\.mode === "action_request" \? \{ support: response\.actionContract\.executionSupport/);
   assert.match(assistantUi, /setCreatedPlanId\(response\.actionPlan\?\.id \?\? null\)/);
   assert.match(assistantUi, /const canOfferGuidedStart = response\.mode === "action_request"/);

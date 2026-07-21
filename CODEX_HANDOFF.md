@@ -1,3 +1,16 @@
+**Phase B AI intent routing and ActionPlan separation (2026-07-21)**
+
+- Started from committed Phase A stabilization baseline `db73fef`.
+- Added deterministic Assistant mode handling before heuristic routing: `intentModeOverride` accepts `Auto`, `Chat`, and `Action`; `Chat` forces `conversation`, `Action` forces `action_request`, and `Auto` uses marker/classifier routing.
+- Added explicit action marker support for `دستور:`, `پرامپت:`, `پرامت:`, `command:`, `prompt:`, and `/action `. Marker text is stripped before catalog/custom planning so stored user messages keep the original text while planners receive the actual operation.
+- Assistant intent results now expose the Phase B response shape fields `reasonCode` and `explicitOverride`; ambiguous low-confidence text stays conversation/clarification and never reaches planning or execution.
+- Conversation and `device_question` modes still call the configured AI provider for the normal answer and return `actionPlan: null`, `shouldCreateActionPlan=false`, and no Action Center/execution handoff.
+- Added the compact Assistant UI mode selector (`Auto`, `Chat`, `Action`) and send it as `intentModeOverride`; switching selected devices still clears stale sessions, ActionPlans, debug state, and target context.
+- Extended custom connector plans with the Phase B `custom_action_plan_v2` fields (`schemaVersion`, `source`, `orderedOperations`, `verificationOperations`, `requiresExplicitApproval`) while preserving the existing v1 fields consumed by backend validation and connectors.
+- Validation passed: focused Assistant/custom contracts 45/45; backend build; frontend build; command catalog validation (191 items); i18n parity/Persian copy; UTF-8 guard (415 files); workflow lab guard; `git diff --check`; full isolated backend TAP `C:\tmp\phase-b-full-backend.tap` with 373 tests, 373 pass, 0 fail, 0 skipped.
+- Playwright MCP acceptance passed on `http://localhost:5173/assistant` with the authenticated browser session: current console errors 0 after reload; English UI rendered Auto/Chat/Action; browser-context CSRF-protected `/firewall-api/ai/chat` smoke verified Persian meta-command conversation, English Chat override no plan, English Action override action mode, English `device_question`, Persian explicit marker custom plan, MikroTik catalog plan, missing `serviceName` collection, FortiGate custom plan, and no `/action-center` or `/actions/:id/execute` calls.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` could not be updated because the `docs` directory is already deleted in the worktree from unrelated pre-existing changes; those deletions were preserved and not staged.
+
 **Phase A backend stabilization before Phase B (2026-07-21)**
 
 - Started from committed Phase A auth baseline `8f6e0e5`. The disconnected TAP run had already finished; parsed `C:\tmp\phase-a-full-backend.tap`: 370 tests, 348 pass, 22 fail.

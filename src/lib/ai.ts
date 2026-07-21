@@ -1,6 +1,7 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 
 export type AiRole = "user" | "assistant" | "system" | "tool";
+export type AiIntentModeOverride = "Auto" | "Chat" | "Action";
 
 export type AiMessage = {
   id: string;
@@ -449,7 +450,7 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
   };
 }
 
-export async function sendAiMessage(sessionId: string | null | undefined, message: string, deviceId?: string, selectedContext?: { selectedVendor?: string; selectedConnectorType?: string | null; selectedDeviceName?: string }) {
+export async function sendAiMessage(sessionId: string | null | undefined, message: string, deviceId?: string, selectedContext?: { selectedVendor?: string; selectedConnectorType?: string | null; selectedDeviceName?: string; intentModeOverride?: AiIntentModeOverride }) {
   const payload = await requestJson<unknown>("/ai/chat", {
     method: "POST",
     body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), ...(deviceId ? { deviceId, selectedDeviceId: deviceId } : {}), ...(selectedContext ?? {}), message }),

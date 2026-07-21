@@ -5,17 +5,28 @@ export type CustomConnectorVendor = "linux" | "mikrotik" | "fortigate" | "cisco"
 
 export type CustomCommandPlan = {
   schema: "ai_custom_connector_plan_v1";
+  schemaVersion: "custom_action_plan_v2";
   deviceId: string;
   vendor: CustomConnectorVendor;
   platform: string | null;
   intent: string;
+  source: "ai_custom";
   orderedCommands: string[];
+  orderedOperations: Array<{
+    id: string;
+    operationType: string;
+    typedParameters: Record<string, unknown>;
+    generatedCommand?: string;
+    dependsOn: string[];
+  }>;
   typedParameters: Record<string, unknown>;
   missingFields: string[];
   riskLevel: AiRiskLevel;
   expectedImpact: string;
   verificationCommands: string[];
+  verificationOperations: unknown[];
   rollbackGuidance: string[];
+  requiresExplicitApproval: true;
   connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh";
   executionTemplateRef: "linux_custom_connector_command" | "mikrotik_custom_connector_command" | "fortigate_custom_connector_command" | "cisco_custom_connector_command";
   backendValidation: {
@@ -203,6 +214,17 @@ function requestedVendorFromText(message: string): CustomConnectorVendor | null 
   return null;
 }
 
+function orderedOperations(input: { vendor: CustomConnectorVendor; commands: string[]; typedParameters: Record<string, unknown> }) {
+  const operationType = String(input.typedParameters.operation ?? `${input.vendor}_custom_command`);
+  return input.commands.map((command, index) => ({
+    id: `op-${index + 1}`,
+    operationType,
+    typedParameters: input.typedParameters,
+    generatedCommand: command,
+    dependsOn: index === 0 ? [] : [`op-${index}`],
+  }));
+}
+
 function basePlan(input: {
   message: string;
   device: Pick<Device, "id" | "type" | "vendor" | "capabilities">;
@@ -215,6 +237,7 @@ function basePlan(input: {
   const synthesized = synthesizeCommands({ message: input.message, vendor, parameters: params });
   const template = customTemplateForVendor(vendor);
   const commands = providedCommands.length ? providedCommands : synthesized.commands;
+  const typedParameters = { ...synthesized.typedParameters, ...asObject(params.typedParameters) };
   const verification = textArray(asObject(params.customCommandPlan).verificationCommands).length
     ? textArray(asObject(params.customCommandPlan).verificationCommands)
     : textArray(params.verificationCommands).length
@@ -222,17 +245,27 @@ function basePlan(input: {
       : synthesized.verificationCommands;
   return {
     schema: "ai_custom_connector_plan_v1",
+    schemaVersion: "custom_action_plan_v2",
     deviceId: input.device.id,
     vendor,
     platform: platformFromDevice(input.device),
     intent: input.message,
+    source: "ai_custom",
     orderedCommands: commands,
-    typedParameters: { ...synthesized.typedParameters, ...asObject(params.typedParameters) },
+    orderedOperations: orderedOperations({ vendor, commands, typedParameters }),
+    typedParameters,
     missingFields: synthesized.missingFields,
     riskLevel: synthesized.riskLevel,
     expectedImpact: text(params.expectedImpact) ?? synthesized.expectedImpact,
     verificationCommands: verification,
+    verificationOperations: verification.map((command, index) => ({
+      id: `verify-${index + 1}`,
+      operationType: "verification",
+      generatedCommand: command,
+      dependsOn: commands.length ? [`op-${commands.length}`] : [],
+    })),
     rollbackGuidance: textArray(params.rollbackGuidance).length ? textArray(params.rollbackGuidance) : synthesized.rollback,
+    requiresExplicitApproval: true,
     ...template,
     backendValidation: {
       normalized: true,

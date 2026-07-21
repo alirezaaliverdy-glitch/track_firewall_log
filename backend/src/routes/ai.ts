@@ -5,12 +5,13 @@ import { completeAiActionRequest, getAiActionIntent, listAiActionIntents, update
 import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
-  app.post<{ Body: { sessionId?: string; message?: string; deviceId?: string; selectedDeviceId?: string; selectedVendor?: string; selectedConnectorType?: string; selectedDeviceName?: string } }>("/api/ai/chat", async (request, reply) => {
+  app.post<{ Body: { sessionId?: string; message?: string; deviceId?: string; selectedDeviceId?: string; selectedVendor?: string; selectedConnectorType?: string; selectedDeviceName?: string; intentModeOverride?: "Auto" | "Chat" | "Action" | string } }>("/api/ai/chat", async (request, reply) => {
     try {
       return await chatWithAssistant({
         sessionId: request.body?.sessionId,
         message: request.body?.message ?? "",
-        deviceId: request.body?.selectedDeviceId ?? request.body?.deviceId
+        deviceId: request.body?.selectedDeviceId ?? request.body?.deviceId,
+        intentModeOverride: request.body?.intentModeOverride
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI chat failed";
