@@ -370,5 +370,5 @@ test("service status action keeps read result success semantics separate from SS
   assert.match(source, /serviceStatusReadSucceeded/);
   assert.match(source, /ActionType\.linux_check_service_status/);
   assert.match(source, /\["active", "inactive", "failed", "not_found", "unknown"\]/);
-  assert.match(source, /status: executionSucceeded \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/);
+  assert.match(source, /status: verification\.ok \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/);
 });

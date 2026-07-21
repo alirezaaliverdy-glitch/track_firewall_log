@@ -10,6 +10,7 @@ import { normalizeIntent } from "../actions/intent-normalizer.js";
 import { resolveTrustedManagementSource } from "./action-preflight.service.js";
 import { env } from "../config/env.js";
 import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
+import { customPlanFromParameters, validateCustomCommandPlan } from "../ai/custom-action-plan.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
@@ -257,6 +258,59 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
 
   if (!(plan.actionType in ActionType)) errors.push("actionType is not supported.");
   if (containsShellShape(parameters)) errors.push("Free-form shell, command, script, or exec parameters are not allowed.");
+
+  if (plan.actionType === ActionType.custom_vendor_action) {
+    const custom = validateCustomCommandPlan({ plan: customPlanFromParameters(parameters), device, actionType: plan.actionType });
+    errors.push(...custom.errors);
+    warnings.push(...custom.warnings);
+    const normalizedParameters = custom.normalizedPlan
+      ? {
+          ...parameters,
+          customCommandPlan: custom.normalizedPlan,
+          orderedCommands: custom.normalizedPlan.orderedCommands,
+          typedParameters: custom.normalizedPlan.typedParameters,
+          verificationCommands: custom.normalizedPlan.verificationCommands,
+          rollbackGuidance: custom.normalizedPlan.rollbackGuidance,
+          connectorType: custom.normalizedPlan.connectorType,
+          executionTemplateRef: custom.normalizedPlan.executionTemplateRef,
+          executionSupport: "connector",
+          implementationState: "implemented",
+          supportState: "verified",
+          executable: custom.valid && custom.missingFields.length === 0,
+          metadata: {
+            ...asObject(parameters.metadata),
+            source: "ai_custom_connector_plan",
+            vendor: custom.normalizedPlan.vendor,
+            platform: custom.normalizedPlan.platform,
+            actionType: ActionType.custom_vendor_action,
+            implementationState: "implemented",
+            executionSupport: "connector",
+            supportState: "verified",
+            supportReasonKey: "support.reason.customConnectorValidated",
+            executable: custom.valid && custom.missingFields.length === 0,
+            connectorType: custom.normalizedPlan.connectorType,
+            executionTemplateRef: custom.normalizedPlan.executionTemplateRef,
+            customCommandPlan: custom.normalizedPlan,
+            normalizedParams: custom.normalizedPlan.typedParameters,
+            requiredParamsSatisfied: custom.missingFields.length === 0,
+            missingFields: custom.missingFields,
+            rawCommandExecution: false,
+          }
+        }
+      : parameters;
+    return finish({
+      requiresApproval: true,
+      riskLevel: custom.normalizedPlan?.riskLevel ?? plan.riskLevel,
+      errors,
+      fieldErrors,
+      parameters: normalizedParameters,
+      actionType: plan.actionType,
+      warnings,
+      normalizedParameters,
+      rollbackJson: custom.rollbackJson,
+      device
+    });
+  }
 
   if (isMikroTikAction(plan.actionType)) {
     if (!device) {

@@ -197,11 +197,11 @@ test("command catalog AI fallback returns executable, guided-parameter, and manu
     url: "/api/commands/ai-propose",
     payload: { request: "وضعیت سرویس رو ببین", vendor: "linux", deviceId: linux.id },
   });
-  assert.equal(needsInput.statusCode, 200);
+  assert.equal(needsInput.statusCode, 201);
   assert.equal(needsInput.json().mode, "guided_workflow");
   assert.equal(needsInput.json().blueprintId, "catalog:linux.service-status");
   assert.deepEqual(needsInput.json().missingFields, ["serviceName"]);
-  assert.equal(needsInput.json().actionPlan, null);
+  assert.equal(needsInput.json().actionPlan.actionType, "linux_check_service_status");
 
   const noDevice = await app.inject({
     method: "POST",
@@ -220,5 +220,7 @@ test("command catalog AI fallback returns executable, guided-parameter, and manu
   });
   assert.equal(manual.statusCode, 200);
   assert.equal(manual.json().mode, "manual_or_not_supported");
-  assert.equal(manual.json().actionPlan, null);
+  assert.equal(manual.json().actionPlan.actionType, "custom_vendor_action");
+  assert.equal(manual.json().actionPlan.parametersJson.executable, false);
+  assert.equal(manual.json().actionPlan.parametersJson.executionSupport, "manual");
 });

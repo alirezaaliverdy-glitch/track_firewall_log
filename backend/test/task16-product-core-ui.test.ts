@@ -39,11 +39,10 @@ test("Action result view and formatter cover structured output and raw fallback"
   }
 });
 
-test("result navigation uses new tab helper with popup fallback", () => {
+test("result navigation uses route navigation for result review", () => {
   const center = read("../../src/components/actions/ActionCenterPanel.tsx");
   const helper = read("../../src/lib/actionResultNavigation.ts");
-  assert.match(center, /openActionResultInNewTab/);
-  assert.match(center, /مشاهده نتیجه در تب جدید/);
-  assert.match(helper, /window\.open/);
+  assert.match(center, /navigate\(actionResultUrl\(plan\.id\)\)/);
+  assert.match(center, /actionResultUrl\(plan\.id\)/);
   assert.match(helper, /\/actions\/\$\{encodeURIComponent\(actionPlanId\)\}\/result/);
 });

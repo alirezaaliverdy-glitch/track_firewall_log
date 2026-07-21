@@ -5,6 +5,7 @@ import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } 
 import { env } from "../config/env.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
+import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -101,6 +102,7 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.linux_read_users,
   ActionType.linux_read_docker,
   ActionType.linux_read_nginx,
+  ActionType.custom_vendor_action,
   "linux_list_running_services" as ActionType,
   "linux_list_failed_services" as ActionType,
   "linux_check_important_services" as ActionType
@@ -656,6 +658,11 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
 }
 
 function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
+  if (plan.actionType === ActionType.custom_vendor_action) {
+    const customPlan = customPlanFromParameters(plan.parametersJson);
+    if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
+    return customDryRun(customPlan);
+  }
   const parameters = asObject(plan.parametersJson);
   const protocol = protocolParam(parameters.protocol);
   const affectedPorts: number[] = [];
@@ -778,7 +785,19 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       return result;
     };
 
-    if (plan.actionType === ActionType.linux_daily_check) {
+    if (plan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(plan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
+      for (const [index, command] of customPlan.orderedCommands.entries()) {
+        await pushCommand(`custom step ${index + 1}`, command);
+      }
+      for (const [index, command] of customPlan.verificationCommands.entries()) {
+        await pushCommand(`custom verification ${index + 1}`, command);
+      }
+      rollbackJson.customConnectorPlan = true;
+      rollbackJson.steps = customPlan.rollbackGuidance;
+      rollbackJson.verification = { ok: true, summary: "Custom Linux command sequence and verification commands completed." };
+    } else if (plan.actionType === ActionType.linux_daily_check) {
       const daily = [
         "printf '===SYSTEM===\\n'; uptime; free -m; swapon --show 2>/dev/null || true; df -h; df -i",
         "printf '===SERVICES===\\n'; systemctl --failed --no-pager 2>/dev/null || true; systemctl is-active ssh sshd nginx apache2 httpd docker fail2ban 2>/dev/null || true",

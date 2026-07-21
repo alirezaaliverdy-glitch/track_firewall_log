@@ -6,6 +6,7 @@ import { mikroTikSupportedActions, validateMikroTikAction } from "../actions/mik
 import { env } from "../config/env.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { evaluateMikroTikExpertPolicy } from "../services/mikrotik-policy-guard.service.js";
+import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -43,7 +44,7 @@ export class MikroTikConnectorError extends Error {
   }
 }
 
-const SUPPORTED_ACTIONS: ActionType[] = mikroTikSupportedActions();
+const SUPPORTED_ACTIONS: ActionType[] = [...mikroTikSupportedActions(), ActionType.custom_vendor_action];
 
 const BASIC_COMMANDS = [
   "/system identity print",
@@ -522,6 +523,11 @@ export const mikrotikSshConnector: DeviceConnector = {
     return collectMikroTikStatus(device);
   },
   async dryRun(actionPlan: ActionPlan, device: Device): Promise<ConnectorDryRun> {
+    if (actionPlan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(actionPlan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "mikrotik") throw new MikroTikConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "MikroTik custom command plan is missing or targets another vendor.", 409);
+      return customDryRun(customPlan);
+    }
     const policy = evaluateMikroTikExpertPolicy(actionPlan, device);
     const validation = policy.validation;
     if (!policy.valid) {
@@ -560,6 +566,38 @@ export const mikrotikSshConnector: DeviceConnector = {
     };
   },
   async execute(actionPlan: ActionPlan, device: Device, audit?: ConnectorAudit): Promise<ConnectorExecutionResult> {
+    if (actionPlan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(actionPlan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "mikrotik") throw new MikroTikConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "MikroTik custom command plan is missing or targets another vendor.", 409);
+      const allowedCommands = new Set([...customPlan.orderedCommands, ...customPlan.verificationCommands]);
+      const commands: ConnectorExecutionResult["commands"] = [];
+      const credential = await getCredential(device);
+      await audit?.("policy_guard_passed", "MikroTik custom command validation passed.", { actionType: actionPlan.actionType, commandCount: allowedCommands.size, backupEnabled: false });
+      return withSshWithCredential(device, credential, async (client) => {
+        await audit?.("connection_attempt", "MikroTik SSH custom execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType, backupEnabled: false });
+        for (const [index, command] of customPlan.orderedCommands.entries()) {
+          const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
+          commands.push({ template: `custom step ${index + 1}`, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode });
+          await audit?.("command_executed", `MikroTik custom step ${index + 1} executed.`, { template: `custom step ${index + 1}`, command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
+          if (result.exitCode !== 0) throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || result.stdout || `RouterOS custom command failed: step ${index + 1}`, 502);
+        }
+        for (const [index, command] of customPlan.verificationCommands.entries()) {
+          const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
+          commands.push({ template: `custom verification ${index + 1}`, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode });
+          await audit?.("command_executed", `MikroTik custom verification ${index + 1} executed.`, { template: `custom verification ${index + 1}`, command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
+          if (result.exitCode !== 0) throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || result.stdout || `RouterOS custom verification failed: ${index + 1}`, 502);
+        }
+        await audit?.("rollback_available", "Rollback guidance is available for this MikroTik custom action.", { steps: customPlan.rollbackGuidance, verification: { ok: true, summary: "Custom MikroTik verification commands completed." } });
+        return {
+          executed: true,
+          actionType: actionPlan.actionType,
+          deviceId: device.id,
+          commands,
+          warnings: ["AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered MikroTik connector dispatch."],
+          rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification: { ok: true, summary: "Custom MikroTik verification commands completed." } }
+        };
+      });
+    }
     const policy = evaluateMikroTikExpertPolicy(actionPlan, device);
     const validation = policy.validation;
     if (!policy.valid) {

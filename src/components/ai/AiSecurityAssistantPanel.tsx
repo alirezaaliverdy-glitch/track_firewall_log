@@ -409,6 +409,9 @@ export default function AiSecurityAssistantPanel() {
   copy.newRequest = t("assistant.controls.newRequest");
   copy.safety = t("assistant.safetyBoundary");
   copy.provider = t("assistant.aiProvider");
+  copy.safetyText = isFa
+    ? "AI may generate new commands and ActionPlans, but it cannot execute directly. Backend validation, preview, explicit approval, PolicyGuard, registered connector dispatch, verification, and audit are mandatory."
+    : "AI may generate new commands and ActionPlans, but it cannot execute directly. Backend validation, preview, explicit approval, PolicyGuard, registered connector dispatch, verification, and audit are mandatory.";
   const viewGeneration = useRef(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);

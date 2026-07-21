@@ -116,6 +116,11 @@ export default function DashboardPage() {
           <Link to="/actions?view=pending" className="primary-link">Review pending approvals</Link>
           <Link to="/actions?view=history&status=failed" className="secondary-link">Investigate failed actions</Link>
           <Link to="/assets/devices/new" className="secondary-link">Register device</Link>
+          <Link to="/assets/devices" className="secondary-link">Equipment inventory</Link>
+          <Link to="/tools/network-check" className="secondary-link">Network quick check</Link>
+          <Link to="/tools" className="secondary-link">Toolbox</Link>
+          <Link to="/tools/nmap" className="secondary-link">Nmap scan</Link>
+          <Link to="/tools/monitors" className="secondary-link">Monitors</Link>
           <Link to="/monitoring/linux" className="secondary-link">Linux monitoring</Link>
           <Link to="/security/findings" className="secondary-link">Findings</Link>
         </div>

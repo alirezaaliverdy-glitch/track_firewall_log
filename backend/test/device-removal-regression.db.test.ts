@@ -5,7 +5,7 @@ import { assertSafeTestDatabaseEnvironment } from "../src/testing/test-database-
 
 assertSafeTestDatabaseEnvironment();
 
-test("DELETE succeeds while the linked Asset remains visible in equipment inventory", async () => {
+test("DELETE archives the linked Asset so it is hidden from active equipment inventory", async () => {
   const [{ buildApp }, { prisma, shutdownDatabase }] = await Promise.all([
     import("../src/app.js"),
     import("../src/db/prisma.js")
@@ -37,14 +37,15 @@ test("DELETE succeeds while the linked Asset remains visible in equipment invent
     assetId = linkedAsset.id;
 
     const removed = await app.inject({ method: "DELETE", url: `/api/devices/${deviceId}` });
-    assert.equal(removed.statusCode, 204);
+    assert.equal(removed.statusCode, 200);
+    assert.equal(removed.json<{ inventoryStatus: string; visibleInActiveInventory: boolean }>().inventoryStatus, "archived");
+    assert.equal(removed.json<{ inventoryStatus: string; visibleInActiveInventory: boolean }>().visibleInActiveInventory, false);
 
     const equipment = await app.inject({ method: "GET", url: "/api/assets" });
     assert.equal(equipment.statusCode, 200);
     const visible = equipment.json<{ assets: Array<{ id: string; deviceId: string | null }> }>().assets
       .find((asset) => asset.id === assetId);
-    assert.ok(visible, "orphan Asset remains visible after successful Device deletion");
-    assert.equal(visible.deviceId, null, "onDelete: SetNull detached the Asset from the deleted Device");
+    assert.equal(visible, undefined, "archived Asset is hidden from active equipment inventory");
   } finally {
     if (deviceId) await prisma.device.deleteMany({ where: { id: deviceId } });
     if (assetId) await prisma.asset.deleteMany({ where: { id: assetId } });

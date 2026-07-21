@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildApp } from "../src/app.js";
@@ -10,10 +11,9 @@ const deviceUi = readFileSync(new URL("../../src/features/assets/pages/AssetDeta
 const assetTable = readFileSync(new URL("../../src/features/assets/components/AssetTable.tsx", import.meta.url), "utf8");
 
 test("device and vendor navigation expose overview, edit, and guarded delete controls", () => {
-  assert.match(assetTable, /vendor-summary-link/);
-  assert.match(assetTable, /\/assets\/vendors\/fortigate/);
-  assert.match(deviceUi, /ویرایش تجهیز/);
-  assert.match(deviceUi, /ذخیره تغییرات/);
+  assert.match(assetTable, /const openPath = "\/assets\/devices\/" \+ workspaceId/);
+  assert.match(deviceUi, /workspace\.editDevice/);
+  assert.match(deviceUi, /common\.saveChanges/);
   assert.match(deviceUi, /deleteDevice\(workspace\.device\.id\)/);
   assert.match(deviceUi, /deleteName\.trim\(\) !== workspace\.device\.name/);
 });
@@ -39,7 +39,8 @@ test("a temporary device can be edited and deleted through the real API", async 
   const app = await buildApp({ authRequired: false });
   let id = "";
   try {
-    const created = await app.inject({ method: "POST", url: "/api/devices", payload: { name: `Temporary management ${Date.now()}`, vendor: "Linux", type: "linux_edge", host: "192.0.2.240", managementPort: 22, protocol: "ssh", environment: "lab", tags: ["temporary"], capabilities: {} } });
+    const suffix = randomUUID();
+    const created = await app.inject({ method: "POST", url: "/api/devices", payload: { name: `Temporary management ${suffix}`, vendor: "Linux", type: "linux_edge", host: `temporary-${suffix}.invalid`, managementPort: 22, protocol: "ssh", environment: "lab", tags: ["temporary"], capabilities: {} } });
     assert.equal(created.statusCode, 201);
     id = created.json().id;
     const updated = await app.inject({ method: "PATCH", url: `/api/devices/${id}`, payload: { name: "Temporary management edited", managementPort: 22022 } });
@@ -47,7 +48,9 @@ test("a temporary device can be edited and deleted through the real API", async 
     assert.equal(updated.json().name, "Temporary management edited");
     assert.equal(updated.json().managementPort, 22022);
     const removed = await app.inject({ method: "DELETE", url: `/api/devices/${id}` });
-    assert.equal(removed.statusCode, 204);
+    assert.equal(removed.statusCode, 200);
+    assert.equal(removed.json().inventoryStatus, "archived");
+    assert.equal(removed.json().visibleInActiveInventory, false);
     id = "";
   } finally {
     if (id) await app.inject({ method: "DELETE", url: `/api/devices/${id}` });

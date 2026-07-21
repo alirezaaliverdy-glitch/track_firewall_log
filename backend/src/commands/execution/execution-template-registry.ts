@@ -23,6 +23,7 @@ const templates: ExecutionTemplate[] = [
   { id: "linux_lock_user", actionType: "linux_lock_user", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_unlock_user", actionType: "linux_unlock_user", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_daily_check", actionType: "linux_daily_check", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_custom_connector_command", actionType: "custom_vendor_action", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "mikrotik_list_management_services", actionType: "mikrotik_list_management_services", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
   { id: "mikrotik_check_firewall_filter", actionType: "mikrotik_list_filter_rules", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
   { id: "mikrotik_check_nat_exposure", actionType: "mikrotik_list_nat_rules", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
@@ -30,6 +31,7 @@ const templates: ExecutionTemplate[] = [
   { id: "mikrotik_block_ip", actionType: "mikrotik_block_ip", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
   { id: "mikrotik_backup_config", actionType: "mikrotik_create_backup", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "mikrotik_daily_check", actionType: "mikrotik_daily_check", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_custom_connector_command", actionType: "custom_vendor_action", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "fortigate_daily_check", actionType: "fortigate_daily_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_interfaces", actionType: "fortigate_show_interfaces", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_route_dns_check", actionType: "fortigate_route_dns_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
@@ -42,6 +44,8 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "fortigate_show_vpn_status", actionType: "fortigate_show_vpn_status", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_ha_vdom_zone", actionType: "fortigate_show_ha_vdom_zone", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_guided_vpn_setup", actionType: "fortigate_guided_vpn_setup", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "fortigate_custom_connector_command", actionType: "custom_vendor_action", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
+  ,{ id: "cisco_custom_connector_command", actionType: "custom_vendor_action", connectorType: "cisco-ios-xe-ssh", handler: "ciscoIosXePlanner" }
   ,...executableCiscoOperations().map((operation) => ({ id: operation.executionTemplateRef!, actionType: "generic_security_action", connectorType: "cisco-ios-xe-ssh" as const, handler: "ciscoIosXePlanner" }))
   ,...FORTIGATE_FULL_CONTROL_ACTION_TYPES.map((actionType) => ({ id: actionType, actionType, connectorType: "fortigate-ssh" as const, handler: "fortigatePlanner" }))
 ];

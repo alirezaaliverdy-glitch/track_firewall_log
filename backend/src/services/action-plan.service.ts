@@ -31,6 +31,7 @@ import { buildFortiGateDailyCheck, parseFortiGateReadOnlyResult } from "../forti
 import { normalizeFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 import { getExecutionTemplate, type ExecutionTemplate } from "../commands/execution/execution-template-registry.js";
 import type { ConnectorExecutionResult, DeviceConnector } from "../connectors/types.js";
+import { customPlanFromParameters, customTemplateForVendor, customVendorFromDevice } from "../ai/custom-action-plan.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -346,6 +347,13 @@ const CONNECTOR_TYPE_TO_NAME: Record<ExecutionTemplate["connectorType"], DeviceC
   "cisco-ios-xe-ssh": "cisco"
 };
 
+const CONNECTOR_TYPE_NAME_ALIASES: Record<ExecutionTemplate["connectorType"], string[]> = {
+  "linux-ssh": ["linux_edge", "linux", "linux-ssh"],
+  "mikrotik-ssh": ["mikrotik", "routeros", "mikrotik-ssh"],
+  "fortigate-ssh": ["fortigate", "fortinet", "fortigate-ssh"],
+  "cisco-ios-xe-ssh": ["cisco", "cisco-ios-xe-ssh", "cisco-iosxe-ssh"]
+};
+
 type ExecutionPipelineResolution = {
   template: ExecutionTemplate;
   connector: DeviceConnector;
@@ -463,6 +471,16 @@ async function ensureControlledCatalogAction(plan: ActionPlan) {
     throw new ActionExecutionError("PREVIEW_ONLY_GUIDED_ACTION", "این اکشن هنوز اجرای واقعی کامل ندارد.", 409);
   }
   const device = plan.deviceId ? await prisma.device.findUnique({ where: { id: plan.deviceId } }) : null;
+  const customPlan = customPlanFromParameters(plan.parametersJson);
+  if (plan.actionType === ActionType.custom_vendor_action && customPlan && previewMetadata.source === "ai_custom_connector_plan") {
+    const selectedVendor = customVendorFromDevice(device);
+    const expected = customTemplateForVendor(customPlan.vendor);
+    if (!device) throw new ActionExecutionError("DEVICE_REQUIRED", "Custom connector ActionPlan requires a selected device.", 409);
+    if (!selectedVendor || selectedVendor !== customPlan.vendor) throw new ActionExecutionError("CUSTOM_VENDOR_MISMATCH", "Custom command vendor does not match the selected device.", 409);
+    if (customPlan.connectorType !== expected.connectorType || customPlan.executionTemplateRef !== expected.executionTemplateRef) throw new ActionExecutionError("CUSTOM_TEMPLATE_MISMATCH", "Custom command template does not match the selected vendor connector.", 409);
+    if (previewExecutionSupport !== "connector") throw new ActionExecutionError("CUSTOM_CONNECTOR_REQUIRED", "Custom ActionPlan execution requires connector support.", 409);
+    return { controlled: true, catalogCommandId: null, source: "ai_custom_connector_plan", executionTemplateRef: customPlan.executionTemplateRef, connectorType: customPlan.connectorType, vendor: customPlan.vendor };
+  }
   const productCatalog = resolveCatalogAction(plan, device);
   if (productCatalog.matched) {
     if (!productCatalog.valid) throw new ActionExecutionError(productCatalog.code, productCatalog.messageFa, 409);
@@ -496,12 +514,12 @@ function registeredConnectorNameFor(template: ExecutionTemplate) {
 }
 
 function connectorMatchesTemplate(connector: DeviceConnector, template: ExecutionTemplate) {
-  return connector.name === registeredConnectorNameFor(template);
+  return CONNECTOR_TYPE_NAME_ALIASES[template.connectorType].includes(String(connector.name));
 }
 
 function isRegisteredConnector(connector: DeviceConnector, template: ExecutionTemplate) {
+  if (!connectorMatchesTemplate(connector, template)) return false;
   return getDeviceConnectors().some((registered) =>
-    registered.name === connector.name &&
     connectorMatchesTemplate(registered, template) &&
     registered.supportedActions.includes(template.actionType as ActionType)
   );
@@ -777,7 +795,8 @@ export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "st
     return new ActionExecutionError("PREVIEW_ONLY_GUIDED_ACTION", "این اکشن هنوز اجرای واقعی کامل ندارد.");
   }
   const productCatalogControlled = ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(String(metadata.source)) && metadata.supportState === "verified" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
-  const controlled = productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
+  const customConnectorControlled = plan.actionType === ActionType.custom_vendor_action && metadata.source === "ai_custom_connector_plan" && metadata.supportState === "verified" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
+  const controlled = customConnectorControlled || productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);
   if (plan.status !== ActionPlanStatus.approved && !(readOnly && plan.status === ActionPlanStatus.dry_run_ready)) {

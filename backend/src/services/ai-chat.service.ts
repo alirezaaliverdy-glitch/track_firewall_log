@@ -15,6 +15,7 @@ import { buildAiStructuredActionPlan, type AiStructuredActionPlan } from "../ai/
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { env } from "../config/env.js";
 import { classifyAssistantIntent, type AssistantIntentClassification } from "../ai/assistant-intent-classifier.js";
+import { buildCustomCommandPlan } from "../ai/custom-action-plan.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -236,6 +237,92 @@ function customReviewOnlyActionPlanParameters(input: {
   };
 }
 
+function customConnectorActionPlanParameters(input: {
+  message: string;
+  actionVendor: string;
+  resolution: ReturnType<typeof resolveAiTemplate>;
+  structuredIntent: StructuredAiIntent | null;
+  structuredPlan: AiStructuredActionPlan;
+  customCommandPlan: NonNullable<ReturnType<typeof buildCustomCommandPlan>>;
+}) {
+  const aiParameters = asObject(input.structuredIntent?.parameters);
+  const missingFields = Array.from(new Set([...input.customCommandPlan.missingFields, ...input.resolution.missingFields]));
+  const typedParameters = input.customCommandPlan.typedParameters;
+  const suggestedPrechecks = input.structuredIntent?.suggestedPrechecks ?? [];
+  const suggestedVerification = input.customCommandPlan.verificationCommands.length ? input.customCommandPlan.verificationCommands : input.structuredIntent?.suggestedVerification ?? [];
+  const suggestedRollback = input.customCommandPlan.rollbackGuidance.length ? input.customCommandPlan.rollbackGuidance : input.structuredIntent?.suggestedRollback ?? [];
+  return {
+    ...aiParameters,
+    ...typedParameters,
+    vendor: input.actionVendor,
+    userRequest: input.message,
+    source: "ai_custom_connector_plan",
+    implementationState: "implemented",
+    executionSupport: "connector",
+    supportState: "verified",
+    supportReasonKey: "support.reason.customConnectorValidated",
+    executable: missingFields.length === 0,
+    connectorType: input.customCommandPlan.connectorType,
+    executionTemplateRef: input.customCommandPlan.executionTemplateRef,
+    customCommandPlan: input.customCommandPlan,
+    orderedCommands: input.customCommandPlan.orderedCommands,
+    typedParameters,
+    normalizedParams: typedParameters,
+    requiredParamsSatisfied: missingFields.length === 0,
+    missingFields,
+    aiStructuredPlan: input.structuredPlan,
+    expectedImpact: input.customCommandPlan.expectedImpact,
+    suggestedPrechecks,
+    suggestedVerification,
+    suggestedRollback,
+    rollbackGuidance: suggestedRollback,
+    requiresExplicitReview: true,
+    backendExecutionRequired: true,
+    rawCommandExecution: false,
+    metadata: {
+      source: "ai_custom_connector_plan",
+      catalogCommandId: null,
+      catalogVersion: COMMAND_CATALOG_VERSION,
+      catalogTitleFa: "\u0628\u0631\u0646\u0627\u0645\u0647 \u0633\u0641\u0627\u0631\u0634\u06cc \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06cc",
+      vendor: input.customCommandPlan.vendor,
+      platform: input.customCommandPlan.platform,
+      actionType: "custom_vendor_action",
+      requestedActionType: input.resolution.canonicalActionType,
+      implementationState: "implemented",
+      executionSupport: "connector",
+      supportState: "verified",
+      supportReasonKey: "support.reason.customConnectorValidated",
+      executable: missingFields.length === 0,
+      connectorType: input.customCommandPlan.connectorType,
+      executionTemplateRef: input.customCommandPlan.executionTemplateRef,
+      customCommandPlan: input.customCommandPlan,
+      orderedCommands: input.customCommandPlan.orderedCommands,
+      typedParameters,
+      normalizedParams: typedParameters,
+      requiredParamsSatisfied: missingFields.length === 0,
+      missingFields,
+      aiStructuredPlan: input.structuredPlan,
+      structuredStepCount: input.customCommandPlan.orderedCommands.length,
+      executableStepCount: missingFields.length === 0 ? input.customCommandPlan.orderedCommands.length : 0,
+      blockedStepCount: 0,
+      executionEligibility: missingFields.length === 0 ? "ready_for_action_center" : "needs_parameters",
+      expectedImpact: input.customCommandPlan.expectedImpact,
+      suggestedPrechecks,
+      suggestedVerification,
+      suggestedRollback,
+      rollbackGuidance: suggestedRollback,
+      requiresExplicitReview: true,
+      backendExecutionRequired: true,
+      rawCommandExecution: false,
+      previewGenerated: false,
+      executed: false,
+      connectorInvoked: false,
+      lastExecutionStatus: "not_started",
+      reviewOnly: false
+    }
+  };
+}
+
 function selectedDeviceSupportsConnector(device: { protocol?: string | null } | null, connectorType: string | null) {
   if (!device || !connectorType) return false;
   if (connectorType.endsWith("-ssh")) return device.protocol === "ssh";
@@ -430,11 +517,14 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     targetDeviceContext: context.targetDeviceContext,
   });
   const deterministicResolved = earlyResolution.mode === "executable_action_plan" || earlyResolution.mode === "guided_workflow" || Boolean((earlyResolution.catalogItem ?? earlyResolution.targetSupportedAction) && earlyResolution.missingFields.length > 0);
+  const deterministicUnsupportedAction = earlyResolution.mode === "manual_or_not_supported" && earlyResolution.executionSupport !== "connector";
   const catalogMatch = routeCatalogIntent(message);
-  const providerCandidate = deterministicResolved
+  const providerCandidate = deterministicResolved || deterministicUnsupportedAction
     ? {
-        assistantMessage: earlyResolution.mode === "executable_action_plan" ? "درخواست به اکشن کنترل‌شده کاتالوگ نگاشت شد." : earlyResolution.reasonFa || "این درخواست باید در فرم مرحله‌ای تکمیل شود.",
-        shouldCreateIntent: true,
+        assistantMessage: earlyResolution.mode === "executable_action_plan"
+          ? "درخواست به اکشن کنترل‌شده کاتالوگ نگاشت شد."
+          : earlyResolution.reasonFa || "این درخواست باید در فرم مرحله‌ای تکمیل شود.",
+        shouldCreateIntent: earlyResolution.mode !== "manual_or_not_supported",
         intent: catalogMatch.parsedIntent ? structuredFromParsed(catalogMatch.parsedIntent) : null,
         confidence: 1,
         provider: "mock" as const,
@@ -543,24 +633,45 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     resolutionMissing,
     structuredPlan
   });
+  const customCommandPlan = selectedDevice && !canCreateSupportedActionPlan
+    ? buildCustomCommandPlan({
+        message,
+        device: selectedDevice,
+        parameters: {
+          ...(effectiveStructuredIntent?.parameters ?? {}),
+          expectedImpact: effectiveStructuredIntent?.expectedImpact,
+          rollbackGuidance: effectiveStructuredIntent?.suggestedRollback,
+          verificationCommands: effectiveStructuredIntent?.suggestedVerification,
+        },
+      })
+    : null;
+  const canCreateCustomConnectorActionPlan = Boolean(
+    selectedDevice &&
+    customCommandPlan &&
+    resolution.canonicalActionType === "custom_vendor_action"
+  );
   const actionVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;
-  const actionRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? "medium";
+  const actionRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? customCommandPlan?.riskLevel ?? "medium";
   const actionSupportState = resolution.catalogItem?.supportState ?? "verified";
   const actionSupportReasonKey = resolution.catalogItem?.supportReasonKey ?? "support.reason.verified";
   const actionTitleFa = resolution.catalogItem?.titleFa ?? resolution.targetSupportedAction?.titleFa ?? resolution.canonicalActionType;
   const actionPlan = canCreateSupportedActionPlan && selectedDevice && supportedActionForPlan
     ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, aiStructuredPlan: structuredPlan, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, aiStructuredPlan: structuredPlan, structuredStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.steps.length : 0, executableStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.executableStepCount : 0, blockedStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.blockedStepCount : 0, executionEligibility: structuredPlan.kind === "action_plan" ? structuredPlan.executionEligibility : "single_action", previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
+    : canCreateCustomConnectorActionPlan && selectedDevice && customCommandPlan
+      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customConnectorActionPlanParameters({ message, actionVendor, resolution, structuredIntent: effectiveStructuredIntent, structuredPlan, customCommandPlan }) })
     : canCreateReviewOnlyActionPlan && selectedDevice
       ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customReviewOnlyActionPlanParameters({ message, actionVendor, actionRiskLevel, resolution, structuredIntent: effectiveStructuredIntent, resolutionMissing, structuredPlan }) })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
-  const executionSupport = informationalChatOnly ? "manual" : resolution.executionSupport;
-  const implementationState = informationalChatOnly ? "manualOnly" : resolution.implementationState;
+  const actionPlanMetadata = actionPlan ? asObject(asObject(actionPlan.parametersJson).metadata) : {};
+  const customConnectorAction = actionPlanMetadata.source === "ai_custom_connector_plan";
+  const executionSupport = customConnectorAction ? "connector" : informationalChatOnly ? "manual" : resolution.executionSupport;
+  const implementationState = customConnectorAction ? "implemented" : informationalChatOnly ? "manualOnly" : resolution.implementationState;
   const canCreateActionPlan = Boolean(actionPlan);
   const manualOnly = implementationState === "manualOnly" || executionSupport !== "connector";
-  const executable = canCreateActionPlan && !manualOnly && resolution.mode === "executable_action_plan";
-  const actionPlanMetadata = actionPlan ? asObject(asObject(actionPlan.parametersJson).metadata) : {};
+  const contractMissingFields = customConnectorAction && customCommandPlan ? customCommandPlan.missingFields : resolutionMissing;
+  const executable = canCreateActionPlan && !manualOnly && (resolution.mode === "executable_action_plan" || customConnectorAction) && contractMissingFields.length === 0;
   const actionContract = {
     canCreateActionPlan,
     manualOnly,
@@ -575,7 +686,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       planState: String(actionPlanMetadata.planState ?? "draft"),
     } : null,
   };
-  const resolvedDebug = { ...debug, deviceId: selectedDevice?.id ?? actionPlan?.deviceId ?? debug.deviceId, missingFields: actionPlan ? resolutionMissing : debug.missingFields, canCreateActionPlan, reason: canCreateActionPlan ? null : debug.reason, blockedReason: canCreateActionPlan ? null : debug.blockedReason };
+  const resolvedDebug = { ...debug, deviceId: selectedDevice?.id ?? actionPlan?.deviceId ?? debug.deviceId, missingFields: actionPlan ? contractMissingFields : debug.missingFields, canCreateActionPlan, reason: canCreateActionPlan ? null : debug.reason, blockedReason: canCreateActionPlan ? null : debug.blockedReason };
   const canStartParameterizedGuidedAction = Boolean(
     selectedDevice &&
     resolution.catalogItem?.supportState === "verified" &&
@@ -607,7 +718,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     sessionId: session.id,
     answer: guidedAssistantText,
     confidence: Math.max(classification.confidence, resolution.confidence),
-    requiresClarification: resolutionMissing.length > 0 || resolution.mode === "clarification",
+    requiresClarification: contractMissingFields.length > 0 || resolution.mode === "clarification",
     message: userMessage,
     assistantMessage: guidedAssistantText,
     assistantMessageRecord: assistantMessage,
@@ -624,12 +735,12 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     actionSession: null,
     guidedActionUrl: null,
     vendor: resolution.canonicalVendor,
-    connectorType: resolution.connectorType,
+    connectorType: customConnectorAction && customCommandPlan ? customCommandPlan.connectorType : resolution.connectorType,
     deviceId: selectedDevice?.id ?? null,
     selectedDeviceName: selectedDevice?.name ?? null,
     clarification: resolution.mode === "clarification" ? { questionFa: resolution.questionFa, options: resolution.options ?? [] } : null,
-    mappedTemplate: resolution.executionTemplateRef,
-    missingFields: resolutionMissing,
+    mappedTemplate: customConnectorAction && customCommandPlan ? customCommandPlan.executionTemplateRef : resolution.executionTemplateRef,
+    missingFields: contractMissingFields,
     nextStepFa,
     warnings: executionSupport === "connector" ? [] : [resolution.reasonFa],
     resolution,
@@ -648,7 +759,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       answer: guidedAssistantText,
       actionPlan,
       confidence: Math.max(classification.confidence, resolution.confidence),
-      requiresClarification: resolutionMissing.length > 0 || resolution.mode === "clarification"
+      requiresClarification: contractMissingFields.length > 0 || resolution.mode === "clarification"
     }
   };
 }

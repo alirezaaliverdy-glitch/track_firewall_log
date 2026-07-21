@@ -189,11 +189,11 @@ test("Task 19.2-A Product State keeps implemented onboarding visible in Assets n
     "src/features/vendors/cisco/pages/CiscoOverviewPage.tsx",
     "src/features/vendors/pages/VendorDetailPage.tsx"
   ].map((file) => readFileSync(join(process.cwd(), "..", file), "utf8")).join("\n");
-  assert.match(sources, /ثبت دستگاه/);
-  assert.match(sources, /ثبت دستگاه جدید/);
-  assert.match(sources, /ثبت دستگاه FortiGate/);
-  assert.match(sources, /ثبت دستگاه MikroTik/);
-  assert.match(sources, /ثبت سرور Linux/);
+  assert.match(sources, /\/assets\/devices\/new/);
+  assert.match(sources, /\/assets\/vendors\/\$\{item\.key\}\/devices\/new/);
+  assert.match(sources, /fortigate:\s*"ثبت دستگاه FortiGate"/);
+  assert.match(sources, /mikrotik:\s*"ثبت دستگاه MikroTik"/);
+  assert.match(sources, /linux:\s*"ثبت سرور Linux"/);
   assert.match(sources, /assets\/vendors\/cisco\/devices\/new/);
 });
 
@@ -246,6 +246,6 @@ test("Task 19.1 R-F workspace exposes stored-data charts and capability-gated ve
     const source = readFileSync(join(process.cwd(), "..", "src", "features", "assets", "pages", "AssetDetailPage.tsx"), "utf8");
     for (const range of ["1h", "6h", "24h", "7d", "30d"]) assert.match(source, new RegExp(`\\"${range}\\"`));
     assert.match(source, /currentWorkspace\.vendor\.sections/);
-    assert.match(source, /No verified data is stored/);
+    assert.match(source, /workspace\.empty\.verifiedData/);
   } finally { await app.close(); }
 });

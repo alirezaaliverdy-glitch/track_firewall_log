@@ -1,3 +1,34 @@
+**Phase A backend stabilization before Phase B (2026-07-21)**
+
+- Started from committed Phase A auth baseline `8f6e0e5`. The disconnected TAP run had already finished; parsed `C:\tmp\phase-a-full-backend.tap`: 370 tests, 348 pass, 22 fail.
+- Isolated database gate was preserved: all backend validation used `prepare-isolated-test-database.ts`, which reported `firewall_log_analyzer_phase_a_test` on `127.0.0.1:5432`. No development/production DB, `.env`, runtime DB, backup, secret, or unrelated deletion was touched.
+- Failure matrix and resolution:
+  - #31 prompt selected-target wording: stale source-contract capitalization; source wording aligned, test passes.
+  - #77 custom Linux restart parsed as start: real product bug; fixed word-bound operation parsing.
+  - #90 Action Center connector evidence source marker: stale source contract; updated to current evidence fields.
+  - #96 device/vendor navigation source markers: stale UI contract; updated to current workspace route/i18n controls.
+  - #98 device delete expected 204: stale contract; current intended behavior is 200 archive result.
+  - #99 orphan-Asset defect assertion: stale regression test asserting the old bug; updated to archive/no-orphan contract.
+  - #100 linked Asset visible after delete: stale behavior test; updated to hidden archived inventory.
+  - #149 onboarding duplicate code: stale route contract; current ownership conflict code is `DEVICE_MANAGEMENT_IP_CONFLICT`.
+  - #150 duplicate unverified registration rejected: stale behavior; current intended behavior reuses/reactivates matching Device/Asset.
+  - #236 result popup/new tab source contract: stale UI contract; normal execution routes to result view.
+  - #237 success from raw execution boolean: stale backend source contract; success now depends on post-execution verification.
+  - #256 AI propose missing-parameter status/actionPlan: stale API contract; current behavior creates a draft ActionPlan and returns 201.
+  - #260 result popup/new tab source contract: stale UI contract; updated to route navigation.
+  - #264 VPN chat mode naming: stale test contract plus classifier gap; current mode is `action_request`, with no session/plan auto-created.
+  - #273 Linux guided connector mismatch: real product bug; connector/template validation now accepts registered aliases while still requiring registered template/action support.
+  - #282 VPN chat provider fallback: real product bug; deterministic unsupported/guided action requests no longer require external AI provider, and `build/setup/create VPN` classify as action requests.
+  - #311 service-status success source contract: stale backend contract; updated to verification-gated success.
+  - #332 stale approved close-port connector mismatch: same real connector alias bug as #273; fixed.
+  - #338 onboarding visibility hard-coded copy: stale source contract; updated to current routes/vendor labels/i18n architecture.
+  - #339 Dashboard missing tools links: real product navigation bug; restored links to tools and devices in operator focus.
+  - #342 workspace empty-state literal: stale i18n source contract; updated to `workspace.empty.verifiedData`.
+  - #350 Dashboard missing tools links: same real product navigation bug as #339; fixed.
+- Additional stabilization: made a device-history fixture use a unique `.invalid` hostname to avoid fixed management-address collisions in the isolated test database.
+- Validation passed: focused previously failing backend files, then full backend TAP `C:\tmp\phase-a-stabilization-full.tap` with 370 tests, 370 pass, 0 fail, 0 skipped.
+- Phase B may start only after this stabilization commit is created. Unrelated tracked doc/task deletions, unrelated connector/planner dirty files, `src/components/ai/AiSecurityAssistantPanel.tsx`, root prompt files, and runtime artifacts remain untouched/uncommitted unless already part of this stabilization scope.
+
 **AI Assistant custom-action safety refinement (2026-07-20)**
 
 - Preserved the three-mode Assistant contract: `conversation`, `device_question`, and `action_request`. Device selection remains optional context for chat and read-only questions; normal conversation does not create ActionPlans.

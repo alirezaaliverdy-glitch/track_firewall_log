@@ -91,7 +91,7 @@ test("Persian and English VPN chat intents stay in Assistant without auto-create
     assert.equal(response.statusCode, 200, response.body);
     const body = response.json();
     if (typeof body.sessionId === "string") chatSessionIds.push(body.sessionId);
-    assert.equal(body.mode, "manual_or_not_supported");
+    assert.equal(body.mode, "action_request");
     assert.equal(body.blueprintId, null);
     assert.equal(body.vendor, "fortigate");
     assert.equal(body.connectorType, "fortigate-ssh");
@@ -764,7 +764,7 @@ test("Bottom chatbot FortiGate VPN stays in Assistant and creates no ActionSessi
   });
   assert.equal(response.statusCode, 200, response.body);
   const body = response.json();
-  assert.equal(body.mode, "manual_or_not_supported");
+  assert.equal(body.mode, "action_request");
   assert.equal(body.blueprintId, null);
   assert.equal(typeof body.assistantMessage, "string");
   assert.equal(body.actionPlan, null);

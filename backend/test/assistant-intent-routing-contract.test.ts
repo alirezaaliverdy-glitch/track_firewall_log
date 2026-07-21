@@ -12,6 +12,12 @@ test("normal chat with a selected Cisco device remains conversation", () => {
   assert.equal(result.requiresClarification, false);
 });
 
+test("unrelated general question with a selected device remains conversation", () => {
+  const result = classifyAssistantIntent({ message: "Explain how BGP path selection works in general", hasSelectedDevice: true });
+  assert.equal(result.mode, "conversation");
+  assert.equal(result.requiresClarification, false);
+});
+
 test("advice request with a selected MikroTik device remains conversation", () => {
   const result = classifyAssistantIntent({ message: "Should we enable Winbox from the internet, or is that unsafe?", hasSelectedDevice: true });
   assert.equal(result.mode, "conversation");
@@ -20,6 +26,12 @@ test("advice request with a selected MikroTik device remains conversation", () =
 
 test("selected-device status question is a read-only device_question", () => {
   const result = classifyAssistantIntent({ message: "What is the memory and interface status on this device?", hasSelectedDevice: true });
+  assert.equal(result.mode, "device_question");
+  assert.equal(result.requiresClarification, false);
+});
+
+test("selected-device technical question remains read-only device_question", () => {
+  const result = classifyAssistantIntent({ message: "Which interfaces look risky on this selected device?", hasSelectedDevice: true });
   assert.equal(result.mode, "device_question");
   assert.equal(result.requiresClarification, false);
 });
@@ -63,6 +75,14 @@ test("chat service gates planning behind classifier and returns explicit respons
   assert.match(chatService, /requiresClarification: classification\.requiresClarification/);
   assert.match(chatService, /responseContract: \{[\s\S]*mode: "action_request"/);
   assert.match(chatService, /const responseMode = "action_request"/);
+});
+
+test("chat service supports connector-backed custom AI ActionPlans", () => {
+  assert.match(chatService, /buildCustomCommandPlan/);
+  assert.match(chatService, /canCreateCustomConnectorActionPlan/);
+  assert.match(chatService, /source: "ai_custom_connector_plan"/);
+  assert.match(chatService, /executionSupport: "connector"/);
+  assert.match(chatService, /rawCommandExecution: false/);
 });
 
 test("non-action branch does not call ActionPlan or execution backend", () => {

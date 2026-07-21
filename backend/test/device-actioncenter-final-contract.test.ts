@@ -48,9 +48,10 @@ test("Action Center exposes an operator-first preview and real execution contrac
   for (const path of ["/actions", "/actions/pending", "/actions/history", "/actions/:actionId", "/assets/devices/:deviceId"]) {
     assert.match(routes, new RegExp(path.replace(/[/:]/g, (character) => character === "/" ? "\\/" : ":")));
   }
-  assert.match(actionWorkspace, /connectorInvoked=true/);
+  assert.match(actionWorkspace, /selected\.evidence\.connectorInvoked/);
   assert.match(actionWorkspace, /connectorResult\.message/);
-  assert.match(actionPlanService, /executed:\s*false,\s*connectorInvoked:\s*true,\s*backupEnabled:\s*false,\s*error:\s*connectorError\.code/);
+  assert.match(actionPlanService, /executed:\s*false,\s*connectorInvoked:\s*true,\s*backupEnabled:\s*false/);
+  assert.match(actionPlanService, /verification:\s*\{\s*status:\s*"failed",\s*error:\s*connectorError\.code\s*\}/);
   assert.match(actionPlanService, /item\.actionType === actionType && item\.vendor === productVendor/);
   assert.match(deviceVerificationService, /lastSuccessAt:\s*successfulAttempt\?\.attemptedAt/);
   assert.match(css, /\.operator-connection--connected/);

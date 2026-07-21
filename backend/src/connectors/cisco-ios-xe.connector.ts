@@ -4,6 +4,7 @@ import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, Dev
 import { ciscoReadCommand } from "./cisco/ios-xe/cisco-iosxe.templates.js";
 import type { CiscoCliCommandSpec } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { findCiscoOperation, type CiscoOperationDefinition } from "../cisco/cisco-operation-registry.js";
+import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 
 function metadata(plan: ActionPlan) {
   const parameters = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson)
@@ -105,7 +106,7 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
 
 export const ciscoIosXeConnector: DeviceConnector = {
   name: "cisco",
-  supportedActions: [ActionType.generic_security_action],
+  supportedActions: [ActionType.generic_security_action, ActionType.custom_vendor_action],
   supports(device) {
     return Boolean(device && isCiscoIosXeSshCandidate(device));
   },
@@ -117,11 +118,16 @@ export const ciscoIosXeConnector: DeviceConnector = {
       canReadSystem: true,
       canExecuteWriteActions: true,
       canExecuteChangeSshPort: false,
-      supportedActions: [ActionType.generic_security_action]
+      supportedActions: [ActionType.generic_security_action, ActionType.custom_vendor_action]
     };
   },
   collectStatus: connection,
   async dryRun(plan): Promise<ConnectorDryRun> {
+    if (plan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(plan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "cisco") throw new Error("Cisco custom command plan is missing or targets another vendor.");
+      return customDryRun(customPlan);
+    }
     const operation = executableOperation(plan);
     return {
       plannedCommands: specsForOperation(operation, plan).map((spec) => spec.command),
@@ -136,6 +142,23 @@ export const ciscoIosXeConnector: DeviceConnector = {
     };
   },
   async execute(plan, device): Promise<ConnectorExecutionResult> {
+    if (plan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(plan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "cisco") throw new Error("Cisco custom command plan is missing or targets another vendor.");
+      const specs: CiscoCliCommandSpec[] = [
+        ...customPlan.orderedCommands.map((command, index) => ({ commandId: `custom step ${index + 1}`, command, write: true })),
+        ...customPlan.verificationCommands.map((command, index) => ({ commandId: `custom verification ${index + 1}`, command, write: false })),
+      ];
+      const result = await ciscoIosXeSshConnector.runCliCommands(device, specs);
+      return {
+        executed: result.connectorInvoked,
+        actionType: plan.actionType,
+        deviceId: device.id,
+        commands: result.results.map((entry) => ({ template: entry.commandId, stdout: entry.stdout, stderr: entry.stderr, exitCode: entry.exitCode })),
+        warnings: [...result.warnings, "AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered Cisco connector dispatch."],
+        rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification: { ok: true, summary: "Custom Cisco verification commands completed." } }
+      };
+    }
     const operation = executableOperation(plan);
     const specs = specsForOperation(operation, plan);
     const mustUseSpecRunner = specs.some((spec) => spec.write === true || spec.redactOutput === true);

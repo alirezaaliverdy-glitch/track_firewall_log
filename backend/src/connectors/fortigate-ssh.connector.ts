@@ -4,6 +4,7 @@ import { Client, type ConnectConfig } from "ssh2";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
 import { fortiGateSupportedActions } from "../actions/fortigate-action-catalog.js";
 import { env } from "../config/env.js";
+import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { resolveEphemeralSecretRef } from "../services/ephemeral-secret.service.js";
 import { compileFortiGateAction } from "../services/fortigate-command-compiler.js";
@@ -46,7 +47,7 @@ export class FortiGateConnectorError extends Error {
   }
 }
 
-const SUPPORTED_ACTIONS: ActionType[] = fortiGateSupportedActions();
+const SUPPORTED_ACTIONS: ActionType[] = [...fortiGateSupportedActions(), ActionType.custom_vendor_action];
 
 const BASIC_COMMANDS = [
   "get system status"
@@ -473,6 +474,11 @@ export const fortigateSshConnector: DeviceConnector = {
     return collectFortiGateStatus(device);
   },
   async dryRun(actionPlan: ActionPlan, device: Device): Promise<ConnectorDryRun> {
+    if (actionPlan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(actionPlan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "fortigate") throw new FortiGateConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "FortiGate custom command plan is missing or targets another vendor.", 409);
+      return customDryRun(customPlan);
+    }
     const policy = evaluateFortiGatePolicy(actionPlan, device);
     const validation = policy.validation;
     if (!policy.valid) throw new FortiGateConnectorError("CONNECTOR_ACTION_UNSUPPORTED", policy.errors.join(" "), 400);
@@ -492,6 +498,37 @@ export const fortigateSshConnector: DeviceConnector = {
     };
   },
   async execute(actionPlan: ActionPlan, device: Device, audit?: ConnectorAudit): Promise<ConnectorExecutionResult> {
+    if (actionPlan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(actionPlan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "fortigate") throw new FortiGateConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "FortiGate custom command plan is missing or targets another vendor.", 409);
+      const allowedCommands = new Set([...customPlan.orderedCommands, ...customPlan.verificationCommands]);
+      const commands: ConnectorExecutionResult["commands"] = [];
+      const credential = await getCredential(device);
+      await audit?.("policy_guard_passed", "FortiGate custom command validation passed.", { actionType: actionPlan.actionType, commandCount: allowedCommands.size, backupEnabled: false });
+      return withSshWithCredential(device, credential, async (client) => {
+        await audit?.("connection_attempt", "FortiGate SSH custom execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType, backupEnabled: false });
+        for (const [index, command] of customPlan.orderedCommands.entries()) {
+          const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
+          const commandResult = { template: `custom step ${index + 1}`, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+          assertNoFortiGateCliFailure(commandResult);
+          commands.push(commandResult);
+          await audit?.("command_executed", `FortiGate custom step ${index + 1} executed.`, { template: commandResult.template, command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
+          if (result.exitCode !== 0) throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || result.stdout || `FortiGate custom command failed: step ${index + 1}`, 502);
+        }
+        for (const [index, command] of customPlan.verificationCommands.entries()) {
+          const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
+          const commandResult = { template: `custom verification ${index + 1}`, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+          assertNoFortiGateCliFailure(commandResult);
+          commands.push(commandResult);
+          await audit?.("command_executed", `FortiGate custom verification ${index + 1} executed.`, { template: commandResult.template, command, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
+          if (result.exitCode !== 0) throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || result.stdout || `FortiGate custom verification failed: ${index + 1}`, 502);
+        }
+        const verification = { ok: true, summary: "Custom FortiGate verification commands completed." };
+        await audit?.("post_verification_passed", verification.summary, verification);
+        await audit?.("rollback_available", "Rollback guidance is available for this FortiGate custom action.", { steps: customPlan.rollbackGuidance, verification });
+        return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: ["AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered FortiGate connector dispatch."], rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification } };
+      });
+    }
     const rawParams = asObject(actionPlan.parametersJson);
     const pskSecretRef = typeof rawParams.pskSecretRef === "string" ? rawParams.pskSecretRef : undefined;
     const pskSecretValue = pskSecretRef ? resolveEphemeralSecretRef(pskSecretRef, "fortigate_ipsec_psk") : undefined;

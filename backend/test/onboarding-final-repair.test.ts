@@ -42,15 +42,15 @@ test("unverified registration is atomic and never invokes a connector", () => {
   assert.doesNotMatch(implementation, /testConnection|runReadOnlyCommands|selectDeviceConnector/);
 });
 
-test("unverified registration validates identity and rejects duplicates and plaintext secrets", () => {
+test("unverified registration validates identity, handles ownership conflicts, and rejects plaintext secrets", () => {
   assert.match(service, /assertNoSecrets\(input\)/);
   assert.match(service, /Management port must be an integer between 1 and 65535/);
   assert.match(service, /OnboardingDuplicateDeviceError/);
-  assert.match(routes, /ONBOARDING_DEVICE_DUPLICATE/);
+  assert.match(routes, /DEVICE_MANAGEMENT_IP_CONFLICT/);
   assert.match(routes, /reply\.code\(409\)/);
 });
 
-test("unverified registration creates one Device and linked Asset without a credential, then rejects a duplicate", async (t) => {
+test("unverified registration creates one Device and linked Asset without a credential, then reuses the same management identity", async (t) => {
   const suffix = Date.now().toString(36);
   const name = `unverified-${suffix}`;
   const host = `192.0.2.${Math.floor(Date.now() % 100) + 100}`;
@@ -87,9 +87,11 @@ test("unverified registration creates one Device and linked Asset without a cred
     method: "POST", url: `/api/device-onboarding/sessions/${duplicateSession.json().id}/register-unverified`,
     payload: { vendor: "linux", platform: "linux", connectionMethod: "ssh", name: `${name}-duplicate`, host, managementPort: 22, credentialId: "", site: "", location: "", environment: "lab" }
   });
-  assert.equal(duplicate.statusCode, 409);
-  assert.equal(duplicate.json().error.code, "ONBOARDING_DEVICE_DUPLICATE");
-  assert.equal(duplicate.json().error.existingDeviceId, deviceId);
+  assert.equal(duplicate.statusCode, 200);
+  assert.equal(duplicate.json().result.deviceId, deviceId);
+  assert.equal(duplicate.json().result.assetId, assetId);
+  assert.equal(await prisma.device.count(), before.devices + 1);
+  assert.equal(await prisma.asset.count(), before.assets + 1);
 });
 
 test("unsupported API is rejected, malformed credential is sanitized, and persisted sessions survive cache loss", async (t) => {

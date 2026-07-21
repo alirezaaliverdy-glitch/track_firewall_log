@@ -34,8 +34,8 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
   assert.equal(state.canExecute, false);
   const center = read("../../src/components/actions/ActionCenterPanel.tsx");
   const result = read("../../src/components/actions/ActionResultView.tsx");
-  assert.match(center, /openActionResultInNewTab/);
-  assert.match(center, /مشاهده نتیجه در تب جدید/);
+  assert.match(center, /navigate\(actionResultUrl\(plan\.id\)\)/);
+  assert.match(center, /actionResultUrl\(plan\.id\)/);
   assert.match(center, /disabled=\{Boolean\(working\)/);
   assert.match(result, /نتیجه اجرای دستور/);
   assert.match(result, /خروجی خام/);
@@ -45,7 +45,7 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
 test("backend stores actual connector result before succeeded", () => {
   const service = read("../src/services/action-plan.service.ts");
   assert.match(service, /serviceStatusReadSucceeded \|\| \(result\.executed && result\.commands\.length > 0/);
-  assert.match(service, /status: executionSucceeded \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/);
+  assert.match(service, /status: verification\.ok \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/);
   assert.match(service, /stdout: result\.commands\.map/);
   assert.match(service, /executor: connector\.name/);
 });

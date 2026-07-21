@@ -32,7 +32,7 @@ const READ_QUESTION_MARKERS = [
 ];
 
 const ACTION_VERBS = [
-  "create", "change", "delete", "restart", "configure", "config", "apply", "block", "enable", "disable",
+  "create", "build", "setup", "change", "delete", "restart", "configure", "config", "apply", "block", "enable", "disable",
   "update", "set", "add", "remove", "start", "stop", "reload", "assign", "open", "close", "allow", "deny", "execute", "run",
   "ایجاد", "بساز", "ساخت", "تغییر", "عوض", "حذف", "پاک", "ریستارت", "تنظیم", "کانفیگ", "اعمال",
   "بلاک", "مسدود", "فعال", "غیرفعال", "آپدیت", "اضافه", "بردار", "باز کن", "ببند", "اجازه", "deny",
@@ -85,6 +85,7 @@ function withoutVendorPrefix(text: string) {
 }
 
 function hasInstructionShape(text: string) {
+  if (hasAny(text, ["create", "build", "setup", "configure"])) return true;
   if (hasAny(text, INSTRUCTION_MARKERS)) return true;
   const commandText = withoutVendorPrefix(text);
   return ACTION_VERBS.some((verb) => {
