@@ -17,6 +17,8 @@ import {
 import { commandCatalogForVendor, VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { routeCatalogIntent } from "../actions/intent-router.js";
 import { cancelActionCenterItem, clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, updateActionCenterTarget } from "../services/action-center.service.js";
+import { requiredExecutionPermissionForRisk } from "../security/authorization.js";
+import { hasPermission } from "../security/permissions.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   const actor = (request: { authUser?: { username: string; role: string } }) => request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined;
@@ -136,6 +138,15 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/execute", async (request, reply) => {
     try {
+      const existingPlan = await getActionPlan(request.params.id);
+      const requiredPermission = requiredExecutionPermissionForRisk(existingPlan?.riskLevel);
+      if (request.authUser && !hasPermission(request.authUser.role, requiredPermission)) {
+        return reply.code(403).send({
+          error: "forbidden",
+          reasonCode: "HIGH_RISK_PERMISSION_REQUIRED",
+          messageFa: "نقش کاربری شما اجازه اجرای عملیات پرریسک را ندارد."
+        });
+      }
       const plan = await executeActionPlan(request.params.id, request.body ?? {});
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
@@ -154,6 +165,15 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/quick-execute", async (request, reply) => {
     try {
+      const existingPlan = await getActionPlan(request.params.id);
+      const requiredPermission = requiredExecutionPermissionForRisk(existingPlan?.riskLevel);
+      if (request.authUser && !hasPermission(request.authUser.role, requiredPermission)) {
+        return reply.code(403).send({
+          error: "forbidden",
+          reasonCode: "HIGH_RISK_PERMISSION_REQUIRED",
+          messageFa: "نقش کاربری شما اجازه اجرای عملیات پرریسک را ندارد."
+        });
+      }
       const plan = await quickExecuteActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) }, {
         trace: (stage, payload) => request.log.info({ ...payload, stage }, stage)
       });

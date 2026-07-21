@@ -38,7 +38,8 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
-import { AUTH_COOKIE_NAME, bootstrapAdmin, getSessionUser } from "./services/auth.service.js";
+import { bootstrapAdmin } from "./services/auth.service.js";
+import { registerSecurityPlugin } from "./plugins/security.plugin.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
   validateCommandCatalog(COMMAND_CATALOG);
@@ -91,19 +92,9 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
 
   const authRequired = options.authRequired !== false;
   if (authRequired) await withDatabaseStartupRetry("Authentication bootstrap", bootstrapAdmin);
+  await registerSecurityPlugin(app, { authRequired });
+
   await app.register(authRoutes);
-
-  const publicPaths = new Set(["/health", "/api/health", "/api/health/live", "/api/health/ready", "/api/auth/login", "/api/auth/logout", "/api/auth/me"]);
-  app.addHook("preHandler", async (request, reply) => {
-    const path = request.url.split("?", 1)[0];
-    if (!authRequired || !path.startsWith("/api/") || publicPaths.has(path)) return;
-    const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
-    if (!user) {
-      return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
-    }
-    request.authUser = user;
-  });
-
   await app.register(healthRoutes);
   await app.register(dashboardRoutes);
   await app.register(actionRoutes);

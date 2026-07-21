@@ -48,6 +48,7 @@ export async function authenticate(username: string, password: string) {
 export async function createSession(userId: string, metadata: { userAgent?: string; ipAddress?: string }) {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + env.authSessionTtlHours * 60 * 60 * 1000);
+  await pruneExpiredSessions();
   await prisma.authSession.create({
     data: { userId, tokenHash: hashSessionToken(token), expiresAt, ...metadata }
   });
@@ -65,6 +66,11 @@ export async function getSessionUser(token?: string) {
     return null;
   }
   const now = new Date();
+  const idleTimeoutMs = env.authSessionIdleMinutes * 60 * 1000;
+  if (now.getTime() - session.lastSeenAt.getTime() > idleTimeoutMs) {
+    await prisma.authSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    return null;
+  }
   if (now.getTime() - session.lastSeenAt.getTime() > 60_000) {
     void prisma.authSession.update({ where: { id: session.id }, data: { lastSeenAt: now } }).catch(() => undefined);
   }
@@ -74,4 +80,12 @@ export async function getSessionUser(token?: string) {
 export async function destroySession(token?: string) {
   if (!token) return;
   await prisma.authSession.deleteMany({ where: { tokenHash: hashSessionToken(token) } });
+}
+
+export async function destroyAllSessionsForUser(userId: string) {
+  await prisma.authSession.deleteMany({ where: { userId } });
+}
+
+export async function pruneExpiredSessions(now = new Date()) {
+  await prisma.authSession.deleteMany({ where: { expiresAt: { lte: now } } });
 }

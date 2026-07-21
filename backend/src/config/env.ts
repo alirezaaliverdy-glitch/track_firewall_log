@@ -172,7 +172,8 @@ export const env = {
   adminPassword: process.env.ADMIN_PASSWORD || "",
   adminDisplayName: process.env.ADMIN_DISPLAY_NAME?.trim() || "Administrator",
   authSessionSecret: process.env.AUTH_SESSION_SECRET || DEFAULT_AUTH_SESSION_SECRET,
-  authSessionTtlHours: parsePositiveInteger(process.env.AUTH_SESSION_TTL_HOURS, 12)
+  authSessionTtlHours: parsePositiveInteger(process.env.AUTH_SESSION_TTL_HOURS, 12),
+  authSessionIdleMinutes: parsePositiveInteger(process.env.AUTH_SESSION_IDLE_MINUTES, 120)
 };
 
 function validateProductionEnv() {

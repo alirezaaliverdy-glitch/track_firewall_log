@@ -10,6 +10,9 @@ import App from './App.tsx'
 import { AuthProvider } from './context/AuthContext.tsx'
 import ProtectedRoute from './components/auth/ProtectedRoute.tsx'
 import { BrowserRouter } from 'react-router-dom'
+import { installCsrfFetch } from './lib/csrfFetch.ts'
+
+installCsrfFetch()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

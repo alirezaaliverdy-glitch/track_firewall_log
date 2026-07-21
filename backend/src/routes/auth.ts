@@ -12,24 +12,27 @@ import {
   destroySession,
   getSessionUser
 } from "../services/auth.service.js";
-
-const attempts = new Map<string, { count: number; resetAt: number }>();
-const WINDOW_MS = 15 * 60_000;
-const MAX_ATTEMPTS = 8;
+import { csrfTokenForSession } from "../security/csrf.js";
+import { assertLoginRateLimit, resetLoginRateLimit } from "../security/rate-limit.js";
 
 export async function authRoutes(app: FastifyInstance) {
   app.post<{ Body: { username?: string; password?: string } }>("/api/auth/login", async (request, reply) => {
-    const key = request.ip;
-    const now = Date.now();
-    const entry = attempts.get(key);
-    const current = !entry || entry.resetAt <= now ? { count: 0, resetAt: now + WINDOW_MS } : entry;
-    if (current.count >= MAX_ATTEMPTS) {
-      return reply.code(429).send({ ok: false, error: "too_many_attempts", messageFa: "تعداد تلاش‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید." });
+    const username = request.body?.username ?? "";
+    const loginLimit = assertLoginRateLimit(request.ip, username);
+    if (!loginLimit.allowed) {
+      reply.header("Retry-After", String(loginLimit.retryAfterSeconds));
+      return reply.code(429).send({
+        ok: false,
+        error: "too_many_attempts",
+        reasonCode: loginLimit.reasonCode,
+        retryAfter: loginLimit.retryAfterSeconds,
+        messageFa: "تعداد تلاش‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید."
+      });
     }
 
     let user;
     try {
-      user = await authenticate(request.body?.username ?? "", request.body?.password ?? "");
+      user = await authenticate(username, request.body?.password ?? "");
     } catch (error) {
       if (isTransientDatabaseStartupError(error)) {
         const reason = databaseUnavailableReason(error);
@@ -44,12 +47,10 @@ export async function authRoutes(app: FastifyInstance) {
       throw error;
     }
     if (!user) {
-      current.count += 1;
-      attempts.set(key, current);
       return reply.code(401).send({ ok: false, error: "invalid_credentials", messageFa: "نام کاربری یا رمز عبور اشتباه است." });
     }
 
-    attempts.delete(key);
+    resetLoginRateLimit(request.ip, username);
     let token: string;
     let expiresAt: Date;
     try {
@@ -86,6 +87,13 @@ export async function authRoutes(app: FastifyInstance) {
     const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
     if (!user) return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
     return { ok: true, user };
+  });
+
+  app.get("/api/auth/csrf", async (request, reply) => {
+    const token = request.cookies[AUTH_COOKIE_NAME];
+    const user = await getSessionUser(token);
+    if (!user || !token) return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
+    return { ok: true, csrfToken: csrfTokenForSession(token) };
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
