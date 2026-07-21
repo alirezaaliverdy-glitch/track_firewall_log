@@ -16,10 +16,10 @@ async function authRequest(path: string, init?: RequestInit) {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const response = await authRequest("/auth/me");
+  const response = await authRequest("/auth/session-status");
   if (response.status === 401) return null;
   if (!response.ok) throw new Error("network");
-  return ((await response.json()) as { user: AuthUser }).user;
+  return ((await response.json()) as { user: AuthUser | null }).user;
 }
 
 export async function login(username: string, password: string): Promise<AuthUser> {

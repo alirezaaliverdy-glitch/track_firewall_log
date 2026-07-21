@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { isProduction } from "../config/env.js";
 import {
   databaseUnavailableReason,
@@ -88,6 +88,14 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ ok: false, error: "unauthorized", messageFa: "برای دسترسی باید وارد حساب کاربری شوید." });
     return { ok: true, user };
   });
+
+  const sessionStatus = async (request: FastifyRequest) => {
+    const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
+    return { ok: true, authenticated: Boolean(user), user };
+  };
+
+  app.get("/api/auth/session-status", sessionStatus);
+  app.get("/api/auth/status", sessionStatus);
 
   app.get("/api/auth/csrf", async (request, reply) => {
     const token = request.cookies[AUTH_COOKIE_NAME];

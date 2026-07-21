@@ -12,6 +12,8 @@ const PUBLIC_PATHS = new Set([
   "/api/health/live",
   "/api/health/ready",
   "/api/auth/login",
+  "/api/auth/session-status",
+  "/api/auth/status",
   "/api/auth/me"
 ]);
 
@@ -37,8 +39,9 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
   app.addHook("preHandler", async (request, reply) => {
     const pathname = request.url.split("?", 1)[0];
     if (!pathname.startsWith("/api/") && pathname !== "/health") return;
+    if (!options.authRequired) return;
 
-    if (options.authRequired && !PUBLIC_PATHS.has(pathname)) {
+    if (!PUBLIC_PATHS.has(pathname)) {
       const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
       if (!user) {
         return reply.code(401).send({
@@ -62,23 +65,22 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
     }
 
     if (!isMutationMethod(request.method) || !pathname.startsWith("/api/")) return;
+    if (CSRF_EXEMPT_PATHS.has(pathname)) return;
 
-    if (!CSRF_EXEMPT_PATHS.has(pathname) && options.authRequired) {
-      const origin = headerValue(request.headers.origin);
-      if (!isAllowedOrigin(origin)) {
-        return reply.code(403).send(forbidden(
-          "ORIGIN_NOT_ALLOWED",
-          "مبدأ درخواست مجاز نیست."
-        ));
-      }
+    const origin = headerValue(request.headers.origin);
+    if (!isAllowedOrigin(origin)) {
+      return reply.code(403).send(forbidden(
+        "ORIGIN_NOT_ALLOWED",
+        "مبدأ درخواست مجاز نیست."
+      ));
+    }
 
-      const csrfHeader = headerValue(request.headers[CSRF_HEADER_NAME]);
-      if (!validateCsrfToken(request.cookies[AUTH_COOKIE_NAME], csrfHeader)) {
-        return reply.code(403).send(forbidden(
-          "CSRF_VALIDATION_FAILED",
-          "اعتبارسنجی امنیتی درخواست ناموفق بود."
-        ));
-      }
+    const csrfHeader = headerValue(request.headers[CSRF_HEADER_NAME]);
+    if (!validateCsrfToken(request.cookies[AUTH_COOKIE_NAME], csrfHeader)) {
+      return reply.code(403).send(forbidden(
+        "CSRF_VALIDATION_FAILED",
+        "اعتبارسنجی امنیتی درخواست ناموفق بود."
+      ));
     }
 
     const permission = findMutationPermission(request.method, pathname);

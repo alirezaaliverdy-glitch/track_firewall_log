@@ -1,6 +1,6 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
-const CSRF_EXEMPT_PATHS = new Set([`${API_BASE_URL}/auth/login`]);
+const CSRF_EXEMPT_PATHS = new Set(["/auth/login"]);
 
 let csrfToken: string | null = null;
 let csrfTokenRequest: Promise<string> | null = null;
@@ -21,6 +21,21 @@ function requestUrl(input: RequestInfo | URL) {
     : input instanceof URL
       ? input.toString()
       : input.url;
+}
+
+function apiPath(input: RequestInfo | URL) {
+  const value = requestUrl(input);
+  const path = (() => {
+    try {
+      return new URL(value, window.location.origin).pathname;
+    } catch {
+      return value;
+    }
+  })();
+  const basePath = API_BASE_URL.startsWith("http")
+    ? new URL(API_BASE_URL).pathname
+    : API_BASE_URL;
+  return path.startsWith(basePath) ? path.slice(basePath.length) || "/" : path;
 }
 
 function requestMethod(input: RequestInfo | URL, init?: RequestInit) {
@@ -53,7 +68,7 @@ export function installCsrfFetch() {
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const method = requestMethod(input, init);
-    if (!MUTATION_METHODS.has(method) || !isApiRequest(input) || CSRF_EXEMPT_PATHS.has(requestUrl(input))) {
+    if (!MUTATION_METHODS.has(method) || !isApiRequest(input) || CSRF_EXEMPT_PATHS.has(apiPath(input))) {
       return originalFetch(input, init);
     }
 

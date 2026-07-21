@@ -43,6 +43,10 @@ test("authentication lifecycle, bootstrap, and protected routes", async (t) => {
   const anonymousMe = await app.inject({ method: "GET", url: "/api/auth/me" });
   assert.equal(anonymousMe.statusCode, 401);
 
+  const anonymousStatus = await app.inject({ method: "GET", url: "/api/auth/session-status" });
+  assert.equal(anonymousStatus.statusCode, 200);
+  assert.equal(anonymousStatus.json().authenticated, false);
+
   const protectedResponse = await app.inject({ method: "GET", url: "/api/devices" });
   assert.equal(protectedResponse.statusCode, 401);
   assert.equal(protectedResponse.json().error, "unauthorized");
@@ -59,7 +63,14 @@ test("authentication lifecycle, bootstrap, and protected routes", async (t) => {
   assert.equal(authenticatedMe.statusCode, 200);
   assert.equal(authenticatedMe.json().user.username, process.env.ADMIN_USERNAME);
 
-  const logout = await app.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie } });
+  const authenticatedStatus = await app.inject({ method: "GET", url: "/api/auth/session-status", headers: { cookie } });
+  assert.equal(authenticatedStatus.statusCode, 200);
+  assert.equal(authenticatedStatus.json().authenticated, true);
+  assert.equal(authenticatedStatus.json().user.username, process.env.ADMIN_USERNAME);
+
+  const csrf = await app.inject({ method: "GET", url: "/api/auth/csrf", headers: { cookie } });
+  assert.equal(csrf.statusCode, 200);
+  const logout = await app.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie, "x-csrf-token": csrf.json().csrfToken } });
   assert.equal(logout.statusCode, 200);
   assert.match(String(logout.headers["set-cookie"]), /firewall_session=;/);
   assert.equal((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie } })).statusCode, 401);

@@ -1,3 +1,13 @@
+**AI Assistant custom-action safety refinement (2026-07-20)**
+
+- Preserved the three-mode Assistant contract: `conversation`, `device_question`, and `action_request`. Device selection remains optional context for chat and read-only questions; normal conversation does not create ActionPlans.
+- Added connector-backed custom ActionPlan support for explicit operational requests that do not match a static catalog template. Custom plans are stored as `ai_custom_connector_plan` with selected `deviceId`, vendor/platform, intent, ordered commands, typed parameters, missing fields, risk, expected impact, verification commands, rollback guidance, and `rawCommandExecution=false`.
+- Added registered custom execution templates for Linux, MikroTik, FortiGate, and Cisco connector families. Execution still requires backend normalization, vendor/platform compatibility validation, parameter validation, preview, explicit approval, PolicyGuard, registered connector dispatch, verification, audit, and result persistence.
+- Extended connector/planner support for `custom_vendor_action` without adding frontend execution or direct AI connector access. Cross-vendor custom commands and unsafe command shapes are rejected by backend validation.
+- Updated Assistant safety text to explain that AI may generate commands and ActionPlans but cannot execute directly.
+- Validation passed: backend build, frontend build, and `git diff --check`. Focused `tsx` tests, command catalog validation, and Playwright MCP were blocked by the environment approval/usage system or Windows sandbox `EPERM` before execution; no workaround was attempted.
+- Unrelated tracked docs/task deletions and untracked root prompt docs remain untouched and unstaged.
+
 **AI Assistant intent routing fix (2026-07-20)**
 
 - Fixed selected-device routing so device selection is context only; every assistant prompt is classified as `conversation`, `device_question`, or `action_request` before any planning code runs.
@@ -906,3 +916,11 @@
 - Custom ActionPlans now preserve AI proposal details in ActionPlan parameters/metadata: expected impact, prechecks, verification, rollback, proposed intent, and explicit review-only/backend-execution-required flags.
 - Smoke coverage manually checked three unprepared requests per vendor through the resolver; all returned `mode=manual_or_not_supported`, `catalogCommandId=null`, and `actionType=custom_vendor_action`.
 - Validation passed: targeted AI routing/context tests (31/31), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, and workflow checks. Full backend `npm test` still stops at `TEST_DATABASE_URL_REQUIRED`; a Prisma chat smoke could not run because the isolated `firewall_log_analyzer_test` database does not exist, and the live API returned `unauthorized` without a browser session.
+
+## 2026-07-21 - Phase A live authentication acceptance repair
+
+- Repaired the live auth probe mismatch by adding public `GET /api/auth/session-status`, keeping `/api/auth/status` as a compatibility alias, and preserving the existing anonymous `/api/auth/me` 401 contract.
+- Frontend session probing now uses `/firewall-api/auth/session-status`; the CSRF fetch wrapper exempts login by normalized API path so it does not fetch a CSRF token before login.
+- Login remains CSRF-exempt. Authenticated mutations still require `X-CSRF-Token`; Playwright verified raw XMLHttpRequest mutation without a token is rejected with `CSRF_VALIDATION_FAILED`, while the installed fetch wrapper attaches a token and reaches normal route validation.
+- Live checks passed: backend port 4000 served health live/ready 200, session-status 200 unauthenticated, configured admin login 200 with cookie, and manual Playwright admin login reached `/dashboard` with `Operational Dashboard` and `role=admin`.
+- Validation passed: backend build, frontend build, focused isolated DB auth/RBAC/CSRF/session/rate-limit/high-risk tests 9/9, Playwright dashboard/session/CSRF smoke. Phase B remains gated by the previously observed unrelated full backend suite failures until those baseline/source-contract failures are resolved.
