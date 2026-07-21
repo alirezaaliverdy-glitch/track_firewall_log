@@ -4,7 +4,11 @@ import test from "node:test";
 import { ActionPlanStatus, ActionType } from "@prisma/client";
 import type { DeviceConnector } from "../src/connectors/types.js";
 
-const actionPlanService = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+const actionPlanService = [
+  "../src/services/action-plan.service.ts",
+  "../src/actions/action-plan/action-plan.shared.ts",
+  "../src/actions/action-plan/action-plan-execution.service.ts",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const actionCenterService = readFileSync(new URL("../src/services/action-center.service.ts", import.meta.url), "utf8");
 const actionCenterClient = readFileSync(new URL("../../src/lib/actionCenter.ts", import.meta.url), "utf8");
 

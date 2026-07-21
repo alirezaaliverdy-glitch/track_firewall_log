@@ -43,7 +43,10 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
 });
 
 test("backend stores actual connector result before succeeded", () => {
-  const service = read("../src/services/action-plan.service.ts");
+  const service = [
+    "../src/services/action-plan.service.ts",
+    "../src/actions/action-plan/action-plan-execution.service.ts",
+  ].map(read).join("\n");
   assert.match(service, /serviceStatusReadSucceeded \|\| \(result\.executed && result\.commands\.length > 0/);
   assert.match(service, /status: verification\.ok \? ActionPlanStatus\.succeeded : ActionPlanStatus\.failed/);
   assert.match(service, /stdout: result\.commands\.map/);

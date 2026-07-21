@@ -4,7 +4,11 @@ import test from "node:test";
 import { ActionType, DeviceProtocol, DeviceType } from "@prisma/client";
 import { buildCustomCommandPlan, customDryRun, validateCustomCommandPlan } from "../src/ai/custom-action-plan.js";
 
-const actionService = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+const actionService = [
+  "../src/services/action-plan.service.ts",
+  "../src/actions/action-plan/action-plan.shared.ts",
+  "../src/actions/action-plan/action-plan-execution.service.ts",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const policyGuard = readFileSync(new URL("../src/services/policy-guard.service.ts", import.meta.url), "utf8");
 const assistantUi = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
 const linuxConnector = readFileSync(new URL("../src/connectors/linux-ssh.connector.ts", import.meta.url), "utf8");

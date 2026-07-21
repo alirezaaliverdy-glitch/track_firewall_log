@@ -95,7 +95,11 @@ test("Action Center exposes Execute and hides manual preview/approval UX", () =>
 });
 
 test("controlled execution records command-plan and result audit events", () => {
-  const source = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+  const source = [
+    "../src/services/action-plan.service.ts",
+    "../src/actions/action-plan/action-plan-preview.service.ts",
+    "../src/actions/action-plan/action-plan-execution.service.ts",
+  ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.match(source, /command_plan_generated/);
   assert.match(source, /execution_succeeded/);
   assert.match(source, /controlled_execution_blocked/);

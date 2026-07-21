@@ -6,7 +6,11 @@ import { buildCustomCommandPlan, validateCustomCommandPlan } from "../src/ai/cus
 import { getCustomCommandPolicy } from "../src/commands/custom-policy/custom-command-policy.registry.js";
 
 const customFacade = readFileSync(new URL("../src/ai/custom-action-plan.ts", import.meta.url), "utf8");
-const actionPlanSource = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+const actionPlanSource = [
+  "../src/services/action-plan.service.ts",
+  "../src/actions/action-plan/action-plan.shared.ts",
+  "../src/actions/action-plan/action-plan-execution.service.ts",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const policyGuardSource = readFileSync(new URL("../src/services/policy-guard.service.ts", import.meta.url), "utf8");
 const registrySource = readFileSync(new URL("../src/commands/custom-policy/custom-command-policy.registry.ts", import.meta.url), "utf8");
 

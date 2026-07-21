@@ -1,3 +1,13 @@
+**Phase D backend refactor - ActionPlan split (2026-07-21)**
+
+- Started Phase D from committed Phase C baseline `46fceeb`.
+- Added/confirmed characterization before refactor with isolated TAP `C:\tmp\phase-d-characterization.tap`; action execution evidence, custom action safety, workflow dependency/skip behavior, Assistant routing, vendor workflow acceptance, and custom policy coverage passed.
+- Decomposed the 102.9 KB `backend/src/services/action-plan.service.ts` monolith into a compatibility facade plus `backend/src/actions/action-plan/` modules for shared lifecycle helpers, proposal/repository, preview/validation, approval, and execution.
+- Preserved public imports from `../services/action-plan.service.js`; source-contract tests now inspect the facade plus the decomposed implementation modules instead of the old monolith.
+- Validation passed after the split: backend build and focused isolated TAP `C:\tmp\phase-d-actionplan-focused.tap` with 44 tests, 44 pass, 0 fail, 0 skipped.
+- Remaining Phase D work before the phase can close: AI assistant service split and oversized FortiGate compiler / Linux connector extraction, followed by full validation and Playwright acceptance.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs` directory deletion was preserved and not staged.
+
 **Phase C custom command policy engine (2026-07-21)**
 
 - Started from committed Phase B baseline `e43aa9f`.

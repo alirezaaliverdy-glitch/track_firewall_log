@@ -11,7 +11,11 @@ const verificationPanel = readFileSync(new URL("../../src/features/assets/compon
 const actionWorkspace = readFileSync(new URL("../../src/components/actions/ActionCenterWorkspace.tsx", import.meta.url), "utf8");
 const actionResultView = readFileSync(new URL("../../src/components/actions/ActionResultView.tsx", import.meta.url), "utf8");
 const actionCenterClient = readFileSync(new URL("../../src/lib/actionCenter.ts", import.meta.url), "utf8");
-const actionPlanService = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+const actionPlanService = [
+  "../src/services/action-plan.service.ts",
+  "../src/actions/action-plan/action-plan-proposal.service.ts",
+  "../src/actions/action-plan/action-plan-execution.service.ts",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const deviceVerificationService = readFileSync(new URL("../src/services/device-verification.service.ts", import.meta.url), "utf8");
 const routes = readFileSync(new URL("../../src/routes/appRoutes.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../../src/App.css", import.meta.url), "utf8");

@@ -33,13 +33,15 @@ test("Task 19.1 R-E keeps structured API recovery and raw URLs out of user error
 });
 
 test("Task 19.1 Execute and Assistant share the newest revision and one action contract", async () => {
-  const [service, actionsApi, assistantApi, assistantUi, actionCenter] = await Promise.all([
+  const [serviceFacade, serviceExecution, actionsApi, assistantApi, assistantUi, actionCenter] = await Promise.all([
     readFile(new URL("backend/src/services/action-plan.service.ts", root), "utf8"),
+    readFile(new URL("backend/src/actions/action-plan/action-plan-execution.service.ts", root), "utf8"),
     readFile(new URL("src/lib/actions.ts", root), "utf8"),
     readFile(new URL("src/lib/ai.ts", root), "utf8"),
     readFile(new URL("src/components/ai/AiSecurityAssistantPanel.tsx", root), "utf8"),
     readFile(new URL("src/components/actions/ActionCenterPanel.tsx", root), "utf8"),
   ]);
+  const service = [serviceFacade, serviceExecution].join("\n");
 
   assert.match(service, /regenerateLatestRevisionForExecution/);
   assert.match(service, /action_revision_regenerated/);

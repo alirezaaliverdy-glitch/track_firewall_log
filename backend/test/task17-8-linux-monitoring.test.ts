@@ -366,7 +366,10 @@ test("service command safety accepts only safe service names and uses structured
 });
 
 test("service status action keeps read result success semantics separate from SSH failure", () => {
-  const source = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+  const source = [
+    "../src/services/action-plan.service.ts",
+    "../src/actions/action-plan/action-plan-execution.service.ts",
+  ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.match(source, /serviceStatusReadSucceeded/);
   assert.match(source, /ActionType\.linux_check_service_status/);
   assert.match(source, /\["active", "inactive", "failed", "not_found", "unknown"\]/);
