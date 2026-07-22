@@ -85,6 +85,7 @@
   "shell.connectionHealth": "سلامت اتصال",
   "shell.backendConnected": "Backend متصل است",
   "shell.backendUnavailable": "Backend در دسترس نیست",
+  "shell.offlineBanner": "آفلاین هستید. نمای برنامه ممکن است از کش بارگذاری شود، اما تأیید و اجرای عملیات نیازمند اتصال است.",
   "actionCenter.filters.all": "همه",
   "actionCenter.commandGeneratedOnExecute": "برنامه دستور هنگام اجرا به‌صورت خودکار ساخته می‌شود.",
   "actionCenter.summary.plans": "برنامه‌های اقدام",

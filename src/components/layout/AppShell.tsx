@@ -1,4 +1,4 @@
-import { Bell, Bot, Boxes, Gauge, LayoutDashboard, LogOut, Menu, Plug, Search, Server, Settings, ShieldAlert, Wifi, WifiOff, Wrench } from "lucide-react";
+import { Bell, Bot, Boxes, Gauge, LayoutDashboard, LogOut, Menu, Plug, Search, Server, Settings, ShieldAlert, Wifi, WifiOff, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { appRoutes } from "@/routes/appRoutes";
 import { listDevices, type Device } from "@/lib/devices";
 import { getProductNavigation, type ProductNavigationGroup } from "@/lib/productState";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 const navigationIcons = {
   dashboard: LayoutDashboard,
@@ -30,15 +31,18 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navigation, setNavigation] = useState<ProductNavigationGroup[]>([]);
   const [navigationError, setNavigationError] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
+  const online = useOnlineStatus();
   const isFa = i18n.language?.startsWith("fa");
   const direction = isFa ? "rtl" : "ltr";
   const activeGroup = appRoutes.find((route) => currentPath === route.path || currentPath.startsWith(`${route.path}/`))?.group ?? "dashboard";
   const selectedDeviceId = useMemo(() => deviceIdFromLocation(location.pathname, location.search), [location.pathname, location.search]);
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) ?? null;
-  const connectionHealthy = navigation.length > 0 && !navigationError;
+  const connectionHealthy = online && navigation.length > 0 && !navigationError;
+  const mobileNavigation = navigation.filter((group) => group.mobilePrimary);
 
   useEffect(() => {
     let active = true;
@@ -66,12 +70,27 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    document.body.classList.toggle("platform-drawer-open", mobileNavOpen);
+    return () => document.body.classList.remove("platform-drawer-open");
+  }, [mobileNavOpen]);
+
   return (
     <div className="platform-shell" dir={direction}>
-      <aside className={`platform-sidebar ${collapsed ? "is-collapsed" : ""}`} aria-label={t("shell.primaryNavigation")}>
-        <button type="button" className="platform-sidebar__toggle" onClick={() => setCollapsed((value) => !value)} aria-label={t("shell.toggleNavigation")}>
-          <Menu className="h-4 w-4" aria-hidden="true" />
-        </button>
+      <button type="button" className={`platform-drawer-scrim ${mobileNavOpen ? "is-open" : ""}`} onClick={() => setMobileNavOpen(false)} aria-label={t("shell.toggleNavigation")} />
+      <aside id="platform-primary-navigation" className={`platform-sidebar ${collapsed ? "is-collapsed" : ""} ${mobileNavOpen ? "is-mobile-open" : ""}`} aria-label={t("shell.primaryNavigation")}>
+        <div className="platform-sidebar__controls">
+          <button type="button" className="platform-sidebar__toggle" onClick={() => setCollapsed((value) => !value)} aria-label={t("shell.toggleNavigation")} aria-expanded={!collapsed}>
+            <Menu className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button type="button" className="platform-sidebar__close" onClick={() => setMobileNavOpen(false)} aria-label={t("shell.toggleNavigation")}>
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
         <nav className="platform-sidebar__nav">
           {navigationError ? <Link to="/dashboard" className="platform-nav-group__label">{isFa ? "داشبورد" : "Dashboard"}</Link> : null}
           {!navigation.length && !navigationError ? <span className="platform-nav-group__label" aria-live="polite">{isFa ? "در حال بارگذاری ناوبری..." : "Loading navigation..."}</span> : null}
@@ -99,6 +118,16 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
       </aside>
       <div className="platform-main">
         <header className="platform-topbar">
+          <button
+            type="button"
+            className="platform-mobile-menu"
+            onClick={() => setMobileNavOpen(true)}
+            aria-controls="platform-primary-navigation"
+            aria-expanded={mobileNavOpen}
+            aria-label={t("shell.toggleNavigation")}
+          >
+            <Menu className="h-4 w-4" aria-hidden="true" />
+          </button>
           <div className="platform-search" role="search">
             <Search className="h-4 w-4" aria-hidden="true" />
             <input disabled title={t("shell.searchUnavailable")} placeholder={t("shell.searchPlaceholder")} />
@@ -132,10 +161,16 @@ export function AppShell({ children, currentPath }: { children: ReactNode; curre
             <button type="button" onClick={() => void logout()} className="icon-button" aria-label={t("auth.logout")}><LogOut className="h-4 w-4" /></button>
           </div>
         </header>
+        {!online ? (
+          <div className="platform-offline-banner" role="status">
+            <WifiOff className="h-4 w-4" aria-hidden="true" />
+            <span>{t("shell.offlineBanner")}</span>
+          </div>
+        ) : null}
         <main className="platform-content">{children}</main>
       </div>
       <nav className="platform-bottom-nav" aria-label={t("shell.mobileNavigation")}>
-        {navigation.filter((group) => group.mobilePrimary).map((group) => (
+        {mobileNavigation.map((group) => (
           <Link key={group.key} to={group.route} className={activeGroup === group.key ? "is-current" : ""}>{isFa ? group.titleFa : group.titleEn}</Link>
         ))}
       </nav>

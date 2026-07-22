@@ -1,3 +1,15 @@
+**Phase F mobile/PWA readiness - responsive shell and offline-safe app shell (2026-07-22)**
+
+- Started Phase F from committed Phase E HEAD `d9b15d5`.
+- Added installable PWA metadata and icons with `public/manifest.webmanifest`, app icon SVGs, and `index.html` manifest/theme/apple metadata.
+- Added `public/sw.js` as an offline app-shell service worker. It caches only the shell/static same-origin assets and never caches `/firewall-api` responses; mutating API requests stay network-only and return `OFFLINE_MUTATION_BLOCKED` if the network is unavailable.
+- Registered the service worker from `src/lib/pwa.ts` only in production or explicit `VITE_ENABLE_PWA=true`, preserving dev behavior.
+- Added online/offline UI state with `useOnlineStatus`, an offline banner, mobile drawer/sidebar behavior, bottom navigation safe-area support, 44px touch targets, responsive content grids, and Action Center review-dialog bottom-sheet styling on mobile.
+- Verified Dashboard, Assistant, Action Center, Devices, and Workflow Lab remain usable at desktop and 390px mobile in Playwright MCP, including the mobile drawer and bottom navigation.
+- Validation passed: frontend build; backend build; focused Phase F TAP (2 tests, 2 pass); i18n parity/Persian primary copy (412 keys); UTF-8 guard (448 files); workflow lab guard; PWA build artifact check for manifest/service worker/icons; Playwright desktop/mobile acceptance; `git diff --check`.
+- Backend execution semantics were not changed. Offline approvals and offline execution remain blocked by network-only API behavior.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs` directory deletion was preserved and not staged.
+
 **Phase E frontend refactor - Assistant and Action Center split (2026-07-22)**
 
 - Started Phase E from committed Phase D HEAD `2d9d415`.

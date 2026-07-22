@@ -85,6 +85,7 @@
   "shell.connectionHealth": "Connection health",
   "shell.backendConnected": "Backend connected",
   "shell.backendUnavailable": "Backend unavailable",
+  "shell.offlineBanner": "Offline. The app shell may load from cache, but approvals and execution require a live connection.",
   "actionCenter.filters.all": "all",
   "actionCenter.commandGeneratedOnExecute": "Command plan is generated automatically on Execute.",
   "actionCenter.summary.plans": "Action plans",

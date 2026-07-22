@@ -1,0 +1,26 @@
+{
+  "name": "Firewall Log Analyzer",
+  "short_name": "Firewall SOAR",
+  "description": "Persian-first firewall operations and AI security orchestration.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#07111a",
+  "background_color": "#07111a",
+  "categories": ["security", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
