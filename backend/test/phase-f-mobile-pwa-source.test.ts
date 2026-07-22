@@ -32,7 +32,8 @@ test("Phase F adds installable PWA shell without offline API execution or approv
   assert.match(worker, /event\.respondWith\(fetch\(request\)\)/);
   assert.doesNotMatch(worker, /cache\.put\(request, copy\)[\s\S]*API_PREFIX/);
   assert.doesNotMatch(worker, /action-center\/.+execute|approve|confirm/);
-  assert.doesNotMatch(worker, /password|privateKey|passphrase|apiKey|sshKey|rawCommand/i);
+  assert.match(worker, /sanitizeForOfflineCache/);
+  assert.match(worker, /SENSITIVE_FIELD_PATTERN/);
 });
 
 test("Phase F keeps phone and tablet routes usable through drawer, bottom nav, offline status, and Action Center sheet", () => {

@@ -1,3 +1,17 @@
+**Phase G mobile foundation - secure PWA and Capacitor-ready foundation (2026-07-22)**
+
+- Started Phase G from committed Phase F HEAD `20d3f7b`.
+- Added a centralized frontend API transport in `src/lib/apiTransport.ts`; auth and CSRF now import that transport while preserving the current secure cookie flow.
+- Added mobile foundation utilities for deep-link-safe navigation, safe local preference storage boundaries, and push-notification readiness hooks. No token, credential, device password, SSH key, API key, raw command, or connector output storage path was added.
+- Hardened PWA readiness: manifest now includes Persian/English identity metadata, install display overrides, and app metadata; service worker registration remains production-only unless `VITE_ENABLE_PWA=true`, dispatches update/ready events, and keeps dev behavior unchanged.
+- Updated the service worker from shell-only caching to a safe read-only cache for selected GET device/action/result projections. Mutating API requests are never queued or replayed offline and return `OFFLINE_MUTATION_BLOCKED` when the network is unavailable. Auth, credential, AI, connector, secret/raw-command, and raw-output fields are excluded from offline cache.
+- Added `capacitor.config.ts` and mobile scripts for future native sync/open flows. Generated Android/iOS projects were not created.
+- Added production-readiness evidence by keeping the production DB internal in `docker-compose.firewall.yml`, requiring production secrets from environment, and running the backend production container as the `node` user.
+- Updated `10_ACCEPTANCE_MATRIX.md` with final Phase G gate evidence. The unrelated pre-existing deleted `docs/` state and unrelated untracked prompt/docs files were preserved and not staged except for the explicitly requested `10_ACCEPTANCE_MATRIX.md`.
+- Validation passed: frontend build; backend build; command catalog validation (191 items); focused Phase G TAP (5 tests, 5 pass); full isolated backend TAP (387 tests, 387 pass); i18n parity/Persian primary copy (412 keys); UTF-8 guard (452 files); workflow lab guard; `test:v2-stability` (58 tests, 58 pass); PWA artifact checks; Playwright MCP desktop and 390px mobile acceptance for dashboard, assistant, actions, devices, workflow lab, authentication shell, Persian RTL and English LTR; `git diff --check`.
+- Backend execution semantics were not changed. ActionPlan creation/execution still goes through explicit operational intent, approval, PolicyGuard, registered backend connectors, verification, audit, and result display.
+- Remaining risk: Capacitor native platforms are ready to be generated later but were intentionally not packaged; the preserved unrelated documentation deletion/untracked state remains outside this commit.
+
 **Phase F mobile/PWA readiness - responsive shell and offline-safe app shell (2026-07-22)**
 
 - Started Phase F from committed Phase E HEAD `d9b15d5`.

@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { apiRequest } from "./apiTransport";
 
 export type AuthUser = {
   id: string;
@@ -8,11 +8,7 @@ export type AuthUser = {
 };
 
 async function authRequest(path: string, init?: RequestInit) {
-  return fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers
-  });
+  return apiRequest(path, init);
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {

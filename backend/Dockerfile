@@ -19,5 +19,7 @@ COPY prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/dist ./dist
+RUN mkdir -p /app/storage/uploads && chown -R node:node /app
+USER node
 EXPOSE 4000
 CMD ["sh", "-c", "pnpm prisma migrate deploy && pnpm start"]

@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "mobile:build:web": "npm run build",
+    "mobile:sync": "npx cap sync",
+    "mobile:open:android": "npx cap open android",
+    "mobile:open:ios": "npx cap open ios",
     "lint": "eslint .",
     "preview": "vite preview",
     "docs:snapshot": "powershell -ExecutionPolicy Bypass -File scripts/project-snapshot.ps1",

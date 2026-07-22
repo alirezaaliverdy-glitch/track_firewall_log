@@ -11,6 +11,7 @@ import CommandCatalogPanel from "@/components/commands/CommandCatalogPanel";
 import { AppShell } from "@/components/layout/AppShell";
 import { appRoutes, type AppRoute } from "@/routes/appRoutes";
 import WorkflowLabPage from "@/features/tools/pages/WorkflowLabPage";
+import { normalizeAppDeepLink } from "@/lib/deepLinks";
 
 function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
@@ -96,7 +97,7 @@ function RouterNavigationBridge() {
   useEffect(() => {
     const handler = (event: Event) => {
       const to = event instanceof CustomEvent && typeof event.detail?.to === "string" ? event.detail.to : "";
-      if (to) navigate(to);
+      if (to) navigate(normalizeAppDeepLink(to));
     };
     window.addEventListener("app:navigate", handler);
     return () => window.removeEventListener("app:navigate", handler);

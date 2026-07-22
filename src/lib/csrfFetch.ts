@@ -1,48 +1,9 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
-const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+import { API_BASE_URL, MUTATION_METHODS, apiPath, isApiRequest, requestMethod } from "./apiTransport";
+
 const CSRF_EXEMPT_PATHS = new Set(["/auth/login"]);
 
 let csrfToken: string | null = null;
 let csrfTokenRequest: Promise<string> | null = null;
-
-function isApiRequest(input: RequestInfo | URL) {
-  const value = typeof input === "string"
-    ? input
-    : input instanceof URL
-      ? input.toString()
-      : input.url;
-  if (API_BASE_URL.startsWith("http")) return value.startsWith(API_BASE_URL);
-  return value.startsWith(API_BASE_URL);
-}
-
-function requestUrl(input: RequestInfo | URL) {
-  return typeof input === "string"
-    ? input
-    : input instanceof URL
-      ? input.toString()
-      : input.url;
-}
-
-function apiPath(input: RequestInfo | URL) {
-  const value = requestUrl(input);
-  const path = (() => {
-    try {
-      return new URL(value, window.location.origin).pathname;
-    } catch {
-      return value;
-    }
-  })();
-  const basePath = API_BASE_URL.startsWith("http")
-    ? new URL(API_BASE_URL).pathname
-    : API_BASE_URL;
-  return path.startsWith(basePath) ? path.slice(basePath.length) || "/" : path;
-}
-
-function requestMethod(input: RequestInfo | URL, init?: RequestInit) {
-  if (init?.method) return init.method.toUpperCase();
-  if (typeof input === "object" && "method" in input && input.method) return input.method.toUpperCase();
-  return "GET";
-}
 
 async function getCsrfToken(fetchImpl: typeof fetch) {
   if (csrfToken) return csrfToken;
