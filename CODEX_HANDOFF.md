@@ -1,3 +1,13 @@
+**Phase E frontend refactor - Assistant and Action Center split (2026-07-22)**
+
+- Started Phase E from committed Phase D HEAD `2d9d415`.
+- Refactored the Assistant compatibility component into typed feature modules for shared types, UI helpers, message rendering, planning context, and intent cards while preserving the three intent modes: `conversation`, `device_question`, and `action_request`.
+- Preserved selected-device-as-context behavior: device selection scopes vendor/platform/catalog context, clears stale plan/guided state on device/session/intent changes, and does not force ActionPlan creation unless the request is explicitly operational.
+- Refactored Action Center UI into typed feature modules for review/model helpers, active workspace helpers, and the inline review sheet while keeping the existing routes, preview/review/approval/PolicyGuard/connector/audit/result path intact.
+- Added frontend role permission helpers and source-contract characterization so viewer/operator/admin UI gates mirror backend execution permissions without replacing backend authorization.
+- Validation passed: frontend build; backend build; command catalog validation (191 items); focused Phase E TAP (40 tests, 40 pass); isolated affected Action Center contract TAP (5 tests, 5 pass); full isolated backend TAP `C:\tmp\phase-e-full-backend-final.tap` (380 tests, 380 pass); i18n parity/Persian primary copy; UTF-8 guard (446 files); Playwright acceptance on `/assistant` and `/actions` at desktop and 390px mobile; `git diff --check`.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs` directory deletion was preserved and not staged.
+
 **Phase D backend refactor - Connector and compiler split (2026-07-21)**
 
 - Split oversized FortiGate compiler helpers into `backend/src/fortigate/command-compiler/shared.ts`, guided VPN compilation into `guided-vpn.ts`, and read-only command compilation into `read-only.ts`, while preserving the public `compileFortiGateAction` import path at `backend/src/services/fortigate-command-compiler.ts`.

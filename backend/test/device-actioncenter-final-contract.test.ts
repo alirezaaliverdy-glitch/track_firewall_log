@@ -9,6 +9,7 @@ import { ActionType } from "@prisma/client";
 
 const verificationPanel = readFileSync(new URL("../../src/features/assets/components/DeviceVerificationPanel.tsx", import.meta.url), "utf8");
 const actionWorkspace = readFileSync(new URL("../../src/components/actions/ActionCenterWorkspace.tsx", import.meta.url), "utf8");
+const actionWorkspaceModel = readFileSync(new URL("../../src/features/actions/actionCenterWorkspaceModel.tsx", import.meta.url), "utf8");
 const actionResultView = readFileSync(new URL("../../src/components/actions/ActionResultView.tsx", import.meta.url), "utf8");
 const actionCenterClient = readFileSync(new URL("../../src/lib/actionCenter.ts", import.meta.url), "utf8");
 const actionPlanService = [
@@ -53,7 +54,7 @@ test("Action Center exposes an operator-first preview and real execution contrac
     assert.match(routes, new RegExp(path.replace(/[/:]/g, (character) => character === "/" ? "\\/" : ":")));
   }
   assert.match(actionWorkspace, /selected\.evidence\.connectorInvoked/);
-  assert.match(actionWorkspace, /connectorResult\.message/);
+  assert.match(actionWorkspaceModel, /connectorResult\.message/);
   assert.match(actionPlanService, /executed:\s*false,\s*connectorInvoked:\s*true,\s*backupEnabled:\s*false/);
   assert.match(actionPlanService, /verification:\s*\{\s*status:\s*"failed",\s*error:\s*connectorError\.code\s*\}/);
   assert.match(actionPlanService, /item\.actionType === actionType && item\.vendor === productVendor/);

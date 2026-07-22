@@ -86,7 +86,8 @@ test("frontend source has action-library route, dashboard shortcut, filters, and
   assert.match(assistant, /canOfferGuidedStart/);
   assert.match(assistant, /guidedStart && <button[^>]*onClick=\{startGuidedWorkflow\}/);
   assert.doesNotMatch(assistant, /response\.actionSessionId[\s\S]*navigate/);
-  assert.match(actionCenter, /Backup is disabled for Quick Controlled execution\./);
+  const actionCenterModel = readFileSync(new URL("../../src/features/actions/actionCenterModel.tsx", import.meta.url), "utf8");
+  assert.match(`${actionCenter}\n${actionCenterModel}`, /Backup is disabled for Quick Controlled execution\./);
   assert.doesNotMatch(actionState, /The action changed after its preview/);
   assert.doesNotMatch(actionCenter, /backup\/export preflight required/i);
   assert.match(i18n, /document\.documentElement\.dir = locale === "fa" \? "rtl" : "ltr"/);

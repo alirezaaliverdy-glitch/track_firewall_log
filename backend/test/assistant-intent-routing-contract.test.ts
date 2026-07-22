@@ -133,9 +133,10 @@ test("frontend treats chat and device_question as assistant-only and clears stal
   assert.match(assistantUi, /INTENT_MODE_OPTIONS/);
   assert.match(assistantUi, /intentModeOverride/);
   assert.match(assistantUi, /sendAiMessage\(sessionId, trimmed, selectedDeviceId \|\| undefined, \{[\s\S]*intentModeOverride/);
-  assert.match(assistantUi, /response\.mode === "action_request" \? \{ support: response\.actionContract\.executionSupport/);
-  assert.match(assistantUi, /setCreatedPlanId\(response\.actionPlan\?\.id \?\? null\)/);
-  assert.match(assistantUi, /const canOfferGuidedStart = response\.mode === "action_request"/);
+  assert.match(assistantUi, /const canSurfacePlan = canSurfaceActionPlan\(response\.mode\)/);
+  assert.match(assistantUi, /setExecutionState\(canSurfacePlan \? \{ support: response\.actionContract\.executionSupport/);
+  assert.match(assistantUi, /setCreatedPlanId\(canSurfacePlan \? response\.actionPlan\?\.id \?\? null : null\)/);
+  assert.match(assistantUi, /const canOfferGuidedStart = canSurfacePlan/);
   assert.match(assistantUi, /previousTargetDeviceId/);
   assert.match(assistantUi, /setSessionId\(null\);[\s\S]*setMessages\(\[\]\);[\s\S]*setLastIntent\(null\);[\s\S]*setCreatedPlanId\(null\);/);
 });

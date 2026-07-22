@@ -5,11 +5,13 @@ import test from "node:test";
 const root = new URL("../../", import.meta.url);
 
 test("Task 19.1 R-E localizes primary Assistant and Action Center controls", async () => {
-  const [assistant, actionCenter, actionUi] = await Promise.all([
+  const [assistant, actionCenterPanel, actionCenterModel, actionUi] = await Promise.all([
     readFile(new URL("src/components/ai/AiSecurityAssistantPanel.tsx", root), "utf8"),
     readFile(new URL("src/components/actions/ActionCenterPanel.tsx", root), "utf8"),
+    readFile(new URL("src/features/actions/actionCenterModel.tsx", root), "utf8"),
     readFile(new URL("src/components/actions/ActionCenterUi.tsx", root), "utf8"),
   ]);
+  const actionCenter = `${actionCenterPanel}\n${actionCenterModel}`;
 
   for (const label of ["تازه‌سازی خلاصه", "پاک‌کردن گفت‌وگو", "درخواست جدید", "مرز ایمنی", "ارائه‌دهنده هوش مصنوعی"]) assert.match(assistant, new RegExp(label));
   for (const label of ["مرکز اقدام", "برنامه‌های اقدام", "در انتظار بازبینی", "تأییدشده بدون تغییر", "کانکتور", "راستی‌آزمایی"]) assert.match(actionCenter, new RegExp(label));

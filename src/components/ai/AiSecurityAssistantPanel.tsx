@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import {
   getAiProviderStatus,
   getSecuritySummary,
-  completeAiActionRequest,
   type AiActionDebug,
   normalizeAiMessage,
   normalizeArray,
@@ -27,6 +26,18 @@ import {
 import { listDevices, type Device } from "@/lib/devices";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { startGuidedSession } from "@/lib/guidedActions";
+import { ChatMessageBubble } from "@/features/assistant/components/AssistantMessageList";
+import { IntentCard } from "@/features/assistant/components/AssistantIntentCard";
+import { PlanningContextPanel } from "@/features/assistant/components/AssistantPlanningContext";
+import {
+  canSurfaceActionPlan,
+  classifyPlanningMode,
+  connectorTypeOf,
+  formatNumber,
+  riskClass,
+  vendorOfDevice,
+} from "@/features/assistant/assistantUiHelpers";
+import type { AssistantExecutionState, GuidedStartState } from "@/features/assistant/types";
 
 const EXAMPLES = [
   "امروز چه تهدیدهایی داشتیم؟",
@@ -41,362 +52,6 @@ const EXAMPLES = [
 ];
 
 const INTENT_MODE_OPTIONS: AiIntentModeOverride[] = ["Auto", "Chat", "Action"];
-
-const safeNumber = (value: unknown): number => {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
-};
-
-const formatNumber = (value: unknown) => safeNumber(value).toLocaleString();
-
-const formatDateTime = (value: unknown): string => {
-  if (!value) return "-";
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
-};
-
-function riskClass(risk: string) {
-  if (risk === "critical") return "border-red-700 bg-red-950/60 text-red-200";
-  if (risk === "high") return "border-red-800 bg-red-950/40 text-red-300";
-  if (risk === "medium") return "border-yellow-800 bg-yellow-950/40 text-yellow-300";
-  return "border-blue-800 bg-blue-950/40 text-blue-200";
-}
-
-function normalizedVendor(value: unknown, intentType?: string) {
-  const token = typeof value === "string" ? value.trim().toLowerCase().replace(/[\s_-]+/g, "") : "";
-  if (["mikrotik", "routeros", "mt", "mkt"].includes(token) || intentType?.startsWith("mikrotik_")) return "mikrotik";
-  if (["fortigate", "fortinet", "fortios"].includes(token) || intentType?.startsWith("fortigate_")) return "fortigate";
-  if (["linux", "linuxedge", "ubuntu"].includes(token) || intentType?.startsWith("linux_")) return "linux_edge";
-  return null;
-}
-
-function vendorOfDevice(device?: Device | null) {
-  if (!device) return "";
-  if (device.type === "linux_edge") return "linux";
-  if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
-  return device.type;
-}
-
-function connectorTypeOf(vendor: string) {
-  if (vendor === "fortigate") return "fortigate-ssh";
-  if (vendor === "mikrotik") return "mikrotik-ssh";
-  if (vendor === "linux") return "linux-ssh";
-  return null;
-}
-
-type AssistantPlanningMode = "chat" | "direct_action" | "guided_workflow";
-
-function classifyPlanningMode(input: {
-  backendMode: string | null;
-  createdPlanId: string | null;
-  guidedStart: unknown;
-  actionIntent: AiActionIntent | null;
-  actionDebug: AiActionDebug | null;
-  executionState: { lifecycle: { actionPlanId: string } | null } | null;
-}): AssistantPlanningMode {
-  if (input.backendMode === "guided_workflow" || input.guidedStart) return "guided_workflow";
-  if (input.createdPlanId || input.actionIntent || input.actionDebug || input.executionState?.lifecycle) return "direct_action";
-  return "chat";
-}
-
-function PlanningContextPanel({
-  mode,
-  selectedDevice,
-  createdPlanId,
-  executionState,
-  guidedStart,
-  actionDebug,
-  isFa,
-}: {
-  mode: AssistantPlanningMode;
-  selectedDevice: Device | null;
-  createdPlanId: string | null;
-  executionState: { support: string; implementation: string; missing: string[]; nextStep: string; template: string | null; canCreateActionPlan: boolean; manualOnly: boolean; executable: boolean; executionMode: string; lifecycle: { actionPlanId: string; status: string; planRevision: number; planState: string } | null } | null;
-  guidedStart: { blueprintId: string; initialValues: Record<string, unknown>; vendor: string | null; deviceId: string | null; initialRequest: string } | null;
-  actionDebug: AiActionDebug | null;
-  isFa: boolean;
-}) {
-  const modeLabels: Record<AssistantPlanningMode, string> = isFa ? {
-    chat: "گفت‌وگو",
-    direct_action: "اقدام مستقیم",
-    guided_workflow: "Workflow مرحله‌ای",
-  } : {
-    chat: "Chat",
-    direct_action: "Direct Action",
-    guided_workflow: "Guided Workflow",
-  };
-  const modeText = modeLabels[mode];
-  const deviceText = selectedDevice
-    ? `${selectedDevice.name} · ${vendorOfDevice(selectedDevice)} · ${selectedDevice.host}:${selectedDevice.managementPort}`
-    : (isFa ? "هیچ دستگاهی انتخاب نشده است" : "No device selected");
-  const stateText = executionState
-    ? executionState.executable
-      ? (isFa ? "قابل اجرا پس از بازبینی" : "Executable after review")
-      : executionState.missing.length > 0
-        ? (isFa ? "نیازمند تکمیل اطلاعات" : "Needs input")
-        : executionState.manualOnly
-          ? (isFa ? "فقط بررسی دستی" : "Review only")
-          : (isFa ? "مسدود یا پشتیبانی‌نشده" : "Blocked or unsupported")
-    : (isFa ? "در انتظار درخواست" : "Waiting for a request");
-  const missingText = executionState?.missing.length ? executionState.missing.join(", ") : (isFa ? "ندارد" : "None");
-
-  return (
-    <div className="mb-4 rounded-lg border border-cyan-900/60 bg-cyan-950/15 p-3 text-right" dir={isFa ? "rtl" : "ltr"} aria-label={isFa ? "زمینه برنامه‌ریزی دستیار" : "Assistant planning context"}>
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-xs font-semibold text-cyan-200">{isFa ? "حالت پاسخ" : "Response mode"}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-cyan-700 bg-cyan-950/50 px-3 py-1 text-xs font-semibold text-cyan-100">{modeText}</span>
-            <span className="text-xs text-zinc-400">{isFa ? "بدون اجرای خودکار و بدون تغییر مسیر خودکار" : "No automatic execution or navigation"}</span>
-          </div>
-        </div>
-        <div className="md:text-left">
-          <p className="text-xs font-semibold text-cyan-200">{isFa ? "منبع vendor/platform" : "Vendor/platform source"}</p>
-          <p className="mt-2 text-xs text-zinc-300">{deviceText}</p>
-          <p className="mt-1 text-[11px] text-zinc-500">{isFa ? "دستگاه انتخاب‌شده تنها منبع محدوده اجرا است." : "The selected device is the only execution scope."}</p>
-        </div>
-      </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
-        <div className="rounded border border-zinc-800 bg-black/20 p-2">
-          <p className="text-[11px] text-zinc-500">{isFa ? "وضعیت قرارداد" : "Contract state"}</p>
-          <p className="mt-1 text-xs font-medium text-zinc-200">{stateText}</p>
-        </div>
-        <div className="rounded border border-zinc-800 bg-black/20 p-2">
-          <p className="text-[11px] text-zinc-500">{isFa ? "فیلدهای ناقص" : "Missing fields"}</p>
-          <p className="mt-1 text-xs font-medium text-zinc-200">{missingText}</p>
-        </div>
-        <div className="rounded border border-zinc-800 bg-black/20 p-2">
-          <p className="text-[11px] text-zinc-500">{isFa ? "بازبینی" : "Review"}</p>
-          <p className="mt-1 text-xs font-medium text-zinc-200">{createdPlanId ? (isFa ? "ActionPlan در مرکز اقدام آماده است" : "ActionPlan is ready in Action Center") : guidedStart ? (isFa ? "شروع دستی workflow آماده است" : "Manual workflow start is available") : actionDebug?.blockedReason ?? (isFa ? "هنوز برنامه‌ای ساخته نشده" : "No plan created yet")}</p>
-        </div>
-      </div>
-      {executionState?.nextStep && <p className="mt-2 text-xs text-zinc-400">{executionState.nextStep}</p>}
-      {createdPlanId && <button type="button" onClick={() => reviewInActionCenter(createdPlanId)} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">{isFa ? "بازبینی در مرکز اقدام" : "Review in Action Center"}</button>}
-    </div>
-  );
-}
-
-function IntentCard({
-  intent,
-  debug,
-  createdPlanId,
-  onCompleted,
-  isFa,
-}: {
-  intent: AiActionIntent | null;
-  debug: AiActionDebug | null;
-  createdPlanId: string | null;
-  onCompleted: (input: { actionPlanId: string | null; intent: AiActionIntent | null; message: string }) => void;
-  isFa: boolean;
-}) {
-  const [missingValues, setMissingValues] = useState<Record<string, string>>({});
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [localMessage, setLocalMessage] = useState<string | null>(null);
-  const params = normalizeObject(intent?.parametersJson);
-  const rawMissingFields = debug?.missingFields.length ? debug.missingFields : normalizeArray<unknown>(params.missingFields).map(String);
-  const missingFields = rawMissingFields.filter((field) => field !== "deviceId");
-  const needsDevice = !debug?.deviceId && !intent?.deviceId && !createdPlanId;
-  const clarificationQuestions = normalizeArray<unknown>(params.clarificationQuestions).map(String);
-  const canCreatePlan = Boolean(debug?.canCreateActionPlan);
-  const riskLevel = intent?.riskLevel ?? "medium";
-  const sshPortChange = intent?.intentType === "mikrotik_change_service_port" && params.service === "ssh";
-  const intentType = String(intent?.intentType ?? debug?.intentType ?? "");
-  const vendor = normalizedVendor(debug?.vendor ?? params.vendor ?? params.targetDeviceHint, intentType);
-  const compatibleDevices = devices.filter((device) => {
-    if (vendor === "mikrotik") return device.type === "mikrotik";
-    if (vendor === "fortigate") return device.type === "fortigate";
-    if (vendor === "linux_edge") return device.type === "linux_edge";
-    if (intentType.startsWith("mikrotik_")) return device.type === "mikrotik";
-    if (intentType.startsWith("fortigate_")) return device.type === "fortigate";
-    if (intentType.startsWith("linux_")) return device.type === "linux_edge";
-    return true;
-  });
-  const targetDevice = devices.find((device) => device.id === (intent?.deviceId ?? debug?.deviceId ?? selectedDeviceId));
-
-  useEffect(() => {
-    listDevices()
-      .then((nextDevices) => setDevices(nextDevices))
-      .catch(() => setDevices([]));
-  }, [intent?.id]);
-
-  useEffect(() => {
-    if (selectedDeviceId || compatibleDevices.length !== 1) return;
-    setSelectedDeviceId(compatibleDevices[0].id);
-  }, [compatibleDevices, selectedDeviceId]);
-
-  if (!intent && !debug) return null;
-
-  const completeRequest = () => {
-    if (!intent?.id) return;
-    const fields: Record<string, unknown> = { ...params };
-    if (selectedDeviceId) fields.deviceId = selectedDeviceId;
-    for (const [key, value] of Object.entries(missingValues)) {
-      if (value.trim()) fields[key] = value.trim();
-    }
-    if (needsDevice && !fields.deviceId) {
-      setLocalMessage("Select a device first.");
-      return;
-    }
-    const stillMissing = missingFields.filter((field) => !String(fields[field] ?? "").trim());
-    if (stillMissing.length > 0) {
-      setLocalMessage(`Fill missing fields: ${stillMissing.join(", ")}`);
-      return;
-    }
-    setSubmitting(true);
-    setLocalMessage(null);
-    completeAiActionRequest(intent.id, fields)
-      .then((result) => {
-        onCompleted({
-          actionPlanId: result.actionPlanId,
-          intent: result.intent,
-          message: result.actionPlanId ? "ActionPlan created. Review in Action Center." : result.blockedReason ?? "ActionPlan not created."
-        });
-        if (result.actionPlanId) {
-          publishActionPlanCreated(result.actionPlanId);
-        }
-      })
-      .catch((error: unknown) => setLocalMessage(error instanceof Error ? error.message : "Failed to complete action request."))
-      .finally(() => setSubmitting(false));
-  };
-
-  return (
-    <div className="mt-3 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
-      <div className="flex flex-wrap items-center gap-2">
-        <TriangleAlert className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-        <span className="text-sm font-semibold text-yellow-100">{createdPlanId ? "ActionPlan proposed" : "Action request reviewed"}</span>
-        <span className={`rounded border px-2 py-0.5 text-xs ${riskClass(riskLevel)}`}>{riskLevel}</span>
-        <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">{intent?.status ?? "not_supported_yet"}</span>
-      </div>
-      <div className="mt-3 grid gap-2 text-xs text-zinc-300">
-        <p><span className="text-zinc-500">intentType:</span> {debug?.intentType ?? intent?.intentType ?? "none"}</p>
-        <p><span className="text-zinc-500">vendor:</span> {vendor ?? "not selected"}</p>
-        <p><span className="text-zinc-500">deviceId:</span> {debug?.deviceId ?? intent?.deviceId ?? "missing"}</p>
-        <p><span className="text-zinc-500">canCreateActionPlan:</span> {String(canCreatePlan)}</p>
-        {createdPlanId && <p><span className="text-zinc-500">actionPlanId:</span> {createdPlanId}</p>}
-      </div>
-      <div className="mt-3 rounded border border-zinc-800 bg-black/20 p-2 text-xs text-zinc-300">
-        <p className="font-semibold text-zinc-200">Planned action summary</p>
-        <p className="mt-1">actionType: {sshPortChange ? "Change MikroTik SSH port" : intent?.intentType ?? debug?.intentType ?? "unknown"}</p>
-        <p>risk: {riskLevel}</p>
-        {sshPortChange && <p>target device: {targetDevice?.name ?? intent?.deviceId ?? "select a MikroTik device"}</p>}
-        {sshPortChange && <p>new port: {String(params.newPort ?? "missing")}</p>}
-        {sshPortChange && <p>trusted source: {String(params.trustedSourceIp ?? params.trustedSourceCidr ?? params.trustedSource ?? "required")}</p>}
-        <pre className="mt-2 max-h-32 overflow-auto rounded bg-black/30 p-2">{JSON.stringify(params, null, 2)}</pre>
-      </div>
-      {sshPortChange && (
-        <p className="mt-2 rounded border border-red-900/70 bg-red-950/20 p-2 text-xs font-medium text-red-200">
-          Lockout warning: the trusted-source firewall rule must be reviewed before the SSH service port changes.
-        </p>
-      )}
-      {!canCreatePlan && (
-        <p className="mt-2 text-xs text-yellow-200">blockedReason: {debug?.blockedReason ?? debug?.reason ?? "blocked"}</p>
-      )}
-      <p className="mt-2 text-xs text-zinc-400">{intent?.explanation || "No explanation provided."}</p>
-      {(needsDevice || missingFields.length > 0) && (
-        <div className="mt-3 rounded border border-yellow-800/70 bg-yellow-950/20 p-2">
-          <p className="text-xs font-semibold text-yellow-100">Missing fields</p>
-          <p className="mt-1 text-xs text-yellow-100/80">{[...(needsDevice ? ["device"] : []), ...missingFields].join(", ")}</p>
-          <div className="mt-2 grid gap-2">
-            {needsDevice && (
-              compatibleDevices.length === 0 ? (
-                <p className="rounded border border-red-900/60 bg-red-950/20 p-2 text-xs text-red-200">
-                  No device found. Add one in Device Registry.
-                </p>
-              ) : (
-                <select
-                  value={selectedDeviceId}
-                  onChange={(event) => setSelectedDeviceId(event.target.value)}
-                  className="h-9 rounded border border-yellow-900/60 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"
-                >
-                  <option value="">Select device</option>
-                  {(["mikrotik", "fortigate", "linux_edge"] as const).map((type) => {
-                    const group = compatibleDevices.filter((device) => device.type === type);
-                    if (group.length === 0) return null;
-                    return (
-                      <optgroup key={type} label={type === "linux_edge" ? "Linux" : type === "mikrotik" ? "MikroTik" : "FortiGate"}>
-                        {group.map((device) => (
-                          <option key={device.id} value={device.id}>
-                            {device.name} - {device.host}:{device.managementPort} - {device.vendor}
-                          </option>
-                        ))}
-                      </optgroup>
-                    );
-                  })}
-                </select>
-              )
-            )}
-            {missingFields.map((field) => (
-              <input
-                key={field}
-                value={missingValues[field] ?? ""}
-                onChange={(event) => setMissingValues((current) => ({ ...current, [field]: event.target.value }))}
-                placeholder={field === "trustedSourceIp" ? "trustedSourceIp or trustedSourceCidr" : field}
-                className="h-8 rounded border border-yellow-900/60 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"
-              />
-            ))}
-            <button
-              type="button"
-              onClick={completeRequest}
-              className="h-8 rounded border border-yellow-700 bg-yellow-950/40 px-2 text-xs font-semibold text-yellow-100 disabled:opacity-50"
-              disabled={submitting || (needsDevice && compatibleDevices.length === 0)}
-            >
-              {submitting ? (isFa ? "در حال ساخت..." : "Creating...") : (isFa ? "ساخت برنامه اقدام" : "Create ActionPlan")}
-            </button>
-          </div>
-        </div>
-      )}
-      {clarificationQuestions.length > 0 && (
-        <div className="mt-3 rounded border border-blue-900/70 bg-blue-950/20 p-2">
-          <p className="text-xs font-semibold text-blue-100">{isFa ? "پرسش‌های تکمیلی" : "Clarification questions"}</p>
-          <ul className="mt-1 space-y-1 text-xs text-blue-100/80">
-            {clarificationQuestions.map((question) => <li key={question}>- {question}</li>)}
-          </ul>
-        </div>
-      )}
-      {createdPlanId && (
-        <div className="mt-3 rounded border border-green-900/70 bg-green-950/20 p-3">
-          <p className="text-xs font-medium text-green-200">{isFa ? "برنامه اقدام ساخته شد؛ آن را در مرکز اقدام بازبینی کنید." : "ActionPlan created. Review in Action Center."}</p>
-          <button
-            type="button"
-            onClick={() => reviewInActionCenter(createdPlanId)}
-            className="mt-2 inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
-          >
-            {isFa ? "بازبینی در مرکز اقدام" : "Review in Action Center"}
-          </button>
-        </div>
-      )}
-      {localMessage && <p className="mt-2 text-xs text-zinc-300">{localMessage}</p>}
-    </div>
-  );
-}
-
-function ChatMessageBubble({ message }: { message: AiMessage }) {
-  const [expanded, setExpanded] = useState(false);
-  const long = message.content.length > 360;
-  const content = long && !expanded ? `${message.content.slice(0, 360)}...` : message.content;
-  return (
-    <div
-      className={`rounded-lg border px-3 py-2 text-left ${
-        message.role === "user"
-          ? "ml-auto max-w-[82%] border-blue-800/70 bg-blue-950/30"
-          : "mr-auto max-w-[88%] border-zinc-800 bg-zinc-900/70"
-      }`}
-    >
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium uppercase text-zinc-500">{message.role}</span>
-        <span className="text-[10px] text-zinc-600">{formatDateTime(message.createdAt)}</span>
-      </div>
-      <p className="whitespace-pre-wrap text-xs leading-5 text-zinc-200">{content}</p>
-      {long && (
-        <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-1 text-xs text-blue-300">
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </div>
-  );
-}
 
 export default function AiSecurityAssistantPanel() {
   const navigate = useNavigate();
@@ -430,13 +85,13 @@ export default function AiSecurityAssistantPanel() {
   const [providerStatus, setProviderStatus] = useState<AiProviderStatus | null>(null);
   const [structuredResponse, setStructuredResponse] = useState<StructuredAiResponse | null>(null);
   const [evidenceMetadata, setEvidenceMetadata] = useState<EvidencePackMetadata | null>(null);
-  const [executionState, setExecutionState] = useState<{ support: string; implementation: string; missing: string[]; nextStep: string; template: string | null; canCreateActionPlan: boolean; manualOnly: boolean; executable: boolean; executionMode: string; lifecycle: { actionPlanId: string; status: string; planRevision: number; planState: string } | null } | null>(null);
+  const [executionState, setExecutionState] = useState<AssistantExecutionState | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [assistantMode, setAssistantMode] = useState<string | null>(null);
   const [intentModeOverride, setIntentModeOverride] = useState<AiIntentModeOverride>("Auto");
   const previousTargetDeviceId = useRef<string | null>(null);
-  const [guidedStart, setGuidedStart] = useState<null | { blueprintId: string; initialValues: Record<string, unknown>; vendor: string | null; deviceId: string | null; initialRequest: string }>(null);
+  const [guidedStart, setGuidedStart] = useState<GuidedStartState | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
@@ -645,9 +300,11 @@ export default function AiSecurityAssistantPanel() {
         setStructuredResponse(response.structured);
         setAssistantMode(response.mode);
         setEvidenceMetadata(response.evidenceMetadata);
-        setExecutionState(response.mode === "action_request" ? { support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle } : null);
-        setCreatedPlanId(response.actionPlan?.id ?? null);
-        const canOfferGuidedStart = response.mode === "action_request" &&
+        const canSurfacePlan = canSurfaceActionPlan(response.mode);
+        setExecutionState(canSurfacePlan ? { support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle } : null);
+        setCreatedPlanId(canSurfacePlan ? response.actionPlan?.id ?? null : null);
+        setGuidedStart(null);
+        const canOfferGuidedStart = canSurfacePlan &&
           Boolean(response.blueprintId) &&
           response.actionContract.implementationState === "implemented" &&
           response.actionContract.executionSupport === "connector" &&
@@ -663,7 +320,7 @@ export default function AiSecurityAssistantPanel() {
           };
           setGuidedStart(guided);
         }
-        if (response.actionPlan?.id) {
+        if (canSurfacePlan && response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);
         }
         refreshSummary();

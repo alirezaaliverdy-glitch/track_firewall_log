@@ -154,8 +154,9 @@ test("selected-device overview questions are routed to registered read-only targ
 
 test("Action Center displays catalog titles for generic Cisco operation wrappers", () => {
   const workspace = read("../../src/components/actions/ActionCenterWorkspace.tsx");
-  assert.match(workspace, /function actionDisplayName/);
-  assert.match(workspace, /metadata\.catalogTitleFa/);
+  const workspaceModel = read("../../src/features/actions/actionCenterWorkspaceModel.tsx");
+  assert.match(workspaceModel, /function actionDisplayName/);
+  assert.match(workspaceModel, /metadata\.catalogTitleFa/);
   assert.match(workspace, /actionDisplayName\(selected, isFa\)/);
   assert.match(workspace, /actionDisplayName\(item, isFa\)/);
 });
@@ -191,7 +192,7 @@ test("executable multi-step action exposes an explicit start button only", () =>
 
   const assistant = read("../../src/components/ai/AiSecurityAssistantPanel.tsx");
   assert.match(assistant, /canOfferGuidedStart/);
-  assert.match(assistant, /response\.mode === "action_request"/);
+  assert.match(assistant, /canSurfaceActionPlan\(response\.mode\)/);
   assert.match(assistant, /response\.missingFields\.length > 0/);
   assert.match(assistant, /guidedStart && <button[^>]*onClick=\{startGuidedWorkflow\}/);
 });

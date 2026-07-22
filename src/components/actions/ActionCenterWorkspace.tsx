@@ -8,167 +8,25 @@ import { listCredentials, type DeviceCredential } from "@/lib/credentials";
 import { getDeviceVerification, retryDeviceVerification, testDeviceVerification, type DeviceVerification } from "@/lib/deviceOnboarding";
 import { listDevices, updateDevice, type Device } from "@/lib/devices";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-
-function formatDate(value: string | null | undefined, locale: string) {
-  if (!value) return locale === "fa-IR" ? "اطلاعات موجود نیست" : "Not available";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? (locale === "fa-IR" ? "اطلاعات موجود نیست" : "Not available") : date.toLocaleString(locale);
-}
-
-function pretty(value: unknown) {
-  return JSON.stringify(value ?? {}, null, 2);
-}
-
-function humanize(value: string) {
-  return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function actionDisplayName(action: ActionCenterItem, isFa: boolean) {
-  const metadata = record(action.parametersJson.metadata);
-  const catalogTitle = isFa ? metadata.catalogTitleFa : metadata.catalogTitleEn ?? metadata.catalogTitleFa;
-  if (typeof catalogTitle === "string" && catalogTitle.trim()) return catalogTitle.trim();
-  const requested = metadata.requestedActionType ?? metadata.actionType;
-  if ((action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action") && typeof requested === "string" && requested.trim()) {
-    return humanize(requested);
-  }
-  return action.actionType ? humanize(action.actionType) : (isFa ? "اطلاعات موجود نیست" : "Not available");
-}
-
-function fieldValue(value: unknown) {
-  if (typeof value === "boolean") return value ? "true" : "false";
-  return value === undefined || value === null ? "" : String(value);
-}
-
-function terminalLifecycle(value: ActionLifecycle) {
-  return value === "succeeded" || value === "failed" || value === "skipped" || value === "cancelled";
-}
-
-function reviewParametersFrom(value: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== "metadata" && (item === null || ["string", "number", "boolean"].includes(typeof item))).map(([key, item]) => [key, fieldValue(item)]));
-}
-
-function commandLines(preview: Record<string, unknown>) {
-  const candidates = [preview.plannedCommands, preview.commands, preview.generatedCommands, preview.command];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate.map((item) => typeof item === "string" ? item : fieldValue((item as Record<string, unknown>)?.command)).filter(Boolean);
-    if (typeof candidate === "string" && candidate.trim()) return [candidate];
-  }
-  return [];
-}
-
-function AdvancedBlock({ title, value }: { title: string; value: unknown }) {
-  return <section className="operator-advanced__block"><h4>{title}</h4><pre>{pretty(value)}</pre></section>;
-}
-
-function resultMessage(item: ActionCenterItem, isFa: boolean) {
-  if (item.lifecycleState === "succeeded" && item.evidence.connectorInvoked) return isFa ? "اجرای واقعی Connector با موفقیت تکمیل شد." : "The connector completed the operation successfully.";
-  if (item.lifecycleState === "failed") {
-    const exactError = typeof item.connectorResult.message === "string" ? item.connectorResult.message : null;
-    if (exactError) return exactError;
-    return item.evidence.integrityError ?? (item.evidence.connectorInvoked
-      ? (isFa ? "Connector اجرا شد اما عملیات موفق نبود. جزئیات پیشرفته را بررسی کنید." : "The connector ran, but the operation did not succeed. Review Advanced Details.")
-      : (isFa ? "عملیات پیش از فراخوانی Connector متوقف شد." : "The operation stopped before the connector was invoked."));
-  }
-  if (item.lifecycleState === "ready_for_confirmation") return isFa ? "پیش‌نمایش آماده است و هیچ دستوری روی دستگاه اجرا نشد." : "Preview is ready; no command was executed on the device.";
-  return isFa ? "وضعیت عملیات از تاریخچه ActionPlan بازیابی شد." : "Operation state was restored from ActionPlan history.";
-}
-
-function backupRequirement(item: ActionCenterItem, isFa: boolean) {
-  const value = item.rollback.required ?? item.commandPreview.requiresBackup ?? item.validationJson.requiresBackup;
-  if (value === true) return isFa ? "الزامی" : "Required";
-  if (value === false) return isFa ? "لازم نیست" : "Not required";
-  return isFa ? "ثبت نشده" : "Not specified";
-}
-
-const INLINE_PARAMETER_EXCLUDE = new Set([
-  "source", "vendor", "deviceId", "protocol", "actionType", "executable", "supportState", "connectorType",
-  "executionSupport", "supportReasonKey", "implementationState", "executionTemplateRef", "requiredParamsSatisfied"
-]);
-
-function InlineActionReviewPanel({
-  item,
-  actionName,
-  isFa,
-  locale,
-  lifecycleLabel,
-  busy,
-  onPreview,
-  onReview,
-  onRetry,
-  onClose
-}: {
-  item: ActionCenterItem;
-  actionName: string;
-  isFa: boolean;
-  locale: string;
-  lifecycleLabel: (value: ActionLifecycle) => string;
-  busy: boolean;
-  onPreview: () => void;
-  onReview: () => void;
-  onRetry: () => void;
-  onClose: () => void;
-}) {
-  const parameters = reviewParametersFrom(item.parametersJson);
-  const parameterLabels = Object.keys(parameters).filter((key) => !INLINE_PARAMETER_EXCLUDE.has(key));
-  const previewCommands = commandLines(item.commandPreview);
-  const canExecute = item.controls.canConfirm || item.controls.canExecute;
-  const detailPath = terminalLifecycle(item.lifecycleState) ? `/actions/${encodeURIComponent(item.id)}/result` : `/actions/${encodeURIComponent(item.id)}`;
-  const deviceLabel = item.device?.name ?? item.deviceId ?? (isFa ? "بدون دستگاه" : "No device");
-  const vendorLabel = [item.device?.vendor, item.device?.type || item.device?.protocol].filter(Boolean).join(" / ") || (isFa ? "نامشخص" : "Unknown");
-  const approvalState = String(record(item.approval).status ?? item.status ?? item.lifecycleState);
-
-  return (
-    <section className="inline-action-review" aria-label={isFa ? "بررسی درون‌صفحه اکشن" : "Inline action review"}>
-      <header>
-        <div>
-          <p className="operator-eyebrow">{isFa ? "بررسی و اجرای درون‌صفحه" : "Inline review and execution"}</p>
-          <h2>{actionName}</h2>
-          <span>{isFa ? "همه کنترل‌ها از مسیر Action Center، PolicyGuard و Connector ثبت‌شده عبور می‌کنند." : "All controls continue through Action Center, PolicyGuard, and the registered connector."}</span>
-        </div>
-        <StatusBadge value={lifecycleLabel(item.lifecycleState)} tone={item.lifecycleState === "succeeded" ? "good" : item.lifecycleState === "failed" ? "danger" : "warning"} />
-      </header>
-
-      <div className="inline-action-review__grid">
-        <div><span>{isFa ? "دستگاه" : "Device"}</span><strong>{deviceLabel}</strong><small>{vendorLabel}</small></div>
-        <div><span>{isFa ? "ریسک" : "Risk"}</span><strong>{item.riskLevel}</strong><small>{isFa ? "پشتیبان" : "Backup"}: {backupRequirement(item, isFa)}</small></div>
-        <div><span>{isFa ? "تأیید" : "Approval"}</span><strong>{approvalState}</strong><small>{isFa ? "به‌روزرسانی" : "Updated"}: {formatDate(item.updatedAt, locale)}</small></div>
-        <div><span>{isFa ? "اثبات اجرا" : "Execution proof"}</span><strong>{item.evidence.connectorInvoked ? (isFa ? "Connector ثبت شد" : "Connector recorded") : (isFa ? "هنوز اجرا نشده" : "Not executed yet")}</strong><small>{item.support.executable ? item.support.execution : String(item.support.reason ?? item.support.state)}</small></div>
-      </div>
-
-      <div className="inline-action-review__summary">
-        <div>
-          <strong>{isFa ? "پیش‌نمایش" : "Preview"}</strong>
-          <p>{previewCommands.length > 0 ? (isFa ? `${previewCommands.length} فرمان آماده بررسی صریح است.` : `${previewCommands.length} generated command${previewCommands.length === 1 ? "" : "s"} ready for explicit review.`) : (isFa ? "ابتدا پیش‌نمایش بسازید؛ هیچ Connector اجرا نمی‌شود." : "Generate a preview first; no connector is invoked.")}</p>
-        </div>
-        <div>
-          <strong>{isFa ? "پارامترها" : "Parameters"}</strong>
-          <p>{parameterLabels.length > 0 ? parameterLabels.map(humanize).join(", ") : (isFa ? "پارامتر عملیاتی قابل نمایش وجود ندارد." : "No operator-facing parameters.")}</p>
-        </div>
-      </div>
-
-      {!item.support.executable && <div className="inline-action-review__guard" role="alert">
-        <strong>{isFa ? "اجرای مستقیم غیرفعال است" : "Direct execution disabled"}</strong>
-        <p>{String(item.support.reason ?? (isFa ? "این اکشن فقط برای بررسی نگه داشته شده است." : "This action is retained for review only."))}</p>
-      </div>}
-
-      <footer className="operator-result__actions">
-        {item.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={busy} onClick={onPreview}>{busy ? (isFa ? "در حال اجرا..." : "Running...") : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-        {canExecute && <button className="primary-button operator-execute" type="button" disabled={busy} onClick={onReview}>{busy ? (isFa ? "در حال اجرا..." : "Running...") : item.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : (isFa ? "بازبینی اجرا" : "Review execution")}</button>}
-        {item.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={busy} onClick={onRetry}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
-        {item.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={busy} onClick={onRetry}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
-        <Link className="secondary-link" to={detailPath}>{isFa ? "جزئیات کامل" : "Full details"}</Link>
-        <button className="text-button" type="button" disabled={busy} onClick={onClose}>{isFa ? "بستن بررسی" : "Close review"}</button>
-      </footer>
-    </section>
-  );
-}
+import { actionExecutionPermission } from "@/lib/frontendPermissions";
+import { useAuth } from "@/context/AuthContext";
+import { InlineActionReviewPanel } from "@/features/actions/components/ActionReviewSheet";
+import {
+  AdvancedBlock,
+  actionDisplayName,
+  commandLines,
+  fieldValue,
+  formatDate,
+  humanize,
+  pretty,
+  resultMessage,
+  reviewParametersFrom,
+  terminalLifecycle,
+} from "@/features/actions/actionCenterWorkspaceModel";
 
 export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initialActionPlanId?: string; onCreate: () => void }) {
   const { i18n } = useTranslation();
+  const { user } = useAuth();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const locale = isFa ? "fa-IR" : "en-US";
   const navigate = useNavigate();
@@ -440,12 +298,23 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   function openExecutionReview() {
     if (!selected) return;
+    const permission = actionExecutionPermission(user, selected.riskLevel, isFa);
+    if (!permission.allowed) {
+      setError(permission.reason ?? "Execution is not allowed for this role.");
+      return;
+    }
     setReviewParameters(reviewParametersFrom(selected.parametersJson));
     setReviewOpen(true);
   }
 
   async function executeSelected() {
     if (!selected?.controls.canConfirm && !selected?.controls.canExecute) return;
+    const permission = actionExecutionPermission(user, selected.riskLevel, isFa);
+    if (!permission.allowed) {
+      setError(permission.reason ?? "Execution is not allowed for this role.");
+      setReviewOpen(false);
+      return;
+    }
     const actionPlanId = selected.id;
     setActionBusy(true);
     setError("");
@@ -513,6 +382,9 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const pages = Math.max(1, Math.ceil(total / 10));
   const currentPage = Math.floor(offset / 10) + 1;
   const selectedActionName = selected ? actionDisplayName(selected, isFa) : "";
+  const selectedExecutionPermission = selected
+    ? actionExecutionPermission(user, selected.riskLevel, isFa)
+    : { allowed: false, reason: null };
   const historyActionLabel = (item: ActionCenterItem) => {
     if (item.controls.canPreview) return isFa ? "بررسی و ساخت پیش‌نمایش" : "Review and preview";
     if (item.controls.canConfirm || item.controls.canExecute) return isFa ? "بررسی و تأیید اجرا" : "Review and execute";
@@ -527,7 +399,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         <div><p className="operator-eyebrow">{isFa ? "اکشن آماده بررسی" : "Action ready for review"}</p><h2>{selectedActionName}</h2><span>{selected.device?.name || (isFa ? "اطلاعات دستگاه موجود نیست" : "Device information is not available")}</span></div>
         <div className="operator-result__actions">
           {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
+          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy || !selectedExecutionPermission.allowed} title={selectedExecutionPermission.reason ?? undefined} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
           {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
           {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
         </div>
@@ -539,6 +411,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         locale={locale}
         lifecycleLabel={lifecycleLabel}
         busy={actionBusy}
+        canReview={selectedExecutionPermission.allowed}
+        disabledReason={selectedExecutionPermission.reason}
         onPreview={() => void previewSelected()}
         onReview={openExecutionReview}
         onRetry={() => void repeatSelected()}
@@ -547,7 +421,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
           if (initialActionPlanId) navigate("/actions");
         }}
       />}
-      {selected && reviewOpen && <section className="action-review-dialog" role="dialog" aria-modal="true" aria-label="Execution review"><div className="action-review-dialog__card"><header><div><p className="operator-eyebrow">Explicit confirmation</p><h2>Review action execution</h2></div><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Close</button></header><dl className="detail-list"><dt>Target device</dt><dd>{selected.device?.name ?? selected.deviceId ?? "-"}</dd><dt>Action purpose</dt><dd>{selectedActionName}</dd><dt>Risk</dt><dd>{selected.riskLevel}</dd><dt>Backup requirement</dt><dd>{String(selected.rollback.required ?? selected.commandPreview.requiresBackup ?? selected.validationJson.requiresBackup ?? "Not specified")}</dd></dl><section><h3>Generated commands</h3>{commandLines(selected.commandPreview).length ? <ol className="command-review-list">{commandLines(selected.commandPreview).map((command, index) => <li key={`${command}-${index}`}><code dir="ltr">{command}</code></li>)}</ol> : <p>Generate a preview first to show commands.</p>}</section><section><h3>Editable parameters</h3>{Object.keys(reviewParameters).length ? <div className="operator-parameters">{Object.entries(reviewParameters).map(([key, value]) => <label key={key}>{humanize(key)}<input value={value} onChange={(event) => setReviewParameters((current) => ({ ...current, [key]: event.target.value }))} /></label>)}</div> : <p>No simple editable parameters are available.</p>}</section><footer className="button-row"><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Cancel</button><button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void executeSelected()}>{actionBusy ? copy.running : "Confirm and execute"}</button></footer></div></section>}
+      {selected && reviewOpen && <section className="action-review-dialog" role="dialog" aria-modal="true" aria-label="Execution review"><div className="action-review-dialog__card"><header><div><p className="operator-eyebrow">Explicit confirmation</p><h2>Review action execution</h2></div><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Close</button></header><dl className="detail-list"><dt>Target device</dt><dd>{selected.device?.name ?? selected.deviceId ?? "-"}</dd><dt>Action purpose</dt><dd>{selectedActionName}</dd><dt>Risk</dt><dd>{selected.riskLevel}</dd><dt>Backup requirement</dt><dd>{String(selected.rollback.required ?? selected.commandPreview.requiresBackup ?? selected.validationJson.requiresBackup ?? "Not specified")}</dd></dl><section><h3>Generated commands</h3>{commandLines(selected.commandPreview).length ? <ol className="command-review-list">{commandLines(selected.commandPreview).map((command, index) => <li key={`${command}-${index}`}><code dir="ltr">{command}</code></li>)}</ol> : <p>Generate a preview first to show commands.</p>}</section><section><h3>Editable parameters</h3>{Object.keys(reviewParameters).length ? <div className="operator-parameters">{Object.entries(reviewParameters).map(([key, value]) => <label key={key}>{humanize(key)}<input value={value} onChange={(event) => setReviewParameters((current) => ({ ...current, [key]: event.target.value }))} /></label>)}</div> : <p>No simple editable parameters are available.</p>}</section><footer className="button-row"><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Cancel</button><button className="primary-button operator-execute" type="button" disabled={actionBusy || !selectedExecutionPermission.allowed} title={selectedExecutionPermission.reason ?? undefined} onClick={() => void executeSelected()}>{actionBusy ? copy.running : "Confirm and execute"}</button></footer></div></section>}
       <section className={`operator-connection operator-connection--${connectionTone}`} aria-label={copy.connection}>
         <header>
           <div><p className="operator-eyebrow">{copy.connection}</p><h2>{verification?.connected ? copy.connected : verification?.error ? copy.failed : copy.notTested}</h2><span>{copy.connectionHelp}</span></div>
@@ -590,7 +464,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         {!selected.support.executable && <div className="state-panel state-panel--error" role="alert"><strong>{isFa ? "غیرقابل اجرا" : "Unsupported action"}</strong><p>{String(selected.support.reason ?? (isFa ? "برای این فروشنده Connector ثبت‌شده‌ای وجود ندارد." : "No registered connector supports this action for the selected vendor."))}</p></div>}
         <div className="operator-result__actions">
           {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
+          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy || !selectedExecutionPermission.allowed} title={selectedExecutionPermission.reason ?? undefined} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
           {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
           {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
         </div>
