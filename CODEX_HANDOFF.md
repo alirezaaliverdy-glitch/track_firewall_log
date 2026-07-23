@@ -1,3 +1,16 @@
+**Phase H intelligent execution and mobile-ready actions (2026-07-23)**
+
+- Resumed Phase H from the existing H4 worktree state without restarting H1-H3. Preserved commits `e4f607a`, `427da23`, and `f9bda77`, then completed H4-H8 in order.
+- H4 added backend-owned ActionPlan parameter schemas and the `/actions/:actionId/configure` workspace so stale or missing inputs are corrected through backend validation before dry-run, approval, PolicyGuard, connector dispatch, audit, and result display.
+- H5 added read-only live monitoring ActionPlan support for Assistant monitoring intent without selecting a connector or executing a device mutation.
+- H6 bound approvals to the verified preview/result state with plan/device/platform/parameter/generated-step hashes, expiry metadata, execution result-state classification, evidence counts, and persisted approval binding metadata.
+- H7 hardened mobile action execution by blocking offline approval/execution, adding mobile idempotency keys, notification event contracts, and deep-link-safe action URLs.
+- H8 stabilized final acceptance: repaired the Assistant Persian intent classifier mojibake, aligned selected-device monitoring characterization, registered the configure route in product state, and updated the acceptance matrix.
+- Validation passed: frontend build; backend build; command catalog validation (191 items); i18n parity/Persian primary copy (412 keys); UTF-8 guard (460 files); workflow lab guard; `test:v2-stability` (58 tests, 58 pass); focused Phase H TAP (54 tests, 54 pass); full isolated backend TAP (403 tests, 403 pass); product-state focused TAP (5 tests, 5 pass); PWA artifact checks; Playwright MCP desktop and 390px mobile dashboard acceptance with zero browser console errors; `git diff --check`.
+- DB-bound validation used the isolated test database path prepared by `prepare-isolated-test-database.ts`. No real device destructive commands were executed.
+- `docs/CURRENT_STATUS.md` and `docs/TASK_HISTORY.md` remain unavailable because the unrelated pre-existing `docs/` deletion state was explicitly preserved and not staged.
+- Remaining risk: native Capacitor projects were not generated or packaged; unsupported connector families remain review-only/unsupported unless they already have registered planners, templates, connector handlers, verification, and tests.
+
 **Phase G mobile foundation - secure PWA and Capacitor-ready foundation (2026-07-22)**
 
 - Started Phase G from committed Phase F HEAD `20d3f7b`.

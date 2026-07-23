@@ -151,7 +151,7 @@ function isAdviceAboutAction(text: string) {
 }
 
 function isExplanationAboutAction(text: string) {
-  return hasAny(text, ["explain", "what does", "how does", "what is", "tell me about", "ØªÙˆØ¶ÛŒØ­", "Ú†Ù‡ Ú©Ø§Ø±", "Ú†Ø·ÙˆØ± Ú©Ø§Ø±"]) && hasActionVerb(text);
+  return hasAny(text, ["explain", "what does", "how does", "what is", "tell me about", "توضیح", "چه کار", "چطور کار"]) && hasActionVerb(text);
 }
 
 function isChatPhrase(text: string) {

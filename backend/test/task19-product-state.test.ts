@@ -42,8 +42,8 @@ test("Task 19A backend feature keys and frontend route registry stay aligned", (
   const frontendRoutes = [...source.matchAll(/path:\s*"([^"]+)"\s*,\s*featureKey:\s*"([^"]+)"/g)]
     .map((match) => ({ route: match[1], key: match[2] }));
   const backendKeys = new Set(PRODUCT_FEATURES.map((item) => item.key));
-  assert.equal(frontendKeys.length, 53);
-  assert.equal(PRODUCT_FEATURES.length, 53);
+  assert.equal(frontendKeys.length, 54);
+  assert.equal(PRODUCT_FEATURES.length, 54);
   assert.equal(new Set(frontendKeys).size, frontendKeys.length);
   for (const key of frontendKeys) assert.ok(backendKeys.has(key), `Frontend feature key is missing from product state: ${key}`);
   for (const item of PRODUCT_FEATURES.filter((feature) => feature.route)) assert.ok(frontendKeys.includes(item.key), `Product state feature is missing from frontend routes: ${item.key}`);

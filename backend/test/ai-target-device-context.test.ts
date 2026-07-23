@@ -118,7 +118,8 @@ test("unmatched selected-device chat stays chat unless classified as an action r
   assert.match(chat, /classification\.mode !== "action_request"/);
   assert.match(chat, /providerIntentIgnored/);
   assert.match(chat, /actionPlan: null/);
-  assert.match(chat, /shouldCreateActionPlan: false/);
+  assert.match(chat, /intentDecision\.intent === "monitoring_live"/);
+  assert.match(chat, /shouldCreateActionPlan: Boolean\(monitoringActionPlan\)/);
   assert.match(chat, /responseContract/);
   assert.match(chat, /shouldCreateReviewOnlyActionPlan/);
   assert.match(chat, /!input\.canCreateSupportedActionPlan/);
