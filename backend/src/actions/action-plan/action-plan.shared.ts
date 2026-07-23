@@ -308,6 +308,9 @@ export interface CanonicalActionPlanPayload {
   riskClass: string;
 }
 
+const ACTION_APPROVAL_BINDING_VERSION = "phase-h-approval-binding-v1";
+const ACTION_APPROVAL_EXPIRY_MS = 15 * 60 * 1000;
+
 export function canonicalPayloadFromStoredPlan(plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson"> & Partial<Pick<ActionPlan, "riskLevel">>): CanonicalActionPlanPayload {
   const parameters = asObject(plan.parametersJson);
   const metadata = asObject(parameters.metadata);
@@ -327,6 +330,41 @@ export function canonicalPayloadFromStoredPlan(plan: Pick<ActionPlan, "actionTyp
 
 export function actionExecutionFingerprint(plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson"> & Partial<Pick<ActionPlan, "riskLevel">>) {
   return sha256(canonicalPayloadFromStoredPlan(plan));
+}
+
+function generatedStepsFromDryRun(dryRun: unknown) {
+  const dryRunObject = asObject(dryRun);
+  return {
+    commands: Array.isArray(dryRunObject.plannedCommands) ? dryRunObject.plannedCommands : Array.isArray(dryRunObject.commands) ? dryRunObject.commands : [],
+    apiCalls: Array.isArray(dryRunObject.apiCalls) ? dryRunObject.apiCalls : [],
+    commandSpecs: Array.isArray(dryRunObject.commandSpecs) ? dryRunObject.commandSpecs : []
+  };
+}
+
+export function buildApprovalBinding(input: {
+  plan: Pick<ActionPlan, "actionType" | "deviceId" | "parametersJson"> & Partial<Pick<ActionPlan, "riskLevel">>;
+  planRevision: number;
+  approvedAt: string;
+  previewHash?: string;
+  generatedStepsHash?: string;
+}) {
+  const canonicalPayload = canonicalPayloadFromStoredPlan(input.plan);
+  const approvedAtMs = Date.parse(input.approvedAt);
+  return {
+    version: ACTION_APPROVAL_BINDING_VERSION,
+    planRevision: input.planRevision,
+    planHash: sha256({ canonicalPayload, planRevision: input.planRevision }),
+    deviceId: canonicalPayload.targetDeviceId,
+    vendor: canonicalPayload.vendor,
+    platform: canonicalPayload.platform ?? null,
+    parametersHash: sha256(canonicalPayload.parameters),
+    generatedStepsHash: input.generatedStepsHash ?? "",
+    riskVersion: canonicalPayload.riskClass,
+    canonicalPayloadHash: sha256(canonicalPayload),
+    previewHash: input.previewHash ?? "",
+    approvedAt: input.approvedAt,
+    expiresAt: new Date((Number.isFinite(approvedAtMs) ? approvedAtMs : Date.now()) + ACTION_APPROVAL_EXPIRY_MS).toISOString()
+  };
 }
 
 export type ExecutionTrace = (stage: string, payload: Record<string, unknown>) => void;
@@ -644,6 +682,7 @@ export function previewRevisionMetadata(plan: ActionPlan, dryRun: unknown) {
   const metadata = asObject(parameters.metadata);
   const canonicalPayload = canonicalPayloadFromStoredPlan(plan);
   const canonicalPayloadHash = sha256(canonicalPayload);
+  const generatedStepsHash = sha256(generatedStepsFromDryRun(dryRun));
   const previewHash = sha256({ canonicalPayload, dryRun });
   return {
     planRevision: planRevision(metadata),
@@ -652,6 +691,7 @@ export function previewRevisionMetadata(plan: ActionPlan, dryRun: unknown) {
     canonicalParametersHash: sha256(canonicalPayload.parameters),
     canonicalPayload,
     canonicalPayloadHash,
+    generatedStepsHash,
     previewHash,
     previewFingerprint: canonicalPayloadHash,
     idempotencyKey: sha256({
@@ -670,6 +710,13 @@ export async function approveCurrentRevisionForExecution(plan: ActionPlan, input
   const approvedAt = new Date().toISOString();
   const canonicalPayloadHash = String(metadata.canonicalPayloadHash ?? actionExecutionFingerprint(plan));
   const previewHash = String(metadata.previewHash ?? "");
+  const approvalBinding = buildApprovalBinding({
+    plan,
+    planRevision: revision,
+    approvedAt,
+    previewHash,
+    generatedStepsHash: typeof metadata.generatedStepsHash === "string" ? metadata.generatedStepsHash : undefined
+  });
   const approval = {
     decision: "approved",
     approvedBy: typeof input.approvedBy === "string" ? input.approvedBy : undefined,
@@ -677,6 +724,7 @@ export async function approveCurrentRevisionForExecution(plan: ActionPlan, input
     planRevision: revision,
     canonicalPayloadHash,
     previewHash,
+    approvalBinding,
     approvedAt
   };
   return prisma.actionPlan.update({
@@ -688,6 +736,7 @@ export async function approveCurrentRevisionForExecution(plan: ActionPlan, input
         approvedRevision: revision,
         approvedCanonicalPayloadHash: canonicalPayloadHash,
         approvedPreviewHash: previewHash,
+        approvedBinding: approvalBinding,
         approvedCanonicalPayload: metadata.canonicalPayload,
         approvedAt
       }))

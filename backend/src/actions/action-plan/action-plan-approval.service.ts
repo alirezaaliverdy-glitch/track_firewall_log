@@ -7,6 +7,7 @@ import {
   approvalPreconditionError,
   asObject,
   audit,
+  buildApprovalBinding,
   includeRelations,
   planRevision,
   toJson,
@@ -38,13 +39,21 @@ export async function approveActionPlan(id: string, input: Record<string, unknow
   const approvedRevision = planRevision(approvalMetadata);
   const approvedCanonicalPayloadHash = String(approvalMetadata.canonicalPayloadHash ?? actionExecutionFingerprint(plan));
   const approvedPreviewHash = String(approvalMetadata.previewHash ?? "");
+  const approvedAt = approval.createdAt.toISOString();
+  const approvalBinding = buildApprovalBinding({
+    plan,
+    planRevision: approvedRevision,
+    approvedAt,
+    previewHash: approvedPreviewHash,
+    generatedStepsHash: typeof approvalMetadata.generatedStepsHash === "string" ? approvalMetadata.generatedStepsHash : undefined
+  });
 
   const updated = await prisma.actionPlan.update({
     where: { id },
     data: {
       status: ActionPlanStatus.approved,
-      approvalJson: toJson({ decision: approval.decision, approvedBy: approval.approvedBy, reason: approval.reason, confirmation: typedApproval || null, breakGlass: input.breakGlass === true, createdAt: approval.createdAt, planRevision: approvedRevision, canonicalPayloadHash: approvedCanonicalPayloadHash, previewHash: approvedPreviewHash }),
-      parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { planState: "approved", approvedRevision, approvedCanonicalPayloadHash, approvedPreviewHash, approvedCanonicalPayload: approvalMetadata.canonicalPayload, approvedAt: approval.createdAt }))
+      approvalJson: toJson({ decision: approval.decision, approvedBy: approval.approvedBy, reason: approval.reason, confirmation: typedApproval || null, breakGlass: input.breakGlass === true, createdAt: approval.createdAt, planRevision: approvedRevision, canonicalPayloadHash: approvedCanonicalPayloadHash, previewHash: approvedPreviewHash, approvalBinding }),
+      parametersJson: toJson(withExecutionMetadata(plan.parametersJson, { planState: "approved", approvedRevision, approvedCanonicalPayloadHash, approvedPreviewHash, approvedBinding: approvalBinding, approvedCanonicalPayload: approvalMetadata.canonicalPayload, approvedAt: approval.createdAt }))
     },
     include: includeRelations()
   });

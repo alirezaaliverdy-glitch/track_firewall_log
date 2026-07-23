@@ -30,6 +30,7 @@ import {
 } from "./action-plan.shared.js";
 import { approveActionPlan } from "./action-plan-approval.service.js";
 import { dryRunActionPlan, validateAndStoreActionPlan } from "./action-plan-preview.service.js";
+import { classifyExecutionResultState } from "./execution-result-state.js";
 async function regenerateLatestRevisionForExecution(plan: ActionPlan, input: Record<string, unknown>, changedFields: string[]) {
   const parameters = asObject(plan.parametersJson);
   const metadata = asObject(parameters.metadata);
@@ -318,13 +319,25 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       resultUrl: `/actions/${id}/result`
     };
     const verification = buildPostExecutionVerification({ plan, pipeline, result, executionSucceeded, connectorInvoked: true });
+    const verificationEvidenceCount = Object.keys(asObject(asObject(result.rollbackJson).verification)).length > 0 ? 1 : 0;
+    const resultState = classifyExecutionResultState({
+      connectorInvoked: true,
+      executionSucceeded,
+      verificationOk: verification.ok,
+      verificationEvidenceCount,
+      commandExitCodes: result.commands.map((command) => command.exitCode)
+    });
     resultPayload.verification = verification;
+    resultPayload.resultState = resultState;
+    resultPayload.approvalBinding = metadata.approvedBinding ?? asObject(plan.approvalJson).approvalBinding ?? null;
     resultPayload.executionEvidence = {
       template: { status: "resolved", ref: pipeline.template.id, connectorType: pipeline.template.connectorType, handler: pipeline.template.handler },
       connector: { status: "invoked", name: connector.name, registered: true },
       validation: { status: "passed", riskLevel: validation.riskLevel },
       execution: { status: executionSucceeded ? "success" : "failed", commandCount: result.commands.length, connectorInvoked: true },
-      verification: { status: verification.ok ? "passed" : "failed", checks: verification.checks },
+      verification: { status: verification.ok ? "passed" : "failed", checks: verification.checks, evidenceCount: verificationEvidenceCount },
+      resultState,
+      approvalBinding: resultPayload.approvalBinding,
       audit: { status: "recorded", events: pipeline.auditEvents }
     };
     dependencies.trace?.("action_remote_command_completed", { connectorInvoked: true, connectorType: connector.name, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
@@ -341,6 +354,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
           executionTemplateRef: pipeline.template.id,
           connectorType: pipeline.template.connectorType,
           verificationStatus: verification.ok ? "passed" : "failed",
+          resultState,
+          verificationEvidenceCount,
           executionPipeline: {
             template: "resolved",
             connector: "invoked",
@@ -352,7 +367,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
           executionCompletedAt: completedAt,
           exitCode: resultPayload.exitCode,
           executor: connector.name,
-          lastExecutionStatus: verification.ok ? "succeeded" : "failed"
+          lastExecutionStatus: resultState
         })),
         resultJson: toJson(resultPayload),
         rollbackJson: toJson(result.rollbackJson ?? plan.rollbackJson)
@@ -363,6 +378,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(updated, "connection_success", "Connector execution connection succeeded.", { connector: connector.name });
     dependencies.trace?.("action_execution_result_saved", { connectorInvoked: true, connectorType: connector.name, backupEnabled: false, exitCode: resultPayload.exitCode, stdoutLength: resultPayload.stdout.length, stderrLength: resultPayload.stderr.length });
     await audit(updated, verification.ok ? "post_execution_verification_passed" : "post_execution_verification_failed", verification.ok ? "Post-execution evidence verified." : "Post-execution evidence failed verification.", verification);
+    await audit(updated, "execution_result_state_recorded", "Execution result state and verification evidence were persisted.", { resultState, verificationEvidenceCount, approvalBinding: resultPayload.approvalBinding });
     await audit(updated, verification.ok ? "execution_succeeded" : "execution_failed", verification.ok ? "Connector execution succeeded and evidence verified." : "Connector execution evidence failed verification.", resultPayload);
     return updated;
   } catch (error) {
@@ -384,6 +400,8 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
           executionTemplateRef: pipeline.template.id,
           connectorType: pipeline.template.connectorType,
           verificationStatus: "failed",
+          resultState: "failed",
+          verificationEvidenceCount: 0,
           executionPipeline: {
             template: "resolved",
             connector: "invoked",
@@ -396,6 +414,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
           lastExecutionStatus: "failed"
         })),
         resultJson: toJson({
+          resultState: "failed",
           executed: false,
           connectorInvoked: true,
           backupEnabled: false,
