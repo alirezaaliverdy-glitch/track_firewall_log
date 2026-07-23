@@ -1,4 +1,5 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { apiRequest } from "./apiTransport";
+import { dispatchMobileActionNotification, withMobileActionRequest } from "./mobileActionGuards";
 
 export type ActionPlanSource = "ai" | "user" | "system" | "detection";
 export type ActionPlanStatus =
@@ -305,15 +306,10 @@ function apiErrorMessage(status: number, payload: unknown) {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit, options?: { allowConflict?: boolean }): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
   let response: Response;
 
   try {
-    response = await fetch(url, {
-      credentials: "include",
-      headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
-      ...init,
-    });
+    response = await apiRequest(path, withMobileActionRequest(path, init));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network request failed.";
     throw new Error(`Action API network error: ${message}`);
@@ -425,10 +421,12 @@ export async function dryRunAction(id: string) {
 }
 
 export async function approveAction(id: string, input: ApprovalInput = {}) {
-  return requestJson<unknown>(`/actions/${id}/approve`, {
+  const plan = await requestJson<unknown>(`/actions/${id}/approve`, {
     method: "POST",
     body: JSON.stringify(input),
   }).then(normalizeActionPlan);
+  dispatchMobileActionNotification({ event: "approval_requested", actionPlanId: id, target: "approval" });
+  return plan;
 }
 
 export async function rejectAction(id: string, input: ApprovalInput = {}) {
@@ -440,18 +438,26 @@ export async function rejectAction(id: string, input: ApprovalInput = {}) {
 
 export async function executeAction(id: string, input: Record<string, unknown> = {}) {
   const latest = await getAction(id);
-  return requestJson<unknown>(`/actions/${id}/execute`, {
+  dispatchMobileActionNotification({ event: "execution_started", actionPlanId: id, target: "result" });
+  const plan = await requestJson<unknown>(`/actions/${id}/execute`, {
     method: "POST",
     body: JSON.stringify({ ...input, actionPlanRevision: actionPlanRevision(latest) }),
   }).then(normalizeActionPlan);
+  dispatchMobileActionNotification({ event: plan.status === "failed" ? "verification_failed" : "execution_completed", actionPlanId: id, target: "result" });
+  return plan;
 }
 
 export async function quickExecuteAction(id: string, input: Record<string, unknown> = {}) {
   const latest = await getAction(id);
-  return requestJson<unknown>(`/actions/${id}/quick-execute`, {
+  if (input.intent === "execute") dispatchMobileActionNotification({ event: "execution_started", actionPlanId: id, target: "result" });
+  const plan = await requestJson<unknown>(`/actions/${id}/quick-execute`, {
     method: "POST",
     body: JSON.stringify({ ...input, actionPlanRevision: actionPlanRevision(latest) }),
   }).then(normalizeActionPlan);
+  if (input.intent === "execute") {
+    dispatchMobileActionNotification({ event: plan.status === "failed" ? "verification_failed" : "execution_completed", actionPlanId: id, target: "result" });
+  }
+  return plan;
 }
 
 export function actionPlanRevision(plan: ActionPlan) {
