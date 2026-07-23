@@ -1,4 +1,4 @@
-import { buildLocalApprovalBinding, approvalStillMatches } from "../../packages/action-core/src/index";
+import { buildLocalApprovalBinding, approvalStillMatches, sha256Hex } from "../../packages/action-core/src/index";
 import type {
   ApprovalInput,
   ApprovalReceipt,
@@ -19,6 +19,8 @@ import { evaluateLocalPolicyGuard } from "../../packages/policy-core/src/index";
 import { templateFor } from "../../packages/vendor-schemas/src/index";
 import { createLocalMobileRepository } from "@/mobile-local/persistence/CapacitorSqliteRepository";
 import type { LocalMobileRepository } from "@/mobile-local/persistence/LocalMobileRepository";
+import { NativeLocalSshExecutor, type LocalSshExecutor } from "@/mobile-local/execution/LocalSshExecutor";
+import { sanitizeTerminalOutput, verifyExecutionResult } from "../../packages/verification-core/src/index";
 
 function now() {
   return new Date().toISOString();
@@ -39,17 +41,19 @@ function renderCommand(command: string, parameters: Record<string, unknown>) {
 export class LocalMobileRuntime {
   readonly kind = "local-mobile" as const;
   private readonly repository: LocalMobileRepository;
+  private readonly ssh: LocalSshExecutor;
   private initialized = false;
 
-  constructor(repository: LocalMobileRepository = createLocalMobileRepository()) {
+  constructor(repository: LocalMobileRepository = createLocalMobileRepository(), ssh: LocalSshExecutor = new NativeLocalSshExecutor()) {
     this.repository = repository;
+    this.ssh = ssh;
   }
 
   async getCapabilities(): Promise<RuntimeCapabilities> {
     return {
       mode: "local-mobile",
       localOnly: true,
-      supportsSsh: false,
+      supportsSsh: true,
       supportsServerApi: false,
       supportsOfflineInventory: true,
       supportsSecureVault: true,
@@ -139,10 +143,66 @@ export class LocalMobileRuntime {
 
   async executePlan(input: ExecutePlanInput): Promise<ExecutionHandle> {
     await this.ensureInitialized();
+    const existing = await this.repository.getExecutionResult(input.idempotencyKey);
+    if (existing) return { executionId: existing.executionId, planId: existing.planId, startedAt: existing.completedAt };
     const plan = await this.requirePlan(input.planId);
+    const device = await this.requireDevice(plan.deviceId);
     const receipt = await this.repository.getApproval(plan.id);
     if (!receipt || !await approvalStillMatches(plan, input.approvalHash, receipt.binding)) throw new Error("LOCAL_APPROVAL_BINDING_INVALID");
-    throw new Error("LOCAL_SSH_PLUGIN_NOT_CONFIGURED");
+    const validation = evaluateLocalPolicyGuard(plan, device);
+    if (!validation.valid) throw new Error(`LOCAL_POLICY_GUARD_BLOCKED: ${validation.errors.join("; ")}`);
+
+    const executionId = input.idempotencyKey;
+    const startedAt = now();
+    const executingPlan = { ...plan, status: "executing" as const, updatedAt: startedAt };
+    await this.repository.savePlan(executingPlan);
+    await this.repository.saveExecutionResult({
+      executionId,
+      planId: plan.id,
+      status: "executing",
+      connectorInvoked: false,
+      verification: "pending",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      completedAt: startedAt
+    });
+    await this.repository.appendExecutionEvent({ executionId, type: "started", message: "Local SSH execution requested.", createdAt: startedAt });
+    await this.audit("local.execution.started", { executionId, planId: plan.id, deviceId: device.id, approvalHash: input.approvalHash });
+
+    try {
+      const handle = await this.ssh.startExecution({ executionId, plan: executingPlan, device, idempotencyKey: input.idempotencyKey });
+      await this.repository.saveExecutionResult({
+        executionId,
+        planId: plan.id,
+        status: "executing",
+        connectorInvoked: true,
+        verification: "pending",
+        stdout: "",
+        stderr: "",
+        exitCode: null,
+        completedAt: startedAt
+      });
+      await this.audit("local.connector.invoked", { executionId, planId: plan.id, deviceId: device.id });
+      return handle;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Local SSH execution failed.";
+      const result = {
+        executionId,
+        planId: plan.id,
+        status: "failed" as const,
+        connectorInvoked: false,
+        verification: "failed" as const,
+        stdout: "",
+        stderr: sanitizeTerminalOutput(message),
+        exitCode: null,
+        completedAt: now()
+      };
+      await this.repository.saveExecutionResult(result);
+      await this.repository.savePlan({ ...plan, status: "failed", verification: verifyExecutionResult(result), updatedAt: result.completedAt });
+      await this.audit("local.execution.failed", { executionId, planId: plan.id, error: message });
+      throw error;
+    }
   }
 
   async cancelExecution(executionId: string): Promise<void> {
@@ -194,13 +254,15 @@ export class LocalMobileRuntime {
   private async audit(eventType: string, payload: Record<string, unknown>) {
     const events = await this.repository.listAuditEvents();
     const previous = events.at(-1)?.eventHash ?? null;
+    const createdAt = now();
+    const eventHash = await sha256Hex({ previousHash: previous, eventType, payload, createdAt });
     const event: AuditEvent = {
       id: id("local-audit"),
-      eventHash: `${previous ?? "root"}:${eventType}:${events.length}`,
+      eventHash,
       previousHash: previous,
       eventType,
       payload,
-      createdAt: now()
+      createdAt
     };
     await this.repository.appendAuditEvent(event);
   }

@@ -103,7 +103,7 @@ export type ExecutionEvent = {
 export type ExecutionResult = {
   executionId: string;
   planId: string;
-  status: "succeeded" | "failed" | "cancelled";
+  status: "executing" | "succeeded" | "failed" | "cancelled";
   connectorInvoked: boolean;
   verification: VerificationState;
   stdout: string;

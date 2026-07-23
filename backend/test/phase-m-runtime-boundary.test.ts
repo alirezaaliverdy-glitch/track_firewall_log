@@ -67,7 +67,7 @@ test("Phase M RuntimeFacade separates server and local mobile adapters", () => {
   assert.match(server, /readonly kind = "server"/);
   assert.match(server, /api|proposeAction|executeAction/);
   assert.match(local, /readonly kind = "local-mobile"/);
-  assert.match(local, /LOCAL_SSH_PLUGIN_NOT_CONFIGURED/);
+  assert.match(local, /NativeLocalSshExecutor|this\.ssh\.startExecution/);
   assert.doesNotMatch(local, /@prisma\/client|fastify|node:|ssh2/);
   assert.doesNotMatch(server, /LocalSsh|@capacitor/);
 });
