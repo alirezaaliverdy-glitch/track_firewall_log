@@ -3,7 +3,7 @@ import { baseDecision, vendorText } from "./shared.js";
 
 function commandAllowed(command: string) {
   if (/^(reload|erase|delete|format|copy|write erase)\b|password|secret|enable secret|username\s+\S+\s+secret/i.test(command)) return false;
-  return /^(show|configure terminal|interface\s+\S+|line\s+vty\s+\d+(?:\s+\d+)?|description\s+.+|shutdown|no shutdown|switchport\b.+|ip address\b.+|transport input ssh|end|exit)\b/i.test(command);
+  return /^(show|configure terminal|interface\s+\S+|line\s+vty\s+\d+(?:\s+\d+)?|description\s+.+|shutdown|no shutdown|switchport\b.+|ip address\b.+|ip dhcp snooping(?:\s+vlan\s+\d{1,4})?|vlan\s+\d{1,4}|name\s+[A-Za-z0-9_.-]{1,64}|transport input ssh|end|exit)\b/i.test(command);
 }
 
 export const ciscoCustomCommandPolicy: VendorCustomCommandPolicy = {

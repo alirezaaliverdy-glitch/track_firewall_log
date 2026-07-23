@@ -56,6 +56,6 @@ test("Phase H generic custom action: catalog absence does not force manual-only 
 
   const validation = validateCustomCommandPlan({ plan, device: ciscoDevice, actionType: ActionType.custom_vendor_action });
   assert.equal(validation.valid, true);
-  assert.equal(validation.errors, []);
+  assert.deepEqual(validation.errors, []);
   assert.equal(validation.normalizedPlan?.backendValidation.commandSafety, "passed");
 });

@@ -122,6 +122,19 @@ function ciscoDescriptionFromPrompt(message: string, parameters: Record<string, 
   return text(parameters.description) ?? message.match(/\bdescription\s+(?:to\s+)?([A-Za-z0-9 _.-]{1,80})/i)?.[1]?.trim();
 }
 
+function ciscoVlanIdFromPrompt(message: string, parameters: Record<string, unknown>) {
+  const explicit = Number(parameters.vlanId ?? parameters.vlan);
+  if (Number.isInteger(explicit) && explicit >= 1 && explicit <= 4094) return explicit;
+  const parsed = Number(message.match(/\bvlan\s+(\d{1,4})\b/i)?.[1]);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 4094 ? parsed : undefined;
+}
+
+function ciscoVlanNameFromPrompt(message: string, parameters: Record<string, unknown>) {
+  const explicit = text(parameters.name) ?? text(parameters.vlanName);
+  const parsed = explicit ?? message.match(/\b(?:named|name)\s+([A-Za-z0-9_.-]{1,64})\b/i)?.[1];
+  return parsed?.replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 64);
+}
+
 function commandsFromProvider(parameters: Record<string, unknown>) {
   const plan = asObject(parameters.customCommandPlan);
   return textArray(plan.orderedCommands).length
@@ -184,6 +197,34 @@ function synthesizeCommands(input: {
       missingFields: [],
       rollback: ["Restore the previous admintimeout value under config system global."],
       expectedImpact: `Changes FortiGate administrative idle timeout to ${timeout} minutes.`,
+      riskLevel: AiRiskLevel.medium,
+    };
+  }
+
+  const vlanId = ciscoVlanIdFromPrompt(input.message, input.parameters);
+  if (/\bdhcp\s+snooping\b/i.test(text)) {
+    if (!vlanId) return { commands: [], verificationCommands: [], typedParameters: { operation: "enable_dhcp_snooping" }, missingFields: ["vlanId"], rollback: ["Disable DHCP snooping for the affected VLAN if review requires rollback."], expectedImpact: "Cisco DHCP snooping requires a VLAN ID.", riskLevel: AiRiskLevel.medium };
+    return {
+      commands: ["configure terminal", "ip dhcp snooping", `ip dhcp snooping vlan ${vlanId}`, "end"],
+      verificationCommands: ["show ip dhcp snooping"],
+      typedParameters: { operation: "enable_dhcp_snooping", vlanId },
+      missingFields: [],
+      rollback: [`Remove VLAN ${vlanId} from DHCP snooping or disable DHCP snooping after impact review.`],
+      expectedImpact: `Enables DHCP snooping for Cisco VLAN ${vlanId}.`,
+      riskLevel: AiRiskLevel.medium,
+    };
+  }
+
+  if (/\b(create|add|configure)\b.*\bvlan\b|\bvlan\b.*\b(create|add|configure)\b/i.test(text)) {
+    if (!vlanId) return { commands: [], verificationCommands: [], typedParameters: { operation: "create_vlan" }, missingFields: ["vlanId"], rollback: ["Remove the VLAN only after confirming it is unused."], expectedImpact: "Cisco VLAN creation requires a VLAN ID.", riskLevel: AiRiskLevel.medium };
+    const vlanName = ciscoVlanNameFromPrompt(input.message, input.parameters);
+    return {
+      commands: ["configure terminal", `vlan ${vlanId}`, ...(vlanName ? [`name ${vlanName}`] : []), "end"],
+      verificationCommands: [`show vlan brief | include ^${vlanId}\\b`],
+      typedParameters: { operation: "create_vlan", vlanId, ...(vlanName ? { name: vlanName } : {}) },
+      missingFields: [],
+      rollback: [`Remove VLAN ${vlanId} only after confirming it is unused and not referenced by access or trunk ports.`],
+      expectedImpact: `Creates Cisco VLAN ${vlanId}${vlanName ? ` named ${vlanName}` : ""}.`,
       riskLevel: AiRiskLevel.medium,
     };
   }
