@@ -2,6 +2,7 @@ import { FORTIGATE_FULL_CONTROL_REGISTRY } from "../../fortigate/full-control-re
 import type { CommandCatalogItem, CommandParam, CommandRiskLevel, CommandVendor, ImplementationState } from "./types.js";
 import { evaluateCatalogSupportState } from "./support-state.js";
 import { CISCO_OPERATION_REGISTRY } from "../../cisco/cisco-operation-registry.js";
+export { COMMAND_CATALOG_VERSION } from "./version.js";
 
 const param = (key: string, labelFa: string, helpFa: string, type: CommandParam["type"], placeholderFa?: string): CommandParam => ({ key, labelFa, helpFa, type, placeholderFa });
 const ipAddress = param("ipAddress", "آدرس IP", "یک آدرس IPv4 یا IPv6 معتبر برای مسدودسازی وارد کنید.", "ip", "192.0.2.10");
@@ -183,7 +184,6 @@ const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
 
 export const COMMAND_CATALOG: readonly CommandCatalogItem[] = Object.freeze(RAW_COMMAND_CATALOG.map(applySupportState));
 
-export const COMMAND_CATALOG_VERSION = "2026.07.05.1";
 
 export function findCatalogItem(id: string) { return COMMAND_CATALOG.find((entry) => entry.id === id); }
 export function searchCatalog(filters: { q?: string; vendor?: string; category?: string; riskLevel?: string; readOnly?: boolean; executable?: boolean; includePlanned?: boolean }) {

@@ -39,6 +39,11 @@ function ActionResultRoute() {
   return <div className="authenticated-app" data-page-id="actions.result"><AppBackground /><ActionResultView actionPlanId={actionId} /></div>;
 }
 
+function MonitoringActionResultRoute() {
+  const { actionId = "" } = useParams();
+  return <div className="authenticated-app" data-page-id="monitoring.action_result"><AppBackground /><ActionResultView actionPlanId={actionId} /></div>;
+}
+
 function FeatureRoute({ route }: { route: AppRoute }) {
   const params = useParams();
   const Page = route.component;
@@ -115,6 +120,7 @@ function App() {
           <Route path="/action-library" element={<ActionLibraryRoute />} />
           <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
           <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />
+          <Route path="/monitoring/actions/:actionId/result" element={<MonitoringActionResultRoute />} />
           {import.meta.env.DEV ? <Route path="/tools/workflow-lab" element={<WorkflowLabRoute />} /> : null}
           {appRoutes.map((route) => <Route key={route.featureKey} path={route.path} element={<FeatureRoute route={route} />} />)}
           <Route path="*" element={<NotFoundPage />} />

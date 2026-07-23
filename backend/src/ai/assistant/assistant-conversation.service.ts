@@ -17,6 +17,7 @@ import { env } from "../../config/env.js";
 import { classifyAssistantIntent, shouldAskProviderForIntentClassification, stripExplicitActionMarker, type AssistantIntentClassification, type AssistantIntentModeOverride } from "../assistant-intent-classifier.js";
 import { decideAssistantIntent, resolveExecutionStrategy } from "../assistant-intent-decision.js";
 import { buildCustomCommandPlan } from "../custom-action-plan.js";
+import { isReadOnlyResolution, monitoringMetadata } from "../../monitoring/monitoring-action-plan.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -443,7 +444,25 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     hasFreshCachedEvidence: false,
   });
   if (classification.mode !== "action_request") {
-    const executionStrategy = resolveExecutionStrategy({ decision: intentDecision, hasFreshCachedEvidence: false });
+    const monitoringResolution = intentDecision.intent === "monitoring_live" && earlySelectedDevice
+      ? resolveAiTemplate({ userText: planningMessage, selectedDevice: earlySelectedDevice, targetDeviceContext: context.targetDeviceContext })
+      : null;
+    const monitoringActionPlan = monitoringResolution && isReadOnlyResolution(monitoringResolution)
+      ? await proposeActionPlan({
+          source: "ai",
+          deviceId: earlySelectedDevice!.id,
+          vendor: monitoringResolution.canonicalVendor,
+          actionType: monitoringResolution.canonicalActionType,
+          riskLevel: monitoringResolution.catalogItem?.riskLevel ?? monitoringResolution.targetSupportedAction?.riskLevel ?? "low",
+          parametersJson: {
+            ...monitoringResolution.normalizedParams,
+            readOnly: true,
+            source: "monitoring_live",
+            metadata: monitoringMetadata({ resolution: monitoringResolution, catalogItem: monitoringResolution.catalogItem }),
+          }
+        })
+      : null;
+    const executionStrategy = resolveExecutionStrategy({ decision: intentDecision, resolution: monitoringResolution, hasFreshCachedEvidence: false });
     const providerResponse = await runAiProvider({ message, context });
     const providerClassificationRequested = shouldAskProviderForIntentClassification(classification);
     const answer = classification.requiresClarification
@@ -482,18 +501,31 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     return {
       mode: classification.mode,
       answer,
-      actionPlan: null,
+      actionPlan: monitoringActionPlan,
       confidence: Math.min(classification.confidence, providerResponse.confidence),
       requiresClarification: classification.requiresClarification,
       sessionId: session.id,
       message: userMessage,
       assistantMessage: answer,
       assistantMessageRecord: assistantMessage,
-      shouldCreateActionPlan: false,
+      shouldCreateActionPlan: Boolean(monitoringActionPlan),
       actionIntent: null,
-      actionContract: noActionContract(),
-      executionSupport: "conversation",
-      implementationState: "not_applicable",
+      actionContract: monitoringActionPlan ? {
+        canCreateActionPlan: true,
+        manualOnly: false,
+        executable: true,
+        executionSupport: "connector",
+        implementationState: "implemented",
+        executionMode: env.actionExecutionMode,
+        lifecycle: {
+          actionPlanId: monitoringActionPlan.id,
+          status: monitoringActionPlan.status,
+          planRevision: 1,
+          planState: "draft",
+        },
+      } : noActionContract(),
+      executionSupport: monitoringActionPlan ? "connector" : "conversation",
+      implementationState: monitoringActionPlan ? "implemented" : "not_applicable",
       blueprintId: null,
       initialValues: null,
       actionSessionId: null,
@@ -504,11 +536,11 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       deviceId: earlySelectedDevice?.id ?? null,
       selectedDeviceName: earlySelectedDevice?.name ?? null,
       clarification: classification.requiresClarification ? { questionFa: nonActionNextStep(classification), options: [] } : null,
-      mappedTemplate: null,
+      mappedTemplate: monitoringResolution?.executionTemplateRef ?? null,
       missingFields: [],
       nextStepFa: nonActionNextStep(classification),
       warnings: [],
-      resolution: null,
+      resolution: monitoringResolution,
       actionDebug: null,
       providerStatus: getAiProviderStatus(providerResponse.error),
       evidenceMetadata: context.evidencePack.metadata,
@@ -524,7 +556,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         intentDecision,
         executionStrategy,
         answer,
-        actionPlan: null,
+        actionPlan: monitoringActionPlan,
         confidence: Math.min(classification.confidence, providerResponse.confidence),
         requiresClarification: classification.requiresClarification,
         reasonCode: classification.reasonCode,

@@ -122,9 +122,11 @@ test("chat service supports connector-backed custom AI ActionPlans", () => {
 
 test("non-action branch does not call ActionPlan or execution backend", () => {
   const nonActionBlock = chatService.slice(chatService.indexOf('if (classification.mode !== "action_request")'), chatService.indexOf("const earlyResolution = resolveAiTemplate"));
-  assert.doesNotMatch(nonActionBlock, /resolveAiTemplate\(/);
+  assert.match(nonActionBlock, /intentDecision\.intent === "monitoring_live"/);
+  assert.match(nonActionBlock, /isReadOnlyResolution\(monitoringResolution\)/);
+  const withoutMonitoringPlanCreation = nonActionBlock.replace(/const monitoringActionPlan[\s\S]*?: null;\r?\n/, "");
+  assert.doesNotMatch(withoutMonitoringPlanCreation, /proposeActionPlan\(/);
   assert.doesNotMatch(nonActionBlock, /createAiActionIntent\(/);
-  assert.doesNotMatch(nonActionBlock, /proposeActionPlan\(/);
   assert.doesNotMatch(nonActionBlock, /quickExecuteActionPlan|executeActionPlan|selectDeviceConnector/);
   assert.match(nonActionBlock, /runAiProvider\(\{ message, context \}\)/);
 });
