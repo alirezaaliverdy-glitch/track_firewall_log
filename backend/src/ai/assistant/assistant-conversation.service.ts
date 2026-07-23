@@ -15,6 +15,7 @@ import { buildAiStructuredActionPlan, type AiStructuredActionPlan } from "../ai-
 import { catalogGuidedBlueprintId } from "../../guided-actions/catalog-guided-blueprint.js";
 import { env } from "../../config/env.js";
 import { classifyAssistantIntent, shouldAskProviderForIntentClassification, stripExplicitActionMarker, type AssistantIntentClassification, type AssistantIntentModeOverride } from "../assistant-intent-classifier.js";
+import { decideAssistantIntent, resolveExecutionStrategy } from "../assistant-intent-decision.js";
 import { buildCustomCommandPlan } from "../custom-action-plan.js";
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -431,7 +432,18 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId }),
   ]);
   const classification = classifyAssistantIntent({ message, hasSelectedDevice: Boolean(earlySelectedDevice?.id), intentModeOverride: input.intentModeOverride });
+  const intentDecision = decideAssistantIntent({
+    message,
+    classification,
+    targetDevice: {
+      id: earlySelectedDevice?.id,
+      vendor: context.targetDeviceContext?.device?.vendor ?? earlySelectedDevice?.vendor,
+      platform: context.targetDeviceContext?.device?.platform,
+    },
+    hasFreshCachedEvidence: false,
+  });
   if (classification.mode !== "action_request") {
+    const executionStrategy = resolveExecutionStrategy({ decision: intentDecision, hasFreshCachedEvidence: false });
     const providerResponse = await runAiProvider({ message, context });
     const providerClassificationRequested = shouldAskProviderForIntentClassification(classification);
     const answer = classification.requiresClarification
@@ -449,6 +461,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
           actionPlan: null,
           confidence: Math.min(classification.confidence, providerResponse.confidence),
           requiresClarification: classification.requiresClarification,
+          intentDecision,
+          executionStrategy,
           classifier: classification,
           providerIntentIgnored: providerResponse.intent,
           providerClassificationRequested,
@@ -507,6 +521,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       },
       responseContract: {
         mode: classification.mode,
+        intentDecision,
+        executionStrategy,
         answer,
         actionPlan: null,
         confidence: Math.min(classification.confidence, providerResponse.confidence),
@@ -614,6 +630,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     targetDeviceContext: context.targetDeviceContext,
     aiIntent: effectiveStructuredIntent ? { intentType: effectiveStructuredIntent.intentType, parameters: effectiveStructuredIntent.parameters } : null,
   });
+  const executionStrategy = resolveExecutionStrategy({ decision: intentDecision, resolution });
   const structuredPlan = buildAiStructuredActionPlan({
     message: planningMessage,
     selectedDevice,
@@ -761,6 +778,8 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     },
     responseContract: {
       mode: "action_request",
+      intentDecision,
+      executionStrategy,
       answer: guidedAssistantText,
       actionPlan,
       confidence: Math.max(classification.confidence, resolution.confidence),

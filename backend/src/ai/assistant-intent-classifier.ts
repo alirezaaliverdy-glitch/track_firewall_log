@@ -35,6 +35,7 @@ const CHAT_PHRASES = [
 const DEVICE_QUESTION_TERMS = [
   "status", "configuration", "config", "health", "memory", "cpu", "interface", "interfaces", "risk", "risks",
   "recommendation", "recommendations", "routing", "routes", "license", "users", "logs", "ports", "services",
+  "vlan", "vlans", "arp", "sessions", "vpn", "temperature", "disk",
   "وضعیت", "کانفیگ", "پیکربندی", "سلامت", "حافظه", "مموری", "پردازنده", "اینترفیس", "رابط", "ریسک",
   "خطر", "پیشنهاد", "مسیر", "لایسنس", "کاربر", "لاگ", "پورت", "سرویس",
 ];
@@ -149,6 +150,10 @@ function isAdviceAboutAction(text: string) {
   return hasAny(text, ADVICE_MARKERS) && hasActionVerb(text);
 }
 
+function isExplanationAboutAction(text: string) {
+  return hasAny(text, ["explain", "what does", "how does", "what is", "tell me about", "ØªÙˆØ¶ÛŒØ­", "Ú†Ù‡ Ú©Ø§Ø±", "Ú†Ø·ÙˆØ± Ú©Ø§Ø±"]) && hasActionVerb(text);
+}
+
 function isChatPhrase(text: string) {
   return hasAny(text, CHAT_PHRASES);
 }
@@ -186,6 +191,10 @@ export function classifyAssistantIntent(input: { message: string; hasSelectedDev
 
   if (isAdviceAboutAction(text)) {
     return result({ mode: "conversation", confidence: 0.9, requiresClarification: false, reasonCode: "advice_or_safety_question" });
+  }
+
+  if (isExplanationAboutAction(text)) {
+    return result({ mode: "conversation", confidence: 0.92, requiresClarification: false, reasonCode: "explanation_about_action" });
   }
 
   if (isChatPhrase(text) && !hasInstructionShape(text)) {
