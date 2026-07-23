@@ -41,9 +41,17 @@ test("server execution remains isolated behind Prisma, PolicyGuard, and register
   assert.match(registry, /ciscoIosXeConnector/);
 });
 
-test("Phase M boundary is not yet implemented before extraction", () => {
-  assert.equal(existsSync(new URL("packages/runtime-contracts/src/index.ts", root)), false);
-  assert.equal(existsSync(new URL("src/runtime/RuntimeFacade.ts", root)), false);
-  assert.equal(existsSync(new URL("src/mobile-local/LocalMobileRuntime.ts", root)), false);
-  assert.equal(existsSync(new URL("src/plugins/local-ssh/index.ts", root)), false);
+test("Phase M portable package boundary excludes server and native dependencies", () => {
+  for (const relative of [
+    "packages/contracts/src/index.ts",
+    "packages/action-core/src/index.ts",
+    "packages/policy-core/src/index.ts",
+    "packages/vendor-schemas/src/index.ts",
+    "packages/verification-core/src/index.ts",
+    "packages/runtime-contracts/src/index.ts"
+  ]) {
+    assert.equal(existsSync(new URL(relative, root)), true, `${relative} should exist`);
+    const source = read(relative);
+    assert.doesNotMatch(source, /@prisma\/client|fastify|node:|ssh2|@capacitor/i, `${relative} must stay portable`);
+  }
 });
