@@ -1,0 +1,16 @@
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "LocalSshPlugin",
+    platforms: [.iOS(.v14)],
+    products: [
+        .library(name: "LocalSshPlugin", targets: ["LocalSshPlugin"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/orlandos-nl/Citadel.git", from: "0.7.0")
+    ],
+    targets: [
+        .target(name: "LocalSshPlugin", dependencies: ["Citadel"])
+    ]
+)
