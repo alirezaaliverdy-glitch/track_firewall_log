@@ -19,6 +19,7 @@ import CiscoOverviewPage from "@/features/vendors/cisco/pages/CiscoOverviewPage"
 import SettingsPage from "@/features/settings/pages/SettingsPage";
 import DeviceOnboardingPage from "@/features/assets/pages/DeviceOnboardingPage";
 import VendorDetailPage from "@/features/vendors/pages/VendorDetailPage";
+import LocalMobileRuntimePage from "@/features/mobile-local/pages/LocalMobileRuntimePage";
 import { PlannedState } from "@/components/ui/PlannedState";
 
 export type RouteComponentProps = { params: Record<string, string> };
@@ -87,5 +88,6 @@ export const appRoutes: AppRoute[] = [
   { path: "/integrations", featureKey: "integrations.overview", labelFa: "وضعیت کلی", labelEn: "Overview", group: "integrations", component: IntegrationsPage },
   { path: "/integrations/netbox", featureKey: "integrations.netbox", labelFa: "NetBox", labelEn: "NetBox", group: "integrations", component: IntegrationsPage },
   { path: "/integrations/wazuh", featureKey: "integrations.wazuh", labelFa: "Wazuh", labelEn: "Wazuh", group: "integrations", component: IntegrationsPage },
+  { path: "/mobile-local", featureKey: "mobile.local", labelFa: "Local Mode", labelEn: "Local Mode", group: "settings", component: LocalMobileRuntimePage },
   { path: "/settings", featureKey: "settings", labelFa: "تنظیمات", labelEn: "Settings", group: "settings", component: SettingsPage }
 ];
