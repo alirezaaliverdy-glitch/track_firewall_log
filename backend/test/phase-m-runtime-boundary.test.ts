@@ -55,3 +55,19 @@ test("Phase M portable package boundary excludes server and native dependencies"
     assert.doesNotMatch(source, /@prisma\/client|fastify|node:|ssh2|@capacitor/i, `${relative} must stay portable`);
   }
 });
+
+test("Phase M RuntimeFacade separates server and local mobile adapters", () => {
+  const facade = read("src/runtime/RuntimeFacade.ts");
+  const server = read("src/runtime/ServerRuntimeClient.ts");
+  const local = read("src/mobile-local/LocalMobileRuntime.ts");
+
+  assert.match(facade, /class RuntimeFacade/);
+  assert.match(facade, /ServerRuntimeClient/);
+  assert.match(facade, /LocalMobileRuntime/);
+  assert.match(server, /readonly kind = "server"/);
+  assert.match(server, /api|proposeAction|executeAction/);
+  assert.match(local, /readonly kind = "local-mobile"/);
+  assert.match(local, /LOCAL_SSH_PLUGIN_NOT_CONFIGURED/);
+  assert.doesNotMatch(local, /@prisma\/client|fastify|node:|ssh2/);
+  assert.doesNotMatch(server, /LocalSsh|@capacitor/);
+});
