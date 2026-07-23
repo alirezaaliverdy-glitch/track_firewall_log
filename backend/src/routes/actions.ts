@@ -19,6 +19,7 @@ import { routeCatalogIntent } from "../actions/intent-router.js";
 import { cancelActionCenterItem, clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, updateActionCenterTarget } from "../services/action-center.service.js";
 import { requiredExecutionPermissionForRisk } from "../security/authorization.js";
 import { hasPermission } from "../security/permissions.js";
+import { getActionParameterSchema } from "../actions/parameter-schema-registry.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   const actor = (request: { authUser?: { username: string; role: string } }) => request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined;
@@ -92,6 +93,22 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     const plan = await getActionPlan(request.params.id);
     if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
     return plan;
+  });
+
+  app.get<{ Params: { id: string } }>("/api/actions/:id/parameter-schema", async (request, reply) => {
+    const plan = await getActionPlan(request.params.id);
+    if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
+    const parametersJson = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson) ? plan.parametersJson as Record<string, unknown> : {};
+    const metadata = parametersJson.metadata && typeof parametersJson.metadata === "object" && !Array.isArray(parametersJson.metadata) ? parametersJson.metadata as Record<string, unknown> : {};
+    return {
+      actionPlanId: plan.id,
+      schema: getActionParameterSchema({
+        actionType: plan.actionType,
+        vendor: plan.device?.vendor ?? undefined,
+        platform: typeof metadata.platform === "string" ? metadata.platform : null,
+        parametersJson,
+      }),
+    };
   });
 
   app.post<{ Params: { id: string } }>("/api/actions/:id/validate", async (request, reply) => {

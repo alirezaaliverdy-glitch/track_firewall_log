@@ -221,6 +221,27 @@ export type ActionAuditEntry = {
   createdAt: string;
 };
 
+export type ActionParameterField = {
+  key: string;
+  label: string;
+  type: "string" | "number" | "boolean" | "cidr" | "ip" | "secretRef";
+  required: boolean;
+  secure?: boolean;
+  defaultValue?: unknown;
+  dependsOn?: string[];
+};
+
+export type ActionParameterSchema = {
+  schemaVersion: string;
+  actionType: string;
+  vendor: string;
+  platform?: string | null;
+  fields: ActionParameterField[];
+  validationRules: Array<{ field: string; rule: string; message: string }>;
+  derivedValues: Array<{ field: string; from: string[]; rule: string }>;
+  secretFields: string[];
+};
+
 export type ProposeActionInput = {
   aiIntentId?: string;
   source?: ActionPlanSource;
@@ -380,6 +401,12 @@ export async function getActions() {
 
 export async function getAction(id: string) {
   return requestJson<unknown>(`/actions/${id}`).then(normalizeActionPlan);
+}
+
+export async function getActionParameterSchema(id: string) {
+  const payload = await requestJson<unknown>(`/actions/${id}/parameter-schema`);
+  const source = normalizeObject(payload);
+  return normalizeObject(source.schema) as ActionParameterSchema;
 }
 
 export async function validateAction(id: string) {

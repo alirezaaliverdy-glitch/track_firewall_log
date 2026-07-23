@@ -9,6 +9,7 @@ import FindingsPage from "@/features/security/pages/FindingsPage";
 import FindingDetailPage from "@/features/security/pages/FindingDetailPage";
 import DetectionRulesPage from "@/features/security/pages/DetectionRulesPage";
 import ActionsPage from "@/features/actions/pages/ActionsPage";
+import ActionConfigurePage from "@/features/actions/pages/ActionConfigurePage";
 import AssistantPage from "@/features/assistant/pages/AssistantPage";
 import IntegrationsPage from "@/features/integrations/pages/IntegrationsPage";
 import ToolsPage from "@/features/tools/pages/ToolsPage";
@@ -67,6 +68,7 @@ export const appRoutes: AppRoute[] = [
   { path: "/actions/guided", featureKey: "actions.guided", labelFa: "اقدام راهنما", labelEn: "Guided Actions", group: "actions", component: planned("اقدام راهنما", "جلسه‌های موجود با مسیر /guided-actions/:sessionId باز می‌مانند.") },
   { path: "/actions/pending", featureKey: "actions.pending", labelFa: "تأییدهای منتظر", labelEn: "Pending", group: "actions", component: ActionsPage },
   { path: "/actions/history", featureKey: "actions.history", labelFa: "تاریخچه اجرا", labelEn: "History", group: "actions", component: ActionsPage },
+  { path: "/actions/:actionId/configure", featureKey: "actions.configure", labelFa: "تنظیم ActionPlan", labelEn: "Configure ActionPlan", group: "actions", component: ActionConfigurePage },
   { path: "/actions/:actionId", featureKey: "actions.detail", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage },
   { path: "/assistant", featureKey: "assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", group: "assistant", component: AssistantPage },
   { path: "/tools", featureKey: "tools.overview", labelFa: "ابزارهای تشخیصی", labelEn: "Diagnostic tools", group: "integrations", component: ToolsPage },
