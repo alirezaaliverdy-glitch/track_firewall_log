@@ -22,7 +22,8 @@ test("Phase M Android SSH plugin pins host keys and avoids accept-all behavior",
   assert.match(java, /sha256Fingerprint/);
   assert.match(java, /trustedSha256\.equals/);
   assert.match(java, /closeQuietly/);
-  assert.match(java, /LOCAL_SSH_NATIVE_VAULT_HANDOFF_REQUIRED/);
+  assert.match(java, /SecureStoragePluginPlugin/);
+  assert.match(java, /LocalSshNativeCore/);
   assert.doesNotMatch(java, /StrictHostKeyChecking\s*=\s*no|PromiscuousVerifier|return true;\s*}/i);
 });
 

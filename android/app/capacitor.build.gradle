@@ -1,3 +1,4 @@
 dependencies {
     implementation project(':local-ssh')
+    implementation project(':capacitor-secure-storage-plugin')
 }
