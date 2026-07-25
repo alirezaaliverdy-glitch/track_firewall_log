@@ -1,0 +1,4 @@
+-- Phase R0 migration-chain repair.
+-- The real schema already stores Cisco enable credential references in Device.capabilities JSON.
+-- This folder existed without a migration.sql in the repository, which breaks migrate deploy.
+-- Keep this migration intentionally empty instead of editing previous applied migrations.

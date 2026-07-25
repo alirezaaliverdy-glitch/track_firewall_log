@@ -1,13 +1,9 @@
 import "dotenv/config";
 import { resolveDatabaseUrl } from "./database-url.js";
+import { parseCorsOriginsForProfile, productionConfigFailures, resolveProductionProfile } from "./production-hardening.js";
 
 const DEFAULT_PORT = 4000;
 const DEFAULT_CORS_ORIGIN = "http://localhost:5173";
-const DEFAULT_CORS_ORIGINS = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://192.168.7.13"
-];
 const DEFAULT_UPLOAD_DIR = "./storage/uploads";
 const DEFAULT_MAX_UPLOAD_MB = 25;
 const DEFAULT_AI_TIMEOUT_MS = 30000;
@@ -37,10 +33,7 @@ const DEFAULT_OPENAI_FALLBACK_MODELS = [
   "openai/gpt-oss-20b:free",
   "google/gemma-4-31b-it:free"
 ];
-const MIN_SECRET_LENGTH = 32;
 const DEFAULT_AUTH_SESSION_SECRET = "development-only-change-this-secret";
-const DEFAULT_ADMIN_PASSWORDS = new Set(["", "admin", "password", "change-me", "change-me-please"]);
-const DEFAULT_SECRET_MARKERS = ["change-me", "replace-with", "development-only", "default", "secret"];
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -49,14 +42,6 @@ function parsePositiveInteger(value: string | undefined, fallback: number): numb
 
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function parseCorsOrigins(value: string | undefined) {
-  const configured = (value ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  return Array.from(new Set([...DEFAULT_CORS_ORIGINS, ...configured]));
 }
 
 function parseCsv(value: string | undefined) {
@@ -97,33 +82,9 @@ function firstEnv(...values: Array<string | undefined>) {
   return values.find((value) => value !== undefined);
 }
 
-function isWeakSecret(value: string | undefined, defaultValue?: string) {
-  const normalized = (value ?? "").trim();
-  const lower = normalized.toLowerCase();
-  return normalized.length < MIN_SECRET_LENGTH ||
-    Boolean(defaultValue && normalized === defaultValue) ||
-    DEFAULT_SECRET_MARKERS.some((marker) => lower.includes(marker));
-}
-
-function hasDefaultPostgresCredentials(databaseUrl: string | undefined) {
-  if (!databaseUrl) return false;
-  try {
-    const parsed = new URL(databaseUrl);
-    return parsed.protocol.startsWith("postgres") && parsed.username === "postgres" && parsed.password === "postgres";
-  } catch {
-    return databaseUrl.includes("postgres:postgres@");
-  }
-}
-
-function isDefaultAdminPassword(value: string) {
-  const normalized = value.trim();
-  const lower = normalized.toLowerCase();
-  return DEFAULT_ADMIN_PASSWORDS.has(lower) ||
-    DEFAULT_SECRET_MARKERS.some((marker) => lower.includes(marker));
-}
-
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const appProfile = parseAppProfile(process.env.APP_PROFILE, nodeEnv);
+const productionProfile = resolveProductionProfile({ nodeEnv, appProfile });
 
 export const env = {
   nodeEnv,
@@ -131,7 +92,7 @@ export const env = {
   productMode: process.env.PRODUCT_MODE === "persian_command_catalog" ? "persian_command_catalog" as ProductMode : "classic" as ProductMode,
   port: parsePositiveInteger(process.env.PORT, DEFAULT_PORT),
   corsOrigin: process.env.CORS_ORIGIN ?? DEFAULT_CORS_ORIGIN,
-  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
+  corsOrigins: parseCorsOriginsForProfile(process.env.CORS_ORIGIN, productionProfile),
   databaseUrl: resolveDatabaseUrl(process.env.DATABASE_URL),
   uploadDir: process.env.UPLOAD_DIR ?? DEFAULT_UPLOAD_DIR,
   maxUploadMb: parsePositiveInteger(process.env.MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB),
@@ -177,21 +138,17 @@ export const env = {
 };
 
 function validateProductionEnv() {
-  if (env.nodeEnv !== "production") return;
-
-  const failures: string[] = [];
-  if (isWeakSecret(process.env.AUTH_SESSION_SECRET, DEFAULT_AUTH_SESSION_SECRET)) {
-    failures.push(`AUTH_SESSION_SECRET must be set to a non-default value with at least ${MIN_SECRET_LENGTH} characters`);
-  }
-  if (isWeakSecret(process.env.CREDENTIAL_ENCRYPTION_KEY)) {
-    failures.push(`CREDENTIAL_ENCRYPTION_KEY must be set to a non-default value with at least ${MIN_SECRET_LENGTH} characters`);
-  }
-  if (hasDefaultPostgresCredentials(env.databaseUrl)) {
-    failures.push("DATABASE_URL must not use the default postgres:postgres credentials in production");
-  }
-  if (isDefaultAdminPassword(env.adminPassword) || env.adminPassword.length < 8) {
-    failures.push("ADMIN_PASSWORD must be changed from the default and contain at least 8 characters in production");
-  }
+  const failures = productionConfigFailures({
+    nodeEnv: env.nodeEnv,
+    appProfile: env.appProfile,
+    authSessionSecret: process.env.AUTH_SESSION_SECRET ?? DEFAULT_AUTH_SESSION_SECRET,
+    credentialEncryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY,
+    databaseUrl: env.databaseUrl,
+    adminPassword: env.adminPassword,
+    actionExecutionMode: env.actionExecutionMode,
+    actionAllowLabUnrestrictedManagement: env.actionAllowLabUnrestrictedManagement,
+    corsOrigins: env.corsOrigins
+  });
 
   if (failures.length > 0) {
     throw new Error(`Production configuration is unsafe: ${failures.join("; ")}.`);
@@ -201,4 +158,4 @@ function validateProductionEnv() {
 validateProductionEnv();
 
 export const maxUploadBytes = env.maxUploadMb * 1024 * 1024;
-export const isProduction = env.nodeEnv === "production";
+export const isProduction = productionProfile;

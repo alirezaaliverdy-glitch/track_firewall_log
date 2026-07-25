@@ -25,8 +25,9 @@ import { normalizeFortiGateGuidedVpnParameters } from "../../services/fortigate-
 import { getExecutionTemplate, type ExecutionTemplate } from "../../commands/execution/execution-template-registry.js";
 import type { ConnectorExecutionResult, DeviceConnector } from "../../connectors/types.js";
 import { customPlanFromParameters, customTemplateForVendor, customVendorFromDevice } from "../../ai/custom-action-plan.js";
+import { redactForPersistence } from "../../security/redaction.js";
 export function toJson(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+  return JSON.parse(JSON.stringify(redactForPersistence(value ?? {}))) as Prisma.InputJsonValue;
 }
 
 export function asObject(value: unknown): Record<string, unknown> {
