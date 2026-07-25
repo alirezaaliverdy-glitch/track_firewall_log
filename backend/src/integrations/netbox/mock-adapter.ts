@@ -34,5 +34,14 @@ export function mockNetBoxAssets() {
 }
 
 export function mockNetBoxHealth() {
-  return { status: "ok", adapter: "mock_netbox", executable: false, message: "Mock NetBox adapter is available for preview/idempotent sync only." };
+  return {
+    status: "ok",
+    adapter: "mock_netbox",
+    mode: "mock",
+    production: false,
+    nonProduction: true,
+    executable: false,
+    warning: "Non-production mock NetBox adapter; preview and idempotent sync samples only.",
+    message: "Mock NetBox adapter is available for preview/idempotent sync only."
+  };
 }

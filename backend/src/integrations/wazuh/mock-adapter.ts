@@ -34,5 +34,14 @@ export function mockWazuhEvents(deviceId?: string, assetId?: string) {
 }
 
 export function mockWazuhHealth() {
-  return { status: "ok", adapter: "mock_wazuh", executable: false, message: "Mock Wazuh adapter maps sample agents and alerts without external calls." };
+  return {
+    status: "ok",
+    adapter: "mock_wazuh",
+    mode: "mock",
+    production: false,
+    nonProduction: true,
+    executable: false,
+    warning: "Non-production mock Wazuh adapter; sample agents and alerts only.",
+    message: "Mock Wazuh adapter maps sample agents and alerts without external calls."
+  };
 }
