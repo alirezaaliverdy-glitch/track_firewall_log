@@ -37,7 +37,7 @@ permissions:
 jobs:
   android-rc:
     name: Build Android APK and AAB
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
 
     env:
@@ -99,6 +99,9 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon assembleDebug
 
+      - name: Generate debug APK SHA-256
+        run: sha256sum android/app/build/outputs/apk/debug/app-debug.apk | tee android/app/build/outputs/apk/debug/app-debug.apk.sha256
+
       - name: Decode release keystore
         if: env.HAS_RELEASE_SIGNING == 'true'
         env:
@@ -121,19 +124,25 @@ jobs:
         working-directory: android
         run: ./gradlew --no-daemon bundleRelease
 
+      - name: Generate release AAB SHA-256
+        run: sha256sum android/app/build/outputs/bundle/release/app-release.aab | tee android/app/build/outputs/bundle/release/app-release.aab.sha256
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: firewall-soar-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
           if-no-files-found: error
 
       - name: Upload release AAB
-        if: env.HAS_RELEASE_SIGNING == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: firewall-soar-release-aab
-          path: android/app/build/outputs/bundle/release/app-release.aab
+          path: |
+            android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/bundle/release/app-release.aab.sha256
           if-no-files-found: error
 
       - name: Upload Android test reports
