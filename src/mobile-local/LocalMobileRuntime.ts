@@ -171,7 +171,13 @@ export class LocalMobileRuntime {
     await this.audit("local.execution.started", { executionId, planId: plan.id, deviceId: device.id, approvalHash: input.approvalHash });
 
     try {
-      const handle = await this.ssh.startExecution({ executionId, plan: executingPlan, device, idempotencyKey: input.idempotencyKey });
+      const handle = await this.ssh.startExecution({
+        executionId,
+        plan: executingPlan,
+        device,
+        idempotencyKey: input.idempotencyKey,
+        onEvent: (event) => this.recordNativeExecutionEvent(plan.id, event)
+      });
       await this.repository.saveExecutionResult({
         executionId,
         planId: plan.id,
@@ -207,6 +213,7 @@ export class LocalMobileRuntime {
 
   async cancelExecution(executionId: string): Promise<void> {
     await this.ensureInitialized();
+    await this.ssh.cancel(executionId);
     const result = await this.repository.getExecutionResult(executionId);
     if (result) await this.repository.saveExecutionResult({ ...result, status: "cancelled", completedAt: now() });
     await this.audit("local.execution.cancelled", { executionId });
@@ -265,5 +272,37 @@ export class LocalMobileRuntime {
       createdAt
     };
     await this.repository.appendAuditEvent(event);
+  }
+
+  private async recordNativeExecutionEvent(planId: string, event: ExecutionEvent) {
+    await this.repository.appendExecutionEvent(event);
+    const existing = await this.repository.getExecutionResult(event.executionId);
+    if (!existing) return;
+    const stdout = event.type === "stdout" ? sanitizeTerminalOutput(String(event.metadata?.data ?? event.message)) : "";
+    const stderr = event.type === "stderr" ? sanitizeTerminalOutput(String(event.metadata?.data ?? event.message)) : "";
+    const merged = {
+      ...existing,
+      stdout: sanitizeTerminalOutput(`${existing.stdout}${stdout}`),
+      stderr: sanitizeTerminalOutput(`${existing.stderr}${stderr}`)
+    };
+    if (event.type === "completed" || event.type === "cancelled") {
+      const exitCode = typeof event.metadata?.exitCode === "number" ? event.metadata.exitCode : event.type === "cancelled" ? 130 : 0;
+      const failed = exitCode !== 0 || /failed|timeout|mismatch|authentication/i.test(event.message);
+      const status = event.type === "cancelled" ? "cancelled" : failed ? "failed" : "succeeded";
+      const completedAt = event.createdAt || now();
+      const result = {
+        ...merged,
+        status,
+        exitCode,
+        verification: status === "succeeded" ? "verified" : status === "failed" ? "failed" : "unverified",
+        completedAt
+      } as const;
+      await this.repository.saveExecutionResult(result);
+      const plan = await this.repository.getPlan(planId);
+      if (plan) await this.repository.savePlan({ ...plan, status, verification: result.verification, updatedAt: completedAt });
+      await this.audit(status === "succeeded" ? "local.execution.completed" : status === "cancelled" ? "local.execution.cancelled" : "local.execution.failed", { executionId: event.executionId, planId, exitCode, message: event.message });
+      return;
+    }
+    await this.repository.saveExecutionResult(merged);
   }
 }

@@ -1,12 +1,13 @@
 import { LocalSsh } from "@/plugins/local-ssh";
-import type { ActionPlan, DeviceDetails, ExecutionHandle } from "../../../packages/contracts/src/index";
-import type { SshExecuteOptions } from "@/plugins/local-ssh";
+import type { ActionPlan, DeviceDetails, ExecutionEvent, ExecutionHandle } from "../../../packages/contracts/src/index";
+import type { SshExecuteOptions, SshExecutionEvent } from "@/plugins/local-ssh";
 
 export type LocalSshExecutionRequest = {
   executionId: string;
   plan: ActionPlan;
   device: DeviceDetails;
   idempotencyKey: string;
+  onEvent?: (event: ExecutionEvent) => Promise<void> | void;
 };
 
 export interface LocalSshExecutor {
@@ -35,6 +36,17 @@ function sshOptions(input: LocalSshExecutionRequest): SshExecuteOptions {
 
 export class NativeLocalSshExecutor implements LocalSshExecutor {
   async startExecution(input: LocalSshExecutionRequest): Promise<ExecutionHandle> {
+    let listener: { remove: () => Promise<void> } | null = null;
+    if (input.onEvent) {
+      listener = await LocalSsh.addListener("sshExecutionEvent", async (event) => {
+        if (event.executionId !== input.executionId) return;
+        await input.onEvent?.(mapExecutionEvent(event));
+        if (event.type === "completed" || event.type === "cancelled") {
+          await listener?.remove();
+          listener = null;
+        }
+      });
+    }
     const started = await LocalSsh.execute(sshOptions(input));
     return { executionId: started.executionId, planId: input.plan.id, startedAt: started.startedAt };
   }
@@ -42,4 +54,18 @@ export class NativeLocalSshExecutor implements LocalSshExecutor {
   async cancel(executionId: string) {
     await LocalSsh.cancel({ executionId });
   }
+}
+
+function mapExecutionEvent(event: SshExecutionEvent): ExecutionEvent {
+  return {
+    executionId: event.executionId,
+    type: event.type,
+    message: event.message ?? event.data ?? event.type,
+    metadata: {
+      stepId: event.stepId,
+      data: event.data,
+      exitCode: event.exitCode
+    },
+    createdAt: event.createdAt
+  };
 }

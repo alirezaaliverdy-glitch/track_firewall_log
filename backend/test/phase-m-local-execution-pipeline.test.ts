@@ -36,3 +36,14 @@ test("Phase M local execution persists duplicate guard, verification, and audit 
   assert.match(runtime, /sha256Hex\(\{ previousHash/);
   assert.match(runtime, /local\.connector\.invoked/);
 });
+
+test("Phase S local execution persists native SSH events and terminal recovery state", () => {
+  const runtime = read("src/mobile-local/LocalMobileRuntime.ts");
+  const executor = read("src/mobile-local/execution/LocalSshExecutor.ts");
+  assert.match(executor, /LocalSsh\.addListener/);
+  assert.match(executor, /mapExecutionEvent/);
+  assert.match(runtime, /recordNativeExecutionEvent/);
+  assert.match(runtime, /repository\.appendExecutionEvent/);
+  assert.match(runtime, /local\.execution\.completed/);
+  assert.match(runtime, /this\.ssh\.cancel\(executionId\)/);
+});
