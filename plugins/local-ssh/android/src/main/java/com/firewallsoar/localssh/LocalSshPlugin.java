@@ -6,11 +6,11 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import android.util.Base64;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.PublicKey;
-import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -99,7 +99,7 @@ public class LocalSshPlugin extends Plugin {
     private static String sha256Fingerprint(PublicKey key) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(key.getEncoded());
-            return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest);
+            return "SHA256:" + Base64.encodeToString(digest, Base64.NO_WRAP).replace("=", "");
         } catch (Exception error) {
             throw new IllegalStateException("LOCAL_SSH_FINGERPRINT_FAILED", error);
         }

@@ -84,7 +84,7 @@ test("Phase G PWA artifacts support installability, updates, offline shell, and 
   assert.doesNotMatch(worker, /action-center\/.+(?:execute|approve|confirm)/i);
 });
 
-test("Phase G is ready for future Capacitor sync without generated native projects", () => {
+test("Phase G Capacitor foundation remains compatible with generated native projects", () => {
   const root = new URL("../../", import.meta.url);
   const packageJson = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
   const capacitor = read("capacitor.config.ts");
@@ -97,8 +97,8 @@ test("Phase G is ready for future Capacitor sync without generated native projec
   assert.equal(packageJson.scripts?.["mobile:sync"], "npx cap sync");
   assert.equal(packageJson.scripts?.["mobile:open:android"], "npx cap open android");
   assert.equal(packageJson.scripts?.["mobile:open:ios"], "npx cap open ios");
-  assert.equal(existsSync(new URL("android", root)), false);
-  assert.equal(existsSync(new URL("ios", root)), false);
+  assert.equal(existsSync(new URL("android/gradlew.bat", root)), true);
+  assert.equal(existsSync(new URL("ios/App/App.xcodeproj/project.pbxproj", root)), true);
 });
 
 test("Phase G production readiness keeps secrets out of compose defaults and runs backend as non-root", () => {
