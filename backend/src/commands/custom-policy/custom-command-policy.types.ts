@@ -21,7 +21,7 @@ export type CustomCommandPolicyDecision = {
   warnings: string[];
   missingFields: string[];
   requiredRole: "operator" | "admin";
-  requiredPermission: string;
+  requiredPermission: "actions.execute.write" | "actions.execute.high_risk";
   requiresBackup: boolean;
   normalizedOperation: NormalizedCustomOperation;
 };

@@ -14,6 +14,7 @@ import {
   asObject,
   audit,
   approveCurrentRevisionForExecution,
+  backupPreconditionError,
   buildPostExecutionVerification,
   canonicalPayloadFromStoredPlan,
   connectorErrorLike,
@@ -26,6 +27,7 @@ import {
   resolveExecutionPipeline,
   stableJson,
   toJson,
+  verificationEvidenceCountFrom,
   withExecutionMetadata
 } from "./action-plan.shared.js";
 import { approveActionPlan } from "./action-plan-approval.service.js";
@@ -207,6 +209,15 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
   }
 
   const validation = await validateActionPlan(plan);
+  const backupError = backupPreconditionError({
+    riskLevel: validation.riskLevel,
+    rollbackJson: validation.rollbackJson ?? plan.rollbackJson,
+    parametersJson: plan.parametersJson,
+  });
+  if (backupError) {
+    await audit(plan, "execution_failed", "Execution refused because backup precondition was not satisfied.", { code: backupError.code, rollbackJson: validation.rollbackJson ?? plan.rollbackJson });
+    throw backupError;
+  }
   const pipeline = await resolveExecutionPipeline({ plan, device, connector, catalogResolution, validation });
   await audit(plan, "policy_guard_passed", "PolicyGuard allowed controlled execution.", { actionType: plan.actionType, templateRef: pipeline.template.id, connector: connector.name });
   dependencies.trace?.("action_policy_guard_passed", {});
@@ -319,7 +330,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       resultUrl: `/actions/${id}/result`
     };
     const verification = buildPostExecutionVerification({ plan, pipeline, result, executionSucceeded, connectorInvoked: true });
-    const verificationEvidenceCount = Object.keys(asObject(asObject(result.rollbackJson).verification)).length > 0 ? 1 : 0;
+    const verificationEvidenceCount = verificationEvidenceCountFrom(result.rollbackJson);
     const resultState = classifyExecutionResultState({
       connectorInvoked: true,
       executionSucceeded,

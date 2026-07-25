@@ -14,9 +14,9 @@ export const linuxCustomCommandPolicy: VendorCustomCommandPolicy = {
     return device?.protocol === "ssh" && (text.includes("linux_edge") || text.includes("linux"));
   },
   parse(input) {
-    return baseDecision({ ...input, vendor: "linux", commandAllowed, requiredPermission: "actions.custom.linux", fallbackOperation: "linux_custom_command" }).normalizedOperation;
+    return baseDecision({ ...input, vendor: "linux", commandAllowed, fallbackOperation: "linux_custom_command" }).normalizedOperation;
   },
   evaluate(input) {
-    return baseDecision({ ...input, vendor: "linux", commandAllowed, requiredPermission: "actions.custom.linux", fallbackOperation: "linux_custom_command" });
+    return baseDecision({ ...input, vendor: "linux", commandAllowed, fallbackOperation: "linux_custom_command" });
   },
 };

@@ -72,6 +72,14 @@ function textArray(value: unknown) {
   return Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
 }
 
+function objectArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function riskLevel(value: unknown): AiRiskLevel | null {
+  return typeof value === "string" && Object.values(AiRiskLevel).includes(value as AiRiskLevel) ? value as AiRiskLevel : null;
+}
+
 export function customVendorFromDevice(device: Pick<Device, "type" | "vendor"> | null | undefined): CustomConnectorVendor | null {
   const vendor = String(device?.vendor ?? "").toLowerCase();
   const type = String(device?.type ?? "").toLowerCase();
@@ -142,6 +150,34 @@ function commandsFromProvider(parameters: Record<string, unknown>) {
     : textArray(parameters.orderedCommands).length
       ? textArray(parameters.orderedCommands)
       : textArray(parameters.commands);
+}
+
+function providerStructuredFields(parameters: Record<string, unknown>) {
+  const plan = asObject(parameters.customCommandPlan);
+  const commands = commandsFromProvider(parameters);
+  if (!commands.length) return null;
+  const nestedTypedParameters = asObject(plan.typedParameters);
+  const topLevelTypedParameters = asObject(parameters.typedParameters);
+  const typedParameters = Object.keys(nestedTypedParameters).length ? nestedTypedParameters : topLevelTypedParameters;
+  return {
+    commands,
+    typedParameters,
+    missingFields: textArray(plan.missingFields).length || Array.isArray(plan.missingFields)
+      ? textArray(plan.missingFields)
+      : Array.isArray(parameters.missingFields)
+        ? textArray(parameters.missingFields)
+        : [],
+    riskLevel: riskLevel(plan.riskLevel) ?? riskLevel(parameters.riskLevel),
+    expectedImpact: text(plan.expectedImpact) ?? text(parameters.expectedImpact),
+    verificationCommands: textArray(plan.verificationCommands).length || Array.isArray(plan.verificationCommands)
+      ? textArray(plan.verificationCommands)
+      : textArray(parameters.verificationCommands),
+    rollbackGuidance: textArray(plan.rollbackGuidance).length || Array.isArray(plan.rollbackGuidance)
+      ? textArray(plan.rollbackGuidance)
+      : textArray(parameters.rollbackGuidance),
+    orderedOperations: objectArray(plan.orderedOperations),
+    verificationOperations: objectArray(plan.verificationOperations),
+  };
 }
 
 function synthesizeCommands(input: {
@@ -264,16 +300,21 @@ function basePlan(input: {
   const vendor = customVendorFromDevice(input.device);
   if (!vendor) return null;
   const params = input.parameters ?? {};
-  const providedCommands = commandsFromProvider(params);
+  const provider = providerStructuredFields(params);
   const synthesized = synthesizeCommands({ message: input.message, vendor, parameters: params });
   const template = customTemplateForVendor(vendor);
-  const commands = providedCommands.length ? providedCommands : synthesized.commands;
-  const typedParameters = { ...synthesized.typedParameters, ...asObject(params.typedParameters) };
-  const verification = textArray(asObject(params.customCommandPlan).verificationCommands).length
-    ? textArray(asObject(params.customCommandPlan).verificationCommands)
-    : textArray(params.verificationCommands).length
-      ? textArray(params.verificationCommands)
-      : synthesized.verificationCommands;
+  const commands = provider?.commands ?? synthesized.commands;
+  const typedParameters = provider ? provider.typedParameters : { ...synthesized.typedParameters, ...asObject(params.typedParameters) };
+  const verification = provider?.verificationCommands ?? synthesized.verificationCommands;
+  const operations = provider?.orderedOperations.length ? provider.orderedOperations as CustomCommandPlan["orderedOperations"] : orderedOperations({ vendor, commands, typedParameters });
+  const verificationOperations = provider?.verificationOperations.length
+    ? provider.verificationOperations
+    : verification.map((command, index) => ({
+      id: `verify-${index + 1}`,
+      operationType: "verification",
+      generatedCommand: command,
+      dependsOn: commands.length ? [`op-${commands.length}`] : [],
+    }));
   return {
     schema: "ai_custom_connector_plan_v1",
     schemaVersion: "custom_action_plan_v2",
@@ -283,19 +324,14 @@ function basePlan(input: {
     intent: input.message,
     source: "ai_custom",
     orderedCommands: commands,
-    orderedOperations: orderedOperations({ vendor, commands, typedParameters }),
+    orderedOperations: operations,
     typedParameters,
-    missingFields: synthesized.missingFields,
-    riskLevel: synthesized.riskLevel,
-    expectedImpact: text(params.expectedImpact) ?? synthesized.expectedImpact,
+    missingFields: provider?.missingFields ?? synthesized.missingFields,
+    riskLevel: provider?.riskLevel ?? synthesized.riskLevel,
+    expectedImpact: provider?.expectedImpact ?? text(params.expectedImpact) ?? synthesized.expectedImpact,
     verificationCommands: verification,
-    verificationOperations: verification.map((command, index) => ({
-      id: `verify-${index + 1}`,
-      operationType: "verification",
-      generatedCommand: command,
-      dependsOn: commands.length ? [`op-${commands.length}`] : [],
-    })),
-    rollbackGuidance: textArray(params.rollbackGuidance).length ? textArray(params.rollbackGuidance) : synthesized.rollback,
+    verificationOperations,
+    rollbackGuidance: provider?.rollbackGuidance ?? (textArray(params.rollbackGuidance).length ? textArray(params.rollbackGuidance) : synthesized.rollback),
     requiresExplicitApproval: true,
     ...template,
     backendValidation: {

@@ -47,7 +47,7 @@ test("Task 19.1 stale approved inputs automatically regenerate and execute the n
   assert.equal(previewMetadata.planState, "preview_ready");
   for (const field of ["canonicalParameters", "canonicalParametersHash", "canonicalPayloadHash", "previewHash", "resolvedVendor", "resolvedPlatform", "catalogCommandId", "executionTemplateRef", "connectorType", "idempotencyKey"]) assert.ok(previewMetadata[field], field);
 
-  await approveActionPlan(created.json().id, { reason: "Task 19.1 revision test" });
+  await approveActionPlan(created.json().id, { approvedBy: "task19-admin-approver", approvedByRole: "admin", reason: "Task 19.1 revision test" });
   const approved = await prisma.actionPlan.findUniqueOrThrow({ where: { id: created.json().id } });
   const approvedMetadata = (approved.parametersJson as { metadata: Record<string, unknown> }).metadata;
   assert.equal(approvedMetadata.approvedRevision, 1);

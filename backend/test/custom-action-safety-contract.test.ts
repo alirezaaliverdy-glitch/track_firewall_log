@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ActionType, DeviceProtocol, DeviceType } from "@prisma/client";
+import { ActionType, AiRiskLevel, DeviceProtocol, DeviceType } from "@prisma/client";
 import { buildCustomCommandPlan, customDryRun, validateCustomCommandPlan } from "../src/ai/custom-action-plan.js";
 
 const actionService = [
@@ -58,6 +58,33 @@ test("multi-step custom action preserves ordered commands and verification", () 
   const preview = customDryRun(plan);
   assert.deepEqual(preview.plannedCommands, ["sudo -n systemctl reload nginx", "systemctl is-active nginx", "systemctl status nginx --no-pager"]);
   assert.equal(preview.requiresApproval, true);
+});
+
+test("provider structured custom plan owns normalized metadata", () => {
+  const plan = buildCustomCommandPlan({
+    message: "Restart the service",
+    device: linuxDevice,
+    parameters: {
+      customCommandPlan: {
+        orderedCommands: ["sudo -n systemctl reload nginx"],
+        verificationCommands: ["systemctl is-active nginx"],
+        typedParameters: { operation: "reload", serviceName: "nginx", source: "provider" },
+        missingFields: [],
+        riskLevel: AiRiskLevel.low,
+        expectedImpact: "Reloads nginx without a full restart.",
+        rollbackGuidance: ["Run sudo -n systemctl restart nginx if reload does not apply cleanly."],
+      },
+    },
+  });
+
+  assert.ok(plan);
+  assert.deepEqual(plan.orderedCommands, ["sudo -n systemctl reload nginx"]);
+  assert.deepEqual(plan.verificationCommands, ["systemctl is-active nginx"]);
+  assert.deepEqual(plan.typedParameters, { operation: "reload", serviceName: "nginx", source: "provider" });
+  assert.deepEqual(plan.missingFields, []);
+  assert.equal(plan.riskLevel, AiRiskLevel.low);
+  assert.equal(plan.expectedImpact, "Reloads nginx without a full restart.");
+  assert.deepEqual(plan.rollbackGuidance, ["Run sudo -n systemctl restart nginx if reload does not apply cleanly."]);
 });
 
 test("missing parameter collection is explicit for custom action", () => {

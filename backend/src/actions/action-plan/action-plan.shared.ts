@@ -26,6 +26,7 @@ import { getExecutionTemplate, type ExecutionTemplate } from "../../commands/exe
 import type { ConnectorExecutionResult, DeviceConnector } from "../../connectors/types.js";
 import { customPlanFromParameters, customTemplateForVendor, customVendorFromDevice } from "../../ai/custom-action-plan.js";
 import { redactForPersistence } from "../../security/redaction.js";
+import type { Role } from "../../security/permissions.js";
 export function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(redactForPersistence(value ?? {}))) as Prisma.InputJsonValue;
 }
@@ -806,6 +807,74 @@ export function approvalInputError(riskLevel: AiRiskLevel, input: Record<string,
   if (requirements.breakGlass && input.breakGlass !== true) return "Critical actions require break-glass mode.";
   if (requirements.reason && !String(input.reason ?? "").trim()) return "Critical actions require a reason.";
   return null;
+}
+
+function realActorId(value: unknown) {
+  const actor = typeof value === "string" ? value.trim() : "";
+  return actor.length > 0 && !actor.includes(":") && actor !== "quick-execute" ? actor : null;
+}
+
+function isMediumOrHigher(riskLevel: AiRiskLevel | string | null | undefined) {
+  return riskLevel === AiRiskLevel.medium || riskLevel === AiRiskLevel.high || riskLevel === AiRiskLevel.critical;
+}
+
+export function approvalSeparationError(
+  plan: Pick<ActionPlan, "actionType" | "requestedBy" | "riskLevel">,
+  input: Record<string, unknown>
+) {
+  if (!isMediumOrHigher(plan.riskLevel)) return null;
+  const requestedBy = realActorId(plan.requestedBy);
+  const approvedBy = realActorId(input.approvedBy);
+  if (!approvedBy) return new ActionExecutionError("REAL_APPROVER_REQUIRED", "Approval requires a real user ID.", 403);
+  if (requestedBy && requestedBy === approvedBy) {
+    return new ActionExecutionError("SELF_APPROVAL_DENIED", "Requester cannot approve their own medium, high, or critical write ActionPlan.", 403);
+  }
+  const role = typeof input.approvedByRole === "string" ? input.approvedByRole as Role : undefined;
+  if ((plan.riskLevel === AiRiskLevel.high || plan.riskLevel === AiRiskLevel.critical) && role !== "admin") {
+    return new ActionExecutionError("PRIVILEGED_APPROVER_REQUIRED", "High and critical ActionPlan approval requires an administrator.", 403);
+  }
+  if (plan.riskLevel === AiRiskLevel.critical && input.secondApprovalRequired === true) {
+    const secondApprovedBy = realActorId(input.secondApprovedBy);
+    if (!secondApprovedBy || secondApprovedBy === approvedBy || secondApprovedBy === requestedBy) {
+      return new ActionExecutionError("SECOND_APPROVAL_REQUIRED", "Critical ActionPlan policy requires a second distinct real approver.", 403);
+    }
+  }
+  return null;
+}
+
+function backupStateFrom(value: unknown) {
+  const rollback = asObject(value);
+  const backup = asObject(rollback.backup);
+  return String(backup.state ?? rollback.backupState ?? rollback.backupStatus ?? "");
+}
+
+export function backupPreconditionError(
+  plan: { riskLevel: AiRiskLevel | string | null | undefined; rollbackJson: unknown; parametersJson: unknown },
+  options: { actionAllowLabUnrestrictedManagement?: boolean } = {}
+) {
+  const labUnrestricted = options.actionAllowLabUnrestrictedManagement ?? env.actionAllowLabUnrestrictedManagement;
+  if (labUnrestricted) return null;
+  if (plan.riskLevel !== AiRiskLevel.high && plan.riskLevel !== AiRiskLevel.critical) return null;
+  const rollback = asObject(plan.rollbackJson);
+  const metadata = asObject(asObject(plan.parametersJson).metadata);
+  const requiresBackup = rollback.requiresBackup === true || metadata.requiresBackup === true;
+  if (!requiresBackup) return null;
+  const state = backupStateFrom(rollback);
+  if (state === "completed" || state === "not_required" || state === "unsupported_approved") return null;
+  return new ActionExecutionError("BACKUP_REQUIRED", "High and critical execution requires completed backup, not-required backup state, or approved unsupported backup break-glass.", 428, { backupState: state || "missing" });
+}
+
+export function verificationEvidenceCountFrom(rollbackJson: unknown) {
+  const verification = asObject(asObject(rollbackJson).verification);
+  const typedEvidence = [
+    verification.evidence,
+    verification.evidenceItems,
+    verification.commandEvidence,
+    verification.verificationEvidence,
+  ].find(Array.isArray);
+  if (Array.isArray(typedEvidence)) return typedEvidence.length;
+  const count = Number(verification.evidenceCount);
+  return Number.isInteger(count) && count > 0 ? count : 0;
 }
 
 export function includeRelations() {

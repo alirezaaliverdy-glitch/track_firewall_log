@@ -12,9 +12,9 @@ export const ciscoCustomCommandPolicy: VendorCustomCommandPolicy = {
     return device?.protocol === "ssh" && vendorText(device).includes("cisco");
   },
   parse(input) {
-    return baseDecision({ ...input, vendor: "cisco", commandAllowed, requiredPermission: "actions.custom.cisco", fallbackOperation: "cisco_custom_command" }).normalizedOperation;
+    return baseDecision({ ...input, vendor: "cisco", commandAllowed, fallbackOperation: "cisco_custom_command" }).normalizedOperation;
   },
   evaluate(input) {
-    return baseDecision({ ...input, vendor: "cisco", commandAllowed, requiredPermission: "actions.custom.cisco", fallbackOperation: "cisco_custom_command" });
+    return baseDecision({ ...input, vendor: "cisco", commandAllowed, fallbackOperation: "cisco_custom_command" });
   },
 };

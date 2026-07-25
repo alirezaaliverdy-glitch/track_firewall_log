@@ -5,6 +5,7 @@ import {
   actionExecutionFingerprint,
   approvalInputError,
   approvalPreconditionError,
+  approvalSeparationError,
   asObject,
   audit,
   buildApprovalBinding,
@@ -22,6 +23,11 @@ export async function approveActionPlan(id: string, input: Record<string, unknow
     throw preconditionError;
   }
   const typedApproval = typeof input.approvalConfirmation === "string" ? input.approvalConfirmation.trim() : "";
+  const separationError = approvalSeparationError(plan, input);
+  if (separationError) {
+    await audit(plan, "action.approval_blocked", "Approval refused by maker-checker separation policy.", { code: separationError.code, requestedBy: plan.requestedBy, approvedBy: input.approvedBy });
+    throw separationError;
+  }
   const inputError = approvalInputError(plan.riskLevel, input);
   if (inputError) throw new ActionExecutionError(plan.riskLevel === AiRiskLevel.critical ? "BREAK_GLASS_REQUIRED" : "APPROVAL_CONFIRMATION_REQUIRED", inputError, 428);
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";

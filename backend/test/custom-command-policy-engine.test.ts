@@ -50,7 +50,7 @@ test("valid custom commands not in the static catalog pass vendor policy validat
     assert.equal(validation.valid, true, `${plan.vendor}: ${validation.errors.join("; ")}`);
     assert.equal(validation.normalizedPlan?.backendValidation.commandSafety, "passed");
     assert.equal(validation.normalizedPlan?.rawCommandExecution, false);
-    assert.ok(validation.rollbackJson.requiredPermission);
+    assert.ok(["actions.execute.write", "actions.execute.high_risk"].includes(String(validation.rollbackJson.requiredPermission)));
   }
 });
 
@@ -64,7 +64,7 @@ test("policy engine exposes typed v2 operations, ordering dependencies, limits, 
   const validation = validateCustomCommandPlan({ plan, device: linuxDevice, actionType: ActionType.custom_vendor_action });
   assert.equal(validation.valid, true);
   assert.equal(validation.normalizedPlan?.typedParameters.requiredRole, "admin");
-  assert.equal(validation.normalizedPlan?.typedParameters.requiredPermission, "actions.custom.linux");
+  assert.equal(validation.normalizedPlan?.typedParameters.requiredPermission, "actions.execute.high_risk");
   assert.equal(validation.normalizedPlan?.typedParameters.outputLimitBytes, 64 * 1024);
 });
 

@@ -36,12 +36,17 @@ export function operationFromPlan(plan: CustomCommandPlan, fallback: string): No
   };
 }
 
+function executionPermissionForRisk(riskLevel: AiRiskLevel) {
+  return riskLevel === AiRiskLevel.high || riskLevel === AiRiskLevel.critical
+    ? "actions.execute.high_risk"
+    : "actions.execute.write";
+}
+
 export function baseDecision(input: {
   plan: CustomCommandPlan;
   vendor: CustomConnectorVendor;
   device: CustomCommandPolicyDevice;
   commandAllowed: (command: string) => boolean;
-  requiredPermission: string;
   fallbackOperation: string;
   requiresBackup?: boolean;
   extraErrors?: string[];
@@ -61,7 +66,7 @@ export function baseDecision(input: {
     warnings: input.warnings ?? [],
     missingFields: Array.from(new Set(input.plan.missingFields)),
     requiredRole: highRisk ? "admin" : "operator",
-    requiredPermission: input.requiredPermission,
+    requiredPermission: executionPermissionForRisk(operation.riskLevel),
     requiresBackup: input.requiresBackup ?? highRisk,
     normalizedOperation: operation,
   };

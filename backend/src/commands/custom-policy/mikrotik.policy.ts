@@ -14,9 +14,9 @@ export const mikrotikCustomCommandPolicy: VendorCustomCommandPolicy = {
     return device?.protocol === "ssh" && (text.includes("mikrotik") || text.includes("routeros"));
   },
   parse(input) {
-    return baseDecision({ ...input, vendor: "mikrotik", commandAllowed, requiredPermission: "actions.custom.mikrotik", fallbackOperation: "mikrotik_custom_command" }).normalizedOperation;
+    return baseDecision({ ...input, vendor: "mikrotik", commandAllowed, fallbackOperation: "mikrotik_custom_command" }).normalizedOperation;
   },
   evaluate(input) {
-    return baseDecision({ ...input, vendor: "mikrotik", commandAllowed, requiredPermission: "actions.custom.mikrotik", fallbackOperation: "mikrotik_custom_command" });
+    return baseDecision({ ...input, vendor: "mikrotik", commandAllowed, fallbackOperation: "mikrotik_custom_command" });
   },
 };

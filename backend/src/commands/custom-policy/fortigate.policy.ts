@@ -12,9 +12,9 @@ export const fortigateCustomCommandPolicy: VendorCustomCommandPolicy = {
     return device?.protocol === "ssh" && vendorText(device).includes("forti");
   },
   parse(input) {
-    return baseDecision({ ...input, vendor: "fortigate", commandAllowed, requiredPermission: "actions.custom.fortigate", fallbackOperation: "fortigate_custom_command" }).normalizedOperation;
+    return baseDecision({ ...input, vendor: "fortigate", commandAllowed, fallbackOperation: "fortigate_custom_command" }).normalizedOperation;
   },
   evaluate(input) {
-    return baseDecision({ ...input, vendor: "fortigate", commandAllowed, requiredPermission: "actions.custom.fortigate", fallbackOperation: "fortigate_custom_command" });
+    return baseDecision({ ...input, vendor: "fortigate", commandAllowed, fallbackOperation: "fortigate_custom_command" });
   },
 };

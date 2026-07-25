@@ -22,7 +22,8 @@ import { hasPermission } from "../security/permissions.js";
 import { getActionParameterSchema } from "../actions/parameter-schema-registry.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
-  const actor = (request: { authUser?: { username: string; role: string } }) => request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined;
+  const actor = (request: { authUser?: { id: string } }) => request.authUser?.id;
+  const actorRole = (request: { authUser?: { role: string } }) => request.authUser?.role;
 
   app.post<{ Body: Record<string, unknown> }>("/api/actions/propose", async (request, reply) => {
     try {
@@ -136,7 +137,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/approve", async (request, reply) => {
     try {
-      const plan = await approveActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) });
+      const plan = await approveActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request), approvedByRole: actorRole(request) });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
     } catch (error) {
@@ -148,7 +149,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/reject", async (request, reply) => {
-    const plan = await rejectActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) });
+    const plan = await rejectActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request), approvedByRole: actorRole(request) });
     if (!plan) return reply.code(404).send({ error: "Action plan not found" });
     return plan;
   });
@@ -191,7 +192,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
           messageFa: "نقش کاربری شما اجازه اجرای عملیات پرریسک را ندارد."
         });
       }
-      const plan = await quickExecuteActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request) }, {
+      const plan = await quickExecuteActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request), approvedByRole: actorRole(request) }, {
         trace: (stage, payload) => request.log.info({ ...payload, stage }, stage)
       });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
