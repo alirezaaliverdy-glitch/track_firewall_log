@@ -38,6 +38,15 @@ backend/.env
 !.env.example
 !backend/.env.example
 
+# Android signing and build artifacts
+*.jks
+*.keystore
+*.apk
+*.aab
+*.idsig
+android/key.properties
+android/signing.properties
+
 .playwright-mcp/
 .playwright-mcp_*.png
 backups/

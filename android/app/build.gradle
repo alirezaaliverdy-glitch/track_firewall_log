@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+def releaseStoreFile = findProperty("FIREWALL_RELEASE_STORE_FILE") ?: System.getenv("FIREWALL_RELEASE_STORE_FILE")
+def releaseStorePassword = findProperty("FIREWALL_RELEASE_STORE_PASSWORD") ?: System.getenv("FIREWALL_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = findProperty("FIREWALL_RELEASE_KEY_ALIAS") ?: System.getenv("FIREWALL_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = findProperty("FIREWALL_RELEASE_KEY_PASSWORD") ?: System.getenv("FIREWALL_RELEASE_KEY_PASSWORD")
+def releaseSigningReady = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 android {
     namespace = "com.firewallsoar.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,9 +22,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseSigningReady) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
+            if (releaseSigningReady) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
