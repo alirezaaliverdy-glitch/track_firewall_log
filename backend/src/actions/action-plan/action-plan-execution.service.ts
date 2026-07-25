@@ -31,6 +31,7 @@ import {
   withExecutionMetadata
 } from "./action-plan.shared.js";
 import { approveActionPlan } from "./action-plan-approval.service.js";
+import { withActionExecutionAdvisoryLock } from "./action-execution-lock.service.js";
 import { dryRunActionPlan, validateAndStoreActionPlan } from "./action-plan-preview.service.js";
 import { classifyExecutionResultState } from "./execution-result-state.js";
 async function regenerateLatestRevisionForExecution(plan: ActionPlan, input: Record<string, unknown>, changedFields: string[]) {
@@ -102,8 +103,10 @@ async function regenerateLatestRevisionForExecution(plan: ActionPlan, input: Rec
 
 
 export async function executeActionPlan(id: string, executionInput: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {
-  let plan = await prisma.actionPlan.findUnique({ where: { id } });
-  if (!plan) return null;
+  const initialPlan = await prisma.actionPlan.findUnique({ where: { id } });
+  if (!initialPlan) return null;
+  return withActionExecutionAdvisoryLock(initialPlan, executionInput, async () => {
+  let plan = initialPlan;
 
   let catalogResolution: Awaited<ReturnType<typeof ensureControlledCatalogAction>>;
   try { catalogResolution = await ensureControlledCatalogAction(plan); } catch (error) {
@@ -450,6 +453,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(updated, "execution_failed", "Connector execution failed.", { code: connectorError.code, message: connectorError.message, backupEnabled: false });
     throw new ActionExecutionError(connectorError.code, connectorError.message, connectorError.statusCode ?? 409);
   }
+  });
 }
 
 export async function quickExecuteActionPlan(id: string, input: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {

@@ -11,6 +11,14 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function json(value: Record<string, unknown>): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
+}
+
+function isArchived(plan: { parametersJson: unknown }) {
+  return typeof object(object(plan.parametersJson).metadata).archivedAt === "string";
+}
+
 function sanitize(value: unknown, key = ""): unknown {
   if (SENSITIVE_KEY.test(key)) return "[redacted]";
   if (Array.isArray(value)) return value.map((item) => sanitize(item));
@@ -22,11 +30,43 @@ export type ActionCenterLifecycle = "draft" | "needs_input" | "ready_for_confirm
 
 export async function clearActionCenterHistory() {
   const terminalStatuses = [ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back];
-  const [deleted, retainedActive] = await prisma.$transaction([
-    prisma.actionPlan.deleteMany({ where: { status: { in: terminalStatuses } } }),
-    prisma.actionPlan.count({ where: { status: { notIn: terminalStatuses } } })
-  ]);
-  return { deleted: deleted.count, retainedActive };
+  const terminalPlans = await prisma.actionPlan.findMany({
+    where: { status: { in: terminalStatuses } },
+    select: { id: true, deviceId: true, parametersJson: true }
+  });
+  const now = new Date().toISOString();
+  const plansToArchive = terminalPlans.filter((plan) => !isArchived(plan));
+  const retainedActive = await prisma.actionPlan.count({ where: { status: { notIn: terminalStatuses } } });
+  if (plansToArchive.length === 0) return { archived: 0, deleted: 0, retainedActive };
+
+  await prisma.$transaction(plansToArchive.flatMap((plan) => {
+    const parameters = object(plan.parametersJson);
+    const metadata = object(parameters.metadata);
+    const archivedParameters = json({
+      ...parameters,
+      metadata: {
+        ...metadata,
+        archivedAt: now,
+        archiveReason: "action_center_history_clear"
+      }
+    });
+    return [
+      prisma.actionPlan.update({
+        where: { id: plan.id },
+        data: { parametersJson: archivedParameters }
+      }),
+      prisma.actionAuditLog.create({
+        data: {
+          actionPlanId: plan.id,
+          deviceId: plan.deviceId,
+          eventType: "action_center_history_archived",
+          message: "Terminal ActionPlan was archived from Action Center history without deleting audit evidence.",
+          metadataJson: { archivedAt: now, archiveReason: "action_center_history_clear" }
+        }
+      })
+    ];
+  }));
+  return { archived: plansToArchive.length, deleted: 0, retainedActive };
 }
 
 function lifecycle(status: ActionPlanStatus, resultJson: unknown): ActionCenterLifecycle {
@@ -111,7 +151,7 @@ function integer(value: unknown, fallback: number, max: number) {
 
 export async function listActionCenter(input: Record<string, unknown> = {}) {
   const rows = await prisma.actionPlan.findMany({ orderBy: { createdAt: "desc" }, take: 500, include });
-  const all = rows.map(project);
+  const all = rows.filter((plan) => !isArchived(plan)).map(project);
   const summary = all.reduce((counts, item) => ({ ...counts, [item.lifecycleState]: counts[item.lifecycleState] + 1 }), {
     draft: 0, needs_input: 0, ready_for_confirmation: 0, confirmed: 0, executing: 0, succeeded: 0, failed: 0, skipped: 0, cancelled: 0
   } as Record<ActionCenterLifecycle, number>);

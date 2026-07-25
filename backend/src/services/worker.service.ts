@@ -9,14 +9,58 @@ function safeErrorMessage(error: unknown) {
 }
 
 export function enqueueAnalysisJob(input: { uploadId: string; jobId: string }) {
-  setImmediate(() => {
-    processAnalysisJob(input).catch(() => {
-      // The job handler records failures in the database. Nothing raw is logged here.
-    });
+  void runAnalysisWorkerOnce(input).catch(() => {
+    // The job handler records failures in the database. Nothing raw is logged here.
   });
 }
 
+export async function claimQueuedAnalysisJobs(input?: { uploadId?: string; jobId?: string }, limit = 1) {
+  const candidates = await prisma.job.findMany({
+    where: {
+      status: JobStatus.queued,
+      ...(input?.jobId ? { id: input.jobId } : {}),
+      ...(input?.uploadId ? { uploadId: input.uploadId } : {})
+    },
+    orderBy: { createdAt: "asc" },
+    take: Math.max(1, Math.min(limit, 25)),
+    select: { id: true, uploadId: true }
+  });
+  const claimed: Array<{ uploadId: string; jobId: string }> = [];
+  for (const candidate of candidates) {
+    const updated = await prisma.job.updateMany({
+      where: { id: candidate.id, status: JobStatus.queued },
+      data: {
+        status: JobStatus.processing,
+        progress: 10,
+        startedAt: new Date(),
+        errorMessage: null
+      }
+    });
+    if (updated.count !== 1) continue;
+    await prisma.upload.update({
+      where: { id: candidate.uploadId },
+      data: { status: UploadStatus.processing }
+    });
+    claimed.push({ uploadId: candidate.uploadId, jobId: candidate.id });
+  }
+  return claimed;
+}
+
+export async function runAnalysisWorkerOnce(input?: { uploadId?: string; jobId?: string }) {
+  const claimed = await claimQueuedAnalysisJobs(input, 1);
+  for (const job of claimed) {
+    await processClaimedAnalysisJob(job);
+  }
+  return { processed: claimed.length };
+}
+
 export async function processAnalysisJob(input: { uploadId: string; jobId: string }) {
+  const claimed = await claimQueuedAnalysisJobs(input, 1);
+  if (claimed.length === 0) return;
+  await processClaimedAnalysisJob(claimed[0]);
+}
+
+async function processClaimedAnalysisJob(input: { uploadId: string; jobId: string }) {
   const job = await prisma.job.findUnique({
     where: { id: input.jobId },
     include: { upload: true }
@@ -25,21 +69,6 @@ export async function processAnalysisJob(input: { uploadId: string; jobId: strin
   if (!job || !job.upload.storagePath) {
     return;
   }
-
-  await prisma.$transaction([
-    prisma.job.update({
-      where: { id: input.jobId },
-      data: {
-        status: JobStatus.processing,
-        progress: 10,
-        startedAt: new Date()
-      }
-    }),
-    prisma.upload.update({
-      where: { id: input.uploadId },
-      data: { status: UploadStatus.processing }
-    })
-  ]);
 
   try {
     const result = await analyzeFirewallFile({

@@ -4,7 +4,7 @@ import { AUTH_COOKIE_NAME, getSessionUser } from "../services/auth.service.js";
 import { findMutationPermission, isMutationMethod } from "../security/authorization.js";
 import { hasPermission } from "../security/permissions.js";
 import { CSRF_HEADER_NAME, validateCsrfToken } from "../security/csrf.js";
-import { acquireExecutionLock, consumeRouteRateLimit, releaseExecutionLock } from "../security/rate-limit.js";
+import { consumeRouteRateLimit } from "../security/rate-limit.js";
 
 const PUBLIC_PATHS = new Set([
   "/health",
@@ -97,22 +97,5 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
         "نقش کاربری شما اجازه انجام این عملیات را ندارد."
       ));
     }
-
-    if (/^\/api\/actions\/[^/]+\/(?:execute|quick-execute)$/.test(pathname)) {
-      const lockKey = acquireExecutionLock(request.authUser?.id, pathname);
-      if (!lockKey) {
-        return reply.code(429).send({
-          error: "too_many_requests",
-          reasonCode: "ACTION_EXECUTION_ALREADY_RUNNING",
-          retryAfter: 1,
-          messageFa: "اجرای این برنامه عملیاتی هم‌اکنون در حال انجام است."
-        });
-      }
-      request.executionRateLimitLockKey = lockKey;
-    }
-  });
-
-  app.addHook("onResponse", async (request) => {
-    releaseExecutionLock(request.executionRateLimitLockKey ?? null);
   });
 }

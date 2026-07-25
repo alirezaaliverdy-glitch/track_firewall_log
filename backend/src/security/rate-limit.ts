@@ -50,8 +50,6 @@ const ROUTE_POLICIES: RateLimitPolicy[] = [
   { id: "upload", limit: 10, windowMs: 60 * 60_000 }
 ];
 
-const activeExecutions = new Set<string>();
-
 function normalizePart(value: unknown) {
   return String(value ?? "unknown").trim().toLowerCase();
 }
@@ -103,15 +101,4 @@ export function consumeRouteRateLimit(request: FastifyRequest, pathname: string)
   const now = Date.now();
   const entry = store.increment(`${policy.id}:${normalizePart(user)}:${normalizePart(target)}`, policy.windowMs, now);
   return resultForEntry(entry, policy, now);
-}
-
-export function acquireExecutionLock(userId: string | undefined, pathname: string) {
-  const key = `${normalizePart(userId)}:${pathname}`;
-  if (activeExecutions.has(key)) return null;
-  activeExecutions.add(key);
-  return key;
-}
-
-export function releaseExecutionLock(key: string | null) {
-  if (key) activeExecutions.delete(key);
 }
