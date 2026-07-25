@@ -37,7 +37,7 @@ permissions:
 jobs:
   android-rc:
     name: Build Android APK and AAB
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
 
     env:
@@ -83,11 +83,17 @@ jobs:
       - name: Sync Capacitor Android project
         run: pnpm exec cap sync android
 
+      - name: Clear generated Gradle problem reports
+        run: rm -rf android/build/reports/problems
+
       - name: Run Android unit tests
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Clear generated Gradle problem reports
+        run: rm -rf android/build/reports/problems
 
       - name: Build debug APK
         working-directory: android
@@ -110,6 +116,11 @@ jobs:
           FIREWALL_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: ./gradlew --no-daemon bundleRelease
 
+      - name: Build unsigned release AAB
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        working-directory: android
+        run: ./gradlew --no-daemon bundleRelease
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -126,7 +137,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Android test reports
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: android-test-reports
