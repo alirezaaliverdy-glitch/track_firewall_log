@@ -60,6 +60,10 @@ project.ext.cdvPluginPostBuildExtras.each { callback ->
 
 tasks.register("verifyRootSdkVariables") {
     doLast {
+        if (JavaVersion.current() < JavaVersion.VERSION_21) {
+            throw new GradleException("Android release candidate requires JDK 21 or newer; current JVM is ${JavaVersion.current()}")
+        }
+
         def variablesFile = rootProject.file("variables.gradle")
         if (!variablesFile.isFile()) {
             throw new GradleException("android/variables.gradle is missing")
@@ -96,6 +100,16 @@ tasks.register("verifyRootSdkVariables") {
             if (!appBuildText.contains("rootProject.ext.${name}")) {
                 throw new GradleException("app/build.gradle does not resolve rootProject.ext.${name}")
             }
+        }
+
+        def capacitorSettingsText = rootProject.file("capacitor.settings.gradle").text
+        if (!capacitorSettingsText.contains("include ':firewallsoar-local-ssh'")) {
+            throw new GradleException("Capacitor sync did not include the local SSH Android plugin")
+        }
+
+        def capacitorBuildText = rootProject.file("app/capacitor.build.gradle").text
+        if (!capacitorBuildText.contains("implementation project(':firewallsoar-local-ssh')")) {
+            throw new GradleException("Capacitor sync did not add the local SSH Android dependency")
         }
     }
 }
