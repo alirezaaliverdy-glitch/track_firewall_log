@@ -9,6 +9,7 @@ def releaseSigningReady = releaseStoreFile && releaseStorePassword && releaseKey
 android {
     namespace = "com.firewallsoar.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildToolsVersion = rootProject.ext.buildToolsVersion
     defaultConfig {
         applicationId "com.firewallsoar.app"
         minSdkVersion rootProject.ext.minSdkVersion
