@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.pnpm-store/
 dist
 build
 dist-ssr
@@ -50,3 +51,4 @@ android/signing.properties
 .playwright-mcp/
 .playwright-mcp_*.png
 backups/
+LOCAL_MOBILE_APP_CODEX_BUNDLE/
