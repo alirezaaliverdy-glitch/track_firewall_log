@@ -14,6 +14,7 @@ import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,7 +25,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import net.schmizz.sshj.SSHClient;
-import net.schmizz.sshj.common.IOUtils;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.transport.verification.HostKeyVerifier;
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider;
@@ -56,6 +56,11 @@ public class LocalSshPlugin extends Plugin {
                 captured.put("algorithm", key.getAlgorithm());
                 captured.put("sha256Fingerprint", sha256Fingerprint(key));
                 return false;
+            }
+
+            @Override
+            public List<String> findExistingAlgorithms(String hostname, int remotePort) {
+                return Collections.emptyList();
             }
         });
         try {
@@ -204,7 +209,17 @@ public class LocalSshPlugin extends Plugin {
     }
 
     private HostKeyVerifier pinnedVerifier(String trustedSha256) {
-        return (hostname, port, key) -> trustedSha256.equals(sha256Fingerprint(key));
+        return new HostKeyVerifier() {
+            @Override
+            public boolean verify(String hostname, int port, PublicKey key) {
+                return trustedSha256.equals(sha256Fingerprint(key));
+            }
+
+            @Override
+            public List<String> findExistingAlgorithms(String hostname, int port) {
+                return Collections.emptyList();
+            }
+        };
     }
 
     private static String sha256Fingerprint(PublicKey key) {
@@ -285,7 +300,11 @@ public class LocalSshPlugin extends Plugin {
 
     private static String readBounded(java.io.InputStream stream, int maxOutputBytes) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(4096, Math.max(1024, maxOutputBytes)));
-        IOUtils.copy(stream, output);
+        byte[] buffer = new byte[4096];
+        int read;
+        while ((read = stream.read(buffer)) != -1) {
+            output.write(buffer, 0, read);
+        }
         String text = output.toString(StandardCharsets.UTF_8);
         return LocalSshNativeCore.sanitize(text, maxOutputBytes);
     }
