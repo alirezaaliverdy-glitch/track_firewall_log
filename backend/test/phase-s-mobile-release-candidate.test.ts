@@ -10,9 +10,9 @@ test("Phase S Android build keeps local SSH plus secure vault wired", () => {
   const settings = read("android/capacitor.settings.gradle");
   const capacitorBuild = read("android/app/capacitor.build.gradle");
   assert.match(rootGradle, /com\.android\.tools\.build:gradle:8\./);
-  assert.match(settings, /:local-ssh/);
+  assert.match(settings, /:firewallsoar-local-ssh/);
   assert.match(settings, /:capacitor-secure-storage-plugin/);
-  assert.match(capacitorBuild, /project\(':local-ssh'\)/);
+  assert.match(capacitorBuild, /project\(':firewallsoar-local-ssh'\)/);
   assert.match(capacitorBuild, /project\(':capacitor-secure-storage-plugin'\)/);
 });
 
@@ -54,15 +54,19 @@ test("Phase S Android release signing is optional and secret driven", () => {
   assert.match(gitignore, /android\/key\.properties/);
 });
 
-test("Phase S GitHub Actions uploads debug APK and secret-gated release AAB artifacts", () => {
+test("Phase S GitHub Actions uploads debug APK and unsigned release AAB artifacts", () => {
   const workflow = read(".github/workflows/android-debug-apk.yml");
+  assert.match(workflow, /permissions:\s+contents: read/);
+  assert.match(workflow, /java-version: "21"/);
   assert.match(workflow, /testDebugUnitTest/);
   assert.match(workflow, /assembleDebug/);
   assert.match(workflow, /bundleRelease/);
-  assert.match(workflow, /ANDROID_RELEASE_KEYSTORE_BASE64/);
+  assert.match(workflow, /Generate debug APK SHA-256/);
+  assert.match(workflow, /Generate release AAB SHA-256/);
   assert.match(workflow, /firewall-soar-debug-apk/);
   assert.match(workflow, /firewall-soar-release-aab/);
-  assert.match(workflow, /android-test-reports/);
+  assert.match(workflow, /android-build-logs/);
+  assert.doesNotMatch(workflow, /environment:/);
 });
 
 test("Phase S M10 acceptance document defines alpha beta gates and iOS macOS work", () => {
