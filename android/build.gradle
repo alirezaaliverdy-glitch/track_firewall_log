@@ -1,3 +1,5 @@
+apply from: "variables.gradle"
+
 ext {
     androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.1'
     cordovaAndroidVersion = project.hasProperty('cordovaAndroidVersion') ? rootProject.ext.cordovaAndroidVersion : '14.0.1'
@@ -54,4 +56,46 @@ if (!project.ext.has("cdvPluginPostBuildExtras")) {
 
 project.ext.cdvPluginPostBuildExtras.each { callback ->
     callback.call()
+}
+
+tasks.register("verifyRootSdkVariables") {
+    doLast {
+        def variablesFile = rootProject.file("variables.gradle")
+        if (!variablesFile.isFile()) {
+            throw new GradleException("android/variables.gradle is missing")
+        }
+
+        def requiredVariables = [
+            "minSdkVersion",
+            "compileSdkVersion",
+            "targetSdkVersion",
+            "buildToolsVersion"
+        ]
+        requiredVariables.each { name ->
+            if (!rootProject.ext.has(name)) {
+                throw new GradleException("rootProject.ext.${name} is not defined")
+            }
+        }
+
+        def rootBuildText = rootProject.file("build.gradle").text
+        def applyIndex = rootBuildText.indexOf('apply from: "variables.gradle"')
+        if (applyIndex < 0) {
+            throw new GradleException("android/build.gradle does not load variables.gradle")
+        }
+
+        def firstSdkRead = requiredVariables
+            .collect { rootBuildText.indexOf("rootProject.ext.${it}") }
+            .findAll { it >= 0 }
+            .min()
+        if (firstSdkRead != null && applyIndex > firstSdkRead) {
+            throw new GradleException("variables.gradle is loaded after rootProject.ext SDK values are read")
+        }
+
+        def appBuildText = rootProject.file("app/build.gradle").text
+        requiredVariables.each { name ->
+            if (!appBuildText.contains("rootProject.ext.${name}")) {
+                throw new GradleException("app/build.gradle does not resolve rootProject.ext.${name}")
+            }
+        }
+    }
 }
