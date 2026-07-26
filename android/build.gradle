@@ -48,6 +48,10 @@ dependencies {
 
 // PLUGIN GRADLE EXTENSIONS END
 
-for (def func : cdvPluginPostBuildExtras) {
-    func()
+if (!project.ext.has("cdvPluginPostBuildExtras")) {
+    project.ext.cdvPluginPostBuildExtras = []
+}
+
+project.ext.cdvPluginPostBuildExtras.each { callback ->
+    callback.call()
 }

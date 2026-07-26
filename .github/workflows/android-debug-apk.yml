@@ -83,84 +83,67 @@ jobs:
       - name: Sync Capacitor Android project
         run: pnpm exec cap sync android
 
+      - name: Guard generated Cordova post-build hook
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path("android/capacitor-cordova-android-plugins/build.gradle")
+          if not path.exists():
+              print(f"{path} was not generated; nothing to guard")
+              raise SystemExit(0)
+
+          text = path.read_text()
+          guarded = """if (!project.ext.has("cdvPluginPostBuildExtras")) {
+              project.ext.cdvPluginPostBuildExtras = []
+          }
+
+          project.ext.cdvPluginPostBuildExtras.each { callback ->
+              callback.call()
+          }
+          """
+          if "project.ext.cdvPluginPostBuildExtras.each" in text:
+              print("Generated Cordova post-build hook is already guarded")
+              raise SystemExit(0)
+
+          pattern = re.compile(
+              r"for\s*\(\s*def\s+func\s*:\s*cdvPluginPostBuildExtras\s*\)\s*\{\s*func\(\)\s*\}",
+              re.MULTILINE,
+          )
+          updated, count = pattern.subn(guarded, text)
+          if count:
+              path.write_text(updated)
+              print("Guarded generated Cordova post-build hook")
+              raise SystemExit(0)
+
+          if "cdvPluginPostBuildExtras" in text:
+              raise SystemExit("Found cdvPluginPostBuildExtras but did not recognize the unsafe loop shape")
+
+          print("No generated Cordova post-build hook found")
+          PY
+
       - name: Clear generated Gradle problem reports
         run: rm -rf android/build/reports/problems
 
-      - name: Diagnose Google Maven resolution
+      - name: Show Gradle version
         run: |
-          mkdir -p android/build/diagnostics
-          log_file="android/build/diagnostics/android-repository-diagnostics.log"
-          exec > >(tee "$log_file") 2>&1
-
-          set +e
-          pom_url="https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/8.12.2/gradle-8.12.2.pom"
-
-          echo "== Environment =="
-          java -version
-          chmod +x ./android/gradlew
-          ./android/gradlew --version
-          env | grep -Ei 'proxy|gradle|java|android' | sed -E 's#(https?://)[^/@:]+(:[^/@]*)?@#\1***:***@#g; s/(password|passwd|pwd|secret|token|key|credential|authorization)=([^[:space:]]+)/\1=***MASKED***/Ig' || true
-
-          echo "== Google Maven exact AGP POM HEAD =="
-          curl -IL --retry 3 "$pom_url"
-
-          echo "== Google Maven exact AGP POM download =="
-          curl -fL --retry 3 "$pom_url" -o /tmp/agp-8.12.2.pom
-          curl_status=$?
-          if [ "$curl_status" -eq 0 ]; then
-            wc -c /tmp/agp-8.12.2.pom
-            head -n 10 /tmp/agp-8.12.2.pom
-          else
-            echo "AGP_POM_DOWNLOAD_FAILED=$curl_status"
-          fi
-
-          echo "== Effective Gradle repository and proxy configuration =="
-          for file in android/settings.gradle android/build.gradle android/gradle.properties "$HOME/.gradle/gradle.properties" "$HOME/.gradle/init.gradle"; do
-            echo "--- $file ---"
-            if [ -f "$file" ]; then
-              sed -E 's/(password|passwd|pwd|secret|token|key|credential|authorization)([[:space:]]*[=:][[:space:]]*).*/\1\2***MASKED***/Ig' "$file"
-            else
-              echo "missing"
-            fi
-          done
-
-          echo "--- $HOME/.gradle/init.d ---"
-          if [ -d "$HOME/.gradle/init.d" ]; then
-            find "$HOME/.gradle/init.d" -maxdepth 1 -type f -print | sort | while read -r init_file; do
-              echo "--- $init_file ---"
-              sed -E 's/(password|passwd|pwd|secret|token|key|credential|authorization)([[:space:]]*[=:][[:space:]]*).*/\1\2***MASKED***/Ig' "$init_file"
-            done
-          else
-            echo "missing"
-          fi
-
-          echo "== Gradle buildEnvironment =="
           cd android
-          ./gradlew --stop
-          ./gradlew buildEnvironment --refresh-dependencies --stacktrace --info
-          build_environment_status=$?
-
-          echo "== Gradle testDebugUnitTest =="
-          ./gradlew testDebugUnitTest --refresh-dependencies --stacktrace --info
-          unit_test_status=$?
-
-          echo "BUILD_ENVIRONMENT_STATUS=$build_environment_status"
-          echo "TEST_DEBUG_UNIT_TEST_STATUS=$unit_test_status"
-
-          if [ "$curl_status" -ne 0 ] || [ "$build_environment_status" -ne 0 ] || [ "$unit_test_status" -ne 0 ]; then
-            exit 1
-          fi
+          chmod +x ./gradlew
+          ./gradlew --version
 
       - name: Run Android unit tests
-        working-directory: android
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: |
+          cd android
+          ./gradlew testDebugUnitTest --stacktrace
 
       - name: Clear generated Gradle problem reports
         run: rm -rf android/build/reports/problems
 
       - name: Build debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
 
       - name: Generate debug APK SHA-256
         run: sha256sum android/app/build/outputs/apk/debug/app-debug.apk | tee android/app/build/outputs/apk/debug/app-debug.apk.sha256
@@ -174,18 +157,20 @@ jobs:
 
       - name: Build release AAB
         if: env.HAS_RELEASE_SIGNING == 'true'
-        working-directory: android
         env:
           FIREWALL_RELEASE_STORE_FILE: app/firewall-release.jks
           FIREWALL_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           FIREWALL_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
           FIREWALL_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --stacktrace
+        run: |
+          cd android
+          ./gradlew bundleRelease --stacktrace
 
       - name: Build unsigned release AAB
         if: env.HAS_RELEASE_SIGNING != 'true'
-        working-directory: android
-        run: ./gradlew bundleRelease --stacktrace
+        run: |
+          cd android
+          ./gradlew bundleRelease --stacktrace
 
       - name: Generate release AAB SHA-256
         run: sha256sum android/app/build/outputs/bundle/release/app-release.aab | tee android/app/build/outputs/bundle/release/app-release.aab.sha256
@@ -212,15 +197,8 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: android-gradle-diagnostics
+          name: android-test-reports
           path: |
-            android/build/diagnostics/
-            android/build/reports/
             android/app/build/reports/tests/
-            android/app/build/reports/
-            android/app/build/test-results/
-            android/capacitor-cordova-android-plugins/build/reports/
-            android/capacitor-cordova-android-plugins/build/test-results/
             plugins/local-ssh/android/build/reports/tests/
-            ~/.gradle/daemon/*/*.log
           if-no-files-found: ignore
