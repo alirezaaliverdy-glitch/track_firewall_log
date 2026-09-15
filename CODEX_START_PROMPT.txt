@@ -1,0 +1,43 @@
+Open and read `TASK_20_1_ONBOARDING_WORKSPACE_DASHBOARD.md` completely, plus every referenced project-memory and prior-task file.
+
+Use Playwright MCP from this exact Codex session. Do not use local Playwright fallback.
+
+Execute Task 20.1 in controlled autonomous mode with separate commits.
+
+Mandatory outcomes:
+
+1. Fix onboarding so it performs the full real sequence:
+   answers → test connection → detect platform → discover → preview → commit.
+
+2. Do not treat HTTP 200 from `/answers` as successful registration.
+
+3. Require:
+   - `connectorInvoked=true`;
+   - real platform evidence;
+   - persisted Device ID;
+   - reachable `/assets/devices/:deviceId`.
+
+4. After successful registration:
+   - show an animated success notification at the top;
+   - keep it accessible and reduced-motion safe;
+   - automatically navigate to the new Device workspace;
+   - preserve the success notification across navigation.
+
+5. Build a vendor-aware Device workspace with:
+   - health score;
+   - inventory;
+   - interfaces;
+   - services;
+   - findings;
+   - actions;
+   - history;
+   - real animated charts.
+
+6. Add real colorful animated Dashboard charts backed only by persisted backend data.
+
+7. Use Playwright MCP to test the full registration flow, the success animation, automatic redirect, Device workspace, Dashboard charts, all primary routes and every visible control.
+
+Do not read or modify `.env`.
+Do not expose secrets.
+Do not run destructive database commands.
+Do not claim completion without connector evidence, Device persistence and MCP browser proof.

@@ -1,0 +1,34 @@
+@media (max-width: 640px) {
+  .login-scene--native {
+    min-height: 100svh;
+    height: 100dvh;
+    place-items: start center;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overflow-anchor: none;
+    overscroll-behavior-y: contain;
+    padding: max(74px, calc(env(safe-area-inset-top) + 58px)) 14px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .login-scene--native .login-card {
+    margin: 0 auto;
+    animation: none;
+  }
+
+  .login-scene--native .login-field,
+  .login-scene--native .login-field:focus-within {
+    transform: none;
+  }
+
+  .login-scene--native input {
+    scroll-margin-block: 88px;
+  }
+
+  .login-scene--native .cyber-grid,
+  .login-scene--native .cyber-scan,
+  .login-scene--native .cyber-particles,
+  .login-scene--native .network-packets,
+  .login-scene--native .login-card-glow {
+    animation: none;
+  }
+}

@@ -1,0 +1,29 @@
+import type { LinuxSecurityFinding, LinuxSecuritySnapshot, LinuxTelemetrySeverity } from "./linux-telemetry.types.js";
+
+const RISKY_PORTS = new Set([22, 23, 3389, 5900, 3306, 5432, 6379, 9200, 27017]);
+const weight: Record<LinuxTelemetrySeverity, number> = { info: 0, low: 5, medium: 12, high: 24, critical: 40 };
+
+function finding(id: string, title: string, severity: LinuxTelemetrySeverity, category: string, evidence: string[], impact: string, recommendation: string, hints: string[] = []): LinuxSecurityFinding {
+  return { id, title, severity, confidence: 0.9, category, evidence, impact, recommendation, relatedActionHints: hints, canCreateActionPlan: hints.length > 0 };
+}
+
+export function analyzeLinuxSecuritySnapshot(snapshot: LinuxSecuritySnapshot) {
+  const findings: LinuxSecurityFinding[] = [];
+  if (snapshot.ssh.passwordAuthentication === "yes") findings.push(finding("ssh-password-auth", "SSH password authentication is enabled", "high", "ssh", ["PasswordAuthentication yes"], "Password-based SSH is exposed to credential attacks.", "Prefer key-based authentication after validating access.", ["linux_harden_ssh"]));
+  if (["yes", "without-password", "prohibit-password"].includes(snapshot.ssh.permitRootLogin)) findings.push(finding("ssh-root-login", "Direct root SSH login is permitted", "high", "ssh", [`PermitRootLogin ${snapshot.ssh.permitRootLogin}`], "Compromise grants immediate full control.", "Review and restrict direct root SSH access.", ["linux_harden_ssh"]));
+  if (snapshot.network.listeningPorts.some((line) => /(?:0\.0\.0\.0|\[::\]|\*):(?:22|\d+)/.test(line)) && snapshot.network.exposedPorts.includes(snapshot.ssh.port)) findings.push(finding("ssh-public", "SSH listens on a public/wildcard interface", "high", "network", [`Port ${snapshot.ssh.port} is wildcard-bound`], "SSH is reachable from every routed network unless filtered upstream.", "Restrict SSH sources and verify firewall policy.", ["linux_review_exposed_port"]));
+  if (snapshot.ssh.recentFailures >= 10) findings.push(finding("ssh-failure-burst", "Repeated SSH authentication failures", snapshot.ssh.recentFailures >= 50 ? "critical" : "high", "authentication", [`${snapshot.ssh.recentFailures} recent failures`], "The host may be under brute-force attack.", "Review source IPs and consider a controlled block action.", ["block_source_ip_temporary"]));
+  if (snapshot.ssh.successfulAfterFailureIps.length) findings.push(finding("ssh-success-after-failures", "Successful SSH login followed failures from the same IP", "critical", "authentication", snapshot.ssh.successfulAfterFailureIps, "This pattern can indicate a successful credential attack.", "Immediately validate the login and review the account and source activity.", ["block_source_ip_temporary"]));
+  if (snapshot.firewall.effectiveStatus === "inactive") findings.push(finding("firewall-inactive", "No active host firewall detected", "high", "firewall", ["UFW, nftables, iptables, and firewalld reported no active policy"], "Exposed services rely entirely on upstream controls.", "Review and plan a host firewall policy.", ["linux_review_firewall"]));
+  const risky = snapshot.network.exposedPorts.filter((port) => RISKY_PORTS.has(port));
+  if (risky.length) findings.push(finding("risky-ports", "Sensitive ports are publicly exposed", "high", "network", risky.map(String), "Management or data services may be internet reachable.", "Confirm business need and restrict source networks.", ["linux_review_exposed_port"]));
+  if (!/\bactive\b|\brunning\b/i.test(snapshot.securityTools.fail2ban) && snapshot.network.exposedPorts.includes(snapshot.ssh.port)) findings.push(finding("fail2ban-inactive", "Fail2ban is inactive while SSH is exposed", "medium", "security_tools", [snapshot.securityTools.fail2ban || "not detected"], "Automated authentication attacks are not rate-limited by fail2ban.", "Review fail2ban installation and policy.", ["linux_review_fail2ban"]));
+  if (!/active/i.test(snapshot.securityTools.auditd)) findings.push(finding("auditd-inactive", "Auditd is inactive or unavailable", "low", "security_tools", [snapshot.securityTools.auditd || "not detected"], "Security-relevant system activity may have reduced audit coverage.", "Review audit logging requirements."));
+  if (snapshot.users.shellUsers.length > 10) findings.push(finding("many-shell-users", "Many users have interactive shells", "medium", "users", [`${snapshot.users.shellUsers.length} shell users`], "A larger interactive account surface increases access risk.", "Review whether each shell account is still required."));
+  if (snapshot.containers.exposedPorts.length) findings.push(finding("docker-public-ports", "Containers publish host ports", "medium", "containers", snapshot.containers.exposedPorts.map(String), "Container services may bypass expected network exposure assumptions.", "Review published ports and upstream filtering."));
+  if (snapshot.containers.privilegedContainers.length) findings.push(finding("docker-privileged", "Privileged containers detected", "high", "containers", snapshot.containers.privilegedContainers, "A container compromise may provide host-level access.", "Review and remove privileged mode where possible."));
+  if (snapshot.recentLogs.warnings.some((line) => /critical|segfault|out of memory|oom/i.test(line))) findings.push(finding("system-errors", "Recent critical system warnings detected", "high", "system", snapshot.recentLogs.warnings.slice(0, 5), "Availability or integrity may be affected.", "Investigate the affected service or kernel event."));
+  const score = Math.min(100, findings.reduce((sum, item) => sum + weight[item.severity], 0));
+  const severity: LinuxTelemetrySeverity = score >= 80 ? "critical" : score >= 55 ? "high" : score >= 30 ? "medium" : score > 0 ? "low" : "info";
+  return { findings, riskSummary: { score, severity, topFindings: findings.sort((a, b) => weight[b.severity] - weight[a.severity]).slice(0, 5) } };
+}

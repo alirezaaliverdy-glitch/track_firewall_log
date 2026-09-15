@@ -1,0 +1,72 @@
+buildscript {
+    repositories {
+        maven { url 'https://redirector.gvt1.com/edgedl/android/maven2' }
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+    }
+}
+
+apply from: "variables.gradle"
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}
+
+tasks.register("verifyRootSdkVariables") {
+    doLast {
+        if (JavaVersion.current() < JavaVersion.VERSION_21) {
+            throw new GradleException("Android release candidate requires JDK 21 or newer; current JVM is ${JavaVersion.current()}")
+        }
+
+        def variablesFile = rootProject.file("variables.gradle")
+        if (!variablesFile.isFile()) {
+            throw new GradleException("android/variables.gradle is missing")
+        }
+
+        def requiredVariables = [
+            "minSdkVersion",
+            "compileSdkVersion",
+            "targetSdkVersion",
+            "buildToolsVersion"
+        ]
+        requiredVariables.each { name ->
+            if (!rootProject.ext.has(name)) {
+                throw new GradleException("rootProject.ext.${name} is not defined")
+            }
+        }
+
+        def rootBuildText = rootProject.file("build.gradle").text
+        def applyIndex = rootBuildText.indexOf('apply from: "variables.gradle"')
+        if (applyIndex < 0) {
+            throw new GradleException("android/build.gradle does not load variables.gradle")
+        }
+
+        def firstSdkRead = requiredVariables
+            .collect { rootBuildText.indexOf("rootProject.ext.${it}") }
+            .findAll { it >= 0 }
+            .min()
+        if (firstSdkRead != null && applyIndex > firstSdkRead) {
+            throw new GradleException("variables.gradle is loaded after rootProject.ext SDK values are read")
+        }
+
+        def appBuildText = rootProject.file("app/build.gradle").text
+        requiredVariables.each { name ->
+            if (!appBuildText.contains("rootProject.ext.${name}")) {
+                throw new GradleException("app/build.gradle does not resolve rootProject.ext.${name}")
+            }
+        }
+
+        def capacitorSettingsText = rootProject.file("capacitor.settings.gradle").text
+        if (!capacitorSettingsText.contains("include ':firewallsoar-local-ssh'")) {
+            throw new GradleException("Capacitor sync did not include the local SSH Android plugin")
+        }
+
+        def capacitorBuildText = rootProject.file("app/capacitor.build.gradle").text
+        if (!capacitorBuildText.contains("implementation project(':firewallsoar-local-ssh')")) {
+            throw new GradleException("Capacitor sync did not add the local SSH Android dependency")
+        }
+    }
+}

@@ -1,0 +1,445 @@
+import { useCallback, useEffect, useState } from "react";
+import { CalendarClock, Eye, Filter, Network, RefreshCw, ShieldAlert } from "lucide-react";
+import {
+  getCollectorStatus,
+  getRetentionStatus,
+  getSecurityEvent,
+  getSecurityEventsSummary,
+  listEventBatches,
+  listSecurityEvents,
+  runCollectorOnce,
+  runRetention,
+  type CollectorStatus,
+  type EventBatch,
+  type EventFilters,
+  type RetentionStatus,
+  type EventsSummary,
+  type SecurityEvent,
+} from "@/lib/securityEvents";
+import { listDevices, type Device } from "@/lib/devices";
+import { Input } from "@/components/ui/input";
+
+const EMPTY_SUMMARY: EventsSummary = {
+  totalEvents: 0,
+  countBySeverity: [],
+  countByAction: [],
+  topSourceIps: [],
+  topDestinationPorts: [],
+  topSources: [],
+  topDevices: [],
+};
+
+const safeNumber = (value: unknown): number => {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatNumber = (value: unknown): string => safeNumber(value).toLocaleString();
+
+const formatDateTime = (value: unknown): string => {
+  if (!value) return "-";
+  const d = new Date(String(value));
+  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+};
+
+const safeArray = <T,>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
+
+const EMPTY_FILTERS: EventFilters = {
+  vendor: "",
+  action: "",
+  severity: "",
+  srcIp: "",
+  dstIp: "",
+  port: "",
+  protocol: "",
+};
+
+function severityClass(severity: string | null) {
+  if (severity === "high" || severity === "critical") return "border-red-800 bg-red-950/40 text-red-300";
+  if (severity === "medium") return "border-yellow-800 bg-yellow-950/40 text-yellow-300";
+  if (severity === "low") return "border-blue-800 bg-blue-950/40 text-blue-200";
+  return "border-zinc-700 bg-zinc-950 text-zinc-400";
+}
+
+function topList(items: Array<{ value?: string; name?: string; count: number }>) {
+  const safeItems = safeArray<{ value?: string; name?: string; count: number }>(items);
+  if (safeItems.length === 0) return "none";
+  return safeItems.slice(0, 3).map((item) => `${item.value ?? item.name ?? "unknown"}: ${formatNumber(item.count)}`).join(", ");
+}
+
+function eventEndpoint(event: SecurityEvent) {
+  const src = [event.srcIp, event.srcPort].filter((value) => value !== null && value !== undefined).join(":");
+  const dst = [event.dstIp, event.dstPort].filter((value) => value !== null && value !== undefined).join(":");
+  return `${src || "-"} -> ${dst || "-"}`;
+}
+
+export default function SecurityEventsPanel() {
+  const [events, setEvents] = useState<SecurityEvent[]>([]);
+  const [summary, setSummary] = useState<EventsSummary>(EMPTY_SUMMARY);
+  const [batches, setBatches] = useState<EventBatch[]>([]);
+  const [filters, setFilters] = useState<EventFilters>(EMPTY_FILTERS);
+  const [selectedEvent, setSelectedEvent] = useState<SecurityEvent | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [collectorStatuses, setCollectorStatuses] = useState<Record<string, CollectorStatus>>({});
+  const [retentionStatus, setRetentionStatus] = useState<RetentionStatus | null>(null);
+  const [collectorRunningId, setCollectorRunningId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setMessage(null);
+    setEvents([]);
+    setSummary(EMPTY_SUMMARY);
+    setBatches([]);
+    setCollectorStatuses({});
+    setRetentionStatus(null);
+    setSelectedEvent(null);
+    setLastRefreshedAt(null);
+    Promise.all([
+      listSecurityEvents(filters),
+      getSecurityEventsSummary(filters),
+      listEventBatches(),
+      listDevices(),
+      getRetentionStatus(),
+    ])
+      .then(([nextEvents, nextSummary, nextBatches, nextDevices, nextRetention]) => {
+        setEvents(safeArray<SecurityEvent>(nextEvents));
+        setSummary(nextSummary ?? EMPTY_SUMMARY);
+        setBatches(safeArray<EventBatch>(nextBatches));
+        setDevices(safeArray<Device>(nextDevices));
+        setRetentionStatus(nextRetention);
+        setLastRefreshedAt(new Date().toISOString());
+        return Promise.all(
+          safeArray<Device>(nextDevices)
+            .filter((device) => device.type === "linux_edge" && device.protocol === "ssh")
+            .map((device) => getCollectorStatus(device.id).then((status) => [device.id, status] as const).catch(() => null))
+        );
+      })
+      .then((statuses) => {
+        if (!statuses) return;
+        setCollectorStatuses(Object.fromEntries(statuses.filter(Boolean) as Array<readonly [string, CollectorStatus]>));
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load security events."))
+      .finally(() => setLoading(false));
+  }, [filters]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = window.setInterval(refresh, 10000);
+    return () => window.clearInterval(id);
+  }, [autoRefresh, refresh]);
+
+  const updateFilter = (key: keyof EventFilters, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const openEvent = (event: SecurityEvent) => {
+    getSecurityEvent(event.id)
+      .then(setSelectedEvent)
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Failed to load event details."));
+  };
+
+  const runCollection = (device: Device) => {
+    setCollectorRunningId(device.id);
+    setMessage(null);
+    runCollectorOnce(device.id)
+      .then((result) => {
+        setMessage(`${device.name}: collected ${result.collectedLines} lines, inserted ${result.ingestion.inserted}, updated ${result.ingestion.updated}.`);
+        refresh();
+      })
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Collector run failed."))
+      .finally(() => setCollectorRunningId(null));
+  };
+
+  const runRetentionNow = () => {
+    setLoading(true);
+    setMessage(null);
+    runRetention()
+      .then(() => refresh())
+      .catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Retention run failed."))
+      .finally(() => setLoading(false));
+  };
+
+  const safeEvents = safeArray<SecurityEvent>(events);
+  const safeBatches = safeArray<EventBatch>(batches);
+  const safeSummary = summary ?? EMPTY_SUMMARY;
+  const countByAction = safeArray<{ action: string; count: number }>(safeSummary.countByAction);
+  const countBySeverity = safeArray<{ severity: string; count: number }>(safeSummary.countBySeverity);
+  const topSourceIps = safeArray<{ value: string; count: number }>(safeSummary.topSourceIps);
+  const linuxDevices = safeArray<Device>(devices).filter((device) => device.type === "linux_edge" && device.protocol === "ssh");
+  const isEmptyStartup = safeSummary.totalEvents === 0 && safeEvents.length === 0 && !expanded;
+
+  return (
+    <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-left text-lg font-semibold text-zinc-100">Security Events</h2>
+          <p className="mt-1 text-left text-sm text-zinc-400">
+            Normalized event store for uploads and future real-time sources.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+        <label className="inline-flex items-center gap-2 rounded border border-zinc-800 bg-zinc-950 px-2 py-1">
+          <input type="checkbox" checked={autoRefresh} onChange={(event) => setAutoRefresh(event.target.checked)} />
+          Auto refresh 10s
+        </label>
+        <span>Last refreshed: {formatDateTime(lastRefreshedAt)}</span>
+        <button
+          type="button"
+          onClick={runRetentionNow}
+          className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-300 hover:text-blue-200"
+        >
+          Run Retention
+        </button>
+        {retentionStatus && <span>Rows: {formatNumber(retentionStatus.totalEvents)}/{formatNumber(retentionStatus.maxRows)}</span>}
+      </div>
+
+      {isEmptyStartup && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-left">
+          <p className="text-sm font-semibold text-zinc-100">No security events yet. Upload logs or enable realtime collection.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex h-9 items-center rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 hover:text-blue-200"
+            >
+              Show Security Events
+            </button>
+            <button
+              type="button"
+              onClick={() => document.getElementById("log-upload")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-500"
+            >
+              Upload Logs
+            </button>
+            <button
+              type="button"
+              onClick={() => linuxDevices[0] && runCollection(linuxDevices[0])}
+              disabled={!linuxDevices[0] || Boolean(collectorRunningId)}
+              className="inline-flex h-9 items-center rounded-md border border-blue-900/70 bg-blue-950/30 px-3 text-sm font-medium text-blue-200 disabled:opacity-60"
+            >
+              Run Collection
+            </button>
+          </div>
+          {message && <p className="mt-3 text-xs text-zinc-400">{message}</p>}
+        </div>
+      )}
+
+      {!isEmptyStartup && (
+        <>
+
+      {linuxDevices.length > 0 && (
+        <div className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <p className="mb-2 text-left text-xs font-semibold text-zinc-300">Collectors</p>
+          <div className="flex flex-wrap gap-2">
+            {linuxDevices.map((device) => {
+              const status = collectorStatuses[device.id];
+              return (
+                <button
+                  key={device.id}
+                  type="button"
+                  onClick={() => runCollection(device)}
+                  disabled={collectorRunningId === device.id}
+                  className="inline-flex h-8 items-center gap-2 rounded border border-blue-900/70 bg-blue-950/30 px-2.5 text-xs font-medium text-blue-200 hover:bg-blue-950/50 disabled:opacity-60"
+                >
+                  {collectorRunningId === device.id ? "Collecting" : "Run Collection Now"} · {device.name}
+                  {status?.state.lastSuccessAt ? ` · last ${formatDateTime(status.state.lastSuccessAt)}` : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+            Total events
+          </div>
+          <p className="mt-1 text-2xl font-semibold text-blue-100">{formatNumber(safeSummary.totalEvents)}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <Network className="h-4 w-4" aria-hidden="true" />
+            Top source IPs
+          </div>
+          <p className="mt-2 text-xs text-zinc-300">{topList(topSourceIps)}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <Filter className="h-4 w-4" aria-hidden="true" />
+            Actions
+          </div>
+          <p className="mt-2 text-xs text-zinc-300">{topList(countByAction.map((item) => ({ value: item.action, count: item.count })))}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <div className="flex items-center gap-2 text-xs text-zinc-500">
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            Recent batches
+          </div>
+          <p className="mt-2 text-xs text-zinc-300">{formatNumber(safeBatches.length)} batches stored</p>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {countBySeverity.map((item) => (
+          <span key={item.severity} className={`rounded border px-2 py-1 text-xs ${severityClass(item.severity)}`}>
+            {item.severity}: {formatNumber(item.count)}
+          </span>
+        ))}
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+        {(["vendor", "action", "severity", "srcIp", "dstIp", "port", "protocol"] as Array<keyof EventFilters>).map((key) => (
+          <label key={key} className="grid gap-1 text-left text-xs font-medium text-zinc-500">
+            {key}
+            <Input
+              value={filters[key] ?? ""}
+              onChange={(event) => updateFilter(key, event.target.value)}
+              placeholder={key === "port" ? "22" : key}
+              className="h-8 text-xs"
+            />
+          </label>
+        ))}
+        <button
+          type="button"
+          onClick={refresh}
+          className="col-span-2 inline-flex h-8 items-center justify-center gap-2 self-end rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-500 md:col-span-1"
+        >
+          <Filter className="h-3.5 w-3.5" aria-hidden="true" />
+          Apply
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-zinc-800 text-left text-sm">
+            <thead className="bg-zinc-900/70 text-xs uppercase text-zinc-500">
+              <tr>
+                <th className="px-3 py-2 font-medium">Time</th>
+                <th className="px-3 py-2 font-medium">Severity</th>
+                <th className="px-3 py-2 font-medium">Action</th>
+                <th className="px-3 py-2 font-medium">Endpoint</th>
+                <th className="px-3 py-2 font-medium">Vendor</th>
+                <th className="px-3 py-2 font-medium">Count</th>
+                <th className="px-3 py-2 font-medium">Source</th>
+                <th className="px-3 py-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-zinc-500">
+                    Refreshing...
+                  </td>
+                </tr>
+              ) : safeEvents.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-zinc-500">
+                    No security events stored yet.
+                  </td>
+                </tr>
+              ) : (
+                safeEvents.map((event) => (
+                  <tr key={event.id} className="text-zinc-300">
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-500">{formatDateTime(event.timestamp ?? event.receivedAt)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex rounded border px-2 py-0.5 text-xs ${severityClass(event.severity)}`}>
+                        {event.severity ?? "unknown"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">{event.action ?? "-"}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{eventEndpoint(event)}</td>
+                    <td className="px-3 py-2">{event.vendor ?? "-"}</td>
+                    <td className="px-3 py-2">{formatNumber(event.count ?? 1)}</td>
+                    <td className="px-3 py-2">{event.source?.name ?? "-"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => openEvent(event)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded border border-zinc-700 bg-zinc-900 px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:text-blue-200"
+                      >
+                        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                        Details
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {safeBatches.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {safeBatches.slice(0, 5).map((batch) => (
+            <span key={batch.id} className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs text-zinc-400">
+              {batch.source?.name ?? "Source"}: {formatNumber(batch.parsedEvents)}/{formatNumber(batch.totalEvents)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {selectedEvent && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center" role="dialog" aria-modal="true">
+          <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-100">Event Details</h3>
+                <p className="mt-0.5 text-xs text-zinc-500">{selectedEvent.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEvent(null)}
+                className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100"
+              >
+                Close
+              </button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto p-4">
+              <div className="grid gap-2 text-sm text-zinc-300 sm:grid-cols-2">
+                <p><span className="text-zinc-500">Type:</span> {selectedEvent.eventType}</p>
+                <p><span className="text-zinc-500">Protocol:</span> {selectedEvent.protocol ?? "-"}</p>
+                <p><span className="text-zinc-500">Rule:</span> {selectedEvent.ruleName ?? "-"}</p>
+                <p><span className="text-zinc-500">User:</span> {selectedEvent.username ?? "-"}</p>
+                <p><span className="text-zinc-500">Source:</span> {eventEndpoint(selectedEvent)}</p>
+                <p><span className="text-zinc-500">Batch:</span> {selectedEvent.batchId ?? "-"}</p>
+              </div>
+              <pre className="mt-4 max-h-80 overflow-auto rounded border border-zinc-800 bg-black/40 p-3 text-xs text-zinc-300">
+                {JSON.stringify(selectedEvent.normalizedJson, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <p className="mt-3 text-left text-xs text-zinc-400" role="status" aria-live="polite">
+          {message}
+        </p>
+      )}
+        </>
+      )}
+    </section>
+  );
+}

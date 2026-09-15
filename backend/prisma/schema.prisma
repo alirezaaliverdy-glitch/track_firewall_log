@@ -1,0 +1,1798 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model AppUser {
+  id           String        @id @default(cuid())
+  username     String        @unique
+  passwordHash String
+  displayName  String
+  role         AppUserRole   @default(viewer)
+  isActive     Boolean       @default(true)
+  allowedSections String[]   @default([])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     AuthSession[]
+  securityAlertChannels SecurityAlertChannel[]
+  scheduledTasks ScheduledTask[]
+}
+
+model AuthSession {
+  id         String   @id @default(cuid())
+  userId     String
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ipAddress  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum AppUserRole {
+  admin
+  operator
+  viewer
+}
+
+model Upload {
+  id                String        @id @default(cuid())
+  fileName          String
+  originalFileName  String
+  fileSize          Int
+  mimeType          String?
+  fileExtension     String
+  detectedFormat    String?
+  selectedVendor    String?
+  detectedVendor    String?
+  status            UploadStatus
+  rowCount          Int?
+  parseWarningCount Int?
+  checksum          String?
+  storagePath       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  jobs              Job[]
+  analysisRuns      AnalysisRun[]
+}
+
+model Job {
+  id           String    @id @default(cuid())
+  uploadId     String
+  upload       Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  type         JobType
+  status       JobStatus
+  progress     Int       @default(0)
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([uploadId])
+}
+
+model AnalysisRun {
+  id                      String         @id @default(cuid())
+  uploadId                String
+  upload                  Upload         @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  status                  AnalysisStatus
+  resultJson              Json?
+  summaryJson             Json?
+  logProfileJson          Json?
+  trafficIntelligenceJson Json?
+  sensitivePortsJson      Json?
+  policyReviewJson        Json?
+  findingsJson            Json?
+  normalizedLogsJson      Json?
+  parseWarningsJson       Json?
+  rowCount                Int?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([uploadId])
+}
+
+model Device {
+  id                       String                    @id @default(cuid())
+  name                     String
+  vendor                   String
+  type                     DeviceType
+  host                     String
+  managementPort           Int
+  protocol                 DeviceProtocol
+  credentialId             String?
+  credential               DeviceCredential?         @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  credentialRef            String?
+  environment              DeviceEnvironment
+  tags                     String[]                  @default([])
+  status                   DeviceStatus              @default(unknown)
+  capabilities             Json?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  authProfiles             DeviceAuthProfile[]
+  deviceCapabilities       DeviceCapability[]
+  deviceCapabilityCaches   DeviceCapabilityCache[]
+  statusChecks             DeviceStatusCheck[]
+  auditLogs                AuditLog[]
+  eventSources             EventSource[]
+  eventBatches             EventBatch[]
+  securityEvents           SecurityEvent[]
+  collectorStates          EventCollectorState[]
+  incidents                Incident[]
+  aiActionIntents          AiActionIntent[]
+  actionPlans              ActionPlan[]
+  metricSamples     MetricSample[]
+  metricAggregates  MetricAggregate[]
+  healthSnapshots   HealthSnapshot[]
+  monitorIncidents  MonitorIncident[]
+  collectionRuns    CollectionRun[]
+  actionAuditLogs          ActionAuditLog[]
+  hardeningRecommendations HardeningRecommendation[]
+  deviceSnapshots          DeviceSnapshot[]
+  findings                 Finding[]
+  asset                    Asset?
+  scheduledTasks           ScheduledTask[]
+
+  @@index([type])
+  @@index([host])
+  @@index([credentialId])
+  @@index([credentialRef])
+  @@index([status])
+}
+
+model DeviceOnboardingSession {
+  id                  String   @id
+  deviceId            String?
+  status              String
+  step                String
+  draftJson           Json
+  testJson            Json?
+  detectionJson       Json?
+  discoveryJson       Json?
+  previewJson         Json?
+  resultJson          Json?
+  privateEvidenceJson Json     @default("{}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  expiresAt           DateTime
+
+  @@index([deviceId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model AssetSite {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  slug        String          @unique
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  locations   AssetLocation[]
+  assets      Asset[]
+  prefixes    AssetPrefix[]
+}
+
+model AssetLocation {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String
+  siteId    String?
+  site      AssetSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  assets    Asset[]
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+}
+
+model AssetRole {
+  id        String          @id @default(cuid())
+  name      String          @unique
+  slug      String          @unique
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  assets    Asset[]
+  platforms AssetPlatform[]
+}
+
+model AssetVendor {
+  id             String          @id @default(cuid())
+  name           String          @unique
+  slug           String          @unique
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  assets         Asset[]
+  assetPlatforms AssetPlatform[]
+}
+
+model AssetPlatform {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  vendorId    String?
+  vendor      AssetVendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  assets      Asset[]
+  assetRole   AssetRole?   @relation(fields: [assetRoleId], references: [id])
+  assetRoleId String?
+
+  @@index([vendorId])
+}
+
+model Asset {
+  id                String              @id @default(cuid())
+  name              String
+  hostname          String?
+  managementIp      String?
+  serial            String?
+  externalId        String?
+  managedState      String              @default("managed")
+  healthState       String              @default("unknown")
+  lastSeenAt        DateTime?
+  deviceId          String?             @unique
+  device            Device?             @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  siteId            String?
+  site              AssetSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  locationId        String?
+  location          AssetLocation?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  roleId            String?
+  role              AssetRole?          @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  vendorId          String?
+  vendor            AssetVendor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  platformId        String?
+  platform          AssetPlatform?      @relation(fields: [platformId], references: [id], onDelete: SetNull)
+  sourceId          String?
+  source            AssetSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  tagsJson          Json                @default("[]")
+  metadataJson      Json                @default("{}")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  interfaces        AssetInterface[]
+  ipAddresses       AssetIpAddress[]
+  relationshipsFrom AssetRelationship[] @relation("AssetRelationshipFrom")
+  relationshipsTo   AssetRelationship[] @relation("AssetRelationshipTo")
+  securityEvents    SecurityEvent[]
+  findings          Finding[]
+  actionPlans       ActionPlan[]
+  metricSamples     MetricSample[]
+  metricAggregates  MetricAggregate[]
+  healthSnapshots   HealthSnapshot[]
+  monitorIncidents  MonitorIncident[]
+  collectionRuns    CollectionRun[]
+
+  @@unique([managementIp])
+  @@unique([serial])
+  @@unique([externalId])
+  @@index([hostname])
+  @@index([managedState])
+  @@index([healthState])
+  @@index([siteId])
+  @@index([vendorId])
+  @@index([lastSeenAt])
+}
+
+model AssetInterface {
+  id           String           @id @default(cuid())
+  assetId      String
+  asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name         String
+  macAddress   String?
+  type         String?
+  enabled      Boolean          @default(true)
+  metadataJson Json             @default("{}")
+  ipAddresses  AssetIpAddress[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([assetId, name])
+  @@index([assetId])
+}
+
+model AssetIpAddress {
+  id          String          @id @default(cuid())
+  address     String          @unique
+  assetId     String?
+  asset       Asset?          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  interfaceId String?
+  interface   AssetInterface? @relation(fields: [interfaceId], references: [id], onDelete: SetNull)
+  prefixId    String?
+  prefix      AssetPrefix?    @relation(fields: [prefixId], references: [id], onDelete: SetNull)
+  role        String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([assetId])
+  @@index([interfaceId])
+  @@index([prefixId])
+}
+
+model AssetPrefix {
+  id          String           @id @default(cuid())
+  cidr        String           @unique
+  siteId      String?
+  site        AssetSite?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  vlanId      String?
+  vlan        AssetVlan?       @relation(fields: [vlanId], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  ipAddresses AssetIpAddress[]
+
+  @@index([siteId])
+  @@index([vlanId])
+}
+
+model AssetVlan {
+  id        String        @id @default(cuid())
+  vlanId    Int
+  name      String
+  siteId    String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  prefixes  AssetPrefix[]
+
+  @@unique([siteId, vlanId])
+  @@index([siteId])
+}
+
+model AssetRelationship {
+  id           String   @id @default(cuid())
+  fromAssetId  String
+  fromAsset    Asset    @relation("AssetRelationshipFrom", fields: [fromAssetId], references: [id], onDelete: Cascade)
+  toAssetId    String
+  toAsset      Asset    @relation("AssetRelationshipTo", fields: [toAssetId], references: [id], onDelete: Cascade)
+  type         String
+  metadataJson Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  @@unique([fromAssetId, toAssetId, type])
+  @@index([fromAssetId])
+  @@index([toAssetId])
+}
+
+model AssetTag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AssetSource {
+  id         String         @id @default(cuid())
+  name       String         @unique
+  type       String
+  enabled    Boolean        @default(true)
+  configJson Json           @default("{}")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  assets     Asset[]
+  syncRuns   AssetSyncRun[]
+}
+
+model AssetSyncRun {
+  id             String       @id @default(cuid())
+  sourceId       String?
+  source         AssetSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  sourceType     String
+  status         String
+  idempotencyKey String?
+  previewJson    Json
+  appliedJson    Json?
+  startedAt      DateTime     @default(now())
+  completedAt    DateTime?
+
+  @@unique([sourceType, idempotencyKey])
+  @@index([sourceId])
+  @@index([sourceType])
+  @@index([status])
+}
+
+model Finding {
+  id                 String   @id @default(cuid())
+  deviceId           String
+  device             Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  assetId            String?
+  asset              Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  vendor             String
+  title              String
+  severity           String
+  category           String
+  status             String   @default("active")
+  confidence         Float
+  summary            String
+  evidenceJson       Json
+  source             String
+  rawRefsJson        Json
+  firstSeen          DateTime
+  lastSeen           DateTime
+  count              Int      @default(1)
+  mitreTags          String[] @default([])
+  affectedObject     String?
+  actor              String?
+  srcIp              String?
+  dstIp              String?
+  dstPort            Int?
+  recommendedActions Json
+  suppressionReason  String?
+  fingerprint        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([deviceId, fingerprint])
+  @@index([deviceId, status])
+  @@index([assetId, status])
+  @@index([vendor, severity])
+  @@index([lastSeen])
+}
+
+model TrustedSourceIp {
+  id        String   @id @default(cuid())
+  ip        String
+  vendor    String   @default("all")
+  label     String?
+  enabled   Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ip, vendor])
+  @@index([vendor, enabled])
+  @@index([createdAt])
+}
+
+model DeviceCredential {
+  id                  String               @id @default(cuid())
+  name                String               @unique
+  type                DeviceCredentialType
+  username            String
+  secretEncrypted     String
+  privateKeyEncrypted String?
+  passphraseEncrypted String?
+  sudo                Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  devices             Device[]
+
+  @@index([type])
+  @@index([name])
+}
+
+model AiChatSession {
+  id        String           @id @default(cuid())
+  title     String
+  userId    String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  messages  AiChatMessage[]
+  intents   AiActionIntent[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AiChatMessage {
+  id             String           @id @default(cuid())
+  sessionId      String
+  session        AiChatSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role           AiChatRole
+  content        String
+  structuredJson Json?
+  createdAt      DateTime         @default(now())
+  actionIntents  AiActionIntent[]
+
+  @@index([sessionId])
+  @@index([role])
+  @@index([createdAt])
+}
+
+model AiActionIntent {
+  id             String               @id @default(cuid())
+  sessionId      String
+  session        AiChatSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        AiChatMessage?       @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  deviceId       String?
+  device         Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  intentType     AiIntentType
+  status         AiActionIntentStatus @default(proposed)
+  riskLevel      AiRiskLevel
+  parametersJson Json
+  explanation    String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  actionPlans    ActionPlan[]
+
+  @@index([sessionId])
+  @@index([messageId])
+  @@index([deviceId])
+  @@index([intentType])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+model ActionPlan {
+  id             String           @id @default(cuid())
+  source         ActionPlanSource
+  requestedBy    String?
+  deviceId       String?
+  device         Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  assetId        String?
+  asset          Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  aiIntentId     String?
+  aiIntent       AiActionIntent?  @relation(fields: [aiIntentId], references: [id], onDelete: SetNull)
+  actionType     ActionType
+  status         ActionPlanStatus @default(proposed)
+  riskLevel      AiRiskLevel
+  parametersJson Json
+  validationJson Json?
+  dryRunJson     Json?
+  approvalJson   Json?
+  resultJson     Json?
+  rollbackJson   Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  auditLogs      ActionAuditLog[]
+  approvals      ActionApproval[]
+  secrets        ActionPlanSecret[]
+  scheduledTaskRuns ScheduledTaskRun[]
+
+  @@index([source])
+  @@index([deviceId])
+  @@index([assetId])
+  @@index([aiIntentId])
+  @@index([actionType])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([createdAt])
+}
+
+model ActionPlanSecret {
+  id              String     @id @default(cuid())
+  actionPlanId    String
+  actionPlan      ActionPlan @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  key             String
+  secretEncrypted String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([actionPlanId, key])
+  @@index([actionPlanId])
+}
+
+model ActionAuditLog {
+  id           String     @id @default(cuid())
+  actionPlanId String
+  actionPlan   ActionPlan @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  deviceId     String?
+  device       Device?    @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  eventType    String
+  message      String
+  metadataJson Json?
+  createdAt    DateTime   @default(now())
+
+  @@index([actionPlanId])
+  @@index([deviceId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model ActionApproval {
+  id           String           @id @default(cuid())
+  actionPlanId String
+  actionPlan   ActionPlan       @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  approvedBy   String?
+  decision     ApprovalDecision
+  reason       String?
+  createdAt    DateTime         @default(now())
+
+  @@index([actionPlanId])
+  @@index([decision])
+  @@index([createdAt])
+}
+
+model SecurityAssessment {
+  id              String                    @id @default(cuid())
+  scopeType       String
+  scopeId         String?
+  status          String                    @default("completed")
+  riskScore       Int
+  summary         String
+  findingsJson    Json
+  dataSourcesJson Json                      @default("{}")
+  language        String                    @default("fa")
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  recommendations HardeningRecommendation[]
+
+  @@index([scopeType])
+  @@index([scopeId])
+  @@index([status])
+  @@index([riskScore])
+  @@index([createdAt])
+}
+
+model HardeningRecommendation {
+  id              String             @id @default(cuid())
+  assessmentId    String
+  assessment      SecurityAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  deviceId        String?
+  device          Device?            @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  vendor          String
+  title           String
+  severity        String
+  category        String
+  reason          String
+  evidenceJson    Json
+  recommendation  String
+  catalogActionId String?
+  actionType      String?
+  parametersJson  Json
+  executable      Boolean            @default(false)
+  status          String             @default("proposed")
+  actionPlanId    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([assessmentId])
+  @@index([deviceId])
+  @@index([vendor])
+  @@index([severity])
+  @@index([category])
+  @@index([catalogActionId])
+  @@index([executable])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DeviceSnapshot {
+  id           String   @id @default(cuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  vendor       String
+  snapshotType String
+  dataJson     Json
+  collectedAt  DateTime @default(now())
+
+  @@index([deviceId])
+  @@index([vendor])
+  @@index([snapshotType])
+  @@index([collectedAt])
+}
+
+model EventSource {
+  id             String            @id @default(cuid())
+  name           String
+  type           EventSourceType
+  deviceId       String?
+  device         Device?           @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  status         EventSourceStatus @default(active)
+  lastSeenAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  batches        EventBatch[]
+  securityEvents SecurityEvent[]
+  incidents      Incident[]
+
+  @@index([type])
+  @@index([deviceId])
+  @@index([status])
+  @@index([lastSeenAt])
+}
+
+model EventBatch {
+  id             String           @id @default(cuid())
+  sourceId       String?
+  source         EventSource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  deviceId       String?
+  device         Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  status         EventBatchStatus
+  totalEvents    Int              @default(0)
+  parsedEvents   Int              @default(0)
+  failedEvents   Int              @default(0)
+  createdAt      DateTime         @default(now())
+  completedAt    DateTime?
+  securityEvents SecurityEvent[]
+
+  @@index([sourceId])
+  @@index([deviceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SecurityEvent {
+  id             String          @id @default(cuid())
+  deviceId       String?
+  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  assetId        String?
+  asset          Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  sourceId       String?
+  source         EventSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  batchId        String?
+  batch          EventBatch?     @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  timestamp      DateTime?
+  receivedAt     DateTime        @default(now())
+  sourceType     String?
+  vendor         String?
+  eventType      String
+  action         String?
+  severity       String?
+  srcIp          String?
+  srcPort        Int?
+  dstIp          String?
+  dstPort        Int?
+  protocol       String?
+  username       String?
+  ruleName       String?
+  interfaceIn    String?
+  interfaceOut   String?
+  rawMessage     String?
+  rawSnippet     String?
+  normalizedJson Json
+  evidenceJson   Json?
+  dedupeKey      String?         @unique
+  firstSeen      DateTime?
+  lastSeen       DateTime?
+  count          Int             @default(1)
+  tags           Json?
+  createdAt      DateTime        @default(now())
+  incidentEvents IncidentEvent[]
+
+  @@index([deviceId])
+  @@index([assetId])
+  @@index([sourceId])
+  @@index([batchId])
+  @@index([timestamp])
+  @@index([receivedAt])
+  @@index([vendor])
+  @@index([sourceType])
+  @@index([action])
+  @@index([severity])
+  @@index([srcIp])
+  @@index([dstIp])
+  @@index([dstPort])
+  @@index([protocol])
+  @@index([dedupeKey])
+  @@index([lastSeen])
+}
+
+model EventCollectorState {
+  id              String    @id @default(cuid())
+  deviceId        String
+  device          Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sourceType      String
+  lastCollectedAt DateTime?
+  lastSuccessAt   DateTime?
+  lastErrorAt     DateTime?
+  lastError       String?
+  consecutiveIdleRuns Int  @default(0)
+  consecutiveFailures Int  @default(0)
+  enabled         Boolean   @default(true)
+  intervalSeconds Int       @default(60)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([deviceId, sourceType])
+  @@index([deviceId])
+  @@index([sourceType])
+  @@index([enabled])
+}
+
+model DetectionRule {
+  id            String            @id @default(cuid())
+  name          String
+  description   String
+  enabled       Boolean           @default(true)
+  severity      IncidentSeverity
+  ruleType      DetectionRuleType
+  queryJson     Json?
+  thresholdJson Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  incidents     Incident[]
+
+  @@unique([ruleType, name])
+  @@index([enabled])
+  @@index([ruleType])
+}
+
+model ScheduledTask {
+  id                String                @id @default(cuid())
+  name              String
+  deviceId          String
+  device            Device                @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  catalogCommandId  String
+  actionType        ActionType
+  riskLevel         AiRiskLevel
+  parametersJson    Json
+  calendarType      ScheduledTaskCalendar @default(gregorian)
+  localDate         String
+  localTime         String
+  timeZone          String                @default("Asia/Tehran")
+  runAt             DateTime
+  status            ScheduledTaskStatus   @default(scheduled)
+  enabled           Boolean               @default(true)
+  createdById       String?
+  createdBy         AppUser?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  confirmationJson  Json
+  lastRunAt         DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  runs              ScheduledTaskRun[]
+
+  @@index([deviceId])
+  @@index([createdById])
+  @@index([status, enabled, runAt])
+  @@index([createdAt])
+}
+
+model ScheduledTaskRun {
+  id              String                 @id @default(cuid())
+  scheduledTaskId String
+  scheduledTask   ScheduledTask          @relation(fields: [scheduledTaskId], references: [id], onDelete: Cascade)
+  actionPlanId    String?
+  actionPlan      ActionPlan?            @relation(fields: [actionPlanId], references: [id], onDelete: SetNull)
+  executionKey    String                 @unique
+  trigger         ScheduledTaskTrigger   @default(schedule)
+  status          ScheduledTaskRunStatus @default(running)
+  scheduledFor    DateTime
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  errorCode       String?
+  errorMessage    String?
+  resultJson      Json?
+  createdAt       DateTime               @default(now())
+
+  @@index([scheduledTaskId, createdAt])
+  @@index([actionPlanId])
+  @@index([status, startedAt])
+}
+
+model SecurityAlertChannel {
+  id              String   @id @default("primary-email")
+  userId          String?  @unique
+  user            AppUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled         Boolean  @default(false)
+  recipientEmail  String?
+  recipientEmails String[] @default([])
+  minimumSeverity String   @default("high")
+  senderProvider  String?
+  senderEmail     String?
+  senderSecretEncrypted String? @db.Text
+  senderConnectedAt DateTime?
+  senderTestedAt  DateTime?
+  senderTestStatus String?
+  lastTestedAt    DateTime?
+  lastTestStatus  String?
+  lastErrorCode   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model SecurityAlertDelivery {
+  id              String    @id @default(cuid())
+  channelId       String
+  findingId       String
+  ruleId          String?
+  eventFingerprint String   @unique
+  recipientEmail  String
+  status          String
+  errorCode       String?
+  attemptCount    Int       @default(1)
+  nextAttemptAt   DateTime?
+  attemptedAt     DateTime  @default(now())
+  sentAt          DateTime?
+  metadataJson    Json?
+
+  @@index([channelId, attemptedAt])
+  @@index([findingId])
+  @@index([status])
+  @@index([status, nextAttemptAt])
+}
+
+model Incident {
+  id          String           @id @default(cuid())
+  title       String
+  description String
+  severity    IncidentSeverity
+  status      IncidentStatus   @default(open)
+  deviceId    String?
+  device      Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  sourceId    String?
+  source      EventSource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  ruleId      String?
+  rule        DetectionRule?   @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  firstSeenAt DateTime
+  lastSeenAt  DateTime
+  eventCount  Int              @default(0)
+  summaryJson Json?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  events      IncidentEvent[]
+
+  @@index([status])
+  @@index([severity])
+  @@index([deviceId])
+  @@index([sourceId])
+  @@index([ruleId])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+model IncidentEvent {
+  id              String        @id @default(cuid())
+  incidentId      String
+  incident        Incident      @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  securityEventId String
+  securityEvent   SecurityEvent @relation(fields: [securityEventId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([incidentId, securityEventId])
+  @@index([incidentId])
+  @@index([securityEventId])
+}
+
+model DeviceAuthProfile {
+  id            String   @id @default(cuid())
+  deviceId      String
+  device        Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  name          String
+  credentialRef String
+  authType      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([deviceId])
+}
+
+model DeviceCapability {
+  id                     String   @id @default(cuid())
+  deviceId               String
+  device                 Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  name                   String
+  category               String
+  enabled                Boolean  @default(false)
+  dryRunSupported        Boolean  @default(true)
+  manualApprovalRequired Boolean  @default(true)
+  metadata               Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([deviceId])
+}
+
+model DeviceCapabilityCache {
+  id               String   @id @default(cuid())
+  deviceId         String
+  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  vendorKey        String
+  platformKey      String
+  connectorType    String
+  detectionJson    Json     @default("{}")
+  capabilitiesJson Json     @default("[]")
+  factsJson        Json     @default("{}")
+  warningsJson     Json     @default("[]")
+  refreshedAt      DateTime @default(now())
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([deviceId])
+  @@index([vendorKey])
+  @@index([platformKey])
+  @@index([expiresAt])
+}
+
+model CollectionRun {
+  id              String           @id @default(cuid())
+  assetId         String?
+  asset           Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  provider        String
+  status          String
+  startedAt       DateTime         @default(now())
+  completedAt     DateTime?
+  durationMs      Int?
+  metricsJson     Json             @default("[]")
+  warningsJson    Json             @default("[]")
+  errorCode       String?
+  errorMessage    String?
+  metricSamples   MetricSample[]
+  healthSnapshots HealthSnapshot[]
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([provider])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model MetricSample {
+  id              String         @id @default(cuid())
+  assetId         String?
+  asset           Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  metricKey       String
+  value           Float
+  unit            String?
+  timestamp       DateTime       @default(now())
+  source          String
+  labelsJson      Json           @default("{}")
+  collectionRunId String?
+  collectionRun   CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([metricKey])
+  @@index([timestamp])
+  @@index([collectionRunId])
+}
+
+model MetricAggregate {
+  id          String   @id @default(cuid())
+  assetId     String?
+  asset       Asset?   @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId    String?
+  device      Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  metricKey   String
+  bucketStart DateTime
+  bucketSize  String
+  avg         Float?
+  min         Float?
+  max         Float?
+  count       Int
+  unit        String?
+  labelsJson  Json     @default("{}")
+
+  @@unique([deviceId, metricKey, bucketStart, bucketSize])
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([metricKey])
+  @@index([bucketStart])
+}
+
+model HealthSnapshot {
+  id              String         @id @default(cuid())
+  assetId         String?
+  asset           Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?        @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  score           Int
+  state           String
+  summary         String
+  metricsJson     Json           @default("{}")
+  warningsJson    Json           @default("[]")
+  collectedAt     DateTime       @default(now())
+  staleAt         DateTime?
+  collectionRunId String?
+  collectionRun   CollectionRun? @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([state])
+  @@index([collectedAt])
+  @@index([collectionRunId])
+}
+
+model HealthRule {
+  id             String   @id @default(cuid())
+  key            String   @unique
+  title          String
+  scope          String
+  enabled        Boolean  @default(true)
+  severity       String
+  expressionJson Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([scope])
+  @@index([severity])
+}
+
+model MonitorIncident {
+  id           String    @id @default(cuid())
+  assetId      String?
+  asset        Asset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  deviceId     String?
+  device       Device?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  state        String
+  severity     String
+  title        String
+  summary      String
+  openedAt     DateTime  @default(now())
+  resolvedAt   DateTime?
+  metadataJson Json      @default("{}")
+
+  @@index([assetId])
+  @@index([deviceId])
+  @@index([state])
+  @@index([severity])
+  @@index([openedAt])
+}
+model DeviceStatusCheck {
+  id        String       @id @default(cuid())
+  deviceId  String
+  device    Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  status    DeviceStatus
+  message   String?
+  latencyMs Int?
+  checkedAt DateTime     @default(now())
+
+  @@index([deviceId])
+  @@index([checkedAt])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  deviceId       String?
+  device         Device?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  actor          String?
+  action         String
+  targetType     String
+  targetId       String?
+  dryRun         Boolean  @default(true)
+  approvalStatus String   @default("not_required")
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  @@index([deviceId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum UploadStatus {
+  uploaded
+  queued
+  processing
+  analyzed
+  failed
+  deleted
+}
+
+enum JobStatus {
+  queued
+  processing
+  completed
+  failed
+}
+
+enum JobType {
+  import
+  analyze
+  ai_report
+}
+
+enum AnalysisStatus {
+  pending
+  completed
+  failed
+}
+
+enum DeviceType {
+  linux_edge
+  mikrotik
+  fortigate
+  pfsense
+  generic_syslog_source
+  generic_firewall
+}
+
+enum DeviceProtocol {
+  ssh
+  api
+  syslog
+  agent
+}
+
+enum DeviceEnvironment {
+  production
+  staging
+  lab
+}
+
+enum DeviceStatus {
+  unknown
+  online
+  offline
+  error
+}
+
+enum DeviceCredentialType {
+  password
+  private_key
+}
+
+enum EventSourceType {
+  upload
+  syslog
+  agent
+  api
+  manual
+}
+
+enum EventSourceStatus {
+  active
+  inactive
+  error
+}
+
+enum EventBatchStatus {
+  processing
+  completed
+  failed
+  partial
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum IncidentStatus {
+  open
+  investigating
+  resolved
+  false_positive
+}
+
+enum DetectionRuleType {
+  port_scan
+  ssh_bruteforce
+  sensitive_port_exposure
+  deny_drop_spike
+  suspicious_outbound
+}
+
+enum AiChatRole {
+  user
+  assistant
+  system
+  tool
+}
+
+enum AiActionIntentStatus {
+  proposed
+  discarded
+  converted_to_action_plan
+}
+
+enum AiRiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum AiIntentType {
+  custom_vendor_action
+  generic_security_action
+  create_egress_policy
+  update_policy_schedule
+  block_source_ip_temporary
+  unblock_source_ip
+  open_port
+  close_port
+  change_ssh_port
+  create_address_object
+  create_schedule_object
+  create_service_object
+  add_firewall_rule
+  remove_firewall_rule
+  enable_rule
+  disable_rule
+  mikrotik_add_address_list_entry
+  mikrotik_remove_address_list_entry
+  mikrotik_block_ip_temporary
+  mikrotik_update_address_list_entry
+  mikrotik_create_managed_drop_rule
+  mikrotik_enable_managed_rule
+  mikrotik_disable_managed_rule
+  mikrotik_add_comment_to_rule
+  mikrotik_read_firewall_summary
+  mikrotik_create_filter_rule
+  mikrotik_enable_filter_rule
+  mikrotik_disable_filter_rule
+  mikrotik_move_filter_rule
+  mikrotik_set_filter_rule_comment
+  mikrotik_remove_managed_filter_rule
+  mikrotik_list_filter_rules
+  mikrotik_search_filter_rules
+  mikrotik_create_dstnat_rule
+  mikrotik_create_srcnat_masquerade_rule
+  mikrotik_enable_nat_rule
+  mikrotik_disable_nat_rule
+  mikrotik_set_nat_rule_comment
+  mikrotik_remove_managed_nat_rule
+  mikrotik_list_nat_rules
+  mikrotik_unblock_ip
+  mikrotik_list_address_list
+  mikrotik_create_managed_blocklist_rule
+  mikrotik_list_ip_services
+  mikrotik_disable_unused_service
+  mikrotik_restrict_service_by_address
+  mikrotik_change_service_port
+  mikrotik_enable_service
+  mikrotik_disable_service
+  mikrotik_list_interfaces
+  mikrotik_enable_interface
+  mikrotik_disable_interface
+  mikrotik_set_interface_comment
+  mikrotik_detect_wan_lan_candidates
+  mikrotik_list_routes
+  mikrotik_add_static_route
+  mikrotik_disable_static_route
+  mikrotik_remove_managed_static_route
+  mikrotik_show_dns_settings
+  mikrotik_set_dns_servers
+  mikrotik_list_dhcp_servers
+  mikrotik_list_dhcp_leases
+  mikrotik_add_static_dhcp_lease
+  mikrotik_remove_static_dhcp_lease
+  mikrotik_create_backup
+  mikrotik_create_export_sanitized
+  mikrotik_set_identity
+  mikrotik_show_clock
+  mikrotik_show_logs
+  mikrotik_show_resources
+  mikrotik_reboot
+  mikrotik_schedule_reboot
+  mikrotik_disable_rule_by_id
+  mikrotik_remove_rule_by_id
+  fortigate_create_address_object
+  fortigate_update_address_object
+  fortigate_delete_managed_address_object
+  fortigate_create_address_group
+  fortigate_add_member_to_address_group
+  fortigate_remove_member_from_address_group
+  fortigate_create_service_object
+  fortigate_update_service_object
+  fortigate_create_service_group
+  fortigate_create_recurring_schedule
+  fortigate_update_schedule
+  fortigate_create_egress_policy
+  fortigate_create_deny_policy
+  fortigate_enable_policy
+  fortigate_disable_policy
+  fortigate_move_policy
+  fortigate_update_policy_comment
+  fortigate_delete_managed_policy
+  fortigate_create_vip
+  fortigate_create_vip_group
+  fortigate_create_dstnat_policy
+  fortigate_create_snat_policy
+  fortigate_list_admins
+  fortigate_restrict_admin_trusthost
+  fortigate_change_admin_port
+  fortigate_disable_unused_admin_service
+  fortigate_backup_config
+  fortigate_export_sanitized_config
+  fortigate_show_logs
+  fortigate_show_sessions
+  fortigate_create_zone
+  fortigate_add_interface_to_zone
+  fortigate_remove_interface_from_zone
+  fortigate_delete_managed_zone
+  fortigate_list_zones
+  fortigate_set_interface_alias
+  fortigate_set_interface_role
+  fortigate_enable_interface
+  fortigate_disable_interface
+  fortigate_create_vlan_interface
+  fortigate_update_interface_ip
+  fortigate_create_tcp_service
+  fortigate_create_udp_service
+  fortigate_create_tcp_udp_service
+  fortigate_update_service_ports
+  fortigate_delete_managed_service
+  fortigate_add_service_to_group
+  fortigate_remove_service_from_group
+  fortigate_create_policy
+  fortigate_create_zone_policy
+  fortigate_update_policy
+  fortigate_create_static_route
+  fortigate_list_interfaces
+  fortigate_list_policies
+  fortigate_list_address_objects
+  fortigate_list_routes
+  linux_check_service_status
+  linux_list_running_services
+  linux_list_failed_services
+  linux_check_important_services
+  linux_list_open_ports
+  linux_check_firewall_status
+  linux_block_ip
+  linux_open_port
+  linux_daily_check
+  mikrotik_daily_check
+  fortigate_daily_check
+  fortigate_show_interfaces
+  fortigate_route_dns_check
+  fortigate_license_status
+  fortigate_admin_users
+  fortigate_show_system_status
+  fortigate_show_routing_dns
+  fortigate_show_admin_access
+  fortigate_show_firewall_policies
+  fortigate_show_vpn_status
+  fortigate_show_ha_vdom_zone
+  fortigate_update_interface_allowaccess
+  fortigate_delete_interface
+  fortigate_show_zones
+  fortigate_update_zone
+  fortigate_delete_zone
+  fortigate_show_address_objects
+  fortigate_delete_address_object
+  fortigate_delete_service_object
+  fortigate_delete_policy
+  fortigate_show_vips
+  fortigate_update_vip
+  fortigate_delete_vip
+  fortigate_show_ippools
+  fortigate_create_ippool
+  fortigate_update_ippool
+  fortigate_delete_ippool
+  fortigate_show_routes
+  fortigate_update_static_route
+  fortigate_delete_static_route
+  fortigate_update_dns
+  fortigate_update_ntp
+  fortigate_show_ipsec_vpns
+  fortigate_guided_workflow_preview
+  fortigate_guided_vpn_setup
+  fortigate_create_ipsec_tunnel
+  fortigate_update_ipsec_phase1
+  fortigate_update_ipsec_phase2
+  fortigate_disable_ipsec_tunnel
+  fortigate_delete_ipsec_tunnel
+  fortigate_show_ssl_vpn
+  fortigate_create_ssl_vpn_portal
+  fortigate_update_ssl_vpn_settings
+  fortigate_bind_ssl_vpn_user_group
+  fortigate_disable_ssl_vpn
+  fortigate_show_admins
+  fortigate_create_admin
+  fortigate_update_admin_trusthost
+  fortigate_disable_admin
+  fortigate_delete_admin
+  fortigate_create_api_user
+  fortigate_update_management_access
+  fortigate_show_vdoms
+  fortigate_create_vdom
+  fortigate_update_vdom
+  fortigate_move_interface_to_vdom
+  fortigate_delete_vdom
+  fortigate_show_ha_status
+  fortigate_ha_precheck
+  fortigate_configure_ha
+  fortigate_update_ha_priority
+  fortigate_show_sdwan_status
+  fortigate_create_sdwan_zone
+  fortigate_add_sdwan_member
+  fortigate_create_sdwan_health_check
+  fortigate_create_sdwan_rule
+  mikrotik_list_management_services
+  mikrotik_check_login_logs
+  mikrotik_block_ip
+  linux_check_ssh_status
+  linux_check_failed_logins
+  linux_check_sudo_users
+  linux_check_fail2ban_status
+  linux_remove_user_from_sudo
+  linux_add_user_to_sudo
+  linux_check_user_groups
+  linux_lock_user
+  linux_unlock_user
+  linux_read_hostname
+  linux_read_interfaces
+  linux_read_routes
+  linux_read_listening_ports
+  linux_read_firewall_status
+  linux_read_auth_logs
+  linux_read_users
+  linux_read_docker
+  linux_read_nginx
+  explain_security_status
+  unknown
+}
+
+enum ActionPlanSource {
+  ai
+  user
+  system
+  detection
+}
+
+enum ActionPlanStatus {
+  proposed
+  validation_failed
+  dry_run_ready
+  awaiting_approval
+  approved
+  rejected
+  executing
+  succeeded
+  failed
+  rolled_back
+}
+
+enum ScheduledTaskCalendar {
+  gregorian
+  jalali
+}
+
+enum ScheduledTaskStatus {
+  scheduled
+  paused
+  running
+  completed
+  cancelled
+}
+
+enum ScheduledTaskTrigger {
+  schedule
+  manual
+}
+
+enum ScheduledTaskRunStatus {
+  running
+  succeeded
+  failed
+  skipped
+}
+
+enum ActionType {
+  custom_vendor_action
+  mikrotik_shutdown
+  generic_security_action
+  create_egress_policy
+  update_policy_schedule
+  block_source_ip_temporary
+  unblock_source_ip
+  open_port
+  close_port
+  change_ssh_port
+  create_address_object
+  create_schedule_object
+  create_service_object
+  add_firewall_rule
+  remove_firewall_rule
+  enable_rule
+  disable_rule
+  mikrotik_add_address_list_entry
+  mikrotik_remove_address_list_entry
+  mikrotik_block_ip_temporary
+  mikrotik_update_address_list_entry
+  mikrotik_create_managed_drop_rule
+  mikrotik_enable_managed_rule
+  mikrotik_disable_managed_rule
+  mikrotik_add_comment_to_rule
+  mikrotik_read_firewall_summary
+  mikrotik_create_filter_rule
+  mikrotik_enable_filter_rule
+  mikrotik_disable_filter_rule
+  mikrotik_move_filter_rule
+  mikrotik_set_filter_rule_comment
+  mikrotik_remove_managed_filter_rule
+  mikrotik_list_filter_rules
+  mikrotik_search_filter_rules
+  mikrotik_create_dstnat_rule
+  mikrotik_create_srcnat_masquerade_rule
+  mikrotik_enable_nat_rule
+  mikrotik_disable_nat_rule
+  mikrotik_set_nat_rule_comment
+  mikrotik_remove_managed_nat_rule
+  mikrotik_list_nat_rules
+  mikrotik_unblock_ip
+  mikrotik_list_address_list
+  mikrotik_create_managed_blocklist_rule
+  mikrotik_list_ip_services
+  mikrotik_disable_unused_service
+  mikrotik_restrict_service_by_address
+  mikrotik_change_service_port
+  mikrotik_enable_service
+  mikrotik_disable_service
+  mikrotik_list_interfaces
+  mikrotik_enable_interface
+  mikrotik_disable_interface
+  mikrotik_set_interface_comment
+  mikrotik_detect_wan_lan_candidates
+  mikrotik_list_routes
+  mikrotik_add_static_route
+  mikrotik_disable_static_route
+  mikrotik_remove_managed_static_route
+  mikrotik_show_dns_settings
+  mikrotik_set_dns_servers
+  mikrotik_list_dhcp_servers
+  mikrotik_list_dhcp_leases
+  mikrotik_add_static_dhcp_lease
+  mikrotik_remove_static_dhcp_lease
+  mikrotik_create_backup
+  mikrotik_create_export_sanitized
+  mikrotik_set_identity
+  mikrotik_show_clock
+  mikrotik_show_logs
+  mikrotik_show_resources
+  mikrotik_reboot
+  mikrotik_schedule_reboot
+  mikrotik_disable_rule_by_id
+  mikrotik_remove_rule_by_id
+  fortigate_create_address_object
+  fortigate_update_address_object
+  fortigate_delete_managed_address_object
+  fortigate_create_address_group
+  fortigate_add_member_to_address_group
+  fortigate_remove_member_from_address_group
+  fortigate_create_service_object
+  fortigate_update_service_object
+  fortigate_create_service_group
+  fortigate_create_recurring_schedule
+  fortigate_update_schedule
+  fortigate_create_egress_policy
+  fortigate_create_deny_policy
+  fortigate_enable_policy
+  fortigate_disable_policy
+  fortigate_move_policy
+  fortigate_update_policy_comment
+  fortigate_delete_managed_policy
+  fortigate_create_vip
+  fortigate_create_vip_group
+  fortigate_create_dstnat_policy
+  fortigate_create_snat_policy
+  fortigate_list_admins
+  fortigate_restrict_admin_trusthost
+  fortigate_change_admin_port
+  fortigate_disable_unused_admin_service
+  fortigate_backup_config
+  fortigate_export_sanitized_config
+  fortigate_show_logs
+  fortigate_show_sessions
+  fortigate_create_zone
+  fortigate_add_interface_to_zone
+  fortigate_remove_interface_from_zone
+  fortigate_delete_managed_zone
+  fortigate_list_zones
+  fortigate_set_interface_alias
+  fortigate_set_interface_role
+  fortigate_enable_interface
+  fortigate_disable_interface
+  fortigate_create_vlan_interface
+  fortigate_update_interface_ip
+  fortigate_create_tcp_service
+  fortigate_create_udp_service
+  fortigate_create_tcp_udp_service
+  fortigate_update_service_ports
+  fortigate_delete_managed_service
+  fortigate_add_service_to_group
+  fortigate_remove_service_from_group
+  fortigate_create_policy
+  fortigate_create_zone_policy
+  fortigate_update_policy
+  fortigate_create_static_route
+  fortigate_list_interfaces
+  fortigate_list_policies
+  fortigate_list_address_objects
+  fortigate_list_routes
+  linux_check_service_status
+  linux_list_running_services
+  linux_list_failed_services
+  linux_check_important_services
+  linux_list_open_ports
+  linux_check_firewall_status
+  linux_block_ip
+  linux_open_port
+  linux_check_ssh_status
+  linux_check_failed_logins
+  linux_check_sudo_users
+  linux_check_fail2ban_status
+  linux_remove_user_from_sudo
+  linux_add_user_to_sudo
+  linux_check_user_groups
+  linux_lock_user
+  linux_unlock_user
+  linux_read_hostname
+  linux_read_interfaces
+  linux_read_routes
+  linux_read_listening_ports
+  linux_read_firewall_status
+  linux_read_auth_logs
+  linux_read_users
+  linux_read_docker
+  linux_read_nginx
+  linux_daily_check
+  linux_reboot
+  linux_shutdown
+  mikrotik_daily_check
+  fortigate_daily_check
+  fortigate_reboot
+  fortigate_shutdown
+  fortigate_show_interfaces
+  fortigate_route_dns_check
+  fortigate_license_status
+  fortigate_admin_users
+  fortigate_show_system_status
+  fortigate_show_routing_dns
+  fortigate_show_admin_access
+  fortigate_show_firewall_policies
+  fortigate_show_vpn_status
+  fortigate_show_ha_vdom_zone
+  fortigate_update_interface_allowaccess
+  fortigate_delete_interface
+  fortigate_show_zones
+  fortigate_update_zone
+  fortigate_delete_zone
+  fortigate_show_address_objects
+  fortigate_delete_address_object
+  fortigate_delete_service_object
+  fortigate_delete_policy
+  fortigate_show_vips
+  fortigate_update_vip
+  fortigate_delete_vip
+  fortigate_show_ippools
+  fortigate_create_ippool
+  fortigate_update_ippool
+  fortigate_delete_ippool
+  fortigate_show_routes
+  fortigate_update_static_route
+  fortigate_delete_static_route
+  fortigate_update_dns
+  fortigate_update_ntp
+  fortigate_show_ipsec_vpns
+  fortigate_guided_workflow_preview
+  fortigate_guided_vpn_setup
+  fortigate_create_ipsec_tunnel
+  fortigate_update_ipsec_phase1
+  fortigate_update_ipsec_phase2
+  fortigate_disable_ipsec_tunnel
+  fortigate_delete_ipsec_tunnel
+  fortigate_show_ssl_vpn
+  fortigate_create_ssl_vpn_portal
+  fortigate_update_ssl_vpn_settings
+  fortigate_bind_ssl_vpn_user_group
+  fortigate_disable_ssl_vpn
+  fortigate_show_admins
+  fortigate_create_admin
+  fortigate_update_admin_trusthost
+  fortigate_disable_admin
+  fortigate_delete_admin
+  fortigate_create_api_user
+  fortigate_update_management_access
+  fortigate_show_vdoms
+  fortigate_create_vdom
+  fortigate_update_vdom
+  fortigate_move_interface_to_vdom
+  fortigate_delete_vdom
+  fortigate_show_ha_status
+  fortigate_ha_precheck
+  fortigate_configure_ha
+  fortigate_update_ha_priority
+  fortigate_show_sdwan_status
+  fortigate_create_sdwan_zone
+  fortigate_add_sdwan_member
+  fortigate_create_sdwan_health_check
+  fortigate_create_sdwan_rule
+  mikrotik_list_management_services
+  mikrotik_check_login_logs
+  mikrotik_block_ip
+}
+
+enum ApprovalDecision {
+  approved
+  rejected
+}

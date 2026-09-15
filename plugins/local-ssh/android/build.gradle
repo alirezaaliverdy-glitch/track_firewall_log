@@ -1,0 +1,19 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.firewallsoar.localssh'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+    }
+}
+
+dependencies {
+    implementation project(':capacitor-android')
+    implementation project(':capacitor-secure-storage-plugin')
+    implementation 'com.hierynomus:sshj:0.40.0'
+    testImplementation 'junit:junit:4.13.2'
+}

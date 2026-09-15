@@ -1,0 +1,12 @@
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'fortigate_show_system_status';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'fortigate_show_routing_dns';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'fortigate_show_admin_access';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'fortigate_show_firewall_policies';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'fortigate_show_vpn_status';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'fortigate_show_ha_vdom_zone';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'fortigate_show_system_status';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'fortigate_show_routing_dns';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'fortigate_show_admin_access';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'fortigate_show_firewall_policies';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'fortigate_show_vpn_status';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'fortigate_show_ha_vdom_zone';

@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: firewall-log-dev-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-firewall_log_analyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-firewall_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-firewall_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - firewall_dev_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  firewall_dev_db_data:

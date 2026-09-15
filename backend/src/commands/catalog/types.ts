@@ -1,0 +1,54 @@
+export type CommandVendor = "linux" | "mikrotik" | "fortigate" | "cisco" | "sophos" | "pfsense" | "juniper" | "paloalto" | "windows" | "generic";
+export type CommandRiskLevel = "low" | "medium" | "high" | "critical";
+export type ImplementationState = "implemented" | "manualOnly" | "planned" | "unsupported";
+export type ExecutionSupport = "connector" | "manual" | "ai_proposed" | "not_implemented";
+export type SupportState = "verified" | "preview_only" | "manual_only" | "unsupported";
+
+export type CommandParam = {
+  key: string;
+  labelFa: string;
+  helpFa: string;
+  type: "string" | "number" | "ip" | "cidr" | "boolean";
+  placeholderFa?: string;
+};
+export type RollbackContract = { available: true; steps: string[] } | { available: false; notAvailableReasonFa: string };
+
+export type CommandCatalogItem = {
+  id: string;
+  vendor: CommandVendor;
+  titleFa: string;
+  titleEn: string;
+  descriptionFa: string;
+  category: string;
+  implementationState: ImplementationState;
+  executionSupport: ExecutionSupport;
+  supportState: SupportState;
+  supportReason: string;
+  supportReasonKey: string;
+  actionType: string;
+  connectorType: string | null;
+  riskLevel: CommandRiskLevel;
+  privilegeLevel: "read" | "operator" | "admin";
+  readOnly: boolean;
+  mutating: boolean;
+  requiresConfirmation: boolean;
+  requiredParams: CommandParam[];
+  optionalParams: CommandParam[];
+  defaultParams: Record<string, unknown>;
+  paramCandidates: Record<string, Array<string | number>>;
+  autoResolveParams: string[];
+  paramLabelsFa: Record<string, string>;
+  paramHelpFa: Record<string, string>;
+  tagsFa: string[];
+  searchKeywordsFa: string[];
+  supportedConnectors: string[];
+  prechecks: string[];
+  validationRules: Record<string, string[]>;
+  executionTemplateRef: string | null;
+  verification: string[];
+  rollback: RollbackContract;
+  evidenceOutput: string[];
+  supportedDeviceCapabilities: string[];
+  disabledReasonFa: string | null;
+  uiHints: { executable: boolean; badgeFa: string };
+};
