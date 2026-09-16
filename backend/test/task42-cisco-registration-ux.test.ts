@@ -18,11 +18,11 @@ test("credential API maps Prisma conflicts without exposing raw database diagnos
   assert.doesNotMatch(route, /detail:\s*message/);
 });
 
-test("generic onboarding requires an explicit vendor choice", () => {
+test("generic onboarding exposes its Linux default as the real selected vendor", () => {
   const page = readFileSync(new URL("../../src/features/assets/pages/DeviceOnboardingPage.tsx", import.meta.url), "utf8");
-  assert.match(page, /vendorConfirmed/);
-  assert.match(page, /if \(!vendorConfirmed\)/);
-  assert.match(page, /setVendorConfirmed\(true\)/);
+  assert.match(page, /query \|\| "linux"/);
+  assert.match(page, /const selected = activeForm\.vendor === item\.key/);
+  assert.doesNotMatch(page, /vendorConfirmed/);
 });
 
 test("Cisco negotiation failure offers an explicit one-click compatibility retry", () => {

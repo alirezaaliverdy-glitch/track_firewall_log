@@ -1,3 +1,9 @@
+## 2026-09-16 - Make the onboarding default actionable
+
+- Removed the separate hidden `vendorConfirmed` state that contradicted the visible Linux platform default on the generic registration route.
+- Bound the vendor checkmark, selected-vendor summary, and validation path to the same onboarding draft value, eliminating the no-op-looking Continue button while preserving vendor switching.
+- Updated the focused source contract, completed the frontend production build, deployed the web image, and verified healthy HTTP responses for onboarding and API readiness.
+
 ## 2026-09-13 - Verify complete Sophos user-consumption reporting
 
 - Opened the live Sophos reports and generated both the application-based user-usage view and the user session-accounting view for the requested two-day range.

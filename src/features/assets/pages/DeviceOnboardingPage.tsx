@@ -53,11 +53,6 @@ function initialVendor(params: Record<string, string>) {
   return (["linux", "cisco", "fortigate", "mikrotik", "sophos"].includes(value) ? value : "linux") as OnboardingDraft["vendor"];
 }
 
-function hasExplicitVendor(params: Record<string, string>) {
-  const query = new URLSearchParams(window.location.search).get("vendor");
-  return Boolean(params.deviceId || params.vendorKey || query);
-}
-
 function statusText(session: OnboardingSession | null, t: TFunction) {
   if (!session?.test) return t("onboarding.status.notTested");
   if (session.test.connected === true && session.test.connectorInvoked === true) return t("onboarding.status.verified");
@@ -109,7 +104,6 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const [form, setForm] = useState<OnboardingDraft | null>(null);
   const [credentials, setCredentials] = useState<DeviceCredential[]>([]);
   const [credentialMode, setCredentialMode] = useState<"existing" | "new">("existing");
-  const [vendorConfirmed, setVendorConfirmed] = useState(() => hasExplicitVendor({ deviceId: params.deviceId ?? "", vendorKey: params.vendorKey ?? "" }));
   const [credentialForm, setCredentialForm] = useState<CredentialInput>(emptyCredential);
   const [enableSecret, setEnableSecret] = useState("");
   const [busy, setBusy] = useState("");
@@ -158,7 +152,6 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   };
 
   function selectVendor(vendor: OnboardingDraft["vendor"]) {
-    setVendorConfirmed(true);
     setForm({
       ...activeForm,
       vendor,
@@ -173,7 +166,6 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   function validateIdentity(candidate: OnboardingDraft = activeForm) {
-    if (!vendorConfirmed) { setError(t("onboarding.vendor.help")); return false; }
     if (!candidate.name.trim()) { setError(t("onboarding.errors.nameRequired")); setInvalidField("name"); nameInput.current?.focus(); return false; }
     if (!candidate.host.trim()) { setError(t("onboarding.errors.hostRequired")); setInvalidField("host"); hostInput.current?.focus(); return false; }
     if (!Number.isInteger(candidate.managementPort) || candidate.managementPort < 1 || candidate.managementPort > 65535) { setError(t("onboarding.errors.portRange")); setInvalidField("port"); return false; }
@@ -284,7 +276,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           </ol>
           <div className={`onboarding-selected-vendor onboarding-selected-vendor--${selectedVendorChoice.tone}`}>
             <span><SelectedVendorIcon size={22} /></span>
-            <div><small>{t("onboarding.guide.selectedVendor")}</small><strong>{vendorConfirmed ? selectedVendorChoice.title : t("onboarding.credentials.choose")}</strong><b dir="ltr">{activeForm.host ? `${activeForm.host}:${activeForm.managementPort}` : `${activeForm.connectionMethod.toUpperCase()} · ${activeForm.managementPort}`}</b></div>
+            <div><small>{t("onboarding.guide.selectedVendor")}</small><strong>{selectedVendorChoice.title}</strong><b dir="ltr">{activeForm.host ? `${activeForm.host}:${activeForm.managementPort}` : `${activeForm.connectionMethod.toUpperCase()} · ${activeForm.managementPort}`}</b></div>
           </div>
           <div className="onboarding-trust-note"><LockKeyhole size={17} /><span>{t("onboarding.guide.security")}</span></div>
         </aside>
@@ -303,7 +295,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
           {step === 1 && <section className="onboarding-stage onboarding-stage--identity" data-testid="onboarding-step-identity">
             <header className="onboarding-stage__heading"><span><Server size={21} /></span><div><small>{t("onboarding.stage.step", { current: 1, total: 3 })}</small><h2>{t("onboarding.step1.title")}</h2><p>{t("onboarding.step1.description")}</p></div></header>
             <fieldset className="onboarding-vendor-fieldset"><legend>{t("onboarding.fields.vendor")}</legend><p>{t("onboarding.vendor.help")}</p><div className="onboarding-vendor-grid" role="radiogroup" aria-label={t("onboarding.fields.vendor")}>
-              {vendorChoices.map((item) => { const Icon = item.icon; const selected = vendorConfirmed && activeForm.vendor === item.key; return <button key={item.key} type="button" role="radio" aria-checked={selected} className={`onboarding-vendor-choice onboarding-vendor-choice--${item.tone}`} onClick={() => selectVendor(item.key)}><span className="onboarding-vendor-choice__icon"><Icon size={22} /></span><span><strong>{item.title}</strong><small>{t(item.descriptionKey)}</small></span>{selected ? <CircleCheck className="onboarding-vendor-choice__check" size={18} /> : null}</button>; })}
+              {vendorChoices.map((item) => { const Icon = item.icon; const selected = activeForm.vendor === item.key; return <button key={item.key} type="button" role="radio" aria-checked={selected} className={`onboarding-vendor-choice onboarding-vendor-choice--${item.tone}`} onClick={() => selectVendor(item.key)}><span className="onboarding-vendor-choice__icon"><Icon size={22} /></span><span><strong>{item.title}</strong><small>{t(item.descriptionKey)}</small></span>{selected ? <CircleCheck className="onboarding-vendor-choice__check" size={18} /> : null}</button>; })}
             </div></fieldset>
             <div className="onboarding-field-grid">
               <label className="onboarding-field"><span>{t("onboarding.fields.name")}<b>{t("onboarding.required")}</b></span><input ref={nameInput} value={activeForm.name} onChange={(event) => change("name", event.target.value)} placeholder={t("onboarding.placeholders.name")} aria-invalid={invalidField === "name"} /><small>{t("onboarding.help.name")}</small></label>

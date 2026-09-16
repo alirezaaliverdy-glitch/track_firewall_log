@@ -1,3 +1,9 @@
+## 2026-09-16 - Repair the device-onboarding Continue step
+
+- Fixed a UI/state mismatch on generic device registration: Linux was displayed as the active platform but remained internally unconfirmed, so valid name, address, and port values could not advance to credentials.
+- The default Linux vendor is now the real selected radio option from initial load, remains visibly checked, and can still be replaced with Cisco, FortiGate, MikroTik, or Sophos before continuing.
+- The frontend production build passed and the updated web container is healthy; both the onboarding route and API readiness endpoint return HTTP 200.
+
 ## 2026-09-13 - Sophos per-user reporting verification
 
 - Generated the live Sophos `User app risks & usage` report for 2026-09-12 through 2026-09-13 and expanded it to all available user rows. Confirmed that this view contains materially more traffic than the session-accounting-oriented `User data transfer report`.
