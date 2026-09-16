@@ -1,3 +1,10 @@
+## 2026-09-16 - Real-data security command dashboard
+
+- Rebuilt the authenticated dashboard in the landing showcase visual language while keeping every operational value connected to the existing backend APIs.
+- Added live daily-service health, asset/vendor availability, open finding severity, a 24-hour stacked finding trend, real destination-port event counts, prioritized device status, latest findings, controlled-action priorities/history, and real Linux health/resource rings.
+- Added explicit empty/error states, manual refresh, 60-second background refresh for non-mutating operational reads, responsive layouts, and reduced-motion behavior. Stale Linux health continues to use the established bounded collection path.
+- Preserved controlled execution semantics: the dashboard only links to Action Center and reports existing backend activity; it does not execute AI text or bypass preview, confirmation, PolicyGuard, connectors, or audit.
+- Validation passed: Docker production build, targeted dashboard ESLint, UTF-8 scan across 387 files, locale parity across 860 keys, Persian primary-route copy checks, deployed dashboard HTTP 200, API health HTTP 200, and healthy web/API/database/main-Nginx containers.
 ## 2026-09-16 - Three-dimensional product landing showcase
 
 - Reworked the public Persian landing page around three privacy-safe product views derived from the real application: the unified operations dashboard, controlled Action Center, and monitoring/AI assistant workspace.

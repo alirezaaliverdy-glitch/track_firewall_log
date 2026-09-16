@@ -1,3 +1,9 @@
+## 2026-09-16 - Rebuild dashboard as a live security command center
+
+- Replaced the previous hero-heavy dashboard with a compact Persian-first command board inspired by the approved landing visual: daily security status, equipment, alerts, alert trend, device table, event-port activity, findings, operator priorities, execution trail, and Linux telemetry.
+- Connected all figures to the existing asset, finding, event-summary, monitoring-worker, dashboard-activity, and Linux-health APIs. No placeholder metrics or fabricated chart points are shown; empty datasets render honest empty states.
+- Added responsive presentation, real refresh behavior, 60-second read-only polling, and reduced-motion support. Corrected all drill-down links to use registered device and finding routes.
+- Passed production build, targeted ESLint, UTF-8/i18n checks, health-gated Docker deployment, HTTP smoke checks, deployed-asset verification, and four-container health validation.
 ## 2026-09-16 - Landing product imagery and 3D interaction
 
 - Replaced the landing's code-only product mockups with three polished, privacy-safe product images based on the current Firewall SOAR interface.
