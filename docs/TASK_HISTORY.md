@@ -1492,3 +1492,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Used the supplied team portrait and the application's bundled IRANYekan font. Added responsive design, smooth scroll reveals, pointer glow, and reduced-motion fallback.
 - Updated the deployment script to pin Compose project `track_firewall_log`, preventing a source-folder name from creating a separate network during future frontend rebuilds.
 - Validation: Docker frontend production build passed; `firewall-web` and `main-nginx` became healthy; local landing and dashboard routes returned HTTP 200. No Docker archive was saved to Desktop.
+
+## 2026-09-16 - Match the live dashboard to the command-center reference
+
+- Kept the real-data dashboard introduced in the first pass and refined its proportions, visual hierarchy, gradients, states, table density, and responsive breakpoints to match the approved reference more closely.
+- Added a sticky desktop AI-assistant rail with real `/ai/chat` requests in Chat mode, operational context chips, suggested questions, loading/error states, and a compact message composer.
+- Added prefilled handoff into the full assistant while keeping all effectful work behind the existing reviewable ActionPlan and Action Center boundary.
+- Kept the operations and Linux sections linked to their real detail pages and retained the 60-second dashboard refresh plus manual collection controls.
+- Verified the production TypeScript/Vite build in Docker, targeted ESLint, UTF-8 and i18n checks, then rebuilt only `firewall-web` using the guarded deployment script.
+- Confirmed HTTP 200 for `/firewall/dashboard` and `/firewall/api/health`, verified the deployed assistant assets, and confirmed `firewall-web`, `firewall-api`, `firewall-db`, and `main-nginx` are healthy.

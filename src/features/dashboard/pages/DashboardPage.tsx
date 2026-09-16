@@ -1,5 +1,6 @@
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { DashboardAssistantPanel } from "@/features/dashboard/components/DashboardAssistantPanel";
 import { useAssets } from "@/features/assets/hooks/useAssets";
 import { useFindings } from "@/features/security/hooks/useFindings";
 import {
@@ -343,6 +344,8 @@ export default function DashboardPage() {
         <div className="command-center-header__tools"><span><i className={activityError ? "is-danger" : ""} />{activityError ? copy(isFa, "بخشی از داده‌ها در دسترس نیست", "Some data is unavailable") : copy(isFa, "داده عملیاتی متصل", "Operational data connected")}</span><small>{copy(isFa, "آخرین به‌روزرسانی", "Updated")}: {shortDate(activity?.generatedAt, language, "—")}</small><button type="button" onClick={refreshAll} disabled={dataRefreshing || linuxRefreshing}><RefreshCw size={16} className={dataRefreshing ? "is-spinning" : undefined} />{copy(isFa, "تازه‌سازی", "Refresh")}</button></div>
       </header>
 
+      <div className="command-workspace-shell">
+        <div className="command-primary-workspace">
       <div className="command-overview-grid">
         <article className={`command-panel daily-check-panel command-panel--${dailyHealthy ? "good" : overallTone}`}>
           <header><span className="command-panel__icon"><ShieldCheck /></span><div><h2>{copy(isFa, "بررسی روزانه امنیت", "Daily security check")}</h2><p>{copy(isFa, "خلاصه زنده سرویس‌های کلیدی", "Live summary of critical services")}</p></div><em>{dailyHealthy ? copy(isFa, "سالم", "Healthy") : copy(isFa, "نیازمند توجه", "Attention")}</em></header>
@@ -391,6 +394,15 @@ export default function DashboardPage() {
             {latestFindings.length ? <ul>{latestFindings.map((finding) => <li key={finding.id}><i className={`is-${finding.severity}`} /><div><Link to={`/security/findings/${finding.id}`}>{finding.title}</Link><span>{finding.device?.name ?? finding.asset?.name ?? finding.vendor}</span></div><time>{relativeDate(finding.lastSeen, language, "—")}</time></li>)}</ul> : <div className="command-empty command-empty--compact"><CheckCircle2 /><p>{copy(isFa, "یافته بازی وجود ندارد.", "No open findings.")}</p></div>}
           </article>
         </div>
+      </div>
+        </div>
+        <DashboardAssistantPanel
+          isFa={isFa}
+          criticalFindings={criticalFindings}
+          pendingApprovals={pendingApprovals}
+          failedActions={failedActions}
+          latestFindingTitle={latestFindings[0]?.title}
+        />
       </div>
 
       <div className="command-operations-grid">

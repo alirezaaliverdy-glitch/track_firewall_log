@@ -157,10 +157,14 @@ export default function AiSecurityAssistantPanel() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedPrompt = params.get("prompt")?.trim();
+    const requestedMode = params.get("mode");
+    if (requestedPrompt) setInput(requestedPrompt.slice(0, 2000));
+    if (requestedMode === "Action" || requestedMode === "Chat") setIntentModeOverride(requestedMode);
     refreshSummary();
     void listDevices().then((next) => {
       setDevices(next);
-      const params = new URLSearchParams(window.location.search);
       const selected = params.get("deviceId") ?? params.get("selectedDeviceId");
       if (selected && next.some((device) => device.id === selected)) setSelectedDeviceId(selected);
       else if (next.length === 1) setSelectedDeviceId(next[0].id);

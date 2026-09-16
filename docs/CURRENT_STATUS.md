@@ -1395,3 +1395,13 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Added scroll-triggered blur-to-clear reveals, responsive/reduced-motion behavior, and a final team section using the supplied portrait and the requested network, security, and product-design role.
 - Hardened the frontend deployment script with an explicit Compose project name so folder names cannot silently place a rebuilt frontend on a disconnected Docker network.
 - Frontend Docker production build passed and both `/firewall/landing` and `/firewall/dashboard` were served through Nginx without exporting a Docker image archive.
+
+## 2026-09-16 - Live security command dashboard refinement
+
+- Rebuilt the authenticated dashboard around the approved command-center composition: daily security check, device/vendor state, open-alert trend, device table, destination-port activity, findings, operator priorities, execution history, and Linux resource telemetry.
+- All counters and charts are derived from existing asset, finding, monitoring, event, Action Center, and Linux snapshot APIs; no illustrative dashboard values were introduced.
+- Added the reference-style right-side AI security assistant with live chat, context-aware prompt shortcuts, compact conversation history, and handoff to the full assistant.
+- The embedded assistant is forced to Chat mode and cannot execute changes. Operational requests still require the existing ActionPlan preview, explicit user confirmation, PolicyGuard, registered connector, verification, and audit flow.
+- The full assistant now accepts safe `prompt`, `mode`, and device query handoff from dashboard links without auto-submitting or executing anything.
+- Responsive layouts stack the assistant below the operational workspace on narrower screens and preserve reduced-motion behavior.
+- Frontend production build, targeted ESLint, UTF-8 scan of 388 files, locale parity for 860 keys, Persian primary-copy checks, Nginx route smoke, API health, and all four required container health checks passed. The latest `firewall-web` image is deployed without a Desktop archive.
