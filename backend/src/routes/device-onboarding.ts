@@ -13,7 +13,8 @@ import {
   testOnboardingConnection,
   OnboardingDuplicateDeviceError,
   OnboardingManagementIpConflictError,
-  OnboardingCredentialInvalidError
+  OnboardingCredentialInvalidError,
+  OnboardingConnectionTestError
 } from "../services/device-onboarding.service.js";
 import { CiscoConnectorError } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 
@@ -39,6 +40,26 @@ function conflictPayload(error: OnboardingManagementIpConflictError) {
     }
   };
 }
+
+function connectionFailurePayload(error: unknown) {
+  const ciscoDiagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
+  const connectorDiagnostic = error instanceof OnboardingConnectionTestError ? error.diagnostic : null;
+  const diagnostic = ciscoDiagnostic ?? connectorDiagnostic;
+  return {
+    error: {
+      code: error instanceof OnboardingCredentialInvalidError
+        ? "ONBOARDING_CREDENTIAL_INVALID"
+        : error instanceof OnboardingConnectionTestError
+          ? error.code
+          : ciscoDiagnostic?.code ?? "ONBOARDING_CONNECTION_FAILED",
+      message: ciscoDiagnostic?.userMessage
+        ?? (error instanceof Error ? error.message : "Connection failed."),
+      connectorInvoked: ciscoDiagnostic?.connectorInvoked
+        ?? (error instanceof OnboardingConnectionTestError ? error.connectorInvoked : false),
+      diagnostic
+    }
+  };
+}
 export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: Record<string, unknown> }>("/api/device-onboarding/sessions", async (request, reply) => {
     try { return reply.code(201).send(await createOnboardingSession(request.body ?? {})); }
@@ -54,11 +75,11 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/test", async (request, reply) => {
     try { return await testOnboardingConnection(request.params.sessionId); }
-    catch (error) { const diagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null; return reply.code(statusCode(error)).send({ error: { code: error instanceof OnboardingCredentialInvalidError ? "ONBOARDING_CREDENTIAL_INVALID" : diagnostic?.code ?? "ONBOARDING_CONNECTION_FAILED", message: diagnostic?.userMessage ?? (error instanceof Error ? error.message : "Connection failed."), connectorInvoked: diagnostic?.connectorInvoked ?? false, diagnostic } }); }
+    catch (error) { return reply.code(statusCode(error)).send(connectionFailurePayload(error)); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/test-connection", async (request, reply) => {
     try { return await testOnboardingConnection(request.params.sessionId); }
-    catch (error) { const diagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null; return reply.code(statusCode(error)).send({ error: { code: error instanceof OnboardingCredentialInvalidError ? "ONBOARDING_CREDENTIAL_INVALID" : diagnostic?.code ?? "ONBOARDING_CONNECTION_FAILED", message: diagnostic?.userMessage ?? (error instanceof Error ? error.message : "Connection failed."), connectorInvoked: diagnostic?.connectorInvoked ?? false, diagnostic } }); }
+    catch (error) { return reply.code(statusCode(error)).send(connectionFailurePayload(error)); }
   });
   app.post<{ Params: { sessionId: string } }>("/api/device-onboarding/sessions/:sessionId/detect", async (request, reply) => {
     try { return await detectOnboardingPlatform(request.params.sessionId); }

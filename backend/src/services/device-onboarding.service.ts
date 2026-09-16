@@ -11,6 +11,33 @@ import { resolveCredentialById } from "./credential.service.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
 export class OnboardingCredentialInvalidError extends Error {}
+export class OnboardingConnectionTestError extends Error {
+  readonly code: string;
+  readonly connectorInvoked = true;
+  readonly diagnostic: Record<string, unknown>;
+
+  constructor(result: {
+    errorCode?: string;
+    message?: string;
+    stages?: unknown;
+    warnings?: unknown;
+    capabilities?: unknown;
+  }) {
+    const code = result.errorCode?.trim() || "ONBOARDING_CONNECTION_FAILED";
+    const message = result.message?.trim() || "The connector did not complete a successful connection test.";
+    super(message);
+    this.name = "OnboardingConnectionTestError";
+    this.code = code;
+    this.diagnostic = {
+      code,
+      message,
+      connectorInvoked: true,
+      stages: result.stages ?? [],
+      warnings: result.warnings ?? [],
+      capabilities: result.capabilities ?? {}
+    };
+  }
+}
 type SessionStatus =
   | "draft"
   | "answers_saved"
@@ -354,8 +381,11 @@ export async function testOnboardingConnection(id: string) {
         connectorType: connector!.name,
         stages: result.stages,
         warnings: result.warnings,
-        capabilities: result.capabilities
+        capabilities: result.capabilities,
+        ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+        ...(result.message ? { error: result.message } : {})
       };
+      if (result.connected !== true) throw new OnboardingConnectionTestError(result);
     }
     if (session.test.connected !== true || session.test.connectorInvoked !== true) throw new Error("The connector did not complete a successful connection test.");
     const response = touch(session, "connection_verified", "detect");
@@ -365,12 +395,17 @@ export async function testOnboardingConnection(id: string) {
     const credentialInvalid = error instanceof Error && error.message.startsWith("CREDENTIAL_INVALID:");
     const safeError = credentialInvalid ? new Error(error.message.replace(/^CREDENTIAL_INVALID:\s*/, "")) : error;
     const ciscoDiagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
+    const connectorDiagnostic = error instanceof OnboardingConnectionTestError ? error.diagnostic : null;
     session.test = {
       connected: false,
-      connectorInvoked: ciscoDiagnostic?.connectorInvoked ?? session.test?.connectorInvoked === true,
+      connectorInvoked: ciscoDiagnostic?.connectorInvoked ?? (connectorDiagnostic?.connectorInvoked === true || session.test?.connectorInvoked === true),
       connectorType: session.test?.connectorType,
-      error: safeError instanceof Error ? safeError.message : "Connection test failed.",
-      diagnostic: ciscoDiagnostic,
+      error: connectorDiagnostic?.message ?? (safeError instanceof Error ? safeError.message : "Connection test failed."),
+      ...(typeof connectorDiagnostic?.code === "string" ? { errorCode: connectorDiagnostic.code } : {}),
+      diagnostic: ciscoDiagnostic ?? connectorDiagnostic,
+      ...(connectorDiagnostic?.stages ? { stages: connectorDiagnostic.stages } : session.test?.stages ? { stages: session.test.stages } : {}),
+      ...(connectorDiagnostic?.warnings ? { warnings: connectorDiagnostic.warnings } : session.test?.warnings ? { warnings: session.test.warnings } : {}),
+      ...(connectorDiagnostic?.capabilities ? { capabilities: connectorDiagnostic.capabilities } : session.test?.capabilities ? { capabilities: session.test.capabilities } : {}),
       legacyCompatibilityRequested: ciscoDiagnostic?.legacyCompatibilityRequested ?? session.draft.ciscoLegacyCompatibilityApproved === true,
       legacyCompatibilityApplied: ciscoDiagnostic?.legacyCompatibilityApplied ?? false,
       connectionPhase: ciscoDiagnostic?.connectionPhase ?? (session.test?.connectorInvoked === true ? "ssh_negotiation" : "input")

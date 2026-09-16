@@ -1361,3 +1361,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Added sanitized collection for interfaces, zones, gateways, firewall rules, IP hosts, services, and IPsec connections. Collected interface state feeds the graphical topology without recursively generating duplicate or phantom ports.
 - Added catalog-backed interface enable/disable/IP changes and firewall-rule enable/disable operations. Every mutation reads the current object, follows ActionPlan/PolicyGuard/audit, and performs a post-change readback before reporting success.
 - Added Sophos device/catalog capability routing and a dedicated graphical Sophos faceplate profile. Backend and frontend production builds pass and the 209-item command catalog validates.
+## 2026-09-16 - Linux SSH onboarding diagnostics repair
+
+- Verified the requested Linux target at 185.89.22.116:22022 from both the Windows host and the API container. TCP reachability and the OpenSSH handshake succeed; the stored alireza password credential is rejected by the server with SSH_AUTH_FAILED.
+- Fixed non-Cisco onboarding so connector stages, error code, safe message, warnings, and capabilities survive the failure path instead of being replaced by a generic connection-test message.
+- Updated both onboarding test endpoints to return the safe connector error code and diagnostic stages. The existing Persian UI now maps SSH_AUTH_FAILED to the credential-rejected guidance.
+- Rebuilt and deployed the API image. Backend TypeScript compilation, real connector failure-path smoke, persisted diagnostic verification, and API readiness passed. No password, private key, or decrypted credential was printed or committed.

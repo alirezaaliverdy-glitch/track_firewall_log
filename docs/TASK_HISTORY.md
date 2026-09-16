@@ -1460,3 +1460,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Implemented read-only discovery for core SFOS network/security objects and normalized interface UP/DOWN plus administrative state for the graphical topology.
 - Added six registered Sophos operations: inventory, interface enable/disable, interface IPv4 update, and firewall-rule enable/disable. Mutations include current-state capture and verified readback.
 - Validation completed: backend TypeScript build, frontend production build, and command catalog validation for 209 entries.
+## 2026-09-16 - Linux SSH onboarding diagnostics repair
+
+- Proved the public SSH endpoint is reachable and negotiates OpenSSH correctly, while both the application password attempt and a non-interactive local-key attempt are rejected at authentication.
+- Preserved the Linux connector's stage-level evidence through onboarding failures and returned the specific sanitized code SSH_AUTH_FAILED to the client.
+- Rebuilt and health-gated the API container against the existing database volume; the application remains healthy and the remaining operator action is to rotate/re-enter the correct alireza password or an authorized private key.
