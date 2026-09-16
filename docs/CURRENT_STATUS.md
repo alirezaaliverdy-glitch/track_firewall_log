@@ -729,3 +729,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Custom proposal ActionPlans now carry expected impact, prechecks, verification, rollback, proposed intent, and explicit review-only/backend-execution-required metadata for Action Center review.
 - Validation passed: targeted AI routing/context tests (31/31), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, and workflow checks.
 - Full backend `npm test` remains blocked by missing `TEST_DATABASE_URL`; a DB-backed chat smoke could not run because `firewall_log_analyzer_test` does not exist, and live `/api/devices` returned unauthorized without a browser session.
+## Persian public landing page (2026-09-16)
+
+- `/` now renders a public, responsive Persian landing experience. `/dashboard`, `/assistant`, `/actions`, and all other operational routes remain protected by the existing session gate.
+- The page includes the requested header, Hero, Features, controlled-execution flow, collaborators/ecosystem presentation, CTA, and footer in the supplied navy/cyan visual direction.
+- Scroll-triggered reveal motion and ambient UI animation respect reduced-motion preferences.
+- Product claims stay aligned with implementation: catalog-first proposals, preview, explicit user confirmation, PolicyGuard, registered connectors, connector evidence, and audit.
+- Frontend production build passed in an ephemeral Node 22 container. UTF-8/mojibake check passed for 551 files. No backend or execution-policy code changed.

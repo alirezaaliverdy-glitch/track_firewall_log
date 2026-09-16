@@ -1,7 +1,7 @@
 import "./App.css";
 import { Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { LogProvider } from "@/context/LogContext";
 import AppBackground from "@/components/background/AppBackground";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
@@ -12,6 +12,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { appRoutes, type AppRoute } from "@/routes/appRoutes";
 import WorkflowLabPage from "@/features/tools/pages/WorkflowLabPage";
 import { normalizeAppDeepLink } from "@/lib/deepLinks";
+import LandingPage from "@/features/landing/pages/LandingPage";
 
 function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
@@ -116,7 +117,7 @@ function App() {
       <LogProvider>
         <RouterNavigationBridge />
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/action-library" element={<ActionLibraryRoute />} />
           <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
           <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />

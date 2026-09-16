@@ -820,3 +820,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added regression tests for three unprepared prompts each on Cisco, MikroTik, FortiGate, and Linux; all must stay custom/manual with `catalogCommandId=null`.
 - Enriched chat-created custom ActionPlans with AI proposal details in parameters and metadata while preserving the existing Action Center, approval, PolicyGuard, connector, and audit pipeline.
 - Validation: targeted AI routing/context tests (31/31), backend build, command catalog validation, frontend build, i18n, UTF-8, and workflow checks passed. Full backend suite still requires an existing isolated test database.
+## 2026-09-16 - Persian public landing page
+
+- Built a new Persian-first landing page from the supplied visual reference using the project color system and code-native React/CSS visuals.
+- Added responsive Header, Hero, Features, secure workflow, ecosystem/collaborators, CTA, and Footer sections.
+- Added smooth IntersectionObserver-based scroll reveals, ambient motion, mobile navigation, and reduced-motion support.
+- Changed only the root route to be public; all operational application routes still require authentication.
+- Preserved controlled Mini-SOAR execution semantics and described the actual ActionPlan, preview, confirmation, PolicyGuard, connector, audit, and result flow.
+- Validation: TypeScript/Vite production build passed in an ephemeral Node 22 container; UTF-8 guard passed (551 files); git diff check passed.

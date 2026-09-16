@@ -1057,3 +1057,11 @@
 - Login remains CSRF-exempt. Authenticated mutations still require `X-CSRF-Token`; Playwright verified raw XMLHttpRequest mutation without a token is rejected with `CSRF_VALIDATION_FAILED`, while the installed fetch wrapper attaches a token and reaches normal route validation.
 - Live checks passed: backend port 4000 served health live/ready 200, session-status 200 unauthenticated, configured admin login 200 with cookie, and manual Playwright admin login reached `/dashboard` with `Operational Dashboard` and `role=admin`.
 - Validation passed: backend build, frontend build, focused isolated DB auth/RBAC/CSRF/session/rate-limit/high-risk tests 9/9, Playwright dashboard/session/CSRF smoke. Phase B remains gated by the previously observed unrelated full backend suite failures until those baseline/source-contract failures are resolved.
+**Persian public landing page (2026-09-16)**
+
+- Replaced the root dashboard redirect with a public Persian-first landing page while keeping every operational route behind the existing authentication boundary.
+- Added a responsive dark SOC presentation with a sticky header, product hero and operational UI mock, feature cards, controlled-execution workflow, execution-security proof, vendor/integration ecosystem, CTA, and footer.
+- Landing copy follows the real Mini-SOAR boundary: catalog-first planning, ActionPlan preview, explicit confirmation, PolicyGuard, registered connector execution, real connector evidence, and audit. No raw AI execution path or backend execution behavior changed.
+- Added IntersectionObserver scroll reveals, ambient motion, responsive navigation, and prefers-reduced-motion handling.
+- Validation passed: production TypeScript/Vite build in an ephemeral Node 22 container; UTF-8/mojibake guard (551 files); git diff check.
+- Environment note: host Node/pnpm were unavailable. The repository Dockerfile install stage also reaches the local plugin before it is copied, so validation used an ephemeral full-workspace container and did not change repository dependencies or generated output.
