@@ -742,3 +742,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Image `firewall-log-analyzer-web:2026.09.16-landing` was built for linux/amd64 and smoke-tested at `/firewall/` with HTTP 200.
 - Export archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing.tar`, 20.27 MiB, SHA-256 `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.
 - Scope: frontend/Nginx image only; backend and PostgreSQL are deployed separately.
+## Editorial landing redesign (2026-09-16)
+
+- `/` is now a narrative Persian product introduction inspired by the structural pacing of Vestris: oversized editorial hero, generous space, numbered chapters, product artifact, human-control proof, and a minimal closing section.
+- The public landing has no login, dashboard, Assistant, or Action Center links. All visible navigation stays within the one-page story.
+- Scroll reveals use opacity + blur + translation + scale and replay as chapters enter/leave the viewport; reduced-motion preferences are honored.
+- The running Nginx container `firewall-landing-web` now serves image `firewall-log-analyzer-web:2026.09.16-landing-v2` at `http://localhost:8080/firewall/`.
+- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-v2.tar` (20.26 MiB), SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.
+- Validation: frontend production build passed, page/bundle HTTP 200, new-copy bundle assertion passed, UTF-8 guard passed (551 files), and diff check passed.

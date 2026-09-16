@@ -12,7 +12,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { appRoutes, type AppRoute } from "@/routes/appRoutes";
 import WorkflowLabPage from "@/features/tools/pages/WorkflowLabPage";
 import { normalizeAppDeepLink } from "@/lib/deepLinks";
-import LandingPage from "@/features/landing/pages/LandingPage";
+import LandingStoryPage from "@/features/landing/pages/LandingStoryPage";
 
 function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
@@ -117,7 +117,7 @@ function App() {
       <LogProvider>
         <RouterNavigationBridge />
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<LandingStoryPage />} />
           <Route path="/action-library" element={<ActionLibraryRoute />} />
           <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
           <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />

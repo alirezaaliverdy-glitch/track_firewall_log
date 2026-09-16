@@ -1073,3 +1073,13 @@
 - Smoke test passed: temporary container served `/firewall/` with HTTP 200, HTML content, and the React root.
 - Exported the image outside the repository to `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing.tar` (20.27 MiB). SHA-256: `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.
 - The archive contains the frontend/Nginx image only. Backend and PostgreSQL remain separate deployment services.
+**Editorial landing redesign inspired by Vestris (2026-09-16)**
+
+- Replaced the dashboard-like landing with a fully narrative Persian one-page experience after reviewing `https://vestris.ai/` as the user's structural reference.
+- The new page starts with a large product explanation, then moves through numbered chapters for product purpose, controlled ActionPlan flow, capabilities, multi-platform scope, human checkpoints, and the closing statement.
+- Removed all login, dashboard, Assistant, and Action Center links from the public landing. Header, hero, and footer interactions only navigate within the page.
+- Scroll motion now transitions sections from low opacity, 16px blur, vertical offset, and slight scale into a crisp final state. Reduced-motion users receive the complete content without animation.
+- Preserved the product's navy/cyan identity and truthful execution model: catalog-first planning, preview, user confirmation, PolicyGuard, connector evidence, and audit.
+- Validation passed: TypeScript/Vite production build through Docker; Nginx image build; `/firewall/` and the versioned JS bundle returned HTTP 200; new landing copy was present in the served bundle; UTF-8 guard passed (551 files); no login/application-route references remain in the landing source; `git diff --check` passed.
+- Live local container: `firewall-landing-web`, image `firewall-log-analyzer-web:2026.09.16-landing-v2`, published on `127.0.0.1:8080->50`.
+- Updated transferable archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-v2.tar` (20.26 MiB), SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.

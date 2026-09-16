@@ -834,3 +834,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added pnpm 12 build-script allowlisting for only `@swc/core` and `esbuild` and pinned pnpm 12.4.2 in the container build.
 - Built and smoke-tested `firewall-log-analyzer-web:2026.09.16-landing` for linux/amd64; `/firewall/` returned HTTP 200 with the React app root.
 - Saved the 20.27 MiB image archive to the user's Desktop with SHA-256 `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.
+## 2026-09-16 - Rebuild landing as an editorial product story
+
+- Reviewed the Vestris landing reference and replaced the prior dashboard-heavy design with an original Persian editorial composition that follows its narrative pacing without copying its content or assets.
+- Added a product-first hero, system explanation, visual ActionPlan artifact, four-stage controlled execution story, capability grid, platform scope, human-control section, and minimal footer.
+- Removed all login and protected-app navigation from the landing page.
+- Implemented gradual blur-to-crisp scroll reveals with opacity, translation, and scale transitions plus reduced-motion handling.
+- Built `firewall-log-analyzer-web:2026.09.16-landing-v2`, replaced the running port-8080 landing container, and verified the page and JS asset over Nginx with HTTP 200.
+- Exported the v2 image to the Desktop as a 20.26 MiB tar archive with SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.
+- UTF-8 guard and `git diff --check` passed.
