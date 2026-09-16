@@ -1091,3 +1091,12 @@
 - Restarted the front Nginx so `http://localhost/firewall/landing` is live. HTTP page and versioned JS asset returned 200; headless Chrome rendered `.story-page` and found no login UI. `firewall-web`, `firewall-api`, `main-nginx`, and `firewall-db` are healthy.
 - Removed the temporary port-8080 landing container after the production-base URL was verified.
 - Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-route.tar` (20.26 MiB), SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.
+
+**Product-accurate landing copy and typography (2026-09-16)**
+
+- Rewrote the public landing narrative from the implemented product contracts: selected device as source of truth, catalog-first resolution, AI proposal fallback, ActionPlan preview, one operator confirmation, PolicyGuard, registered connector invocation, evidence, and audit.
+- Replaced generic feature claims with the actual inventory/device context, Persian command catalog and Assistant, Daily Check/findings, and Action Center/audit surfaces.
+- Removed NetBox and Wazuh from the production-platform strip because they are not current executable integrations; the strip now lists Linux, MikroTik, FortiGate, and Cisco IOS-XE while explicitly qualifying support by registered device capability.
+- The landing now inherits the application's primary `Vazirmatn` font from `body`; the independent Georgia heading treatment was removed.
+- Frontend TypeScript/Vite production build passed in Docker. The deployed `firewall-web` image matches `firewall-log-analyzer-web:2026.09.16-product-copy`; `http://localhost/firewall/landing` and its versioned JS asset return HTTP 200, and both `firewall-web` and `main-nginx` are healthy.
+- Updated transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-product-copy.tar` (20.26 MiB), SHA-256 `222D957E6DDBA3BAE06F60861423F80292C4FFE652D5957F15307D6111CC709A`.

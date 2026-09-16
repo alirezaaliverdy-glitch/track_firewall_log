@@ -757,3 +757,12 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - The landing remains public and contains no login UI; application routes remain authenticated.
 - Active frontend image: `firewall-log-analyzer-web:2026.09.16-landing-route`. Main Nginx, frontend, API, and DB health checks are passing.
 - Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-route.tar`, SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.
+
+## Product-accurate landing content and primary font (2026-09-16)
+
+- The canonical landing remains `http://localhost/firewall/landing` and is live through the main Nginx with HTTP 200.
+- Copy now describes the real Mini-SOAR product boundary: device context -> catalog/AI proposal -> ActionPlan/preview -> operator confirmation -> PolicyGuard -> registered connector -> evidence/audit.
+- Feature copy reflects inventory and capability discovery, Persian command operations, Daily Check/findings, and Action Center. Platform language is capability-qualified and no longer presents NetBox/Wazuh as executable production integrations.
+- Persian landing typography now inherits the same application `Vazirmatn` stack; the separate serif heading font was removed.
+- Active frontend build: `firewall-log-analyzer-web:2026.09.16-product-copy`; `firewall-web` and `main-nginx` health checks pass.
+- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-product-copy.tar`, 20.26 MiB, SHA-256 `222D957E6DDBA3BAE06F60861423F80292C4FFE652D5957F15307D6111CC709A`.

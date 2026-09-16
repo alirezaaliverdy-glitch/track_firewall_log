@@ -850,3 +850,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Built the route-aware frontend image and replaced only the active `firewall-web` service behind the existing main Nginx.
 - Verified `http://localhost/firewall/landing` and its JS asset with HTTP 200; headless browser DOM contained the story landing and no login UI. All four stack services are healthy.
 - Removed the temporary port-8080 container and exported the updated image to the Desktop with SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.
+
+## 2026-09-16 - Align landing copy with the Mini-SOAR product
+
+- Re-read the product, architecture, status, and execution-contract documentation before rewriting the public copy.
+- Reframed the story around selected-device truth, catalog-first command resolution, reviewable ActionPlans, preview versus execution, operator confirmation, PolicyGuard, registered connector execution, evidence, and audit.
+- Replaced broad marketing claims with implemented product areas and removed NetBox/Wazuh from the active platform presentation.
+- Made all Persian headings and body copy inherit the application's primary Vazirmatn font and removed the landing-only Georgia style.
+- Docker production build passed, the active frontend-only container was recreated without touching API or PostgreSQL, and the canonical landing plus its versioned asset returned HTTP 200 with healthy Nginx/frontend checks.
+- Exported `firewall-log-analyzer-web:2026.09.16-product-copy` to the Desktop as a 20.26 MiB tar archive with SHA-256 `222D957E6DDBA3BAE06F60861423F80292C4FFE652D5957F15307D6111CC709A`.

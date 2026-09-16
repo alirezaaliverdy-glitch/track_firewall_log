@@ -24,46 +24,46 @@ import "./LandingStoryPage.css";
 const flow = [
   {
     number: "۰۱",
-    icon: Command,
-    title: "درخواست را فارسی بنویسید",
-    summary: "به‌جای حفظ‌کردن سینتکس هر تجهیز، هدف عملیاتی را همان‌طور که در ذهن دارید بیان کنید.",
-    detail: "سامانه ابتدا کاتالوگ فرمان‌های تاییدشده را بررسی می‌کند و فقط در صورت نبود مسیر آماده، از هوش مصنوعی برای پیشنهاد استفاده می‌کند.",
-    example: "«وضعیت فایروال سرور اصلی را بررسی کن»",
+    icon: Network,
+    title: "ابتدا دستگاه هدف را انتخاب کنید",
+    summary: "فروشنده، پلتفرم و قابلیت‌های کشف‌شده‌ی همان دستگاه، مرز واقعی عملیات را مشخص می‌کنند.",
+    detail: "سامانه حدس نمی‌زند که هر تجهیز چه کاری می‌تواند انجام دهد؛ موجودی ثبت‌شده و وضعیت Connector منبع حقیقت هستند.",
+    example: "Target · Vendor · Capabilities",
   },
   {
     number: "۰۲",
-    icon: Eye,
-    title: "قبل از اجرا، همه‌چیز را ببینید",
-    summary: "ActionPlan مقصد، پارامترها و مراحل واقعی را به یک پیش‌نمایش روشن تبدیل می‌کند.",
-    detail: "هیچ خروجی خام هوش مصنوعی اجرا نمی‌شود. دستگاه انتخاب‌شده، قالب ثبت‌شده و ورودی‌های معتبر باید کنار هم قرار بگیرند.",
-    example: "Preview · Target · Parameters · Steps",
+    icon: Command,
+    title: "هدف عملیاتی را فارسی بنویسید",
+    summary: "درخواست شما ابتدا با کاتالوگ فرمان‌های کنترل‌شده تطبیق داده می‌شود؛ نه با یک متن آزاد و غیرقابل پیش‌بینی.",
+    detail: "اگر فرمان آماده‌ای وجود نداشته باشد، AI فقط پیشنهاد می‌سازد. پیشنهاد سفارشی تا زمان داشتن Planner، Template و Connector معتبر، قابل اجرا نیست.",
+    example: "Catalog first · AI proposal fallback",
   },
   {
     number: "۰۳",
-    icon: Fingerprint,
-    title: "تایید نهایی همیشه با اپراتور است",
-    summary: "هوش مصنوعی پیشنهاد می‌دهد؛ تصمیم برای عبور از نقطه‌ی کنترل متعلق به شماست.",
-    detail: "پس از تایید، PolicyGuard برنامه را دوباره با سیاست‌های اجرا، سطح دسترسی و وضعیت مقصد تطبیق می‌دهد.",
-    example: "User confirm → PolicyGuard",
+    icon: Eye,
+    title: "ActionPlan را پیش از اجرا ببینید",
+    summary: "مقصد، پارامترها، مراحل، ریسک و مسیر بازگشت در یک پیش‌نمایش قابل بررسی کنار هم قرار می‌گیرند.",
+    detail: "Preview اجرا نیست. اپراتور برنامه‌ی نهایی را می‌بیند، یک‌بار تایید می‌کند و سپس PolicyGuard تازگی و مجازبودن آن را دوباره می‌سنجد.",
+    example: "Preview → Confirm → PolicyGuard",
   },
   {
     number: "۰۴",
     icon: Zap,
-    title: "نتیجه‌ی واقعی، نه یک پیام خوش‌بینانه",
-    summary: "موفقیت فقط وقتی ثبت می‌شود که Connector واقعاً اجرا شده و شواهد نتیجه را برگردانده باشد.",
-    detail: "خروجی، وضعیت، زمان و رویدادهای ممیزی کنار همان ActionPlan می‌مانند تا مسیر تصمیم قابل پیگیری باشد.",
-    example: "Connector → Evidence → Audit",
+    title: "Connector اجرا می‌کند؛ شواهد نتیجه را ثابت می‌کنند",
+    summary: "فقط Handler ثبت‌شده‌ی همان پلتفرم اجازه دارد عملیات تاییدشده را روی تجهیز واقعی اجرا کند.",
+    detail: "وضعیت succeeded تنها وقتی ثبت می‌شود که Connector واقعاً فراخوانی شده باشد؛ خروجی، زمان و Audit کنار ActionPlan باقی می‌مانند.",
+    example: "Connector invoked → Evidence → Audit",
   },
 ];
 
 const capabilities = [
-  { icon: Bot, title: "دستیار فارسی", text: "گفت‌وگو، پرسش درباره‌ی تجهیز و درخواست اقدام در یک تجربه‌ی یکپارچه، اما با مرزهای اجرایی روشن." },
-  { icon: Gauge, title: "پایش زنده", text: "سلامت تجهیزات، وضعیت Connectorها و رخدادهای عملیاتی بدون جابه‌جایی میان چند ابزار پراکنده." },
-  { icon: Network, title: "چندفروشنده", text: "یک زبان عملیاتی مشترک برای Linux، MikroTik، Cisco و FortiGate، متناسب با سطح پشتیبانی واقعی هر پلتفرم." },
-  { icon: ScrollText, title: "ممیزی کامل", text: "پیشنهاد، پیش‌نمایش، تایید، اجرا و نتیجه در یک زنجیره‌ی قابل بازبینی باقی می‌مانند." },
+  { icon: Network, title: "موجودی و شناخت تجهیز", text: "دستگاه‌ها، اطلاعات اتصال، قابلیت‌های کشف‌شده و وضعیت اعتبارسنجی در یک نمای عملیاتی جمع می‌شوند." },
+  { icon: Bot, title: "کاتالوگ و دستیار فارسی", text: "فرمان‌های رایج از مسیرهای ازپیش‌تعریف‌شده می‌آیند و AI فقط جایی وارد می‌شود که برای فهم یا پیشنهاد به آن نیاز است." },
+  { icon: Gauge, title: "Daily Check و یافته‌ها", text: "بررسی‌های دوره‌ای، تله‌متری و یافته‌های امنیتی کمک می‌کنند مشکل پیش از تبدیل‌شدن به بحران دیده شود." },
+  { icon: ScrollText, title: "Action Center و ممیزی", text: "پیشنهاد، پیش‌نمایش، تایید، اجرای Connector و نتیجه در یک زنجیره‌ی قابل بازبینی باقی می‌مانند." },
 ];
 
-const platforms = ["LINUX", "MIKROTIK", "CISCO", "FORTIGATE", "NETBOX", "WAZUH"];
+const platforms = ["LINUX", "MIKROTIK", "FORTIGATE", "CISCO IOS-XE"];
 
 function Brand() {
   return (
@@ -90,7 +90,7 @@ function CommandArtifact() {
             <p>وضعیت فایروال سرور اصلی را بررسی کن</p>
           </div>
           <div className="story-trace">
-            <span className="is-complete"><i><Check /></i><b>Catalog match</b><small>linux.firewall.status</small></span>
+            <span className="is-complete"><i><Check /></i><b>Catalog match</b><small>linux_check_firewall_status</small></span>
             <span className="is-complete"><i><Check /></i><b>ActionPlan</b><small>target + verified inputs</small></span>
             <span className="is-current"><i><Fingerprint /></i><b>Human checkpoint</b><small>waiting for confirmation</small></span>
             <span><i><Terminal /></i><b>Connector</b><small>not invoked yet</small></span>
@@ -169,16 +169,16 @@ function LandingStoryPage() {
         <section className="story-hero">
           <div className="story-hero__orb" aria-hidden="true" />
           <div className="story-container story-hero__inner">
-            <div className="story-hero__tag"><span /> MINI–SOAR / PERSIAN FIRST</div>
+            <div className="story-hero__tag"><span /> PERSIAN COMMAND OPERATIONS / CONTROLLED EXECUTION</div>
             <h1>
-              عملیات امنیتی،
-              <span>از فهم تا اقدام</span>
-              <em>در یک مسیر روشن.</em>
+              فرمان فارسی،
+              <span>تا اقدام واقعی</span>
+              <em>با کنترل کامل.</em>
             </h1>
-            <p>Firewall Log Analyzer یک مرکز فرمان سبک برای تیم‌های شبکه و امنیت است؛ رخداد را می‌فهمد، اقدام مناسب را پیشنهاد می‌دهد و اجرای واقعی را پشت پیش‌نمایش، تایید اپراتور و کنترل سیاست نگه می‌دارد.</p>
+            <p>Firewall Log Analyzer یک Mini‑SOAR سبک برای تیم‌های شبکه و امنیت است. دستگاه را انتخاب می‌کنید و خواسته‌تان را فارسی می‌نویسید؛ سامانه از کاتالوگ و قابلیت واقعی همان دستگاه ActionPlan می‌سازد و اجرای نهایی را از مسیر تایید اپراتور، PolicyGuard و Connector ثبت‌شده عبور می‌دهد.</p>
             <div className="story-hero__actions">
               <a href="#story" className="story-button">سامانه را بشناسید <ArrowDown /></a>
-              <span><i /> بدون اجرای خام هوش مصنوعی</span>
+              <span><i /> هیچ متن خام AI روی تجهیز اجرا نمی‌شود</span>
             </div>
           </div>
           <div className="story-hero__footer">
@@ -191,15 +191,15 @@ function LandingStoryPage() {
           <div className="story-container">
             <div className="story-chapter" data-reveal><span>فصل اول</span><b>سامانه چیست؟</b><i>01</i></div>
             <div className="story-intro__statement" data-reveal>
-              <p>وقتی یک هشدار می‌رسد، مسئله فقط دیدن آن نیست.</p>
-              <h2>باید بدانید <em>چه اتفاقی افتاده،</em><br />چه کاری درست است، و اجرای آن<br /><em>واقعاً چه نتیجه‌ای داده.</em></h2>
+              <p>مسئله فقط پیدا کردن یک هشدار یا اجرای یک دستور نیست.</p>
+              <h2>باید زمینه را <em>از خود تجهیز بگیرید،</em><br />تصمیم را پیش از اجرا ببینید و نتیجه را<br /><em>با شواهد واقعی بسنجید.</em></h2>
             </div>
             <div className="story-intro__grid">
-              <p data-reveal>سامانه‌ی شما تحلیل لاگ، وضعیت تجهیزات، دستیار فارسی و مرکز اقدام را از هم جدا نگه نمی‌دارد. همه‌ی آن‌ها بخشی از یک زنجیره‌اند: از مشاهده و تصمیم تا اجرای کنترل‌شده و ثبت شواهد.</p>
+              <p data-reveal>این سامانه موجودی تجهیزات، تحلیل لاگ، تله‌متری، یافته‌های امنیتی، دستیار فارسی و Action Center را به یک مسیر عملیاتی متصل می‌کند؛ از شناخت دستگاه و تشخیص مسئله تا ساخت برنامه، اجرای کنترل‌شده و ثبت نتیجه.</p>
               <div data-reveal>
-                <span><strong>دیدن</strong><small>تله‌متری و یافته‌ها</small></span>
-                <span><strong>فهمیدن</strong><small>تحلیل و پیشنهاد</small></span>
-                <span><strong>اقدام</strong><small>تایید و اجرای واقعی</small></span>
+                <span><strong>شناخت</strong><small>موجودی و قابلیت دستگاه</small></span>
+                <span><strong>تصمیم</strong><small>کاتالوگ و ActionPlan</small></span>
+                <span><strong>اثبات</strong><small>Connector و Audit</small></span>
               </div>
             </div>
           </div>
@@ -208,8 +208,8 @@ function LandingStoryPage() {
         <section className="story-product story-section">
           <div className="story-container">
             <div className="story-product__heading" data-reveal>
-              <span>یک فرمان ساده، یک مسیر کامل</span>
-              <h2>پیچیدگی زیرساخت پشت یک تجربه‌ی <em>آرام و قابل فهم</em> می‌ماند.</h2>
+              <span>یک فرمان فارسی، یک زنجیره‌ی قابل بررسی</span>
+              <h2>سادگی برای اپراتور؛ <em>انضباط برای اجرا.</em></h2>
             </div>
             <div data-reveal><CommandArtifact /></div>
           </div>
@@ -219,8 +219,8 @@ function LandingStoryPage() {
           <div className="story-container">
             <div className="story-chapter" data-reveal><span>فصل دوم</span><b>نحوه‌ی کار</b><i>02</i></div>
             <div className="story-flow__heading" data-reveal>
-              <h2>کارهای چندمرحله‌ای،<br /><em>بدون پرش از روی مرحله‌های مهم.</em></h2>
-              <p>هر مرحله تنها زمانی آغاز می‌شود که مرحله‌ی قبلی وضعیت روشن و قابل اتکایی داشته باشد.</p>
+              <h2>از نیت عملیاتی تا نتیجه،<br /><em>بدون دورزدن نقطه‌های کنترل.</em></h2>
+              <p>هر مرحله داده‌ی روشن خود را دارد و تا پیش‌نیاز مرحله‌ی بعد کامل نباشد، اجرا جلو نمی‌رود.</p>
             </div>
             <ol className="story-flow__list">
               {flow.map((item, index) => {
@@ -241,8 +241,8 @@ function LandingStoryPage() {
           <div className="story-container">
             <div className="story-chapter" data-reveal><span>فصل سوم</span><b>قابلیت‌ها</b><i>03</i></div>
             <div className="story-capabilities__heading" data-reveal>
-              <h2>ابزارهای کمتر.<br /><em>تصویر عملیاتی کامل‌تر.</em></h2>
-              <p>همه‌چیز برای کم‌کردن اصطکاک اپراتور طراحی شده، نه حذف قضاوت او.</p>
+              <h2>از مشاهده تا اقدام،<br /><em>در یک فضای عملیاتی.</em></h2>
+              <p>اجزای سامانه برای کم‌کردن رفت‌وآمد و خطای اپراتور کنار هم قرار گرفته‌اند، نه برای پنهان‌کردن واقعیت اجرا.</p>
             </div>
             <div className="story-capabilities__grid">
               {capabilities.map((item, index) => {
@@ -255,7 +255,7 @@ function LandingStoryPage() {
               })}
             </div>
             <div className="story-platforms" data-reveal>
-              <p>یک زبان مشترک برای زیرساخت ناهمگون</p>
+              <p>پشتیبانی براساس قابلیت ثبت‌شده‌ی هر تجهیز، نه صرفاً نام فروشنده</p>
               <div>{platforms.map((platform) => <span key={platform}>{platform}</span>)}</div>
             </div>
           </div>
@@ -271,13 +271,13 @@ function LandingStoryPage() {
               <span className="story-control__badge story-control__badge--three"><ScrollText /> Audit recorded</span>
             </div>
             <div className="story-control__copy" data-reveal>
-              <span className="story-kicker">AUTOMATED WORK / HUMAN CONTROL</span>
-              <h2>سرعت ماشین،<br /><em>با مسئولیت‌پذیری انسان.</em></h2>
-              <p>دستیار می‌تواند مسیر را کوتاه کند، اما نقطه‌ی تصمیم را حذف نمی‌کند. پیش از هر تغییر، شما مقصد و اثر اقدام را می‌بینید و تایید می‌کنید.</p>
+              <span className="story-kicker">PROPOSAL FIRST / EXECUTION CONTROLLED</span>
+              <h2>ساخت برنامه آسان‌تر؛<br /><em>اجرای تغییر سخت‌گیرانه‌تر.</em></h2>
+              <p>سامانه می‌تواند برای یک درخواست ActionPlan بسازد، اما فقط آیتم implemented که Planner، Template و Handler ثبت‌شده دارد از مرز اجرا عبور می‌کند. موارد manualOnly، planned و unsupported هرگز به‌جای عملیات واقعی نمایش داده نمی‌شوند.</p>
               <ul>
+                <li><CheckCircle2 /><span><b>وضعیت کاتالوگ مرز اجرا را تعیین می‌کند</b><small>implemented قابل اجراست؛ manualOnly فقط برای بازبینی می‌ماند.</small></span></li>
                 <li><CheckCircle2 /><span><b>Preview با Execution یکی نیست</b><small>پیش‌نمایش هیچ تغییری روی تجهیز ایجاد نمی‌کند.</small></span></li>
-                <li><CheckCircle2 /><span><b>PolicyGuard همیشه در مسیر است</b><small>کنترل سیاست قبل از فراخوانی Connector انجام می‌شود.</small></span></li>
-                <li><CheckCircle2 /><span><b>موفقیت به شواهد واقعی وابسته است</b><small>بدون اجرای Connector، وضعیت succeeded ثبت نمی‌شود.</small></span></li>
+                <li><CheckCircle2 /><span><b>موفقیت به اجرای واقعی وابسته است</b><small>بدون connectorInvoked و شواهد نتیجه، succeeded ثبت نمی‌شود.</small></span></li>
               </ul>
             </div>
           </div>
@@ -285,9 +285,9 @@ function LandingStoryPage() {
 
         <section className="story-ending story-section">
           <div className="story-container" data-reveal>
-            <span><Sparkles /> ساخته‌شده برای اپراتورهایی که باید مطمئن باشند</span>
-            <h2>از هشدار عبور کنید.<br /><em>به نتیجه برسید.</em></h2>
-            <p>یک تجربه‌ی فارسی، شفاف و کنترل‌شده برای روزهایی که سرعت مهم است و اشتباه هزینه دارد.</p>
+            <span><Sparkles /> ساخته‌شده برای عملیات واقعی شبکه و امنیت</span>
+            <h2>از درخواست فارسی،<br /><em>به نتیجه‌ی قابل استناد.</em></h2>
+            <p>برای اپراتوری که می‌خواهد سریع‌تر عمل کند، بدون آن‌که کنترل، قابلیت واقعی تجهیز یا ردپای ممیزی را دور بزند.</p>
             <a href="#top" className="story-button">بازگشت به آغاز <ArrowDown /></a>
           </div>
         </section>
@@ -296,7 +296,7 @@ function LandingStoryPage() {
       <footer className="story-footer">
         <div className="story-container story-footer__top">
           <Brand />
-          <p>تحلیل هوشمند، اقدام کنترل‌شده و ممیزی کامل برای عملیات امنیت شبکه.</p>
+          <p>Mini‑SOAR فارسی‌محور برای شناخت تجهیز، ساخت ActionPlan، اجرای کنترل‌شده و ثبت نتیجه‌ی واقعی.</p>
           <nav><a href="#story">سامانه</a><a href="#flow">نحوه‌ی کار</a><a href="#capabilities">قابلیت‌ها</a><a href="#control">امنیت اجرا</a></nav>
         </div>
         <div className="story-container story-footer__bottom"><span>© ۲۰۲۶ Firewall Security Orchestrator</span><span><i /> Persian-first Mini-SOAR</span></div>
