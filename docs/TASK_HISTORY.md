@@ -1471,3 +1471,13 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Proved the public SSH endpoint is reachable and negotiates OpenSSH correctly, while both the application password attempt and a non-interactive local-key attempt are rejected at authentication.
 - Preserved the Linux connector's stage-level evidence through onboarding failures and returned the specific sanitized code SSH_AUTH_FAILED to the client.
 - Rebuilt and health-gated the API container against the existing database volume; the application remains healthy and the remaining operator action is to rotate/re-enter the correct alireza password or an authorized private key.
+
+## 2026-09-16 - Restore latest UI and add the public product landing
+
+- Identified that the running frontend image had been built from the older `track` checkout although the active Compose stack belonged to `track_firewall_log_latest-safe-snapshot`.
+- Rebuilt from the latest snapshot, recreated only `firewall-web` under the canonical Compose project, and refreshed `main-nginx`; the current Persian interface replaced the stale English login build.
+- Added `/landing` as the only new public route and redirected the base application path to it; `/dashboard` and every operational route remain authenticated.
+- Implemented a shorter four-part product story: hero, three current-product views, controlled execution workflow, and team profile. The views mirror current dashboard, ActionPlan, PolicyGuard, connector/audit, and multi-vendor asset concepts without exposing live data.
+- Used the supplied team portrait and the application's bundled IRANYekan font. Added responsive design, smooth scroll reveals, pointer glow, and reduced-motion fallback.
+- Updated the deployment script to pin Compose project `track_firewall_log`, preventing a source-folder name from creating a separate network during future frontend rebuilds.
+- Validation: Docker frontend production build passed; `firewall-web` and `main-nginx` became healthy; local landing and dashboard routes returned HTTP 200. No Docker archive was saved to Desktop.

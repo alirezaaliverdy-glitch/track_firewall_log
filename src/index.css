@@ -169,3 +169,37 @@
     @apply border-border bg-card text-foreground;
   }
 }
+
+/* The first product impression must remain visible even when an embedded or
+   headless browser delays IntersectionObserver delivery. Later sections keep
+   their scroll-driven reveal behavior. */
+.landing .landing-hero > [data-reveal] {
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+@media (max-width: 700px) {
+  .landing .landing-header .landing-brand {
+    direction: rtl;
+  }
+
+  .landing .landing-hero,
+  .landing .landing-hero > *,
+  .landing .landing-hero__copy {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .landing .landing-hero__copy {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .landing .landing-hero h1 {
+    font-size: clamp(2.15rem, 10.8vw, 3rem);
+    line-height: 1.18;
+    letter-spacing: -0.035em;
+    overflow-wrap: anywhere;
+  }
+}

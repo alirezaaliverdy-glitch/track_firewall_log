@@ -13,6 +13,7 @@ import { normalizeAppDeepLink } from "@/lib/deepLinks";
 const ActionResultView = lazy(() => import("@/components/actions/ActionResultView"));
 const GuidedActionWizard = lazy(() => import("@/components/guided-actions/GuidedActionWizard"));
 const CommandCatalogPanel = lazy(() => import("@/components/commands/CommandCatalogPanel"));
+const LandingPage = lazy(() => import("@/features/landing/LandingPage"));
 function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
   return (
@@ -40,8 +41,7 @@ function firstAllowedRoute(allowedSections: string[] = []) {
 }
 
 function HomeRedirect() {
-  const { user } = useAuth();
-  return <Navigate to={user?.role === "admin" ? "/dashboard" : firstAllowedRoute(user?.allowedSections)} replace />;
+  return <Navigate to="/landing" replace />;
 }
 
 function SectionGate({ section, children }: { section: string; children: ReactNode }) {
@@ -146,6 +146,7 @@ function App() {
         <RouterNavigationBridge />
         <Routes>
           <Route path="/" element={<HomeRedirect />} />
+          <Route path="/landing" element={<LandingPage />} />
           <Route path="/action-library" element={<SectionGate section="actions"><ActionLibraryRoute /></SectionGate>} />
           <Route path="/guided-actions/:sessionId" element={<SectionGate section="actions"><GuidedActionRoute /></SectionGate>} />
           <Route path="/actions/:actionId/result" element={<SectionGate section="actions"><ActionResultRoute /></SectionGate>} />

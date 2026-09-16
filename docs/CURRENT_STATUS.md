@@ -1373,3 +1373,12 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Fixed non-Cisco onboarding so connector stages, error code, safe message, warnings, and capabilities survive the failure path instead of being replaced by a generic connection-test message.
 - Updated both onboarding test endpoints to return the safe connector error code and diagnostic stages. The existing Persian UI now maps SSH_AUTH_FAILED to the credential-rejected guidance.
 - Rebuilt and deployed the API image. Backend TypeScript compilation, real connector failure-path smoke, persisted diagnostic verification, and API readiness passed. No password, private key, or decrypted credential was printed or committed.
+
+## 2026-09-16 - Public product landing and latest frontend restoration
+
+- Restored the active `firewall-web` service from the `latest-safe-snapshot` source and returned it to the canonical `track_firewall_log` Compose project/network; `/firewall/dashboard` now serves the current Persian product shell through main Nginx.
+- Added a public, Persian-first `/firewall/landing` route while keeping all operational routes behind the existing authentication boundary.
+- Built a concise landing with the real IRANYekan font and visual treatments derived from the current dashboard, controlled ActionPlan flow, and multi-vendor asset workspace. Product visuals contain only illustrative, non-operational values.
+- Added scroll-triggered blur-to-clear reveals, responsive/reduced-motion behavior, and a final team section using the supplied portrait and the requested network, security, and product-design role.
+- Hardened the frontend deployment script with an explicit Compose project name so folder names cannot silently place a rebuilt frontend on a disconnected Docker network.
+- Frontend Docker production build passed and both `/firewall/landing` and `/firewall/dashboard` were served through Nginx without exporting a Docker image archive.

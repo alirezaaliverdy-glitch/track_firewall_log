@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$ComposeFile = "docker-compose.firewall.yml",
+    [string]$ProjectName = "track_firewall_log",
     [string]$Service = "firewall-web",
     [string]$ContainerName = "firewall-web",
     [int]$HealthTimeoutSeconds = 90
@@ -33,10 +34,10 @@ if (-not (Test-Path -LiteralPath $ComposeFile -PathType Leaf)) {
 $previousImage = Read-ContainerImage $ContainerName
 if ($previousImage) { Write-Host "Previous $Service image: $previousImage" }
 
-& docker compose -f $ComposeFile build $Service
+& docker compose -p $ProjectName -f $ComposeFile build $Service
 Assert-LastExitCode "Docker image build"
 
-& docker compose -f $ComposeFile up -d --no-deps --force-recreate $Service
+& docker compose -p $ProjectName -f $ComposeFile up -d --no-deps --force-recreate $Service
 Assert-LastExitCode "Docker container recreate"
 
 $deadline = (Get-Date).AddSeconds($HealthTimeoutSeconds)
