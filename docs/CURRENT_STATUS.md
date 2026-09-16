@@ -750,3 +750,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - The running Nginx container `firewall-landing-web` now serves image `firewall-log-analyzer-web:2026.09.16-landing-v2` at `http://localhost:8080/firewall/`.
 - Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-v2.tar` (20.26 MiB), SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.
 - Validation: frontend production build passed, page/bundle HTTP 200, new-copy bundle assertion passed, UTF-8 guard passed (551 files), and diff check passed.
+## Public landing URL under Nginx base path (2026-09-16)
+
+- Canonical local landing URL is now `http://localhost/firewall/landing`.
+- React Router uses the production Vite base `/firewall/` as its basename. `/firewall/` redirects client-side to `/firewall/landing`.
+- The landing remains public and contains no login UI; application routes remain authenticated.
+- Active frontend image: `firewall-log-analyzer-web:2026.09.16-landing-route`. Main Nginx, frontend, API, and DB health checks are passing.
+- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-route.tar`, SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.

@@ -1,7 +1,7 @@
 import "./App.css";
 import { Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { LogProvider } from "@/context/LogContext";
 import AppBackground from "@/components/background/AppBackground";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
@@ -117,7 +117,8 @@ function App() {
       <LogProvider>
         <RouterNavigationBridge />
         <Routes>
-          <Route path="/" element={<LandingStoryPage />} />
+          <Route path="/" element={<Navigate to="/landing" replace />} />
+          <Route path="/landing" element={<LandingStoryPage />} />
           <Route path="/action-library" element={<ActionLibraryRoute />} />
           <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
           <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />

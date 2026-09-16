@@ -843,3 +843,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Built `firewall-log-analyzer-web:2026.09.16-landing-v2`, replaced the running port-8080 landing container, and verified the page and JS asset over Nginx with HTTP 200.
 - Exported the v2 image to the Desktop as a 20.26 MiB tar archive with SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.
 - UTF-8 guard and `git diff --check` passed.
+## 2026-09-16 - Publish landing at /firewall/landing
+
+- Corrected the production routing boundary by assigning React Router the Vite `/firewall/` basename.
+- Moved the public landing to `/landing`, redirected the base root to that route, and kept the public auth exception limited to root/landing.
+- Built the route-aware frontend image and replaced only the active `firewall-web` service behind the existing main Nginx.
+- Verified `http://localhost/firewall/landing` and its JS asset with HTTP 200; headless browser DOM contained the story landing and no login UI. All four stack services are healthy.
+- Removed the temporary port-8080 container and exported the updated image to the Desktop with SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.

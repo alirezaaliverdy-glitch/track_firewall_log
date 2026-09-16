@@ -1083,3 +1083,11 @@
 - Validation passed: TypeScript/Vite production build through Docker; Nginx image build; `/firewall/` and the versioned JS bundle returned HTTP 200; new landing copy was present in the served bundle; UTF-8 guard passed (551 files); no login/application-route references remain in the landing source; `git diff --check` passed.
 - Live local container: `firewall-landing-web`, image `firewall-log-analyzer-web:2026.09.16-landing-v2`, published on `127.0.0.1:8080->50`.
 - Updated transferable archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-v2.tar` (20.26 MiB), SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.
+**Public landing route under the production Nginx base path (2026-09-16)**
+
+- Added the Vite `/firewall/` base as the React Router basename, moved the public landing route to `/landing`, and made the basename root redirect to `/landing`.
+- The public authentication bypass is limited to router paths `/` and `/landing`; all operational routes remain behind the existing session gate.
+- Rebuilt the frontend image as `firewall-log-analyzer-web:2026.09.16-landing-route`, tagged it for the active stack, and recreated only `firewall-web`; API and PostgreSQL were not rebuilt or stopped.
+- Restarted the front Nginx so `http://localhost/firewall/landing` is live. HTTP page and versioned JS asset returned 200; headless Chrome rendered `.story-page` and found no login UI. `firewall-web`, `firewall-api`, `main-nginx`, and `firewall-db` are healthy.
+- Removed the temporary port-8080 landing container after the production-base URL was verified.
+- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-route.tar` (20.26 MiB), SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.
