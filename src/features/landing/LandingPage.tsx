@@ -5,146 +5,69 @@ import {
   Check,
   ChevronLeft,
   CircleCheck,
-  Clock3,
   Command,
-  Database,
+  Eye,
+  Gauge,
+  Layers3,
   Network,
   Radar,
-  Server,
   ShieldCheck,
   Sparkles,
-  TerminalSquare,
+  Workflow,
 } from "lucide-react";
 import { useEffect, useRef, type CSSProperties, type PointerEvent } from "react";
 import "./LandingPage.css";
+import "./LandingRefresh.css";
 
 const baseUrl = import.meta.env.BASE_URL;
 
 const productViews = [
   {
     index: "01",
-    eyebrow: "دید عملیاتی",
-    title: "تصمیم‌های مهم، قبل از جزئیات",
+    eyebrow: "دید عملیاتی یکپارچه",
+    title: "وضعیت شبکه را پیش از تبدیل‌شدن به بحران ببینید",
     description:
-      "داشبورد، سلامت دارایی‌ها، یافته‌های فوری و اقدام‌های منتظر تأیید را از داده واقعی Backend کنار هم می‌گذارد تا وضعیت شبکه در یک نگاه روشن باشد.",
-    visual: "dashboard",
+      "داشبورد، سلامت تجهیزات، هشدارها، یافته‌های امنیتی و اقدام‌های منتظر تأیید را از داده واقعی Backend کنار هم می‌گذارد؛ تا به‌جای جابه‌جایی بین ابزارها، روی مهم‌ترین تصمیم تمرکز کنید.",
+    image: "product-overview.png",
+    alt: "نمای یکپارچه داشبورد، پایش لینوکس و دارایی‌های Firewall SOAR",
+    accent: "cyan",
+    facts: ["اولویت‌بندی رخدادها", "سلامت دارایی‌ها", "آخرین اجراها"],
   },
   {
     index: "02",
-    eyebrow: "فرمان و اقدام",
-    title: "از درخواست فارسی تا ActionPlan قابل بازبینی",
+    eyebrow: "مرکز اقدام کنترل‌شده",
+    title: "از فرمان فارسی تا اجرای قابل ردیابی، بدون پرش از کنترل‌ها",
     description:
-      "فرمان مناسب ابتدا از کاتالوگ انتخاب می‌شود؛ سپس پیش‌نمایش، پارامترها و دستگاه مقصد را می‌بینید. اجرا فقط پس از تأیید شما و عبور از PolicyGuard انجام می‌شود.",
-    visual: "action",
+      "سامانه ابتدا فرمان پیاده‌سازی‌شده را از کاتالوگ انتخاب و ActionPlan شفاف می‌سازد. مقصد و پارامترها را می‌بینید، پیش‌نمایش را بررسی می‌کنید و تنها پس از تأیید شما، PolicyGuard و Connector واقعی وارد عمل می‌شوند.",
+    image: "controlled-action.png",
+    alt: "مرکز اقدام کنترل‌شده با پیش‌نمایش، PolicyGuard، Connector و نتیجه",
+    accent: "violet",
+    facts: ["ActionPlan قابل بازبینی", "تأیید اپراتور", "Audit نتیجه واقعی"],
   },
   {
     index: "03",
-    eyebrow: "هوشمندی دارایی",
-    title: "یک فضای کاری برای شبکه و امنیت",
+    eyebrow: "پایش و دستیار هوشمند",
+    title: "هوش مصنوعی تحلیل می‌کند؛ اختیار اجرا دست اپراتور می‌ماند",
     description:
-      "Linux، MikroTik، Cisco، FortiGate، pfSense و Sophos در یک مدل دارایی مشترک دیده می‌شوند؛ از وضعیت اتصال و پایش تا پورت‌ها، یافته‌ها و تاریخچه عملیات.",
-    visual: "assets",
+      "Daily Check، تله‌متری Linux و MikroTik، روند هشدارها و دستیار زمینه‌محور در یک نمای عملیاتی قرار می‌گیرند. دستیار پیشنهاد را به طرح قابل بررسی تبدیل می‌کند و هرگز متن خام AI را مستقیم اجرا نمی‌کند.",
+    image: "monitoring-assistant.png",
+    alt: "پایش روزانه تجهیزات و دستیار هوشمند امنیتی Firewall SOAR",
+    accent: "coral",
+    facts: ["Daily Check", "تحلیل زمینه‌محور", "پیشنهاد، نه اجرای خام"],
   },
 ] as const;
 
+const capabilities = [
+  { icon: Network, title: "دارایی چندسازنده", text: "Linux، MikroTik، Cisco، FortiGate، pfSense و Sophos در یک مدل عملیاتی مشترک." },
+  { icon: Radar, title: "کشف و پایش پیوسته", text: "جمع‌آوری وضعیت، رخداد و تله‌متری با نمایش سلامت و آخرین زمان بررسی." },
+  { icon: ShieldCheck, title: "تشخیص قابل توضیح", text: "قوانین تشخیص، یافته‌ها، شدت و شواهد مرتبط برای تصمیم سریع‌تر تیم امنیت." },
+  { icon: Command, title: "کاتالوگ فرمان فارسی", text: "فرمان‌های آماده و پارامتریک؛ فقط عملیات دارای Planner، Template و Connector اجرا می‌شوند." },
+  { icon: Bot, title: "دستیار امنیتی", text: "تحلیل وضعیت و پیشنهاد گام بعدی، با تبدیل خروجی به برنامه قابل بازبینی اپراتور." },
+  { icon: Activity, title: "ثبت کامل نتیجه", text: "از پیش‌نمایش و تأیید تا فراخوانی Connector و نتیجه واقعی، همه‌چیز قابل ردیابی است." },
+];
+
 function BrandMark() {
-  return (
-    <span className="landing-brand-mark" aria-hidden="true">
-      <ShieldCheck />
-      <i />
-    </span>
-  );
-}
-
-function DashboardVisual() {
-  return (
-    <div className="product-ui product-ui--dashboard" aria-label="نمای پاک‌سازی‌شده داشبورد عملیاتی">
-      <div className="product-ui__topline">
-        <span><i /> داده زنده</span>
-        <small>نمای محصول · داده نمایشی</small>
-      </div>
-      <div className="product-ui__hero">
-        <div>
-          <small>وضعیت عملیات</small>
-          <strong>مرکز فرمان شبکه و امنیت</strong>
-          <span>اولویت‌ها، سلامت تجهیزات و نتیجه اقدام‌ها</span>
-        </div>
-        <div className="defense-orbit" aria-hidden="true">
-          <i className="defense-orbit__ring defense-orbit__ring--one" />
-          <i className="defense-orbit__ring defense-orbit__ring--two" />
-          <ShieldCheck />
-          <b /><b /><b />
-        </div>
-      </div>
-      <div className="product-metrics">
-        <div><span><ShieldCheck /> سلامت کلی</span><strong>پایدار</strong><small>کنترل پیوسته</small></div>
-        <div><span><Server /> دارایی فعال</span><strong>۱۲</strong><small>چند وندور</small></div>
-        <div><span><Clock3 /> منتظر تأیید</span><strong>۲</strong><small>نیازمند تصمیم شما</small></div>
-      </div>
-      <div className="product-chart-row">
-        <div className="health-ring"><span>۹۲</span><small>امتیاز سلامت</small></div>
-        <div className="mini-activity">
-          <span><i className="is-cyan" /> CPU <b>۳۸٪</b></span>
-          <span><i className="is-purple" /> Memory <b>۵۶٪</b></span>
-          <span><i className="is-amber" /> Disk <b>۴۱٪</b></span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ActionVisual() {
-  return (
-    <div className="product-ui product-ui--action" aria-label="نمای پاک‌سازی‌شده چرخه اقدام کنترل‌شده">
-      <div className="command-prompt">
-        <span><Sparkles /> درخواست اپراتور</span>
-        <p>وضعیت سرویس را بررسی کن و اقدام امن پیشنهاد بده.</p>
-      </div>
-      <div className="action-plan-card">
-        <header><span><Command /> ActionPlan</span><em>آماده بازبینی</em></header>
-        <div className="action-target"><Server /><div><small>دستگاه مقصد</small><strong>Linux Gateway</strong></div><CircleCheck /></div>
-        <code dir="ltr">systemctl status nginx</code>
-        <div className="plan-checks">
-          <span><Check /> قالب ثبت‌شده</span>
-          <span><Check /> PolicyGuard</span>
-          <span><Check /> ثبت رویداد</span>
-        </div>
-        <footer><span>پیش‌نمایش، اجرا نیست</span><button type="button" tabIndex={-1}>تأیید اپراتور</button></footer>
-      </div>
-      <div className="flow-dots" aria-hidden="true"><i /><i /><i /><i /></div>
-    </div>
-  );
-}
-
-function AssetVisual() {
-  return (
-    <div className="product-ui product-ui--assets" aria-label="نمای پاک‌سازی‌شده فضای کاری دارایی‌ها">
-      <div className="asset-map">
-        <span className="asset-map__hub"><Network /></span>
-        <span className="asset-node asset-node--one"><Server /><small>Linux</small></span>
-        <span className="asset-node asset-node--two"><Radar /><small>Cisco</small></span>
-        <span className="asset-node asset-node--three"><ShieldCheck /><small>Firewall</small></span>
-        <i className="asset-link asset-link--one" />
-        <i className="asset-link asset-link--two" />
-        <i className="asset-link asset-link--three" />
-      </div>
-      <div className="asset-summary">
-        <header><div><span>فضای کاری تجهیز</span><strong>Edge Gateway</strong></div><em><i /> متصل</em></header>
-        <div className="asset-tabs"><span className="is-active">نمای کلی</span><span>پورت‌ها</span><span>امنیت</span></div>
-        <div className="asset-services">
-          <span><TerminalSquare /><b>SSH</b><small>کنترل‌شده</small></span>
-          <span><Database /><b>Telemetry</b><small>فعال</small></span>
-          <span><Activity /><b>Daily check</b><small>تازه</small></span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProductVisual({ type }: { type: (typeof productViews)[number]["visual"] }) {
-  if (type === "action") return <ActionVisual />;
-  if (type === "assets") return <AssetVisual />;
-  return <DashboardVisual />;
+  return <span className="landing-brand-mark" aria-hidden="true"><ShieldCheck /><i /></span>;
 }
 
 export default function LandingPage() {
@@ -162,7 +85,7 @@ export default function LandingPage() {
           observer.unobserve(entry.target);
         }
       }),
-      { threshold: 0.16, rootMargin: "0px 0px -8%" },
+      { threshold: 0.13, rootMargin: "0px 0px -7%" },
     );
     targets.forEach((target) => observer.observe(target));
     return () => {
@@ -177,6 +100,22 @@ export default function LandingPage() {
     event.currentTarget.style.setProperty("--pointer-y", `${event.clientY - bounds.top}px`);
   };
 
+  const tiltCard = (event: PointerEvent<HTMLElement>) => {
+    if (window.matchMedia("(max-width: 900px), (prefers-reduced-motion: reduce)").matches) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+    event.currentTarget.style.setProperty("--tilt-x", `${(-y * 5.5).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--tilt-y", `${(x * 7).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--shine-x", `${((x + 0.5) * 100).toFixed(1)}%`);
+    event.currentTarget.style.setProperty("--shine-y", `${((y + 0.5) * 100).toFixed(1)}%`);
+  };
+
+  const resetTilt = (event: PointerEvent<HTMLElement>) => {
+    event.currentTarget.style.setProperty("--tilt-x", "0deg");
+    event.currentTarget.style.setProperty("--tilt-y", "0deg");
+  };
+
   return (
     <div ref={rootRef} className="landing" dir="rtl" onPointerMove={moveGlow}>
       <div className="landing-grid" aria-hidden="true" />
@@ -186,35 +125,37 @@ export default function LandingPage() {
           <span><strong>Firewall SOAR</strong><small>مرکز فرمان امنیت</small></span>
         </a>
         <nav aria-label="ناوبری لندینگ">
-          <a href="#product">محصول</a>
-          <a href="#workflow">چرخه اقدام</a>
-          <a href="#team">تیم</a>
+          <a href="#product">محصول</a><a href="#capabilities">قابلیت‌ها</a><a href="#workflow">چرخه اقدام</a><a href="#team">تیم</a>
         </nav>
         <a className="landing-header__anchor" href="#product">مشاهده محصول <ArrowDownLeft /></a>
       </header>
 
       <main>
-        <section id="top" className="landing-hero">
+        <section id="top" className="landing-hero landing-hero--refresh">
           <div className="landing-hero__copy" data-reveal>
             <span className="landing-kicker"><i /> Mini‑SOAR فارسی برای عملیات واقعی</span>
-            <h1>از سیگنال امنیتی تا<br /><em>اقدام کنترل‌شده.</em></h1>
-            <p>
-              Firewall SOAR لاگ‌ها، دارایی‌ها و وضعیت شبکه را به یک دید عملیاتی تبدیل می‌کند؛
-              سپس با کاتالوگ فرمان و دستیار هوشمند، مسیر تحلیل تا اجرای قابل‌ردیابی را کوتاه می‌کند.
-            </p>
+            <h1>امنیت را فقط نبینید؛<br /><em>برای آن اقدام کنید.</em></h1>
+            <p>Firewall SOAR لاگ، دارایی و وضعیت شبکه را به یک دید عملیاتی تبدیل می‌کند و فاصله میان تشخیص تا اقدام کنترل‌شده را کوتاه می‌سازد—با کاتالوگ فرمان فارسی، دستیار هوشمند و اجرای کاملاً قابل ردیابی.</p>
             <div className="landing-hero__actions">
-              <a href="#product">داخل محصول را ببینید <ChevronLeft /></a>
-              <span><ShieldCheck /> بدون اجرای مستقیم فرمان AI</span>
+              <a href="#product">محصول را کشف کنید <ChevronLeft /></a>
+              <span><ShieldCheck /> هیچ فرمان خام AI مستقیماً اجرا نمی‌شود</span>
+            </div>
+            <div className="hero-trust">
+              <span><strong>۶</strong><small>خانواده تجهیز</small></span>
+              <span><strong>۴</strong><small>لایه کنترل اجرا</small></span>
+              <span><strong>۱</strong><small>مرکز فرمان فارسی</small></span>
             </div>
           </div>
 
-          <div className="landing-hero__visual" data-reveal style={{ "--reveal-delay": "120ms" } as CSSProperties}>
-            <div className="hero-window">
-              <div className="hero-window__bar"><span /><span /><span /><small>firewall / dashboard</small></div>
-              <DashboardVisual />
-            </div>
-            <div className="hero-float hero-float--one"><Bot /><span><strong>طرح اقدام آماده است</strong><small>نیازمند بازبینی اپراتور</small></span></div>
-            <div className="hero-float hero-float--two"><CircleCheck /><span><strong>Connector اجرا شد</strong><small>نتیجه در Audit ثبت شد</small></span></div>
+          <div className="landing-hero__visual showcase-stage showcase-stage--hero" data-reveal style={{ "--reveal-delay": "110ms" } as CSSProperties}>
+            <div className="showcase-orbit" aria-hidden="true" />
+            <article className="showcase-frame showcase-frame--hero" onPointerMove={tiltCard} onPointerLeave={resetTilt}>
+              <div className="showcase-frame__bar"><span /><span /><span /><small>firewall / operations</small></div>
+              <div className="showcase-frame__image"><img src={`${baseUrl}landing/product-overview.png`} alt="نمای کلی محیط واقعی Firewall SOAR" /></div>
+              <i className="showcase-frame__shine" aria-hidden="true" />
+            </article>
+            <div className="hero-float hero-float--one"><Bot /><span><strong>طرح اقدام آماده بررسی</strong><small>پیشنهاد هوشمند · کنترل انسانی</small></span></div>
+            <div className="hero-float hero-float--two"><CircleCheck /><span><strong>اجرای Connector ثبت شد</strong><small>نتیجه واقعی در Audit</small></span></div>
           </div>
 
           <div className="landing-proof" data-reveal>
@@ -224,20 +165,43 @@ export default function LandingPage() {
 
         <section id="product" className="landing-product landing-section">
           <div className="landing-section__intro" data-reveal>
-            <span>داخل نسخه اصلی</span>
-            <h2>کمتر بین صفحه‌ها بگردید.<br />بیشتر تصمیم بگیرید.</h2>
-            <p>سه نمای اصلی محصول، با همان منطق و زبان بصری نسخه عملیاتی و بدون نمایش داده‌های حساس.</p>
+            <span>داخل محصول</span>
+            <h2>سه نمای واقعی.<br />یک جریان عملیاتی منسجم.</h2>
+            <p>تصاویر بر پایه رابط خود سامانه ساخته و برای نمایش عمومی از داده عملیاتی پاک‌سازی شده‌اند؛ منطق محصول همان چیزی است که اپراتور در نسخه اصلی می‌بیند.</p>
           </div>
 
-          <div className="product-stories">
+          <div className="product-stories product-stories--images">
             {productViews.map((item, index) => (
-              <article className={`product-story product-story--${item.visual}`} key={item.index} data-reveal style={{ "--reveal-delay": `${index * 70}ms` } as CSSProperties}>
+              <article className={`product-story product-story--image product-story--${item.accent}`} key={item.index} data-reveal style={{ "--reveal-delay": `${index * 70}ms` } as CSSProperties}>
                 <div className="product-story__copy">
                   <span><b>{item.index}</b>{item.eyebrow}</span>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
+                  <div className="story-facts">{item.facts.map((fact) => <span key={fact}><Check />{fact}</span>)}</div>
                 </div>
-                <ProductVisual type={item.visual} />
+                <div className="showcase-stage">
+                  <article className="showcase-frame" onPointerMove={tiltCard} onPointerLeave={resetTilt}>
+                    <div className="showcase-frame__bar"><span /><span /><span /><small>Firewall SOAR · {item.index}</small></div>
+                    <div className="showcase-frame__image"><img src={`${baseUrl}landing/${item.image}`} alt={item.alt} loading={index === 0 ? "eager" : "lazy"} /></div>
+                    <i className="showcase-frame__shine" aria-hidden="true" />
+                  </article>
+                  <span className="showcase-depth showcase-depth--one" aria-hidden="true" />
+                  <span className="showcase-depth showcase-depth--two" aria-hidden="true" />
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="capabilities" className="landing-capabilities landing-section">
+          <div className="capabilities-heading" data-reveal>
+            <div><span>فراتر از یک داشبورد</span><h2>ابزارهای واقعی برای عملیات روزمره شبکه و امنیت</h2></div>
+            <p>از مشاهده و تشخیص تا اجرای کنترل‌شده؛ قابلیت‌ها به‌جای نمایش نمایشی، به سرویس‌ها، Connectorها و Audit واقعی سامانه متصل‌اند.</p>
+          </div>
+          <div className="capability-grid">
+            {capabilities.map(({ icon: Icon, title, text }, index) => (
+              <article key={title} data-reveal style={{ "--reveal-delay": `${index * 45}ms` } as CSSProperties}>
+                <span><Icon /></span><h3>{title}</h3><p>{text}</p><i>{String(index + 1).padStart(2, "0")}</i>
               </article>
             ))}
           </div>
@@ -246,14 +210,14 @@ export default function LandingPage() {
         <section id="workflow" className="landing-workflow landing-section" data-reveal>
           <div className="workflow-copy">
             <span>مرز ایمنی محصول</span>
-            <h2>هوش مصنوعی پیشنهاد می‌دهد؛<br />کنترل دست اپراتور می‌ماند.</h2>
-            <p>اجرای واقعی فقط برای فرمان پیاده‌سازی‌شده، دستگاه انتخاب‌شده و پارامترهای معتبر ممکن است. تأیید شما، PolicyGuard، Connector و Audit هیچ‌وقت حذف نمی‌شوند.</p>
+            <h2>AI پیشنهاد می‌دهد؛<br />کنترل دست اپراتور می‌ماند.</h2>
+            <p>فقط آیتم پیاده‌سازی‌شده با Planner، Template و Connector ثبت‌شده قابلیت اجرا دارد. پیش‌نمایش اجرا نیست؛ نتیجه نیز تنها وقتی موفق ثبت می‌شود که Connector واقعی با موفقیت پاسخ داده باشد.</p>
           </div>
           <ol className="workflow-steps">
-            <li><span>01</span><div><Bot /><strong>پیشنهاد</strong><small>کاتالوگ یا AI</small></div></li>
-            <li><span>02</span><div><Command /><strong>پیش‌نمایش</strong><small>ActionPlan شفاف</small></div></li>
-            <li><span>03</span><div><ShieldCheck /><strong>تأیید و محافظت</strong><small>کاربر + PolicyGuard</small></div></li>
-            <li><span>04</span><div><CircleCheck /><strong>اجرا و ثبت</strong><small>Connector + Audit</small></div></li>
+            <li><span>01</span><div><Sparkles /><strong>انتخاب راهکار</strong><small>کاتالوگ، سپس AI</small></div></li>
+            <li><span>02</span><div><Eye /><strong>پیش‌نمایش</strong><small>ActionPlan شفاف</small></div></li>
+            <li><span>03</span><div><ShieldCheck /><strong>تأیید و محافظت</strong><small>اپراتور + PolicyGuard</small></div></li>
+            <li><span>04</span><div><Workflow /><strong>اجرا و ثبت</strong><small>Connector + Audit</small></div></li>
           </ol>
         </section>
 
@@ -263,15 +227,10 @@ export default function LandingPage() {
             <span><i /> شبکه · امنیت · طراحی محصول</span>
           </div>
           <div className="team-copy" data-reveal style={{ "--reveal-delay": "90ms" } as CSSProperties}>
-            <span>تیم محصول</span>
-            <h2>علیرضا</h2>
+            <span>پشت محصول</span><h2>علیرضا</h2>
             <h3>متخصص شبکه و امنیت، طراح تجربه محصول</h3>
-            <p>طراحی Firewall SOAR از دل نیازهای واقعی عملیات شبکه شکل گرفته است: دید واضح، کنترل قبل از اجرا و مسیری که تحلیل امنیتی را به اقدام قابل‌اعتماد تبدیل کند.</p>
-            <div className="team-values">
-              <span><Network /> معماری شبکه</span>
-              <span><ShieldCheck /> عملیات امنیت</span>
-              <span><Sparkles /> طراحی محصول</span>
-            </div>
+            <p>Firewall SOAR از دل نیازهای واقعی عملیات شبکه شکل گرفته است: دید واضح، کنترل پیش از اجرا و مسیری که تحلیل امنیتی را به اقدام قابل اعتماد تبدیل کند. تمرکز طراحی روی کاهش شلوغی، سرعت تصمیم و حفظ اختیار اپراتور است.</p>
+            <div className="team-values"><span><Network /> معماری شبکه</span><span><ShieldCheck /> عملیات امنیت</span><span><Layers3 /> طراحی محصول</span><span><Gauge /> تجربه اپراتور</span></div>
           </div>
         </section>
       </main>

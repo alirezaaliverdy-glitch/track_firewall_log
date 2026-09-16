@@ -1,3 +1,8 @@
+## 2026-09-16 - Landing product imagery and 3D interaction
+
+- Replaced the landing's code-only product mockups with three polished, privacy-safe product images based on the current Firewall SOAR interface.
+- Added 3D perspective/tilt, layered card depth, pointer lighting, responsive fallbacks, and richer capability copy while preserving the existing landing route, Persian-first typography, team section, and scroll reveals.
+- Verified the production Docker build and health-gated web deployment. Both the landing and authenticated dashboard routes remain available through the main Nginx entrypoint.
 ## 2026-09-16 - Make the onboarding default actionable
 
 - Removed the separate hidden `vendorConfirmed` state that contradicted the visible Linux platform default on the generic registration route.

@@ -1,3 +1,9 @@
+## 2026-09-16 - Three-dimensional product landing showcase
+
+- Reworked the public Persian landing page around three privacy-safe product views derived from the real application: the unified operations dashboard, controlled Action Center, and monitoring/AI assistant workspace.
+- Added responsive perspective, pointer-reactive tilt, layered depth, restrained light reflection, scroll blur-to-clear reveals, and reduced-motion/mobile fallbacks.
+- Expanded product copy to accurately describe multi-vendor assets, continuous monitoring, explainable detections, the Persian command catalog, reviewable AI proposals, PolicyGuard, real connector invocation, and audit results.
+- The frontend production build passed inside Docker. `firewall-web`, `main-nginx`, `firewall-api`, and `firewall-db` are healthy; `/firewall/landing`, `/firewall/dashboard`, and all three landing image assets return HTTP 200.
 ## 2026-09-16 - Repair the device-onboarding Continue step
 
 - Fixed a UI/state mismatch on generic device registration: Linux was displayed as the active platform but remained internally unconfirmed, so valid name, address, and port values could not advance to credentials.
