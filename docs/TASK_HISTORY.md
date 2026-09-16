@@ -828,3 +828,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Changed only the root route to be public; all operational application routes still require authentication.
 - Preserved controlled Mini-SOAR execution semantics and described the actual ActionPlan, preview, confirmation, PolicyGuard, connector, audit, and result flow.
 - Validation: TypeScript/Vite production build passed in an ephemeral Node 22 container; UTF-8 guard passed (551 files); git diff check passed.
+## 2026-09-16 - Export transferable frontend Docker image
+
+- Fixed the frontend multi-stage Docker build ordering for the local SSH plugin dependency.
+- Added pnpm 12 build-script allowlisting for only `@swc/core` and `esbuild` and pinned pnpm 12.4.2 in the container build.
+- Built and smoke-tested `firewall-log-analyzer-web:2026.09.16-landing` for linux/amd64; `/firewall/` returned HTTP 200 with the React app root.
+- Saved the 20.27 MiB image archive to the user's Desktop with SHA-256 `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.

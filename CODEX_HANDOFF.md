@@ -1065,3 +1065,11 @@
 - Added IntersectionObserver scroll reveals, ambient motion, responsive navigation, and prefers-reduced-motion handling.
 - Validation passed: production TypeScript/Vite build in an ephemeral Node 22 container; UTF-8/mojibake guard (551 files); git diff check.
 - Environment note: host Node/pnpm were unavailable. The repository Dockerfile install stage also reaches the local plugin before it is copied, so validation used an ephemeral full-workspace container and did not change repository dependencies or generated output.
+**Transferable frontend Docker image (2026-09-16)**
+
+- Repaired the frontend container build so the local `plugins/local-ssh` dependency is present before frozen install.
+- Pinned pnpm 12.4.2 in the build stage and added a pnpm 12 `allowBuilds` policy limited to `@swc/core` and `esbuild`.
+- Built `firewall-log-analyzer-web:2026.09.16-landing` for `linux/amd64`; TypeScript/Vite production build passed inside the image build.
+- Smoke test passed: temporary container served `/firewall/` with HTTP 200, HTML content, and the React root.
+- Exported the image outside the repository to `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing.tar` (20.27 MiB). SHA-256: `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.
+- The archive contains the frontend/Nginx image only. Backend and PostgreSQL remain separate deployment services.

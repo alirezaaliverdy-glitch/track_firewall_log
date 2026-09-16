@@ -736,3 +736,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Scroll-triggered reveal motion and ambient UI animation respect reduced-motion preferences.
 - Product claims stay aligned with implementation: catalog-first proposals, preview, explicit user confirmation, PolicyGuard, registered connectors, connector evidence, and audit.
 - Frontend production build passed in an ephemeral Node 22 container. UTF-8/mojibake check passed for 551 files. No backend or execution-policy code changed.
+## Transferable frontend Docker image (2026-09-16)
+
+- Frontend Docker builds are reproducible again: the local SSH plugin is copied before frozen dependency installation, pnpm is pinned to 12.4.2, and dependency build scripts are explicitly limited to SWC and esbuild.
+- Image `firewall-log-analyzer-web:2026.09.16-landing` was built for linux/amd64 and smoke-tested at `/firewall/` with HTTP 200.
+- Export archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing.tar`, 20.27 MiB, SHA-256 `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.
+- Scope: frontend/Nginx image only; backend and PostgreSQL are deployed separately.
