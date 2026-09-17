@@ -3,7 +3,9 @@ import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
 import { env } from "../config/env.js";
+import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
+import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -21,6 +23,7 @@ type SshCredential = {
   privateKeyPath?: string;
   passphrase?: string;
   sudo?: boolean;
+  port?: number;
 };
 
 type ExecResult = {
@@ -29,6 +32,9 @@ type ExecResult = {
   exitCode: number | null;
 };
 
+import { LINUX_STREAM_COMMANDS, LINUX_TELEMETRY_COMMANDS, type LinuxStreamSource, type LinuxTelemetryCommandId } from "./linux/telemetry-commands.js";
+export { LINUX_STREAM_COMMANDS, LINUX_TELEMETRY_COMMANDS } from "./linux/telemetry-commands.js";
+export type { LinuxStreamSource, LinuxTelemetryCommandId } from "./linux/telemetry-commands.js";
 export class ConnectorError extends Error {
   code: string;
   statusCode: number;
@@ -43,44 +49,76 @@ export class ConnectorError extends Error {
 
 const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.open_port,
+  ActionType.linux_open_port,
   ActionType.close_port,
+  ActionType.linux_block_ip,
   ActionType.block_source_ip_temporary,
   ActionType.unblock_source_ip,
   ActionType.linux_check_service_status,
+  ActionType.linux_check_ssh_status,
+  ActionType.linux_check_failed_logins,
+  ActionType.linux_check_sudo_users,
+  ActionType.linux_check_fail2ban_status,
+  ActionType.linux_remove_user_from_sudo,
+  ActionType.linux_add_user_to_sudo,
+  ActionType.linux_check_user_groups,
+  ActionType.linux_lock_user,
+  ActionType.linux_unlock_user,
   ActionType.linux_read_hostname,
   ActionType.linux_read_interfaces,
   ActionType.linux_read_routes,
+  ActionType.linux_list_open_ports,
   ActionType.linux_read_listening_ports,
+  ActionType.linux_check_firewall_status,
   ActionType.linux_read_firewall_status,
   ActionType.linux_read_auth_logs,
   ActionType.linux_read_users,
   ActionType.linux_read_docker,
-  ActionType.linux_read_nginx
+  ActionType.linux_read_nginx,
+  ActionType.custom_vendor_action,
+  "linux_list_running_services" as ActionType,
+  "linux_list_failed_services" as ActionType,
+  "linux_check_important_services" as ActionType
+  ,ActionType.linux_daily_check
 ];
 
 const LINUX_READ_ACTIONS = new Set<ActionType>([
+  ActionType.linux_check_ssh_status, ActionType.linux_check_failed_logins,
+  ActionType.linux_check_sudo_users, ActionType.linux_check_fail2ban_status,
   ActionType.linux_read_hostname, ActionType.linux_read_interfaces, ActionType.linux_read_routes,
-  ActionType.linux_read_listening_ports, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
-  ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx
+  ActionType.linux_list_open_ports, ActionType.linux_read_listening_ports, ActionType.linux_check_firewall_status, ActionType.linux_read_firewall_status, ActionType.linux_read_auth_logs,
+  ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx,
+  "linux_list_running_services" as ActionType, "linux_list_failed_services" as ActionType, "linux_check_important_services" as ActionType
 ]);
 
 function linuxReadCommand(actionType: ActionType, sudo = "") {
   const commands: Partial<Record<ActionType, { template: string; command: string }>> = {
+    [ActionType.linux_check_ssh_status]: { template: "SSH service status", command: "systemctl is-active ssh || systemctl is-active sshd || service ssh status || service sshd status" },
+    [ActionType.linux_check_failed_logins]: { template: "failed SSH logins in last 24 hours", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null || ${sudo}tail -n 300 /var/log/auth.log 2>/dev/null || ${sudo}tail -n 300 /var/log/secure 2>/dev/null` },
+    [ActionType.linux_check_sudo_users]: { template: "sudo, wheel, and UID 0 users", command: "getent group sudo; getent group wheel; awk -F: '$3==0 {print $1}' /etc/passwd" },
+    [ActionType.linux_check_fail2ban_status]: { template: "fail2ban service status", command: `systemctl is-active fail2ban; command -v fail2ban-client >/dev/null 2>&1 && ${sudo}fail2ban-client status || true` },
     [ActionType.linux_read_hostname]: { template: "hostname", command: "hostname" },
     [ActionType.linux_read_interfaces]: { template: "ip -brief address", command: "ip -brief address" },
     [ActionType.linux_read_routes]: { template: "ip route show", command: "ip route show" },
-    [ActionType.linux_read_listening_ports]: { template: "ss -lntup", command: "ss -lntup" },
-    [ActionType.linux_read_firewall_status]: { template: "ufw status verbose", command: `${sudo}ufw status verbose` },
+    [ActionType.linux_list_open_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
+    [ActionType.linux_read_listening_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
+    [ActionType.linux_check_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
+    [ActionType.linux_read_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
     [ActionType.linux_read_auth_logs]: { template: "journalctl SSH authentication events", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -n 200` },
     [ActionType.linux_read_users]: { template: "getent passwd", command: "getent passwd" },
     [ActionType.linux_read_docker]: { template: "docker ps", command: "docker ps --no-trunc" },
-    [ActionType.linux_read_nginx]: { template: "nginx -t", command: `${sudo}nginx -t` }
+    [ActionType.linux_read_nginx]: { template: "nginx -t", command: `${sudo}nginx -t` },
+    ["linux_list_running_services" as ActionType]: { template: "running services", command: "systemctl list-units --type=service --state=running --no-pager --plain" },
+    ["linux_list_failed_services" as ActionType]: { template: "failed services", command: "systemctl --failed --type=service --no-pager --plain" },
+    ["linux_check_important_services" as ActionType]: { template: "important services", command: "for s in ssh sshd nginx apache2 httpd docker fail2ban postgresql mysql mariadb redis; do if systemctl list-unit-files --type=service 2>/dev/null | grep -q \"^${s}\\.service\"; then printf '=== %s ===\\n' \"$s\"; systemctl is-active \"$s\" 2>/dev/null || true; systemctl status \"$s\" --no-pager --lines=5 2>/dev/null || true; fi; done" }
   };
   return commands[actionType];
 }
 
 const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 
+import { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "./linux/firewall-parsers.js";
+export { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "./linux/firewall-parsers.js";
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -114,11 +152,17 @@ function ipParam(value: unknown) {
 }
 
 function serviceParam(value: unknown) {
-  const service = text(value) ?? "nginx";
-  if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) {
-    throw new ConnectorError("INVALID_SERVICE", "Service name must contain only letters, numbers, dot, underscore, dash, or @.");
+  try {
+    return validateLinuxServiceName(text(value) ?? "nginx");
+  } catch {
+    throw new ConnectorError("INVALID_SERVICE", "Service name must contain only letters, numbers, dot, underscore, @, colon, or dash.");
   }
-  return service;
+}
+
+function usernameParam(value: unknown) {
+  const username = text(value);
+  if (!username || !/^[a-z_][a-z0-9_.-]{0,31}$/i.test(username)) throw new ConnectorError("INVALID_USERNAME", "A valid Linux username is required.");
+  return username;
 }
 
 function isPrivateOrLocalIp(ip: string) {
@@ -177,10 +221,32 @@ async function getCredential(device: Device) {
   throw new ConnectorError("SSH_CREDENTIAL_MISSING", "No SSH credential is configured for this device.", 400);
 }
 
+function validPort(value: unknown) {
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : undefined;
+}
+
+export function isLinuxSshCapable(device: Pick<Device, "type" | "vendor" | "protocol" | "capabilities"> | null | undefined) {
+  if (!device) return false;
+  const vendor = String(device.vendor ?? "").trim().toLowerCase();
+  const type = String(device.type ?? "").trim().toLowerCase();
+  const capabilities = device.capabilities && typeof device.capabilities === "object" ? JSON.stringify(device.capabilities).toLowerCase() : "";
+  const linux = type === "linux_edge" || type === "linux" || vendor === "linux" || vendor.includes("ubuntu") || vendor.includes("linux") || capabilities.includes("linux");
+  const ssh = String(device.protocol ?? "").toLowerCase() === "ssh" || capabilities.includes("ssh");
+  return linux && ssh;
+}
+
+export function resolveLinuxConnectionPort(device: Device | (Partial<Device> & Record<string, unknown>), credential?: SshCredential) {
+  const source = device as Record<string, unknown>;
+  const capabilities = source.capabilities && typeof source.capabilities === "object" ? source.capabilities as Record<string, unknown> : {};
+  const connection = capabilities.connection && typeof capabilities.connection === "object" ? capabilities.connection as Record<string, unknown> : {};
+  return validPort(source.managementPort) ?? validPort(source.port) ?? validPort(credential?.port) ?? validPort(connection.port) ?? 22;
+}
+
 function connectConfig(device: Device, credential: SshCredential): ConnectConfig {
   const config: ConnectConfig = {
     host: device.host,
-    port: device.managementPort,
+    port: resolveLinuxConnectionPort(device, credential),
     username: credential.username,
     readyTimeout: env.sshHandshakeTimeoutMs
   };
@@ -284,6 +350,99 @@ function sudoPrefix(credential: SshCredential) {
   return credential.username === "root" ? "" : "sudo -n ";
 }
 
+function telemetryCommand(command: string, privileged: boolean, privilegeLevel: "root" | "sudo" | "limited") {
+  if (!privileged || privilegeLevel === "root") return command;
+  if (privilegeLevel === "sudo") return `sudo -n sh -c ${JSON.stringify(command)}`;
+  return null;
+}
+
+export function detectLinuxPrivilege(username: string, uidOutput: string, sudoExitCode: number | null): "root" | "sudo" | "limited" {
+  return uidOutput.trim() === "0" || username === "root" ? "root" : sudoExitCode === 0 ? "sudo" : "limited";
+}
+
+export async function runLinuxTelemetryCommands(device: Device, commandIds: LinuxTelemetryCommandId[]) {
+  if (!isLinuxSshCapable(device)) {
+    throw new ConnectorError("LINUX_SSH_REQUIRED", "Selected device is not Linux/SSH capable.", 404);
+  }
+  if (commandIds.some((id) => !(id in LINUX_TELEMETRY_COMMANDS))) {
+    throw new ConnectorError("TELEMETRY_COMMAND_NOT_ALLOWED", "Telemetry command is not allowlisted.", 400);
+  }
+  return withSsh(device, async (client, credential) => {
+    const uid = await exec(client, "id -u");
+    const root = uid.stdout.trim() === "0" || credential.username === "root";
+    const sudoCheck = root ? null : await exec(client, "sudo -n true");
+    const privilegeLevel = detectLinuxPrivilege(credential.username, uid.stdout, sudoCheck?.exitCode ?? null);
+    const results: Record<string, ExecResult & { skipped?: boolean }> = {};
+    for (const id of commandIds) {
+      const definition = LINUX_TELEMETRY_COMMANDS[id];
+      const command = telemetryCommand(definition.command, definition.privileged, privilegeLevel);
+      if (!command) {
+        results[id] = { stdout: "", stderr: "Privileged read unavailable.", exitCode: null, skipped: true };
+        continue;
+      }
+      try {
+        results[id] = await exec(client, command, Math.max(env.sshCommandTimeoutMs, 20000));
+      } catch (error) {
+        results[id] = { stdout: "", stderr: error instanceof Error ? error.message : "Read failed.", exitCode: null };
+      }
+    }
+    return { privilegeLevel, sudoAvailable: privilegeLevel === "root" || privilegeLevel === "sudo", connectionPort: resolveLinuxConnectionPort(device, credential), results };
+  });
+}
+
+export async function openLinuxTelemetryStream(
+  device: Device,
+  source: LinuxStreamSource,
+  onLine: (line: string) => void,
+  onWarning: (message: string) => void
+) {
+  if (!(source in LINUX_STREAM_COMMANDS)) throw new ConnectorError("STREAM_SOURCE_NOT_ALLOWED", "Stream source is not allowlisted.", 400);
+  const credential = await getCredential(device);
+  const client = new Client();
+  let closed = false;
+  let channel: { close: () => void } | null = null;
+  const ready = new Promise<void>((resolve, reject) => {
+    client.once("ready", async () => {
+      try {
+        const uid = await exec(client, "id -u");
+        const root = uid.stdout.trim() === "0" || credential.username === "root";
+        const sudoCheck = root ? null : await exec(client, "sudo -n true");
+        const privileged = root || sudoCheck?.exitCode === 0;
+        const command = privileged && !root
+          ? `sudo -n sh -c ${JSON.stringify(LINUX_STREAM_COMMANDS[source])}`
+          : LINUX_STREAM_COMMANDS[source];
+        client.exec(command, (error, stream) => {
+          if (error) return reject(error);
+          channel = stream;
+          let buffer = "";
+          const consume = (chunk: Buffer) => {
+            buffer += chunk.toString("utf8");
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() ?? "";
+            lines.filter(Boolean).forEach(onLine);
+          };
+          stream.on("data", consume);
+          stream.stderr.on("data", (chunk: Buffer) => onWarning(chunk.toString("utf8").trim()));
+          stream.on("close", () => { if (!closed) onWarning(`${source} stream closed.`); });
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+    client.once("error", reject);
+    client.connect(connectConfig(device, credential));
+  });
+  await ready;
+  return {
+    close() {
+      closed = true;
+      channel?.close();
+      client.end();
+    }
+  };
+}
+
 async function execChecked(client: Client, command: string) {
   const result = await exec(client, command);
   if (result.exitCode !== 0) {
@@ -309,7 +468,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
   const base = {
     deviceId: device.id,
     host: device.host,
-    port: device.managementPort,
+    port: resolveLinuxConnectionPort(device),
     stages,
     warnings
   };
@@ -332,7 +491,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
   }
 
   try {
-    await tcpConnect(device.host, device.managementPort);
+    await tcpConnect(device.host, resolveLinuxConnectionPort(device, credential));
     stages.push({ name: "tcp_connect", status: "ok" });
   } catch (error) {
     const connectorError = error instanceof ConnectorError ? error : new ConnectorError("SSH_TCP_CONNECT_FAILED", "TCP connection failed.");
@@ -433,6 +592,11 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
 }
 
 function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
+  if (plan.actionType === ActionType.custom_vendor_action) {
+    const customPlan = customPlanFromParameters(plan.parametersJson);
+    if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
+    return customDryRun(customPlan);
+  }
   const parameters = asObject(plan.parametersJson);
   const protocol = protocolParam(parameters.protocol);
   const affectedPorts: number[] = [];
@@ -441,7 +605,7 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   let plannedCommands: string[] = [];
   let rollbackSteps: string[] = [];
 
-  if (plan.actionType === ActionType.open_port) {
+  if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
     const port = portParam(parameters.port);
     affectedPorts.push(port);
     plannedCommands = [`sudo -n ufw allow ${port}/${protocol} comment 'firewall-log-analyzer action ${plan.id}'`, "sudo -n ufw status numbered"];
@@ -452,10 +616,16 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     if (DANGEROUS_CLOSE_PORTS.has(port)) {
       throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing protected port ${port} is blocked by Linux connector policy.`);
     }
-    plannedCommands = [`sudo -n ufw delete allow ${port}/${protocol}`, "sudo -n ufw status numbered"];
-    rollbackSteps = [`sudo -n ufw allow ${port}/${protocol}`];
-  } else if (plan.actionType === ActionType.block_source_ip_temporary) {
-    const srcIp = ipParam(parameters.srcIp);
+    plannedCommands = [
+      "detect active firewall adapter (UFW, firewalld, nftables, or iptables)",
+      `inspect effective allow rules for ${port}/${protocol}`,
+      `remove only matching allow rules for ${port}/${protocol} when present`,
+      `verify ${port}/${protocol} is not effectively allowed`
+    ];
+    rollbackSteps = [`restore the removed ${port}/${protocol} allow rule through the detected adapter after explicit review`];
+    validationWarnings.push("Idempotent execution: if no matching effective allow rule exists, return verified_no_change after connector inspection.");
+  } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
+    const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
     const durationMinutes = Number(parameters.durationMinutes ?? 30);
     if (isPrivateOrLocalIp(srcIp)) {
       throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Blocking private, local, or management IPs is blocked by Linux connector policy.");
@@ -470,11 +640,28 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     validationWarnings.push("Exact deny rule number will be discovered at execution time. No guessed deletion is allowed.");
   } else if (plan.actionType === ActionType.change_ssh_port) {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Changing SSH port has an execution preview but is not enabled in this connector.");
+  } else if (plan.actionType === ActionType.linux_daily_check) {
+    plannedCommands = ["controlled Linux daily-check bundle (read-only)"];
+    rollbackSteps = [];
   } else if (plan.actionType === ActionType.linux_check_service_status) {
     const service = serviceParam(parameters.serviceName ?? parameters.service);
     affectedServices.push(service);
-    plannedCommands = [`systemctl is-active ${service}`, `systemctl status ${service} --no-pager -l`];
+    plannedCommands = [
+      `systemctl show ${service} --no-pager --property=Id,LoadState,ActiveState,SubState,UnitFileState,Description,MainPID,ExecMainStatus`,
+      `systemctl is-active ${service}`,
+      `systemctl is-enabled ${service}`,
+      `service ${service} status`,
+      `pgrep -a ${service}`
+    ];
     validationWarnings.push("Read-only service status check. No service restart or config change is planned.");
+  } else if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
+    const username = usernameParam(parameters.username);
+    affectedServices.push("local-accounts");
+    if (plan.actionType === ActionType.linux_remove_user_from_sudo) { plannedCommands = [`sudo -n gpasswd -d ${username} sudo || sudo -n deluser ${username} sudo`, `groups ${username} || id ${username}`]; rollbackSteps = [`sudo -n usermod -aG sudo ${username}`]; }
+    if (plan.actionType === ActionType.linux_add_user_to_sudo) { plannedCommands = [`sudo -n usermod -aG sudo ${username}`, `groups ${username} || id ${username}`]; rollbackSteps = [`sudo -n gpasswd -d ${username} sudo || sudo -n deluser ${username} sudo`]; }
+    if (plan.actionType === ActionType.linux_check_user_groups) { plannedCommands = [`id ${username}; groups ${username}`]; rollbackSteps = []; }
+    if (plan.actionType === ActionType.linux_lock_user) { plannedCommands = [`sudo -n usermod -L ${username}`, `passwd -S ${username} || true`]; rollbackSteps = [`sudo -n usermod -U ${username}`]; }
+    if (plan.actionType === ActionType.linux_unlock_user) { plannedCommands = [`sudo -n usermod -U ${username}`, `passwd -S ${username} || true`]; rollbackSteps = [`sudo -n usermod -L ${username}`]; }
   } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
     const read = linuxReadCommand(plan.actionType);
     if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);
@@ -532,7 +719,30 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       return result;
     };
 
-    if (plan.actionType === ActionType.open_port) {
+    if (plan.actionType === ActionType.custom_vendor_action) {
+      const customPlan = customPlanFromParameters(plan.parametersJson);
+      if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
+      for (const [index, command] of customPlan.orderedCommands.entries()) {
+        await pushCommand(`custom step ${index + 1}`, command);
+      }
+      for (const [index, command] of customPlan.verificationCommands.entries()) {
+        await pushCommand(`custom verification ${index + 1}`, command);
+      }
+      rollbackJson.customConnectorPlan = true;
+      rollbackJson.steps = customPlan.rollbackGuidance;
+      rollbackJson.verification = { ok: true, summary: "Custom Linux command sequence and verification commands completed." };
+    } else if (plan.actionType === ActionType.linux_daily_check) {
+      const daily = [
+        "printf '===SYSTEM===\\n'; uptime; free -m; swapon --show 2>/dev/null || true; df -h; df -i",
+        "printf '===SERVICES===\\n'; systemctl --failed --no-pager 2>/dev/null || true; systemctl is-active ssh sshd nginx apache2 httpd docker fail2ban 2>/dev/null || true",
+        "printf '===NETWORK===\\n'; ip -brief address; ip route; ss -lntup 2>/dev/null || ss -lntp 2>/dev/null || true",
+        `${sudo}sh -c \"printf '===FIREWALL===\\n'; ufw status verbose 2>/dev/null || nft list ruleset 2>/dev/null || iptables -S 2>/dev/null || true\"`,
+        `${sudo}sh -c \"printf '===LOGS===\\n'; journalctl -p err..alert --since '24 hours ago' -n 150 --no-pager 2>/dev/null || true; journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null | grep -Ei 'failed|invalid user|authentication failure' | tail -n 100 || true\"`,
+        "printf '===UPDATES===\\n'; (apt list --upgradable 2>/dev/null || dnf check-update 2>/dev/null || yum check-update 2>/dev/null || true) | head -n 100"
+      ];
+      for (const command of daily) await pushCommand("linux daily check", command);
+      rollbackJson.readOnly = true;
+    } else if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
       const port = portParam(parameters.port);
       const template = `ufw allow ${port}/${protocol}`;
       await pushCommand(template, `${sudo}ufw allow ${port}/${protocol} comment 'firewall-log-analyzer action ${plan.id}'`);
@@ -547,14 +757,64 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       if (port === sshPort) {
         throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing current SSH port ${port} is blocked.`);
       }
-      await pushCommand(`ufw delete allow ${port}/${protocol}`, `${sudo}ufw delete allow ${port}/${protocol}`);
-      if (parameters.deny === true) {
-        await pushCommand(`ufw deny ${port}/${protocol}`, `${sudo}ufw deny ${port}/${protocol} comment 'firewall-log-analyzer action ${plan.id}'`);
+      const detection = await pushCommand(
+        "firewall adapter detection",
+        `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then echo ufw; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then echo firewalld; elif command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then echo nftables; elif command -v iptables >/dev/null 2>&1; then echo iptables; else echo none; fi'`
+      );
+      const adapter = detection.stdout.trim().split(/\r?\n/).at(-1)?.trim();
+      let changed = false;
+
+      if (adapter === "ufw") {
+        const before = await pushCommand("ufw status before close", `${sudo}ufw status numbered`);
+        const rules = parseUfwAllowRuleNumbers(before.stdout, port, protocol);
+        for (const rule of rules) {
+          await pushCommand(`ufw delete allow rule ${rule}`, `${sudo}ufw --force delete ${rule}`);
+          changed = true;
+        }
+        const after = await pushCommand("ufw effective-state verification", `${sudo}ufw status numbered`);
+        if (parseUfwAllowRuleNumbers(after.stdout, port, protocol).length > 0) throw new ConnectorError("POSTCHECK_FAILED", `UFW still allows ${port}/${protocol} after execution.`);
+      } else if (adapter === "firewalld") {
+        const runtimeBefore = await pushCommand("firewalld runtime ports before close", `${sudo}firewall-cmd --list-ports`);
+        const permanentBefore = await pushCommand("firewalld permanent ports before close", `${sudo}firewall-cmd --permanent --list-ports`);
+        if (firewalldHasPort(runtimeBefore.stdout, port, protocol)) { await pushCommand(`firewalld remove runtime ${port}/${protocol}`, `${sudo}firewall-cmd --remove-port=${port}/${protocol}`); changed = true; }
+        if (firewalldHasPort(permanentBefore.stdout, port, protocol)) { await pushCommand(`firewalld remove permanent ${port}/${protocol}`, `${sudo}firewall-cmd --permanent --remove-port=${port}/${protocol}`); changed = true; }
+        const runtimeAfter = await pushCommand("firewalld runtime verification", `${sudo}firewall-cmd --list-ports`);
+        const permanentAfter = await pushCommand("firewalld permanent verification", `${sudo}firewall-cmd --permanent --list-ports`);
+        if (firewalldHasPort(runtimeAfter.stdout, port, protocol) || firewalldHasPort(permanentAfter.stdout, port, protocol)) throw new ConnectorError("POSTCHECK_FAILED", `firewalld still allows ${port}/${protocol} after execution.`);
+      } else if (adapter === "nftables") {
+        const before = await pushCommand("nftables ruleset before close", `${sudo}nft -a list ruleset`);
+        const rules = parseNftAllowRules(before.stdout, port, protocol);
+        for (const rule of rules) {
+          await pushCommand(`nftables delete handle ${rule.handle}`, `${sudo}nft delete rule ${rule.family} ${rule.table} ${rule.chain} handle ${rule.handle}`);
+          changed = true;
+        }
+        const after = await pushCommand("nftables effective-state verification", `${sudo}nft -a list ruleset`);
+        if (parseNftAllowRules(after.stdout, port, protocol).length > 0) throw new ConnectorError("POSTCHECK_FAILED", `nftables still allows ${port}/${protocol} after execution.`);
+      } else if (adapter === "iptables") {
+        const before = await pushCommand("iptables INPUT rules before close", `${sudo}iptables -L INPUT -n --line-numbers`);
+        const rules = parseIptablesAllowRuleNumbers(before.stdout, port, protocol);
+        for (const rule of rules) {
+          await pushCommand(`iptables delete INPUT rule ${rule}`, `${sudo}iptables -D INPUT ${rule}`);
+          changed = true;
+        }
+        const after = await pushCommand("iptables effective-state verification", `${sudo}iptables -L INPUT -n --line-numbers`);
+        if (parseIptablesAllowRuleNumbers(after.stdout, port, protocol).length > 0) throw new ConnectorError("POSTCHECK_FAILED", `iptables still allows ${port}/${protocol} after execution.`);
+      } else {
+        throw new ConnectorError("FIREWALL_ADAPTER_NOT_FOUND", "No supported active Linux firewall adapter was detected.");
       }
-      await pushCommand("ufw status numbered", `${sudo}ufw status numbered`);
-      rollbackJson.steps = [`${sudo}ufw allow ${port}/${protocol}`];
-    } else if (plan.actionType === ActionType.block_source_ip_temporary) {
-      const srcIp = ipParam(parameters.srcIp);
+
+      const outcome = changed ? "completed" : "verified_no_change";
+      warnings.push(outcome.toUpperCase());
+      rollbackJson.firewallAdapter = adapter;
+      rollbackJson.outcome = outcome;
+      rollbackJson.effectiveState = "closed";
+      rollbackJson.port = port;
+      rollbackJson.protocol = protocol;
+      rollbackJson.connectorInvoked = true;
+      rollbackJson.steps = changed ? [`Restore an allow rule for ${port}/${protocol} through the detected ${adapter} adapter after explicit review.`] : [];
+      await audit?.(changed ? "effective_state_verified" : "already_compliant", changed ? "Firewall effective state was verified after removing matching allow rules." : "Firewall effective state was inspected and was already compliant.", { adapter, port, protocol, outcome, connectorInvoked: true });
+    } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
+      const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
       const durationMinutes = Number(parameters.durationMinutes ?? 30);
       if (isPrivateOrLocalIp(srcIp)) {
         throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Blocking private, local, or management IPs is blocked by Linux connector policy.");
@@ -589,12 +849,21 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.steps = [`${sudo}ufw deny from ${srcIp}`];
     } else if (plan.actionType === ActionType.linux_check_service_status) {
       const service = serviceParam(parameters.serviceName ?? parameters.service);
-      const active = await exec(client, `systemctl is-active ${service}`);
-      commands.push({ template: `systemctl is-active ${service}`, stdout: active.stdout, stderr: active.stderr, exitCode: active.exitCode });
-      const status = await exec(client, `systemctl status ${service} --no-pager -l`);
-      commands.push({ template: `systemctl status ${service} --no-pager -l`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
+      const status = await exec(client, buildLinuxServiceStatusCommand(service));
+      const parsed = parseLinuxServiceStatus(service, status.stdout, status.stderr);
+      commands.push({ template: `service status ${service}`, stdout: status.stdout.slice(0, 4000), stderr: status.stderr.slice(0, 4000), exitCode: status.exitCode });
       rollbackJson.readOnly = true;
-      warnings.push(active.exitCode === 0 ? "SERVICE_ACTIVE" : "SERVICE_NOT_ACTIVE");
+      rollbackJson.serviceStatus = parsed;
+      warnings.push(`SERVICE_STATE_${parsed.state.toUpperCase()}`);
+      if (parsed.state === "failed" || parsed.state === "unknown") warnings.push("SERVICE_STATUS_WARNING");
+    } else if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
+      const username = usernameParam(parameters.username);
+      if (plan.actionType === ActionType.linux_remove_user_from_sudo) { await pushCommand("remove user from sudo", `${sudo}gpasswd -d ${username} sudo || ${sudo}deluser ${username} sudo`); rollbackJson.steps = [`${sudo}usermod -aG sudo ${username}`]; }
+      if (plan.actionType === ActionType.linux_add_user_to_sudo) { await pushCommand("add user to sudo", `${sudo}usermod -aG sudo ${username}`); rollbackJson.steps = [`${sudo}gpasswd -d ${username} sudo || ${sudo}deluser ${username} sudo`]; }
+      if (plan.actionType === ActionType.linux_check_user_groups) rollbackJson.readOnly = true;
+      if (plan.actionType === ActionType.linux_lock_user) { await pushCommand("lock Linux user", `${sudo}usermod -L ${username}`); rollbackJson.steps = [`${sudo}usermod -U ${username}`]; }
+      if (plan.actionType === ActionType.linux_unlock_user) { await pushCommand("unlock Linux user", `${sudo}usermod -U ${username}`); rollbackJson.steps = [`${sudo}usermod -L ${username}`]; }
+      await pushCommand("verify Linux user groups", `id ${username}; groups ${username}`);
     } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
       const read = linuxReadCommand(plan.actionType, sudo);
       if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);
@@ -619,11 +888,7 @@ export const linuxSshConnector: DeviceConnector = {
   name: "linux_edge",
   supportedActions: SUPPORTED_ACTIONS,
   supports(device) {
-    return Boolean(device && device.protocol === DeviceProtocol.ssh && (
-      device.type === DeviceType.linux_edge ||
-      String(device.vendor ?? "").toLowerCase().includes("ubuntu") ||
-      String(device.vendor ?? "").toLowerCase().includes("linux")
-    ));
+    return isLinuxSshCapable(device);
   },
   async testConnection(device) {
     try {
@@ -634,7 +899,7 @@ export const linuxSshConnector: DeviceConnector = {
         connected: false,
         deviceId: device.id,
         host: device.host,
-        port: device.managementPort,
+        port: resolveLinuxConnectionPort(device),
         credentialResolved: false,
         stages: [
           { name: "resolve_device", status: "ok" },

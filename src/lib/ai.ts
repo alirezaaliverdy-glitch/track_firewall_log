@@ -1,6 +1,7 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 
 export type AiRole = "user" | "assistant" | "system" | "tool";
+export type AiIntentModeOverride = "Auto" | "Chat" | "Action";
 
 export type AiMessage = {
   id: string;
@@ -38,6 +39,9 @@ export type AiActionIntent = {
 
 export type AiChatResponse = {
   sessionId: string;
+  answer?: string;
+  confidence?: number;
+  requiresClarification?: boolean;
   message: AiMessage | null;
   assistantMessage: AiMessage | null;
   actionIntent: AiActionIntent | null;
@@ -45,6 +49,44 @@ export type AiChatResponse = {
   actionDebug: AiActionDebug | null;
   providerStatus: AiProviderStatus | null;
   structured: StructuredAiResponse | null;
+  evidenceMetadata: EvidencePackMetadata | null;
+  shouldCreateActionPlan: boolean;
+  executionSupport: string;
+  implementationState: string;
+  mappedTemplate: string | null;
+  missingFields: string[];
+  nextStepFa: string;
+  warnings: string[];
+  mode: "conversation" | "device_question" | "action_request" | string;
+  blueprintId: string | null;
+  initialValues: Record<string, unknown> | null;
+  actionSessionId: string | null;
+  actionSession: Record<string, unknown> | null;
+  guidedActionUrl: string | null;
+  vendor: string | null;
+  connectorType: string | null;
+  deviceId: string | null;
+  selectedDeviceName: string | null;
+  actionContract: AiActionContract;
+};
+
+export type AiActionContract = {
+  canCreateActionPlan: boolean;
+  manualOnly: boolean;
+  executable: boolean;
+  executionSupport: string;
+  implementationState: string;
+  executionMode: string;
+  lifecycle: { actionPlanId: string; status: string; planRevision: number; planState: string } | null;
+};
+
+export type EvidencePackMetadata = {
+  contextTruncated: boolean;
+  rawLogsIncluded: boolean;
+  includedEventsCount: number;
+  includedFindingsCount: number;
+  includedIncidentsCount: number;
+  includedActionPlansCount: number;
 };
 
 export type AiActionDebug = {
@@ -69,11 +111,19 @@ export type CompleteActionRequestResponse = {
 
 export type StructuredAiIntent = {
   intentType: string;
+  vendor: string;
   riskLevel: string;
   targetDeviceHint: string | null;
   parameters: Record<string, unknown>;
   missingFields: string[];
   clarificationQuestions: string[];
+  executionSupport: string;
+  destructive: boolean;
+  requiresExplicitReview: boolean;
+  expectedImpact: string;
+  suggestedPrechecks: string[];
+  suggestedVerification: string[];
+  suggestedRollback: string[];
   explanation: string;
 };
 
@@ -91,6 +141,12 @@ export type AiProviderStatus = {
   keyConfigured: boolean;
   baseUrlConfigured: boolean;
   timeoutMs: number;
+  appProfile: string;
+  actionExecutionMode: string;
+  actionCreationPolicy: string;
+  executionPolicy: string;
+  catalogActionCount: number;
+  customActionFallbackSupported: boolean;
   maxContextEvents: number;
   maxContextIncidents: number;
   executionAllowed: boolean;
@@ -125,6 +181,10 @@ export type HardeningRecommendation = {
   actionType: string | null;
   parametersJson: Record<string, unknown>;
   executable: boolean;
+  createActionSupported: boolean;
+  actionHint: string | null;
+  impact: string;
+  recommendedFix: string;
   status: string;
   actionPlanId: string | null;
   device: { id: string; name: string; vendor: string; type: string } | null;
@@ -196,6 +256,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   try {
     response = await fetch(url, {
+      credentials: "include",
       headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
       ...init,
     });
@@ -256,6 +317,10 @@ function normalizeHardeningRecommendation(value: unknown): HardeningRecommendati
     actionType: typeof source.actionType === "string" ? source.actionType : null,
     parametersJson: normalizeObject(source.parametersJson),
     executable: Boolean(source.executable),
+    createActionSupported: Boolean(source.createActionSupported ?? source.executable),
+    actionHint: typeof source.actionHint === "string" ? source.actionHint : (typeof source.catalogActionId === "string" ? source.catalogActionId : null),
+    impact: String(source.impact ?? source.reason ?? ""),
+    recommendedFix: String(source.recommendedFix ?? source.recommendation ?? ""),
     status: String(source.status ?? "proposed"),
     actionPlanId: typeof source.actionPlanId === "string" ? source.actionPlanId : null,
     device: source.device ? normalizeObject(source.device) as HardeningRecommendation["device"] : null,
@@ -321,11 +386,19 @@ function normalizeStructuredIntent(value: unknown): StructuredAiIntent | null {
   if (Object.keys(source).length === 0) return null;
   return {
     intentType: String(source.intentType ?? "unknown"),
+    vendor: String(source.vendor ?? "unknown"),
     riskLevel: String(source.riskLevel ?? "medium"),
     targetDeviceHint: typeof source.targetDeviceHint === "string" ? source.targetDeviceHint : null,
     parameters: normalizeObject(source.parameters),
     missingFields: normalizeArray<unknown>(source.missingFields).map(String),
     clarificationQuestions: normalizeArray<unknown>(source.clarificationQuestions).map(String),
+    executionSupport: String(source.executionSupport ?? "manual_or_not_implemented"),
+    destructive: Boolean(source.destructive),
+    requiresExplicitReview: Boolean(source.requiresExplicitReview),
+    expectedImpact: String(source.expectedImpact ?? ""),
+    suggestedPrechecks: normalizeArray<unknown>(source.suggestedPrechecks).map(String),
+    suggestedVerification: normalizeArray<unknown>(source.suggestedVerification).map(String),
+    suggestedRollback: normalizeArray<unknown>(source.suggestedRollback).map(String),
     explanation: String(source.explanation ?? ""),
   };
 }
@@ -364,6 +437,12 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
     keyConfigured: Boolean(source.keyConfigured),
     baseUrlConfigured: Boolean(source.baseUrlConfigured),
     timeoutMs: safeNumber(source.timeoutMs),
+    appProfile: String(source.appProfile ?? "unknown"),
+    actionExecutionMode: String(source.actionExecutionMode ?? "unknown"),
+    actionCreationPolicy: String(source.actionCreationPolicy ?? "permissive"),
+    executionPolicy: String(source.executionPolicy ?? "controlled"),
+    catalogActionCount: safeNumber(source.catalogActionCount),
+    customActionFallbackSupported: Boolean(source.customActionFallbackSupported),
     maxContextEvents: safeNumber(source.maxContextEvents),
     maxContextIncidents: safeNumber(source.maxContextIncidents),
     executionAllowed: Boolean(source.executionAllowed),
@@ -371,21 +450,77 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
   };
 }
 
-export async function sendAiMessage(sessionId: string | null | undefined, message: string) {
+export async function sendAiMessage(sessionId: string | null | undefined, message: string, deviceId?: string, selectedContext?: { selectedVendor?: string; selectedConnectorType?: string | null; selectedDeviceName?: string; intentModeOverride?: AiIntentModeOverride }) {
   const payload = await requestJson<unknown>("/ai/chat", {
     method: "POST",
-    body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), message }),
+    body: JSON.stringify({ ...(sessionId ? { sessionId } : {}), ...(deviceId ? { deviceId, selectedDeviceId: deviceId } : {}), ...(selectedContext ?? {}), message }),
   });
   const source = normalizeObject(payload);
+  const evidence = normalizeObject(source.evidenceMetadata);
+  const contractSource = normalizeObject(source.actionContract);
+  const lifecycleSource = normalizeObject(contractSource.lifecycle);
+  const actionContract: AiActionContract = {
+    canCreateActionPlan: Boolean(contractSource.canCreateActionPlan ?? source.shouldCreateActionPlan),
+    manualOnly: Boolean(contractSource.manualOnly ?? String(source.executionSupport ?? "manual") !== "connector"),
+    executable: Boolean(contractSource.executable),
+    executionSupport: String(contractSource.executionSupport ?? source.executionSupport ?? "manual"),
+    implementationState: String(contractSource.implementationState ?? source.implementationState ?? "manualOnly"),
+    executionMode: String(contractSource.executionMode ?? "unknown"),
+    lifecycle: Object.keys(lifecycleSource).length > 0 ? {
+      actionPlanId: String(lifecycleSource.actionPlanId ?? ""),
+      status: String(lifecycleSource.status ?? "proposed"),
+      planRevision: safeNumber(lifecycleSource.planRevision) || 1,
+      planState: String(lifecycleSource.planState ?? "draft"),
+    } : null,
+  };
+  const assistantRecord = source.assistantMessageRecord ?? (typeof source.assistantMessage === "object" ? source.assistantMessage : null);
+  const assistantText = typeof source.assistantMessage === "string" ? source.assistantMessage : "";
+  const assistantMessage = assistantRecord
+    ? normalizeAiMessage({
+        ...normalizeObject(assistantRecord),
+        content: assistantText || String(normalizeObject(assistantRecord).content ?? ""),
+      })
+    : assistantText
+      ? normalizeAiMessage({ id: `assistant-${Date.now()}`, sessionId: String(source.sessionId ?? sessionId ?? ""), role: "assistant", content: assistantText, structuredJson: {}, createdAt: new Date().toISOString() })
+      : null;
   return {
     sessionId: String(source.sessionId ?? sessionId ?? ""),
+    answer: typeof source.answer === "string" ? source.answer : undefined,
+    confidence: source.confidence === undefined ? undefined : safeNumber(source.confidence),
+    requiresClarification: source.requiresClarification === undefined ? undefined : Boolean(source.requiresClarification),
     message: source.message ? normalizeAiMessage(source.message) : null,
-    assistantMessage: source.assistantMessage ? normalizeAiMessage(source.assistantMessage) : null,
+    assistantMessage,
     actionIntent: source.actionIntent ? normalizeAiIntent(source.actionIntent) : null,
     actionPlan: source.actionPlan ? normalizeObject(source.actionPlan) as AiChatResponse["actionPlan"] : null,
     actionDebug: source.actionDebug ? normalizeActionDebug(source.actionDebug) : null,
     providerStatus: source.providerStatus ? normalizeProviderStatus(source.providerStatus) : null,
     structured: source.structured ? normalizeStructured(source.structured) : null,
+    evidenceMetadata: source.evidenceMetadata ? {
+      contextTruncated: Boolean(evidence.contextTruncated),
+      rawLogsIncluded: Boolean(evidence.rawLogsIncluded),
+      includedEventsCount: safeNumber(evidence.includedEventsCount),
+      includedFindingsCount: safeNumber(evidence.includedFindingsCount),
+      includedIncidentsCount: safeNumber(evidence.includedIncidentsCount),
+      includedActionPlansCount: safeNumber(evidence.includedActionPlansCount),
+    } : null,
+    shouldCreateActionPlan: actionContract.canCreateActionPlan,
+    executionSupport: actionContract.executionSupport,
+    implementationState: actionContract.implementationState,
+    mappedTemplate: typeof source.mappedTemplate === "string" ? source.mappedTemplate : null,
+    missingFields: normalizeArray<unknown>(source.missingFields).map(String),
+    nextStepFa: String(source.nextStepFa ?? ""),
+    warnings: normalizeArray<unknown>(source.warnings).map(String),
+    mode: String(source.mode ?? "manual_or_not_supported"),
+    blueprintId: typeof source.blueprintId === "string" ? source.blueprintId : null,
+    initialValues: source.initialValues ? normalizeObject(source.initialValues) : null,
+    actionSessionId: typeof source.actionSessionId === "string" ? source.actionSessionId : null,
+    actionSession: source.actionSession ? normalizeObject(source.actionSession) : null,
+    guidedActionUrl: typeof source.guidedActionUrl === "string" ? source.guidedActionUrl : null,
+    vendor: typeof source.vendor === "string" ? source.vendor : null,
+    connectorType: typeof source.connectorType === "string" ? source.connectorType : null,
+    deviceId: typeof source.deviceId === "string" ? source.deviceId : null,
+    selectedDeviceName: typeof source.selectedDeviceName === "string" ? source.selectedDeviceName : null,
+    actionContract,
   } satisfies AiChatResponse;
 }
 

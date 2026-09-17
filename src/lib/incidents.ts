@@ -83,6 +83,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   try {
     response = await fetch(url, {
+      credentials: "include",
       headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
       ...init,
     });

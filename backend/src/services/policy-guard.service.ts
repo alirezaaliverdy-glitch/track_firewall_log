@@ -8,6 +8,9 @@ import { getActionCatalogEntry, validateCatalogParameters } from "../actions/act
 import { EXPECTED_FORMATS, validateCanonicalFieldShapes, validationError, type StructuredValidationError } from "../actions/action-validators.js";
 import { normalizeIntent } from "../actions/intent-normalizer.js";
 import { resolveTrustedManagementSource } from "./action-preflight.service.js";
+import { env } from "../config/env.js";
+import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
+import { customPlanFromParameters, validateCustomCommandPlan } from "../ai/custom-action-plan.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
@@ -53,6 +56,10 @@ type ValidationResult = {
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isActionPlanControlSource(value: unknown) {
+  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan"].includes(value);
 }
 
 function numberParam(parameters: Record<string, unknown>, key: string) {
@@ -151,7 +158,7 @@ async function credentialExists(device: Device | null) {
   return false;
 }
 
-function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge") {
+function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge" | "cisco") {
   if (!device) return false;
   const deviceVendor = String(device.vendor ?? "").toLowerCase();
   if (vendor === "mikrotik") {
@@ -159,6 +166,9 @@ function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate"
   }
   if (vendor === "fortigate") {
     return device.protocol === "ssh" && (device.type === "fortigate" || deviceVendor.includes("forti"));
+  }
+  if (vendor === "cisco") {
+    return device.protocol === "ssh" && deviceVendor.includes("cisco");
   }
   return device.protocol === "ssh" && (device.type === "linux_edge" || deviceVendor.includes("linux"));
 }
@@ -182,16 +192,20 @@ function inferFieldError(message: string, parameters: Record<string, unknown>, a
 }
 
 function finish(input: Omit<ValidationResult, "valid" | "missingFields" | "policyGuardError" | "exactReason" | "fieldErrors"> & { errors: string[]; fieldErrors?: StructuredValidationError[]; parameters?: Record<string, unknown>; actionType?: ActionType }): ValidationResult {
-  const inferred = input.errors.map((message) => inferFieldError(message, input.parameters ?? {}, input.actionType ?? ActionType.create_egress_policy));
+  const errors = env.actionAllowLabUnrestrictedManagement
+    ? input.errors.filter((message) => !/blocked by policy|protected port|explicitOverride|managementOverride|break.?glass|backup.*required|rollback.*required/i.test(message))
+    : input.errors;
+  const inferred = errors.map((message) => inferFieldError(message, input.parameters ?? {}, input.actionType ?? ActionType.create_egress_policy));
   const fieldErrors = [...(input.fieldErrors ?? []), ...inferred].filter((issue, index, all) => all.findIndex((candidate) => candidate.field === issue.field && candidate.message === issue.message) === index);
   const { parameters: _parameters, actionType: _actionType, ...result } = input;
   return {
     ...result,
-    valid: input.errors.length === 0,
+    errors,
+    valid: errors.length === 0,
     fieldErrors,
-    missingFields: Array.from(new Set([...missingFieldsFromErrors(input.errors), ...fieldErrors.filter((issue) => issue.currentValue === null || issue.currentValue === "").map((issue) => issue.field)])),
-    policyGuardError: input.errors.length > 0 ? input.errors.join(" ") : null,
-    exactReason: exactReasonFrom(input.errors)
+    missingFields: Array.from(new Set([...missingFieldsFromErrors(errors), ...fieldErrors.filter((issue) => issue.currentValue === null || issue.currentValue === "").map((issue) => issue.field)])),
+    policyGuardError: errors.length > 0 ? errors.join(" ") : null,
+    exactReason: exactReasonFrom(errors)
   };
 }
 
@@ -201,7 +215,13 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   const originalParameters = asObject(plan.parametersJson);
   const canonical = normalizeIntent({ ...originalParameters, actionType: plan.actionType });
   delete canonical.actionType;
-  const parameters = { ...originalParameters, ...canonical };
+  if (isActionPlanControlSource(originalParameters.source) && canonical.sourceIp === originalParameters.source) {
+    delete canonical.sourceIp;
+    delete canonical.srcInterface;
+  }
+  const parameters = plan.actionType === ActionType.fortigate_guided_vpn_setup
+    ? normalizeFortiGateGuidedVpnParameters({ ...originalParameters, ...canonical })
+    : { ...originalParameters, ...canonical };
   const normalizedPlan = { ...plan, parametersJson: JSON.parse(JSON.stringify(parameters)) } as ActionPlan;
   const catalog = getActionCatalogEntry(plan.actionType);
   const catalogValidation = catalog ? validateCatalogParameters(catalog, parameters) : { valid: true, errors: [], fieldErrors: [] };
@@ -239,6 +259,59 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   if (!(plan.actionType in ActionType)) errors.push("actionType is not supported.");
   if (containsShellShape(parameters)) errors.push("Free-form shell, command, script, or exec parameters are not allowed.");
 
+  if (plan.actionType === ActionType.custom_vendor_action) {
+    const custom = validateCustomCommandPlan({ plan: customPlanFromParameters(parameters), device, actionType: plan.actionType });
+    errors.push(...custom.errors);
+    warnings.push(...custom.warnings);
+    const normalizedParameters = custom.normalizedPlan
+      ? {
+          ...parameters,
+          customCommandPlan: custom.normalizedPlan,
+          orderedCommands: custom.normalizedPlan.orderedCommands,
+          typedParameters: custom.normalizedPlan.typedParameters,
+          verificationCommands: custom.normalizedPlan.verificationCommands,
+          rollbackGuidance: custom.normalizedPlan.rollbackGuidance,
+          connectorType: custom.normalizedPlan.connectorType,
+          executionTemplateRef: custom.normalizedPlan.executionTemplateRef,
+          executionSupport: "connector",
+          implementationState: "implemented",
+          supportState: "verified",
+          executable: custom.valid && custom.missingFields.length === 0,
+          metadata: {
+            ...asObject(parameters.metadata),
+            source: "ai_custom_connector_plan",
+            vendor: custom.normalizedPlan.vendor,
+            platform: custom.normalizedPlan.platform,
+            actionType: ActionType.custom_vendor_action,
+            implementationState: "implemented",
+            executionSupport: "connector",
+            supportState: "verified",
+            supportReasonKey: "support.reason.customConnectorValidated",
+            executable: custom.valid && custom.missingFields.length === 0,
+            connectorType: custom.normalizedPlan.connectorType,
+            executionTemplateRef: custom.normalizedPlan.executionTemplateRef,
+            customCommandPlan: custom.normalizedPlan,
+            normalizedParams: custom.normalizedPlan.typedParameters,
+            requiredParamsSatisfied: custom.missingFields.length === 0,
+            missingFields: custom.missingFields,
+            rawCommandExecution: false,
+          }
+        }
+      : parameters;
+    return finish({
+      requiresApproval: true,
+      riskLevel: custom.normalizedPlan?.riskLevel ?? plan.riskLevel,
+      errors,
+      fieldErrors,
+      parameters: normalizedParameters,
+      actionType: plan.actionType,
+      warnings,
+      normalizedParameters,
+      rollbackJson: custom.rollbackJson,
+      device
+    });
+  }
+
   if (isMikroTikAction(plan.actionType)) {
     if (!device) {
       errors.push(`${plan.actionType} requires a valid registered MikroTik device.`);
@@ -254,7 +327,6 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     const mikrotikValidation = expert?.validation ?? validateMikroTikAction(normalizedPlan);
     errors.push(...(expert?.errors ?? mikrotikValidation.errors));
     warnings.push(...(expert?.warnings ?? mikrotikValidation.warnings));
-    if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
     if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
     if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
 
@@ -269,8 +341,8 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
       normalizedParameters: mikrotikValidation.normalizedParameters,
       rollbackJson: {
         ...mikrotikValidation.rollbackJson,
-        backupName: expert?.backupName,
-        requiresBackup: expert?.requiresBackup,
+        backupEnabled: false,
+        requiresBackup: false,
         requiresBreakGlass: expert?.requiresBreakGlass,
         lockoutSensitive: expert?.lockoutSensitive
       },
@@ -286,14 +358,28 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     } else if (device.protocol !== "ssh") {
       errors.push(`${plan.actionType} requires FortiGate SSH protocol.`);
     }
-    if (device && !await credentialExists(device)) errors.push(`${plan.actionType} requires an existing credential for the target device.`);
+    if (device && !await credentialExists(device)) {
+      errors.push(plan.actionType === ActionType.fortigate_guided_vpn_setup
+        ? "Cannot execute: FortiGate SSH connector is not configured for this device."
+        : `${plan.actionType} requires an existing credential for the target device.`);
+    }
     if (device && !connectorExists(device, "fortigate")) errors.push(`${plan.actionType} requires a registered FortiGate connector.`);
 
+    if (plan.actionType === ActionType.fortigate_guided_vpn_setup) {
+      const capabilities = asObject(device?.capabilities);
+      const status = asObject(capabilities.fortigateStatus);
+      const discovery = asObject(status.fortigate);
+      const discoveredInterfaces = new Set(Array.isArray(discovery.interfaces) ? discovery.interfaces.map(String) : []);
+      const vpnValidation = validateFortiGateGuidedVpnParameters(parameters, discoveredInterfaces);
+      Object.assign(parameters, vpnValidation.normalized);
+      normalizedPlan.parametersJson = JSON.parse(JSON.stringify(parameters));
+      fieldErrors.push(...vpnValidation.issues);
+      errors.push(...vpnValidation.issues.map((issue) => issue.message));
+    }
     const expert = device ? evaluateFortiGatePolicy(normalizedPlan, device) : null;
     const fortigateValidation = expert?.validation ?? validateFortiGateAction(normalizedPlan);
     errors.push(...(expert?.errors ?? fortigateValidation.errors));
     warnings.push(...(expert?.warnings ?? fortigateValidation.warnings));
-    if (expert?.requiresBackup) warnings.push(`Backup/export preflight required: ${expert.backupName}`);
     if (expert?.requiresBreakGlass) warnings.push("Break-glass confirmation is required.");
     if (expert?.lockoutWarning) warnings.push(expert.lockoutWarning);
 
@@ -308,8 +394,8 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
       normalizedParameters: fortigateValidation.normalizedParameters,
       rollbackJson: {
         ...fortigateValidation.rollbackJson,
-        backupName: expert?.backupName,
-        requiresBackup: expert?.requiresBackup,
+        backupEnabled: false,
+        requiresBackup: false,
         requiresBreakGlass: expert?.requiresBreakGlass,
         lockoutSensitive: expert?.lockoutSensitive
       },
@@ -317,6 +403,16 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     });
   }
 
+  const metadata = asObject(parameters.metadata);
+  const isCiscoCatalogAction = plan.actionType === ActionType.generic_security_action && (metadata.connectorType === "cisco-ios-xe-ssh" || metadata.vendor === "cisco" || parameters.vendor === "cisco");
+  if (isCiscoCatalogAction) {
+    if (!plan.deviceId) errors.push("Cisco catalog action requires deviceId.");
+    if (plan.deviceId && !device) errors.push("Cisco catalog action requires a valid registered device.");
+    if (device && !String(device.vendor ?? "").toLowerCase().includes("cisco")) errors.push("Cisco catalog action requires a Cisco device.");
+    if (device && device.protocol !== "ssh") errors.push("Cisco catalog action requires SSH protocol.");
+    if (device && !await credentialExists(device)) errors.push("Cisco catalog action requires an existing credential for the target device.");
+    if (device && !connectorExists(device, "cisco")) errors.push("Cisco catalog action requires the registered Cisco SSH connector.");
+  }
   if (DEVICE_REQUIRED_ACTIONS.has(plan.actionType)) {
     if (!plan.deviceId) errors.push(`${plan.actionType} requires deviceId.`);
     if (plan.deviceId && !device) errors.push(`${plan.actionType} requires a valid registered device.`);
@@ -333,6 +429,11 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
       const service = textParam(parameters, "serviceName") ?? textParam(parameters, "service");
       if (!service) errors.push("linux_check_service_status requires serviceName.");
       else if (!/^[a-zA-Z0-9_.@-]+$/.test(service)) errors.push("linux_check_service_status serviceName is invalid.");
+    }
+    if (new Set<ActionType>([ActionType.linux_remove_user_from_sudo, ActionType.linux_add_user_to_sudo, ActionType.linux_check_user_groups, ActionType.linux_lock_user, ActionType.linux_unlock_user]).has(plan.actionType)) {
+      const username = textParam(parameters, "username");
+      if (!username) errors.push(`${plan.actionType} requires username.`);
+      else if (!/^[a-z_][a-z0-9_.-]{0,31}$/i.test(username)) errors.push(`${plan.actionType} username is invalid.`);
     }
   }
 
@@ -383,7 +484,7 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     if (port && WARNING_PORTS.has(port)) warnings.push(`Port ${port} is operationally sensitive.`);
   }
 
-  if (plan.actionType === ActionType.open_port) {
+  if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
     const port = numberParam(parameters, "port");
     if (!validPort(port)) errors.push("open_port requires a valid port between 1 and 65535.");
     if (!validProtocol(parameters.protocol)) errors.push("open_port protocol must be tcp or udp.");
@@ -398,10 +499,10 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     if (fromPort && toPort && fromPort === toPort) errors.push("toPort must be different from fromPort.");
   }
 
-  if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.unblock_source_ip) {
-    const srcIp = typeof parameters.srcIp === "string" ? parameters.srcIp : undefined;
-    if (!srcIp) errors.push(`${plan.actionType} requires srcIp.`);
-    if (plan.actionType === ActionType.block_source_ip_temporary && srcIp && isPrivateOrLocalIp(srcIp)) {
+  if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip || plan.actionType === ActionType.unblock_source_ip) {
+    const srcIp = typeof parameters.srcIp === "string" ? parameters.srcIp : typeof parameters.ipAddress === "string" ? parameters.ipAddress : undefined;
+    if (!srcIp) errors.push(`${plan.actionType} requires ${plan.actionType === ActionType.linux_block_ip ? "ipAddress" : "srcIp"}.`);
+    if ((plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) && srcIp && isPrivateOrLocalIp(srcIp)) {
       errors.push("Blocking private, local, or management IPs is blocked by policy.");
     }
     if (srcIp && currentManagementIp() && srcIp === currentManagementIp() && parameters.managementOverride !== true) {
@@ -449,7 +550,7 @@ export function rollbackFor(actionType: ActionType, parameters: Record<string, u
     };
   }
 
-  if (actionType === ActionType.open_port) {
+  if (actionType === ActionType.open_port || actionType === ActionType.linux_open_port) {
     return {
       type: "close_opened_port",
       port: parameters.port,
@@ -457,10 +558,10 @@ export function rollbackFor(actionType: ActionType, parameters: Record<string, u
     };
   }
 
-  if (actionType === ActionType.block_source_ip_temporary) {
+  if (actionType === ActionType.block_source_ip_temporary || actionType === ActionType.linux_block_ip) {
     return {
       type: "remove_temporary_block",
-      srcIp: parameters.srcIp,
+      srcIp: parameters.srcIp ?? parameters.ipAddress,
       expiresAfterMinutes: parameters.durationMinutes ?? 30
     };
   }

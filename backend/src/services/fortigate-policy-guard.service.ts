@@ -1,5 +1,6 @@
 import { ActionType, AiRiskLevel, type ActionPlan, type Device } from "@prisma/client";
 import { validateFortiGateAction } from "../actions/fortigate-action-catalog.js";
+import { normalizeFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -9,19 +10,17 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function backupName(device: Device, suffix: string) {
-  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-  const safeDevice = device.name.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 32) || "fortigate";
-  return `firewall-log-analyzer-before-${safeDevice}-${stamp}-${suffix}`;
-}
-
 export function evaluateFortiGatePolicy(plan: ActionPlan, device: Device) {
-  const parameters = asObject(plan.parametersJson);
-  const validation = validateFortiGateAction(plan);
+  const parameters = plan.actionType === ActionType.fortigate_guided_vpn_setup
+    ? normalizeFortiGateGuidedVpnParameters(asObject(plan.parametersJson))
+    : asObject(plan.parametersJson);
+  const validation = validateFortiGateAction({ ...plan, parametersJson: parameters });
   const errors = [...validation.errors];
   const warnings = [...validation.warnings];
   const breakGlass = parameters.breakGlass === true;
-  const requiresBackup = validation.commandSpecs.some((spec) => spec.write) && ["high", "critical"].includes(validation.riskLevel);
+  const backupEnabled = false;
+  const wouldRequireBackup = validation.commandSpecs.some((spec) => spec.write) && ["high", "critical"].includes(validation.riskLevel);
+  const requiresBackup = false;
   const requiresBreakGlass = validation.riskLevel === AiRiskLevel.critical;
   const reason = text(parameters.reason);
   const confirmation = text(parameters.deviceNameConfirmation);
@@ -60,14 +59,18 @@ export function evaluateFortiGatePolicy(plan: ActionPlan, device: Device) {
   const interfaceParameters = [
     text(parameters.interfaceName),
     text(parameters.name && directInterfaceActions.has(plan.actionType) ? parameters.name : undefined),
+    text(parameters.wanInterface),
+    text(parameters.lanInterface),
     text(parameters.parent),
     text(parameters.parentInterface)
   ].filter(Boolean) as string[];
   const policyTargets = [
-    text(parameters.srcintf),
-    text(parameters.dstintf),
-    text(parameters.srcInterface),
-    text(parameters.dstInterface)
+    ...(plan.actionType === ActionType.fortigate_guided_vpn_setup ? [] : [
+      text(parameters.srcintf),
+      text(parameters.dstintf),
+      text(parameters.srcInterface),
+      text(parameters.dstInterface)
+    ])
   ].filter(Boolean) as string[];
 
   if (vdomMode === "enabled" && !configuredVdom) errors.push("FORTIGATE_VDOM_REQUIRED");
@@ -105,21 +108,19 @@ export function evaluateFortiGatePolicy(plan: ActionPlan, device: Device) {
   if (requiresBreakGlass && !reason) warnings.push("Critical FortiGate action requires a reason before execution.");
   if (lockoutSensitive) warnings.push("This action may affect management access or traffic path. Verify alternate access before executing.");
 
-  const backupBase = backupName(device, plan.id.slice(-6));
-  const backupCommands = requiresBackup ? ["show full-configuration", "show"] : [];
-  const preflightCommands = requiresBackup ? [
-    ...backupCommands,
-    "show firewall policy",
-    "show firewall address"
-  ] : [];
+  const backupCommands: string[] = [];
+  const preflightCommands: string[] = [];
+  if (wouldRequireBackup) warnings.push("Backup is disabled for Quick Controlled execution.");
 
   return {
     valid: errors.length === 0,
     errors,
     warnings,
     validation,
+    backupEnabled,
+    wouldRequireBackup,
     requiresBackup,
-    backupName: requiresBackup ? backupBase : undefined,
+    backupName: undefined,
     backupCommands,
     preflightCommands,
     requiresBreakGlass,

@@ -8,10 +8,18 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.pnpm-store/
 dist
+build
 dist-ssr
+coverage
 *.local
+*.db
+*.sqlite
 backend/storage/
+storage/uploads
+backend/storage/uploads
+.runtime/
 
 # Editor directories and files
 .vscode/*
@@ -27,5 +35,20 @@ backend/storage/
 backend/.env
 
 .env
+.env.*
+!.env.example
+!backend/.env.example
 
-.env.development
+# Android signing and build artifacts
+*.jks
+*.keystore
+*.apk
+*.aab
+*.idsig
+android/key.properties
+android/signing.properties
+
+.playwright-mcp/
+.playwright-mcp_*.png
+backups/
+LOCAL_MOBILE_APP_CODEX_BUNDLE/

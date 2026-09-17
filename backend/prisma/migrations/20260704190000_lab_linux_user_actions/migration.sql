@@ -1,0 +1,10 @@
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'linux_remove_user_from_sudo';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'linux_add_user_to_sudo';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'linux_check_user_groups';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'linux_lock_user';
+ALTER TYPE "ActionType" ADD VALUE IF NOT EXISTS 'linux_unlock_user';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'linux_remove_user_from_sudo';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'linux_add_user_to_sudo';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'linux_check_user_groups';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'linux_lock_user';
+ALTER TYPE "AiIntentType" ADD VALUE IF NOT EXISTS 'linux_unlock_user';

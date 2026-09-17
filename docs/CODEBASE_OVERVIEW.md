@@ -1,78 +1,90 @@
 # Codebase Overview
 
-`track_firewall_log` is a React/Vite firewall-log UI backed by a Fastify/Prisma/PostgreSQL API. The frontend uses `VITE_API_BASE_URL` (default `/firewall-api`); the backend routes themselves are mounted under `/api`.
+`track_firewall_log` is a React/Vite frontend and Fastify/Prisma/PostgreSQL backend. Frontend requests use the configured API base (normally proxied to backend `/api` routes).
 
-## 1. Frontend
+## Repository Shape
 
-- `src/App.tsx` composes the single-page workflow. `src/context/LogContext.tsx` holds uploaded/normalized logs, column mapping, local analytics, findings, selection, and search state.
-- `components/csv-uploader.tsx` uploads a file for backend analysis or runs the browser-only importer. Backend mode calls `POST /analysis/upload`, then polls `GET /analysis/jobs/:jobId` and reads `GET /analysis/jobs/:jobId/result`; it also lists `GET /analysis/jobs`.
-- Upload and analysis views (`upload/*`, `dashboard/*`, `charts/*`, `policies/*`, `findings/*`, `log-chart.tsx`, `log-table.tsx`, and `export/*`) select the firewall type, map columns, and display quality, traffic, ports, policy review, findings, charts, evidence, logs, and exports. They primarily consume `LogContext` and do not make their own API calls.
-- `components/devices/DeviceRegistryPanel.tsx` manages devices, credentials, connection tests, discovery, and capabilities. It calls `/devices`, `/devices/:id`, `/devices/:id/test-connection`, `/devices/:id/capabilities`, `/credentials`, and `/credentials/:id`.
-- `components/events/SecurityEventsPanel.tsx` filters and inspects stored events/batches, collector state, and retention. It calls `/events`, `/events/:id`, `/events/summary`, `/event-batches`, `/collectors/:deviceId/status`, `/collectors/:deviceId/run-once`, `/events/retention/status`, and `/events/retention/run`.
-- `components/incidents/IncidentsPanel.tsx` runs detections, lists incident details/evidence, and changes incident status. It calls `POST /detections/run`, `/incidents`, `/incidents/:id`, and `/incidents/:id/events`.
-- `components/ai/AiSecurityAssistantPanel.tsx` displays security context and provider state, sends chat messages, and completes missing intent fields. Its API module covers `/ai/chat`, chat sessions, `/ai/context/security-summary`, `/ai/provider/status`, `/ai/intents`, and `/ai/action-requests/:id/complete`.
-- `components/actions/ActionCenterPanel.tsx` reviews the action lifecycle, generated commands, approvals, execution results, and audit history. It calls `/actions`, `/actions/:id`, and the `validate`, `dry-run`, `approve`, `reject`, `execute`, `quick-execute`, and `audit` subroutes.
+- `src/`: frontend application, panels, contexts, API helpers, local log analysis.
+- `backend/src/routes/`: authenticated HTTP surface registered by `backend/src/app.ts`.
+- `backend/src/product-state/`: versioned feature-state, navigation, vendor, and integration contract.
+- `backend/src/assets/`: asset intelligence, imports, seeded security detection, and finding handoff.
+- `backend/src/services/`: lifecycle, AI, event, device, credential, assessment, and policy services.
+- `backend/src/commands/`: Persian catalog contract and execution-template registry.
+- `backend/src/connectors/`: planners plus Linux, MikroTik, FortiGate, and Cisco IOS-XE read-only connector foundations.
+- `backend/src/vendors/`: vendor/platform/capability registry and discovery cache services.
+- `backend/src/monitoring/linux/`: Linux health metrics, scoring, collection runs, and monitoring APIs.
+- `backend/src/daily-check/`: ten vendor profiles and grouped Daily Check engine.
+- `backend/src/telemetry/`: vendor profiles/finding rules and Linux snapshot/live collection.
+- `backend/prisma/schema.prisma`: 28 persistent models.
+- `backend/test/`: task and regression tests.
+- `docs/` and `scripts/`: project memory, generated snapshot, and integrity tooling.
 
-## 2. Backend
+## Backend Areas
 
-### Routes
+| Area | Main files | API | Current state |
+|---|---|---|---|
+| Product state | `product-state/*`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented; navigation fail-closed |
+| Auth | `services/auth.service.ts`, `routes/auth.ts` | `/api/auth/login`, `/me`, `/logout` | Implemented |
+| Devices/credentials | `services/device.service.ts`, `credential*.ts`, routes | `/api/devices/*`, `/api/credentials/*` | Implemented; credentials stay referenced/encrypted |
+| Vendor capabilities | `vendors/*`, `routes/vendors.ts`, `routes/devices.ts` | `/api/vendors/*`, `/api/devices/:id/capabilities` | Task 18.2A foundation |
+| Asset intelligence | `assets/asset-intelligence.service.ts`, `routes/assets.ts` | `/api/assets/*`, `/api/integrations/netbox/*` | Minimum platform milestone |
+| Catalog | `commands/catalog/*`, `routes/command-catalog.ts` | `/api/commands/catalog*`, `/ai-propose` | 51 entries; 22 Linux/MikroTik items implemented |
+| AI | `ai/context`, `ai/prompts`, `services/ai-*.ts` | `/api/ai/*` | Compact Evidence Pack and structured intents |
+| Resolver/templates | `catalog-action-resolver.ts`, `execution-template-registry.ts` | Internal action resolution | Validated mappings; no raw AI CLI |
+| Actions | `action-plan.service.ts`, `policy-guard.service.ts`, `dry-run.service.ts`, `routes/actions.ts` | `/api/actions/*` | Preview/confirm/execute/audit; rollback partial |
+| Connectors | `connectors/*` and vendor planners | `/api/connectors/*`, `/api/actions/:id/plan` | Linux/MikroTik/FortiGate connector-backed; Cisco IOS-XE read-only foundation |
+| Linux health | `monitoring/linux/*`, `routes/linux-health.ts` | `/api/monitoring/linux/*` | Metric/health schema and API foundation |
+| Daily Check | `daily-check/*`, `routes/daily-check.ts` | `/api/daily-check/*` | Linux/MikroTik implemented; others manual-only |
+| Telemetry/findings | `telemetry/*`, telemetry routes | `/api/devices/:id/telemetry/*`, findings APIs | Shared finding model; Linux feeds it today |
+| Security platform | `assets/asset-intelligence.service.ts`, `routes/security-platform.ts` | `/api/security/*`, `/api/integrations/wazuh/*` | Asset-linked events/findings/rules milestone |
+| Events/incidents | event/detection/incident services and routes | `/api/events/*`, `/api/detections/*`, `/api/incidents/*` | Implemented foundation; advanced correlation open |
+| Assessment | `security-assessment.service.ts`, vendor profiles | `/api/assessments/*` | Multi-vendor deterministic analysis; proposal-only fixes |
+| Audit/results | Action service and Prisma audit/approval models | `/api/actions/:id`, `/audit` | Persists connector evidence; success gated on invocation |
 
-- Upload/analysis: `/api/uploads`, `/api/jobs`, `/api/analysis/*`, and analysis lookups under `/api/uploads/:id/analysis` and `/api/analysis-runs/:id`.
-- Events/detection/incidents: `/api/events`, `/api/event-batches`, `/api/collectors`, `/api/detections/run` (plus the legacy singular alias), `/api/detection-rules`, and `/api/incidents`.
-- Inventory: `/api/devices`, `/api/credentials`, connection tests, device capabilities, and `/api/connectors/{capabilities,vendors}`.
-- AI/actions: `/api/ai/*`, `/api/actions/*`, and `/api/actions/:id/plan`.
-- Operations: `/api/health` and retention endpoints under `/api/events/retention/*`.
+Prisma domains include auth; upload/job/analysis; devices/credentials/capabilities; AI chat/intents; ActionPlan/approval/audit; assessments/recommendations/snapshots; findings; events/collectors/detections/incidents; and device audit/status.
 
-### Services and data
+## Frontend Areas
 
-- Upload and analysis: `upload.service.ts`, `worker.service.ts`, and `analysis.service.ts` store files/jobs and run the parser/normalizer/analytics pipeline in `src/analyzer/`.
-- Event pipeline: `event.service.ts`, `event-ingestion.service.ts`, `collector.service.ts`, `event-retention.service.ts`, `detection.service.ts`, `incident-builder.service.ts`, and `incident.service.ts` store/query events and build incidents.
-- Inventory: `device.service.ts`, `credential.service.ts`, and `credential-crypto.service.ts` manage devices, encrypted credentials, discovery, status, and device-level audit records.
-- AI: `ai-context.service.ts` builds bounded security context; `ai-provider.service.ts` selects the configured provider; provider adapters return structured output; `ai-intent.service.ts` combines deterministic parsing with validated structured intent; `ai-chat.service.ts` persists chat and creates an `ActionPlan` only when the intent is supported and complete. Provider status explicitly reports `executionAllowed: false`.
-- Controlled actions: `action-plan.service.ts` owns proposal, validation, dry-run, approval/rejection, execution, status, rollback metadata, and `ActionAuditLog`. `policy-guard.service.ts` rejects free-form command-shaped parameters and applies common/vendor rules. `dry-run.service.ts` combines the deterministic vendor planner with connector-specific validation. `connector-registry.service.ts` selects planners/connectors; vendor catalogs and command compilers generate allowlisted commands; SSH connectors perform discovery and approved execution.
+| Area | Main path | API/status |
+|---|---|---|
+| Shell/routing | `src/App.tsx`, `src/main.tsx`, `src/routes/appRoutes.tsx`, `components/layout/AppShell.tsx`, `lib/productState.ts` | Route mapping plus backend-generated desktop/mobile navigation |
+| Device registry | `components/devices/DeviceRegistryPanel.tsx` | Device/credential APIs; implemented |
+| Persian catalog | `components/commands/CommandCatalogPanel.tsx` | Command APIs; implemented |
+| Asset/Security platform | `features/assets/`, `features/security/` | Compact `/assets` and `/security` milestone |
+| Vendor capabilities | `features/vendors/cisco/`, `lib/vendors.ts` | `/assets/vendors`, `/assets/vendors/cisco`, `/assets/vendors/cisco/devices` |
+| Linux health | `features/monitoring/pages/LinuxMonitoringPage.tsx`, `lib/linuxMonitoring.ts` | `/monitoring/linux`, `/monitoring/linux/:deviceId` |
+| AI assistant | `components/ai/AiSecurityAssistantPanel.tsx` | AI APIs; implemented proposal flow |
+| Action center/result | `components/actions/ActionCenterPanel.tsx`, `ActionResultView.tsx` | Action APIs; implemented controlled flow |
+| Daily Check | `components/daily-check/DailyCheckPanel.tsx` | Profiles plus ActionPlan flow; vendor support varies |
+| Health | app header/helpers | `/api/health`, provider status; basic |
+| Telemetry/events | `components/telemetry`, `findings`, `events`, `incidents` | Linux live telemetry and shared event/finding review |
+| Log analysis | upload/dashboard/chart/policy components and `LogContext` | Browser/backend analysis foundation |
 
-The Prisma schema contains: `Upload`, `Job`, `AnalysisRun`; `Device`, `DeviceCredential`, `DeviceAuthProfile`, `DeviceCapability`, `DeviceStatusCheck`, and `AuditLog`; `EventSource`, `EventBatch`, `SecurityEvent`, and `EventCollectorState`; `DetectionRule`, `Incident`, and `IncidentEvent`; plus `AiChatSession`, `AiChatMessage`, `AiActionIntent`, `ActionPlan`, `ActionApproval`, and `ActionAuditLog`.
+## Non-Negotiable Boundary
 
-### Controlled action boundary
+Catalog or AI may create a reviewed plan. Execution requires stable preview inputs, explicit `intent=execute`, confirmation, PolicyGuard, registered template/connector, real invocation, persisted audit/result, and `connectorInvoked=true` before success. Protected lab mode removes repeated policy confirmations for supported Linux/MikroTik templates; it does not remove this boundary.
 
-`AiActionIntent` is descriptive, while `ActionPlan` is the executable state machine. PolicyGuard validates the selected device, credential, protocol, catalog parameters, risk, and rollback metadata. Dry-run stores exact planned commands without changing the device. Approval is persisted separately in `ActionApproval`. Execution requires a stored dry-run, acceptable validation, an approved plan (except explicitly read-only vendor actions), and an immediate PolicyGuard re-check. The selected connector then executes only its supported, compiled command set and writes connection, preflight, command, result, and rollback-availability events to `ActionAuditLog`. Rollback instructions are stored, but connector-driven automatic rollback is not implemented.
+## Task 18.1 Frontend IA Update
 
-## 3. Main workflows
+- `src/routes/appRoutes.tsx`: lightweight route registry and route matcher.
+- `src/components/layout/AppShell.tsx`: grouped sidebar, topbar, mobile bottom nav.
+- `src/design-system/`: replaceable token foundation for later Figma work.
+- `src/features/assets/`: asset overview/list/detail/sync pages, hooks, summary/table components.
+- `src/features/security/`: security overview/findings/detail/rules pages, hooks, finding table.
 
-### Log upload to incident
+The old platform panel remains available but the routed experience is now page-based.
 
-1. `POST /api/analysis/upload` stores the file and creates an `Upload` plus queued `Job`; the in-process worker parses, normalizes, and analyzes it.
-2. `analysis.service.ts` stores `AnalysisRun` and converts normalized rows into an upload `EventSource`, one `EventBatch`, and `SecurityEvent` rows.
-3. Detection is currently explicit: the UI or caller invokes `POST /api/detections/run`, optionally scoped to a batch/device/source/window.
-4. Enabled `DetectionRule`s detect port scans, SSH brute force, sensitive-port exposure, and deny/drop spikes; the suspicious-outbound rule is intentionally a placeholder. Matches are upserted into `Incident` and linked through `IncidentEvent`. The incident builder also adds its recent-event patterns.
+## Task 18.2A Code Pointers
 
-### AI chat to audited execution
+- Cisco read-only foundation: `backend/src/connectors/cisco/ios-xe/` and `backend/test/task18-2a-cisco-linux-observability.test.ts`.
+- Vendor/capability API layer: `backend/src/vendors/`, `backend/src/routes/vendors.ts`, and the existing device capability route in `backend/src/routes/devices.ts`.
+- Linux health observability: `backend/src/monitoring/linux/`, `backend/src/routes/linux-health.ts`, and migration `backend/prisma/migrations/20260712192000_task18_2a_vendor_linux_observability/`.
+- Frontend surfaces: `src/features/vendors/cisco/pages/CiscoOverviewPage.tsx`, `src/features/monitoring/pages/LinuxMonitoringPage.tsx`, `src/lib/vendors.ts`, and `src/lib/linuxMonitoring.ts`.
 
-`AI chat -> security context + provider/deterministic parser -> AiActionIntent -> missing-field completion (if needed) -> ActionPlan -> PolicyGuard validation -> deterministic dry-run -> manual approval -> connector execution -> ActionAuditLog/result`
+## Milestone 19A Code Pointers
 
-AI output cannot carry raw CLI through this path. High/critical quick execution requires `EXECUTE`, the exact device name, and (for critical actions) a reason; critical vendor actions add break-glass checks.
-
-### MikroTik dry-run and execution
-
-1. The plan is normalized to a MikroTik catalog action and resolved to a registered SSH device/credential.
-2. `policy-guard.service.ts` and `mikrotik-policy-guard.service.ts` validate exact targets, managed-object restrictions, lockout risk, risk level, backup need, and break-glass requirements. `mikrotik-action-catalog.ts`/`routeros-command-compiler.ts` compile structured parameters into exact RouterOS commands; raw commands are rejected.
-3. `mikrotik.planner.ts` plus `mikrotik-ssh.connector.ts#dryRun` produce command specs, warnings, rollback steps, and any backup/export preflight commands without connecting to change the router.
-4. After approval, execution re-runs PolicyGuard, verifies that every command belongs to the compiled allowlist, creates required backup/export artifacts, then runs commands over SSH. Critical operations require break-glass, `EXECUTE`, exact device-name confirmation, and a reason.
-5. Each connection, preflight, backup, command, success/failure, and rollback-metadata event is audited. Address-list block/update actions have extra existence/idempotency handling. The read-only firewall summary may execute from `dry_run_ready`; automatic rollback remains unavailable.
-
-## 4. Vendor status
-
-| Vendor | Dry-run support | Execution support | Main connector/planner files | Current limitations |
-|---|---|---|---|---|
-| MikroTik | Yes: broad catalog, RouterOS compiler, exact command specs, PolicyGuard, and backup/break-glass metadata. | Yes, through the SSH connector after gating; read-only summary has the documented approval exception. | `connectors/mikrotik-ssh.connector.ts`, `connectors/vendors/mikrotik.planner.ts`, `actions/mikrotik-action-catalog.ts`, `services/routeros-command-compiler.ts`, `services/mikrotik-policy-guard.service.ts` | Runtime execution is SSH-only although capability metadata also advertises API; requires registered credentials; only catalog commands are accepted; automatic rollback is not implemented. |
-| FortiGate | Yes: structured FortiOS catalog/compiler with discovery, vendor PolicyGuard, preflight, backup, and break-glass metadata. | Yes, through the FortiGate SSH connector for catalog actions. | `connectors/fortigate-ssh.connector.ts`, `connectors/vendors/fortigate.planner.ts`, `actions/fortigate-action-catalog.ts`, `services/fortigate-command-compiler.ts`, `services/fortigate-policy-guard.service.ts`, `services/fortigate-version.service.ts` | SSH and discovered structured targets are required; raw CLI and dangerous command shapes are blocked; output/rollback is metadata-driven and automatic rollback is absent. |
-| Linux Edge | Yes for UFW open/close/block/unblock and read-only service status; the planner can describe SSH-port change, but the connector marks it dry-run-only. | Yes over SSH for open/close port, temporary block, unblock, and service-status check. | `connectors/linux-ssh.connector.ts`, `connectors/vendors/linux-edge.planner.ts` | Requires UFW and suitable sudo rights; protected/current SSH ports and private/local blocking are refused; temporary unblock is not scheduled automatically; SSH-port change and automatic rollback are not executable. |
-| pfSense | Placeholder only: the planner returns an `unsupported` manual plan rather than an executable dry-run. | No. | `connectors/vendors/pfsense.planner.ts` (no device connector yet) | No configured pfSense API/SSH connector, discovery, compiler, or execution path; current output is manual guidance only. |
-
-## 5. Five small next tasks
-
-1. Trigger a batch-scoped detection run after upload analysis completes, or make the current manual step explicit in the upload UI.
-2. Add focused tests for PolicyGuard, approval/dry-run prerequisites, critical confirmations, and connector command allowlists.
-3. Reconcile advertised connector protocols with runtime support (for example, MikroTik API and Linux agent are listed but current execution connectors require SSH).
-4. Add a small pfSense capability/discovery spike and keep execution disabled until a structured compiler and PolicyGuard exist.
-5. Clarify rollback status in the API/UI and correct stale connector messages so stored rollback metadata is not mistaken for automatic rollback support.
+- Contract: `backend/src/product-state/product-state.types.ts` and `product-state.registry.ts`.
+- Read APIs: `backend/src/routes/product-state.ts`, registered by `backend/src/app.ts`.
+- Navigation consumer: `src/lib/productState.ts` and `src/components/layout/AppShell.tsx`.
+- Cross-layer route identity: `src/routes/appRoutes.tsx` and `backend/test/task19-product-state.test.ts`.
+- Development parity: `vite.config.ts` proxies `/firewall-api` to local backend `/api`, matching the deployed path contract.

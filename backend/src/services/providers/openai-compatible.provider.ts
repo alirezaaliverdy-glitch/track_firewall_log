@@ -1,5 +1,6 @@
 import { env } from "../../config/env.js";
 import type { AiProviderInput, StructuredAiResponse } from "../ai-provider.service.js";
+import { buildSecurityOrchestratorSystemPrompt } from "../../ai/prompts/security-orchestrator-system-prompt.js";
 
 export class AiProviderRequestError extends Error {
   statusCode: number;
@@ -21,22 +22,6 @@ function extractJson(value: string) {
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
   return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
-}
-
-function systemPrompt() {
-  return [
-    "You are a security assistant for a firewall/SIEM/SOAR dashboard.",
-    "You must never execute commands, generate free-form shell for execution, SSH, or change devices.",
-    "Return only valid JSON matching this exact schema:",
-    '{"assistantMessage":"string","shouldCreateIntent":boolean,"intent":{"intentType":"string","riskLevel":"low|medium|high|critical","targetDeviceHint":string|null,"parameters":{},"missingFields":[],"clarificationQuestions":[],"explanation":"string"}|null,"confidence":number}',
-    "Supported intentType values: explain_security_status, create_egress_policy, block_source_ip_temporary, unblock_source_ip, open_port, close_port, change_ssh_port, create_address_object, create_schedule_object, create_service_object, add_firewall_rule, remove_firewall_rule, enable_rule, disable_rule, mikrotik_add_address_list_entry, mikrotik_remove_address_list_entry, mikrotik_block_ip_temporary, mikrotik_create_managed_drop_rule, mikrotik_enable_managed_rule, mikrotik_disable_managed_rule, mikrotik_add_comment_to_rule, mikrotik_read_firewall_summary, mikrotik_create_filter_rule, mikrotik_enable_filter_rule, mikrotik_disable_filter_rule, mikrotik_move_filter_rule, mikrotik_set_filter_rule_comment, mikrotik_remove_managed_filter_rule, mikrotik_list_filter_rules, mikrotik_search_filter_rules, mikrotik_create_dstnat_rule, mikrotik_create_srcnat_masquerade_rule, mikrotik_enable_nat_rule, mikrotik_disable_nat_rule, mikrotik_set_nat_rule_comment, mikrotik_remove_managed_nat_rule, mikrotik_list_nat_rules, mikrotik_unblock_ip, mikrotik_list_address_list, mikrotik_create_managed_blocklist_rule, mikrotik_list_ip_services, mikrotik_disable_unused_service, mikrotik_restrict_service_by_address, mikrotik_change_service_port, mikrotik_enable_service, mikrotik_disable_service, mikrotik_list_interfaces, mikrotik_enable_interface, mikrotik_disable_interface, mikrotik_set_interface_comment, mikrotik_detect_wan_lan_candidates, mikrotik_list_routes, mikrotik_add_static_route, mikrotik_disable_static_route, mikrotik_remove_managed_static_route, mikrotik_show_dns_settings, mikrotik_set_dns_servers, mikrotik_list_dhcp_servers, mikrotik_list_dhcp_leases, mikrotik_add_static_dhcp_lease, mikrotik_remove_static_dhcp_lease, mikrotik_create_backup, mikrotik_create_export_sanitized, mikrotik_set_identity, mikrotik_show_clock, mikrotik_show_logs, mikrotik_show_resources, mikrotik_reboot, mikrotik_schedule_reboot, mikrotik_disable_rule_by_id, mikrotik_remove_rule_by_id, unknown.",
-    "For MikroTik, never output raw RouterOS CLI. Use only the mikrotik_* catalog intent types and structured parameters such as address, listName, timeout, chain, ruleId, or comment.",
-    "For MikroTik reboot or scheduled reboot, use mikrotik_reboot or mikrotik_schedule_reboot only when the user explicitly asks; these are critical break-glass intents. Block reset, user, certificate, show-sensitive export, SSH service changes, SSH port changes, remove all, disable all, and raw command requests with intentType unknown.",
-    "For action requests, set shouldCreateIntent=true and provide structured parameters only.",
-    "For questions or summaries, set shouldCreateIntent=false unless a concrete device action is requested.",
-    "Never guess firewall interfaces. Put missing deviceId, srcInterface, dstInterface, services, exact schedule, or sourceIp into missingFields when unknown.",
-    "Do not include credentials, secrets, raw logs, or executable free-form commands."
-  ].join("\n");
 }
 
 function providerLabel() {
@@ -98,12 +83,13 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput, model 
         temperature: 0.1,
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: systemPrompt() },
+          { role: "system", content: buildSecurityOrchestratorSystemPrompt(input.context) },
           {
             role: "user",
             content: JSON.stringify({
               userMessage: input.message,
-              safeSecurityContext: input.context
+              evidencePack: input.context.evidencePack,
+              availableActionHints: input.context.evidencePack.availableActionHints
             })
           }
         ]

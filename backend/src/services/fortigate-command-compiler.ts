@@ -1,195 +1,45 @@
-import net from "node:net";
 import { ActionType, AiRiskLevel } from "@prisma/client";
+import { getFortiGateControlAction } from "../fortigate/full-control-registry.js";
 import type { FortiOsDialect } from "./fortigate-version.service.js";
+import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
+import {
+  actionName,
+  arrayNames,
+  assertNotBuiltinService,
+  block,
+  cidrList,
+  cidrOrIp,
+  fail,
+  fqdn,
+  ipRange,
+  MANAGED_PREFIX,
+  ipv4,
+  ipv4OrFqdn,
+  managedComment,
+  objectName,
+  policyId,
+  port,
+  portList,
+  quote,
+  readOnly,
+  requireFeature,
+  result,
+  RAW_KEYS,
+  safeName,
+  safeOptionalName,
+  safeProposal,
+  safeText,
+  secretValue,
+  spec,
+  subnet,
+  text,
+  withVdom,
+  type FortiGateCompiledAction,
+} from "../fortigate/command-compiler/shared.js";
 
-export type FortiGateCommandSpec = {
-  template: string;
-  command: string;
-  write: boolean;
-  target: Record<string, unknown>;
-  rollbackSteps: string[];
-  warnings: string[];
-};
-
-export type FortiGateCompiledAction = {
-  commandSpecs: FortiGateCommandSpec[];
-  normalizedParameters: Record<string, unknown>;
-  warnings: string[];
-  rollbackJson: Record<string, unknown>;
-  riskLevel: AiRiskLevel;
-  category: string;
-  requiresBackup: boolean;
-  requiresBreakGlass: boolean;
-  lockoutSensitive: boolean;
-};
-
-const MANAGED_PREFIX = "firewall-log-analyzer";
-const SAFE_NAME = /^[A-Za-z0-9_.:-]{1,79}$/;
-const SAFE_TEXT = /^[A-Za-z0-9_.:\/,@#() +*-]{1,180}$/;
-const SAFE_ID = /^[0-9]{1,10}$/;
-const RAW_KEYS = new Set(["command", "cmd", "shell", "script", "exec", "args", "cli", "rawCli"]);
-const BUILT_IN_SERVICES = new Set(["ALL", "HTTP", "HTTPS", "SSH", "DNS", "PING", "FTP", "SMTP", "POP3", "IMAP", "LDAP", "RDP", "TELNET", "SNMP"]);
-
-function fail(name: string): never {
-  throw new Error(`${name} is invalid or missing.`);
-}
-
-function rejectUnsafe(value: string, key: string) {
-  if (/[\n\r;`|&]|[$][(]|\\$/.test(value)) throw new Error(`${key} contains unsafe characters.`);
-  return value;
-}
-
-function text(params: Record<string, unknown>, key: string, fallback?: string) {
-  const value = typeof params[key] === "string" && String(params[key]).trim() ? String(params[key]).trim() : fallback;
-  return value === undefined ? undefined : rejectUnsafe(value, key);
-}
-
-function safeName(params: Record<string, unknown>, key: string, fallback?: string) {
-  const value = text(params, key, fallback);
-  if (!value || !SAFE_NAME.test(value)) fail(key);
-  return value;
-}
-
-function safeOptionalName(params: Record<string, unknown>, key: string) {
-  const value = text(params, key);
-  if (value !== undefined && !SAFE_NAME.test(value)) fail(key);
-  return value;
-}
-
-function safeText(params: Record<string, unknown>, key: string, fallback?: string) {
-  const value = text(params, key, fallback);
-  if (value !== undefined && !SAFE_TEXT.test(value)) throw new Error(`${key} contains unsupported characters.`);
-  return value;
-}
-
-function arrayNames(params: Record<string, unknown>, key: string, fallback?: string[]) {
-  const raw = Array.isArray(params[key]) ? params[key] : typeof params[key] === "string" ? String(params[key]).split(",") : fallback ?? [];
-  const values = raw.map((item) => safeName({ value: String(item).trim() }, "value")).filter(Boolean);
-  if (values.length === 0) fail(key);
-  return values;
-}
-
-function policyId(params: Record<string, unknown>, key = "policyId") {
-  const value = text(params, key);
-  if (!value || !SAFE_ID.test(value)) fail(key);
-  return value;
-}
-
-function port(params: Record<string, unknown>, key: string) {
-  const value = Number(params[key]);
-  if (!Number.isInteger(value) || value < 1 || value > 65535) fail(key);
-  return value;
-}
-
-function portList(params: Record<string, unknown>, key: string) {
-  const raw = Array.isArray(params[key]) ? params[key].join(",") : String(params[key] ?? "").trim();
-  if (!raw) fail(key);
-  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
-  if (parts.length === 0) fail(key);
-  for (const part of parts) {
-    const [start, end] = part.split("-");
-    const a = Number(start);
-    const b = end === undefined ? a : Number(end);
-    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 1 || b < 1 || a > 65535 || b > 65535 || a > b) fail(key);
-  }
-  return parts.join(",");
-}
-
-function ipv4(value: string, key: string) {
-  if (net.isIP(value) !== 4) fail(key);
-  return value;
-}
-
-function cidrOrIp(params: Record<string, unknown>, key: string) {
-  const value = text(params, key) ?? fail(key);
-  const [ip, prefix] = value.split("/");
-  ipv4(ip, key);
-  if (prefix !== undefined) {
-    const n = Number(prefix);
-    if (!Number.isInteger(n) || n < 0 || n > 32 || String(n) !== prefix) fail(key);
-  }
-  return value;
-}
-
-function subnet(params: Record<string, unknown>) {
-  const cidr = text(params, "sourceCidr") ?? text(params, "cidr") ?? text(params, "sourceIp") ?? text(params, "ip") ?? text(params, "address");
-  if (!cidr) fail("cidr");
-  const [ip, prefix] = cidr.split("/");
-  ipv4(ip, "cidr");
-  const bits = prefix === undefined ? 32 : Number(prefix);
-  if (!Number.isInteger(bits) || bits < 0 || bits > 32) fail("cidr");
-  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
-  return `${ip} ${[24, 16, 8, 0].map((shift) => (mask >>> shift) & 255).join(".")}`;
-}
-
-function fqdn(params: Record<string, unknown>) {
-  const value = text(params, "fqdn") ?? text(params, "domain") ?? fail("fqdn");
-  if (!/^\*?(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,63}$/.test(value)) fail("fqdn");
-  return value;
-}
-
-function ipRange(params: Record<string, unknown>) {
-  const start = ipv4(text(params, "startIp") ?? text(params, "start") ?? fail("startIp"), "startIp");
-  const end = ipv4(text(params, "endIp") ?? text(params, "end") ?? fail("endIp"), "endIp");
-  return { start, end };
-}
-
-function requireFeature(condition: boolean | undefined, code = "FORTIGATE_UNSUPPORTED_FEATURE") {
-  if (condition === false) throw new Error(code);
-}
-
-function assertNotBuiltinService(name: string) {
-  if (BUILT_IN_SERVICES.has(name.toUpperCase())) throw new Error("Built-in FortiGate services cannot be overwritten or deleted.");
-}
-
-function quote(value: string | number | boolean) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function block(lines: string[]) {
-  return lines.join("\n");
-}
-
-function spec(input: Omit<FortiGateCommandSpec, "write"> & { write?: boolean }): FortiGateCommandSpec {
-  return { ...input, write: input.write ?? true };
-}
-
-function managedComment(comment?: string) {
-  const value = comment?.startsWith(MANAGED_PREFIX) ? comment : `${MANAGED_PREFIX} ${comment ?? "managed fortigate change"}`;
-  return value.slice(0, 180);
-}
-
-function result(input: Omit<FortiGateCompiledAction, "commandSpecs" | "warnings" | "rollbackJson"> & {
-  commandSpecs?: FortiGateCommandSpec[];
-  warnings?: string[];
-  rollbackJson?: Record<string, unknown>;
-}): FortiGateCompiledAction {
-  return {
-    commandSpecs: input.commandSpecs ?? [],
-    warnings: input.warnings ?? [],
-    rollbackJson: input.rollbackJson ?? { type: "manual_review" },
-    ...input
-  };
-}
-
-function readOnly(command: string, category: string) {
-  return result({
-    category,
-    riskLevel: AiRiskLevel.low,
-    normalizedParameters: {},
-    requiresBackup: false,
-    requiresBreakGlass: false,
-    lockoutSensitive: false,
-    commandSpecs: [spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })],
-    rollbackJson: { type: "none_read_only" }
-  });
-}
-
-function withVdom(command: string, vdom?: string) {
-  if (!vdom) return command;
-  return block(["config vdom", `edit ${quote(vdom)}`, command, "end"]);
-}
-
+export type { FortiGateCommandSpec, FortiGateCompiledAction } from "../fortigate/command-compiler/shared.js";
+import { compileFortiGateGuidedVpnSetup } from "../fortigate/command-compiler/guided-vpn.js";
+import { compileFortiGateReadOnlyAction } from "../fortigate/command-compiler/read-only.js";
 export function compileFortiGateAction(input: {
   actionType: ActionType;
   parameters: Record<string, unknown>;
@@ -199,8 +49,19 @@ export function compileFortiGateAction(input: {
   const p = input.parameters;
   for (const key of Object.keys(p)) if (RAW_KEYS.has(key)) throw new Error("Raw CLI parameters are not allowed.");
   const actionType = input.actionType;
+  const action = actionName(actionType);
   const vdom = safeOptionalName(p, "vdom");
   if (p.vdomRequired === true && !vdom) throw new Error("FORTIGATE_VDOM_REQUIRED");
+
+  const readOnlyCompiled = compileFortiGateReadOnlyAction(actionType);
+  if (readOnlyCompiled) return readOnlyCompiled;
+
+  if (actionType === ActionType.fortigate_guided_vpn_setup) return compileFortiGateGuidedVpnSetup({ parameters: p, riskLevel: input.riskLevel, dialect: input.dialect });
+
+  if (actionType === ActionType.fortigate_show_ha_vdom_zone) {
+    const commands = ["get system ha status", "show system ha", "show system vdom", "show system zone"];
+    return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })) });
+  }
 
   if (actionType === ActionType.fortigate_list_admins) return readOnly("show system admin", "management");
   if (actionType === ActionType.fortigate_list_zones) return readOnly("show system zone", "zone");
@@ -210,6 +71,11 @@ export function compileFortiGateAction(input: {
   if (actionType === ActionType.fortigate_list_routes) return readOnly("get router info routing-table all", "route");
   if (actionType === ActionType.fortigate_show_logs) return readOnly("execute log display", "system");
   if (actionType === ActionType.fortigate_show_sessions) return readOnly("diagnose sys session list", "system");
+  const registryRead = getFortiGateControlAction(action);
+  if (registryRead && registryRead.rollbackTemplate === "none_read_only") {
+    const commands = registryRead.verificationCommands.length > 0 ? registryRead.verificationCommands : [registryRead.readCommand];
+    return result({ category: registryRead.category, riskLevel: AiRiskLevel.low, normalizedParameters: {}, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: commands.map((command) => spec({ template: command, command, write: false, target: {}, rollbackSteps: [], warnings: [] })), rollbackJson: { type: "none_read_only", actionType: action } });
+  }
 
   if (actionType === ActionType.fortigate_create_static_route) {
     const destinationCidr = cidrOrIp({ destinationCidr: p.destinationCidr ?? p.dstCidr ?? p.destination }, "destinationCidr");
@@ -221,7 +87,7 @@ export function compileFortiGateAction(input: {
     return result({
       category: "route", riskLevel: AiRiskLevel.high, normalizedParameters: { destinationCidr, gateway, device: device ?? null },
       requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true,
-      warnings: ["Static route changes can alter the management path and require backup preflight."],
+      warnings: ["Static route changes can alter the management path. Backup is disabled for Quick Controlled execution."],
       commandSpecs: [spec({ template: "config router static/edit 0/set dst/gateway", command: block(lines), target: { destinationCidr, gateway, device: device ?? null }, rollbackSteps: ["Remove the created managed route using its audited route ID."], warnings: [] })],
       rollbackJson: { type: "remove_created_static_route", destinationCidr, gateway }
     });
@@ -243,20 +109,20 @@ export function compileFortiGateAction(input: {
 
   if (actionType === ActionType.fortigate_create_zone || actionType === ActionType.fortigate_add_interface_to_zone || actionType === ActionType.fortigate_remove_interface_from_zone) {
     const name = safeName(p, "name", text(p, "zoneName"));
-    const interfaces = arrayNames(p, "interfaces", safeOptionalName(p, "interfaceName") ? [safeName(p, "interfaceName")] : undefined);
+    const interfaces = actionType === ActionType.fortigate_create_zone && p.interfaces === undefined && !safeOptionalName(p, "interfaceName") ? [] : arrayNames(p, "interfaces", safeOptionalName(p, "interfaceName") ? [safeName(p, "interfaceName")] : undefined);
     const verb = actionType === ActionType.fortigate_add_interface_to_zone ? "append" : actionType === ActionType.fortigate_remove_interface_from_zone ? "unselect" : "set";
-    const command = withVdom(block(["config system zone", `edit ${quote(name)}`, `${verb} interface ${interfaces.map(quote).join(" ")}`, `set intrazone ${p.intrazone === "allow" ? "allow" : "deny"}`, `set description ${quote(managedComment(safeText(p, "comment", "managed zone")))}`, "next", "end"]), vdom);
+    const command = withVdom(block(["config system zone", `edit ${quote(name)}`, ...(interfaces.length > 0 ? [`${verb} interface ${interfaces.map(quote).join(" ")}`] : []), `set intrazone ${p.intrazone === "allow" ? "allow" : "deny"}`, `set description ${quote(managedComment(safeText(p, "comment", "managed zone")))}`, "next", "end"]), vdom);
     return result({ category: "zone", riskLevel: AiRiskLevel.high, normalizedParameters: { name, interfaces, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Zone changes are high risk and may affect policy matching."], commandSpecs: [spec({ template: `config system zone/${verb} interface`, command, target: { name, interfaces, vdom }, rollbackSteps: ["Restore previous zone interface membership from backup/export."], warnings: [] })], rollbackJson: { type: "restore_zone_membership_manual", name, vdom } });
   }
 
-  if (actionType === ActionType.fortigate_delete_managed_zone) {
+  if (actionType === ActionType.fortigate_delete_managed_zone || action === "fortigate_delete_zone") {
     const name = safeName(p, "name", text(p, "zoneName"));
     const critical = p.managed === false || p.breakGlass === true;
     const command = withVdom(block(["config system zone", `delete ${quote(name)}`, "end"]), vdom);
     return result({ category: "zone", riskLevel: critical ? AiRiskLevel.critical : AiRiskLevel.high, normalizedParameters: { name, vdom, managedOnly: true }, requiresBackup: true, requiresBreakGlass: critical, lockoutSensitive: true, warnings: ["Deleting zones is high risk. Non-managed zone deletion requires break-glass."], commandSpecs: [spec({ template: "config system zone/delete <managed-zone>", command, target: { name, vdom }, rollbackSteps: ["Recreate zone and memberships from backup/export."], warnings: [] })], rollbackJson: { type: "recreate_deleted_zone_manual", name, vdom } });
   }
 
-  if (new Set<ActionType>([ActionType.fortigate_set_interface_alias, ActionType.fortigate_set_interface_role, ActionType.fortigate_enable_interface, ActionType.fortigate_disable_interface, ActionType.fortigate_update_interface_ip]).has(actionType)) {
+  if (new Set<ActionType>([ActionType.fortigate_set_interface_alias, ActionType.fortigate_set_interface_role, ActionType.fortigate_enable_interface, ActionType.fortigate_disable_interface, ActionType.fortigate_update_interface_ip]).has(actionType) || action === "fortigate_update_interface_allowaccess" || action === "fortigate_update_management_access") {
     const name = safeName(p, "name", text(p, "interfaceName"));
     const lines = ["config system interface", `edit ${quote(name)}`];
     let rollback = "Restore previous interface settings from backup/export.";
@@ -276,6 +142,15 @@ export function compileFortiGateAction(input: {
       requiresBreakGlass = p.managementFacing === true || p.lockoutRisk === true;
       riskLevel = requiresBreakGlass ? AiRiskLevel.critical : AiRiskLevel.high;
     }
+    if (action === "fortigate_update_interface_allowaccess" || action === "fortigate_update_management_access") {
+      const allowaccess = arrayNames(p, "allowaccess").map((item) => item.toLowerCase());
+      const allowed = new Set(["ping", "https", "ssh", "http", "fgfm", "snmp", "radius-acct", "probe-response", "fabric"]);
+      for (const item of allowaccess) if (!allowed.has(item)) fail("allowaccess");
+      lines.push(`set allowaccess ${allowaccess.join(" ")}`);
+      requiresBreakGlass = allowaccess.includes("http") || allowaccess.includes("https") || allowaccess.includes("ssh") || p.publicInterface === true;
+      riskLevel = requiresBreakGlass ? AiRiskLevel.high : AiRiskLevel.medium;
+      rollback = `restore previous allowaccess for ${name}`;
+    }
     lines.push("next", "end");
     return result({ category: "interface", riskLevel, normalizedParameters: { name, vdom, managementFacing: p.managementFacing === true }, requiresBackup: true, requiresBreakGlass, lockoutSensitive: true, warnings: ["Interface changes can cause connectivity loss. Verify alternate access."], commandSpecs: [spec({ template: "config system interface/edit <name>/controlled update", command: withVdom(block(lines), vdom), target: { name, vdom }, rollbackSteps: [rollback], warnings: [] })], rollbackJson: { type: "restore_interface_manual", name, vdom } });
   }
@@ -286,7 +161,13 @@ export function compileFortiGateAction(input: {
     const vlanId = Number(p.vlanId);
     if (!Number.isInteger(vlanId) || vlanId < 1 || vlanId > 4094) fail("vlanId");
     const command = withVdom(block(["config system interface", `edit ${quote(name)}`, "set type vlan", `set interface ${quote(parent)}`, `set vlanid ${vlanId}`, ...(text(p, "ip") || text(p, "cidr") ? [`set ip ${subnet({ cidr: text(p, "cidr") ?? text(p, "ip") })}`] : []), `set alias ${quote(managedComment(safeText(p, "comment", "managed vlan interface")))}`, "next", "end"]), vdom);
-    return result({ category: "interface", riskLevel: AiRiskLevel.high, normalizedParameters: { name, parent, vlanId, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["VLAN interface creation is high risk and requires backup preflight."], commandSpecs: [spec({ template: "config system interface/edit <vlan>/set type vlan", command, target: { name, parent, vlanId, vdom }, rollbackSteps: [`delete VLAN interface ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vlan_interface", name, vdom } });
+    return result({ category: "interface", riskLevel: AiRiskLevel.high, normalizedParameters: { name, parent, vlanId, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["VLAN interface creation is high risk. Backup is disabled for Quick Controlled execution."], commandSpecs: [spec({ template: "config system interface/edit <vlan>/set type vlan", command, target: { name, parent, vlanId, vdom }, rollbackSteps: [`delete VLAN interface ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vlan_interface", name, vdom } });
+  }
+
+  if (action === "fortigate_delete_interface") {
+    const name = safeName(p, "name", text(p, "interfaceName"));
+    const command = withVdom(block(["config system interface", `delete ${quote(name)}`, "end"]), vdom);
+    return result({ category: "interface", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Interface deletion requires dependency review before execution."], commandSpecs: [spec({ template: "config system interface/delete <name>", command, target: { name, vdom }, rollbackSteps: ["Recreate interface from snapshot/export."], warnings: [] })], rollbackJson: { type: "recreate_deleted_interface_manual", name, vdom } });
   }
 
   if (actionType === ActionType.fortigate_create_address_object || actionType === ActionType.fortigate_update_address_object) {
@@ -321,7 +202,7 @@ export function compileFortiGateAction(input: {
     });
   }
 
-  if (actionType === ActionType.fortigate_delete_managed_address_object) {
+  if (actionType === ActionType.fortigate_delete_managed_address_object || action === "fortigate_delete_address_object") {
     const name = safeName(p, "name", text(p, "addressObjectName"));
     const command = withVdom(block(["config firewall address", `delete ${quote(name)}`, "end"]), vdom);
     const critical = p.managed === false || p.breakGlass === true;
@@ -360,7 +241,7 @@ export function compileFortiGateAction(input: {
     return result({ category: "service", riskLevel: AiRiskLevel.medium, normalizedParameters: { name, protocol, tcpPorts, udpPorts, vdom }, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "config firewall service custom/edit <name>/set protocol and port ranges", command, target: { name, tcpPorts, udpPorts, vdom }, rollbackSteps: [`delete service object ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_service", name, vdom } });
   }
 
-  if (actionType === ActionType.fortigate_delete_managed_service) {
+  if (actionType === ActionType.fortigate_delete_managed_service || action === "fortigate_delete_service_object") {
     const name = safeName(p, "name", text(p, "serviceName"));
     assertNotBuiltinService(name);
     const critical = p.managed === false || p.breakGlass === true;
@@ -441,10 +322,10 @@ export function compileFortiGateAction(input: {
     if (p.disabled !== undefined || text(p, "status")) lines.push(`set status ${p.disabled === true || text(p, "status") === "disabled" ? "disable" : "enable"}`);
     if (text(p, "comment")) lines.push(`set comments ${quote(managedComment(safeText(p, "comment")))}`);
     lines.push("next", "end");
-    return result({ category: "policy", riskLevel: AiRiskLevel.high, normalizedParameters: { policyId: id, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Policy updates are high risk and require backup preflight."], commandSpecs: [spec({ template: "config firewall policy/edit <id>/controlled update", command: withVdom(block(lines), vdom), target: { policyId: id, vdom }, rollbackSteps: ["Restore previous policy fields from backup/export."], warnings: [] })], rollbackJson: { type: "restore_policy_fields_manual", policyId: id, vdom } });
+    return result({ category: "policy", riskLevel: AiRiskLevel.high, normalizedParameters: { policyId: id, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Policy updates are high risk. Backup is disabled for Quick Controlled execution."], commandSpecs: [spec({ template: "config firewall policy/edit <id>/controlled update", command: withVdom(block(lines), vdom), target: { policyId: id, vdom }, rollbackSteps: ["Restore previous policy fields from backup/export."], warnings: [] })], rollbackJson: { type: "restore_policy_fields_manual", policyId: id, vdom } });
   }
 
-  if (new Set<ActionType>([ActionType.fortigate_enable_policy, ActionType.fortigate_disable_policy, ActionType.fortigate_delete_managed_policy]).has(actionType)) {
+  if (new Set<ActionType>([ActionType.fortigate_enable_policy, ActionType.fortigate_disable_policy, ActionType.fortigate_delete_managed_policy]).has(actionType) || action === "fortigate_delete_policy") {
     const id = policyId(p);
     const verb = actionType === ActionType.fortigate_enable_policy ? "enable" : actionType === ActionType.fortigate_disable_policy ? "disable" : "delete";
     const command = withVdom(verb === "delete" ? block(["config firewall policy", `delete ${id}`, "end"]) : block(["config firewall policy", `edit ${id}`, `set status ${verb}`, "next", "end"]), vdom);
@@ -473,7 +354,23 @@ export function compileFortiGateAction(input: {
     const command = actionType === ActionType.fortigate_create_vip
       ? withVdom(block(["config firewall vip", `edit ${quote(name)}`, `set extip ${ipv4(text(p, "externalIp") ?? fail("externalIp"), "externalIp")}`, `set mappedip ${quote(ipv4(text(p, "mappedIp") ?? fail("mappedIp"), "mappedIp"))}`, `set extport ${port(p, "externalPort")}`, `set mappedport ${port(p, "mappedPort")}`, "set portforward enable", "next", "end"]), vdom)
       : withVdom(block(["config firewall vipgrp", `edit ${quote(name)}`, `set member ${arrayNames(p, "members").map(quote).join(" ")}`, "next", "end"]), vdom);
-    return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["VIP/NAT changes are high risk and require backup preflight."], commandSpecs: [spec({ template: actionType === ActionType.fortigate_create_vip ? "config firewall vip/edit <name>" : "config firewall vipgrp/edit <name>", command, target: { name, vdom }, rollbackSteps: [`delete VIP/VIP group ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vip_artifact", name, vdom } });
+    return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["VIP/NAT changes are high risk. Backup is disabled for Quick Controlled execution."], commandSpecs: [spec({ template: actionType === ActionType.fortigate_create_vip ? "config firewall vip/edit <name>" : "config firewall vipgrp/edit <name>", command, target: { name, vdom }, rollbackSteps: [`delete VIP/VIP group ${name}`], warnings: [] })], rollbackJson: { type: "delete_created_vip_artifact", name, vdom } });
+  }
+
+  if (action === "fortigate_update_vip" || action === "fortigate_delete_vip") {
+    const name = safeName(p, "name");
+    const command = action === "fortigate_delete_vip"
+      ? withVdom(block(["config firewall vip", `delete ${quote(name)}`, "end"]), vdom)
+      : withVdom(block(["config firewall vip", `edit ${quote(name)}`, ...(text(p, "externalIp") ? [`set extip ${ipv4(text(p, "externalIp") ?? "", "externalIp")}`] : []), ...(text(p, "mappedIp") ? [`set mappedip ${quote(ipv4(text(p, "mappedIp") ?? "", "mappedIp"))}`] : []), ...(p.externalPort !== undefined ? [`set extport ${port(p, "externalPort")}`] : []), ...(p.mappedPort !== undefined ? [`set mappedport ${port(p, "mappedPort")}`] : []), "next", "end"]), vdom);
+    return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["VIP changes require policy reference review."], commandSpecs: [spec({ template: action === "fortigate_delete_vip" ? "config firewall vip/delete <name>" : "config firewall vip/edit <name>", command, target: { name, vdom }, rollbackSteps: ["Restore previous VIP from snapshot/export."], warnings: [] })], rollbackJson: { type: "restore_vip_manual", name, vdom } });
+  }
+
+  if (action === "fortigate_create_ippool" || action === "fortigate_update_ippool" || action === "fortigate_delete_ippool") {
+    const name = safeName(p, "name");
+    const command = action === "fortigate_delete_ippool"
+      ? withVdom(block(["config firewall ippool", `delete ${quote(name)}`, "end"]), vdom)
+      : withVdom(block(["config firewall ippool", `edit ${quote(name)}`, ...(text(p, "startIp") ? [`set startip ${ipv4(text(p, "startIp") ?? "", "startIp")}`] : []), ...(text(p, "endIp") ? [`set endip ${ipv4(text(p, "endIp") ?? "", "endIp")}`] : []), "next", "end"]), vdom);
+    return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: `config firewall ippool/${action.endsWith("delete_ippool") ? "delete" : "edit"} <name>`, command, target: { name, vdom }, rollbackSteps: ["Restore previous IP pool from snapshot/export."], warnings: [] })], rollbackJson: { type: "restore_ippool_manual", name, vdom } });
   }
 
   if (actionType === ActionType.fortigate_create_snat_policy) {
@@ -485,6 +382,27 @@ export function compileFortiGateAction(input: {
     return result({ category: "nat", riskLevel: AiRiskLevel.high, normalizedParameters: { srcintf, dstintf, srcaddr, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "config firewall central-snat-map/edit 0", command, target: { srcintf, dstintf, vdom }, rollbackSteps: ["Remove created central SNAT entry from backup/export reference."], warnings: [] })], rollbackJson: { type: "remove_created_central_snat_manual", vdom } });
   }
 
+  if (action === "fortigate_update_static_route" || action === "fortigate_delete_static_route") {
+    const routeId = policyId(p, "routeId");
+    const command = action === "fortigate_delete_static_route"
+      ? block(["config router static", `delete ${routeId}`, "end"])
+      : block(["config router static", `edit ${routeId}`, ...(text(p, "destinationCidr") ? [`set dst ${quote(cidrOrIp({ destinationCidr: p.destinationCidr }, "destinationCidr"))}`] : []), ...(text(p, "gateway") ? [`set gateway ${quote(ipv4(text(p, "gateway") ?? "", "gateway"))}`] : []), ...(text(p, "device") ? [`set device ${quote(safeName(p, "device"))}`] : []), "next", "end"]);
+    return result({ category: "route", riskLevel: AiRiskLevel.high, normalizedParameters: { routeId, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Route changes can affect management reachability. Old and new route must be reviewed in preview."], commandSpecs: [spec({ template: `config router static/${action.endsWith("delete_static_route") ? "delete" : "edit"} <routeId>`, command: withVdom(command, vdom), target: { routeId, vdom }, rollbackSteps: ["Restore previous route from snapshot/export."], warnings: [] })], rollbackJson: { type: "restore_static_route_manual", routeId, vdom } });
+  }
+
+  if (action === "fortigate_update_dns") {
+    const primary = ipv4(text(p, "primary") ?? fail("primary"), "primary");
+    const secondary = ipv4(text(p, "secondary") ?? fail("secondary"), "secondary");
+    const command = block(["config system dns", `set primary ${primary}`, `set secondary ${secondary}`, "end"]);
+    return result({ category: "network", riskLevel: AiRiskLevel.medium, normalizedParameters: { primary, secondary }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "config system dns/set primary secondary", command, target: { primary, secondary }, rollbackSteps: ["Restore previous DNS servers from snapshot/export."], warnings: [] })], rollbackJson: { type: "restore_dns_manual" } });
+  }
+
+  if (action === "fortigate_update_ntp") {
+    const server = safeText(p, "server") ?? fail("server");
+    const command = block(["config system ntp", "set ntpsync enable", "config ntpserver", "edit 1", `set server ${quote(server)}`, "next", "end", "end"]);
+    return result({ category: "network", riskLevel: AiRiskLevel.medium, normalizedParameters: { server }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "config system ntp/server", command, target: { server }, rollbackSteps: ["Restore previous NTP settings from snapshot/export."], warnings: [] })], rollbackJson: { type: "restore_ntp_manual" } });
+  }
+
   if (new Set<ActionType>([ActionType.fortigate_restrict_admin_trusthost, ActionType.fortigate_change_admin_port, ActionType.fortigate_disable_unused_admin_service]).has(actionType)) {
     const critical = actionType === ActionType.fortigate_change_admin_port;
     const admin = safeName(p, "admin", "admin");
@@ -494,6 +412,58 @@ export function compileFortiGateAction(input: {
         ? block(["config system global", `set admin-sport ${port(p, "port")}`, "end"])
         : block(["config system global", `set admin-${safeName(p, "service")} disable`, "end"]);
     return result({ category: "management", riskLevel: critical ? AiRiskLevel.critical : AiRiskLevel.high, normalizedParameters: { admin, vdom }, requiresBackup: true, requiresBreakGlass: critical, lockoutSensitive: true, warnings: ["Management changes may lock out the current administrator."], commandSpecs: [spec({ template: "config system controlled management update", command, target: { admin }, rollbackSteps: ["Restore previous admin management settings from backup/export."], warnings: [] })], rollbackJson: { type: "restore_admin_management_manual", admin } });
+  }
+
+  if (action === "fortigate_update_zone") {
+    const name = safeName(p, "name", text(p, "zoneName"));
+    const lines = ["config system zone", `edit ${quote(name)}`];
+    if (p.interfaces !== undefined || text(p, "interfaceName")) lines.push(`set interface ${arrayNames(p, "interfaces", safeOptionalName(p, "interfaceName") ? [safeName(p, "interfaceName")] : undefined).map(quote).join(" ")}`);
+    if (text(p, "comment")) lines.push(`set description ${quote(managedComment(safeText(p, "comment")))}`);
+    lines.push("next", "end");
+    return result({ category: "zone", riskLevel: AiRiskLevel.high, normalizedParameters: { name, vdom }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Zone updates must show affected policy references."], commandSpecs: [spec({ template: "config system zone/edit <name>", command: withVdom(block(lines), vdom), target: { name, vdom }, rollbackSteps: ["Restore previous zone from snapshot/export."], warnings: [] })], rollbackJson: { type: "restore_zone_manual", name, vdom } });
+  }
+
+  if (action.startsWith("fortigate_") && getFortiGateControlAction(action)) {
+    const name = safeOptionalName(p, "name") ?? safeOptionalName(p, "admin") ?? safeOptionalName(p, "groupName") ?? safeOptionalName(p, "interfaceName");
+    const registry = getFortiGateControlAction(action)!;
+    if (registry.requiredParams.includes("pskSecretRef") && text(p, "psk")) throw new Error("PSK plaintext is not allowed; use pskSecretRef.");
+    if (registry.requiredParams.includes("pskSecretRef") && !text(p, "pskSecretRef")) fail("pskSecretRef");
+    const target = name ? quote(name) : "0";
+    let command: string;
+    if (action.includes("_admin")) {
+      const admin = safeName(p, "admin", name ?? text(p, "name"));
+      command = action === "fortigate_delete_admin"
+        ? block(["config system admin", `delete ${quote(admin)}`, "end"])
+        : block(["config system admin", `edit ${quote(admin)}`, ...(action === "fortigate_disable_admin" ? ["set status disable"] : []), ...(text(p, "profile") ? [`set accprofile ${quote(safeName(p, "profile"))}`] : []), ...(text(p, "trusthost") ? [`set trusthost1 ${cidrOrIp(p, "trusthost")}`] : []), "next", "end"]);
+    } else if (action === "fortigate_create_api_user") {
+      const apiName = safeName(p, "name");
+      command = block(["config system api-user", `edit ${quote(apiName)}`, ...(text(p, "profile") ? [`set accprofile ${quote(safeName(p, "profile"))}`] : []), "next", "end"]);
+    } else if (action.includes("_vdom")) {
+      const vdomName = safeName(p, "name", text(p, "vdomName"));
+      command = action === "fortigate_delete_vdom" ? block(["config vdom", `delete ${quote(vdomName)}`, "end"]) : block(["config vdom", `edit ${quote(vdomName)}`, "next", "end"]);
+    } else if (action === "fortigate_move_interface_to_vdom") {
+      const iface = safeName(p, "name", text(p, "interfaceName"));
+      const targetVdom = safeName(p, "targetVdom", text(p, "vdom"));
+      command = block(["config global", "config system interface", `edit ${quote(iface)}`, `set vdom ${quote(targetVdom)}`, "next", "end", "end"]);
+    } else if (action.includes("_ha")) {
+      command = block(["config system ha", ...(text(p, "mode") ? [`set mode ${safeName(p, "mode")}`] : []), ...(text(p, "groupName") ? [`set group-name ${quote(safeName(p, "groupName"))}`] : []), ...(p.priority !== undefined ? [`set priority ${Number(p.priority)}`] : []), "end"]);
+    } else if (action.includes("_sdwan")) {
+      command = block(["config system sdwan", action === "fortigate_create_sdwan_zone" ? "config zone" : action === "fortigate_create_sdwan_health_check" ? "config health-check" : action === "fortigate_create_sdwan_rule" ? "config service" : "config members", `edit ${target}`, ...(text(p, "interfaceName") ? [`set interface ${quote(safeName(p, "interfaceName"))}`] : []), ...(text(p, "server") ? [`set server ${quote(safeText(p, "server") ?? "")}`] : []), "next", "end", "end"]);
+    } else if (action.includes("_ipsec_")) {
+      const vpnName = safeName(p, "name");
+      const table = action.includes("phase2") ? "phase2-interface" : "phase1-interface";
+      command = action === "fortigate_delete_ipsec_tunnel"
+        ? block(["config vpn ipsec phase2-interface", `delete ${quote(vpnName)}`, "end", "config vpn ipsec phase1-interface", `delete ${quote(vpnName)}`, "end"])
+        : block([`config vpn ipsec ${table}`, `edit ${quote(vpnName)}`, ...(text(p, "remoteGateway") ? [`set remote-gw ${ipv4(text(p, "remoteGateway") ?? "", "remoteGateway")}`] : []), ...(action === "fortigate_disable_ipsec_tunnel" ? ["set status disable"] : []), "next", "end"]);
+    } else if (action.includes("_ssl_vpn")) {
+      command = action === "fortigate_disable_ssl_vpn"
+        ? block(["config vpn ssl settings", "unset source-interface", "end"])
+        : block(["config vpn ssl settings", ...(p.port !== undefined ? [`set port ${port(p, "port")}`] : []), "end"]);
+    } else {
+      throw new Error("FORTIOS_UNSUPPORTED_FEATURE");
+    }
+    const critical = registry.risk === "critical";
+    return result({ category: registry.category, riskLevel: critical ? AiRiskLevel.critical : registry.risk === "high" ? AiRiskLevel.high : registry.risk === "medium" ? AiRiskLevel.medium : AiRiskLevel.low, normalizedParameters: { actionType: action, name: name ?? null, vdom }, requiresBackup: registry.rollbackTemplate !== "none_read_only", requiresBreakGlass: false, lockoutSensitive: critical || registry.category === "admin" || registry.category === "vdom" || registry.category === "ha", warnings: registry.preChecks.map((item) => `Precheck required: ${item}`), commandSpecs: [spec({ template: registry.createTemplate ?? registry.updateTemplate ?? registry.deleteTemplate ?? registry.enableTemplate ?? registry.disableTemplate ?? action, command: withVdom(command, vdom), target: { actionType: action, name: name ?? null, vdom }, rollbackSteps: [registry.rollbackTemplate], warnings: [] })], rollbackJson: { type: registry.rollbackTemplate, actionType: action, name: name ?? null, vdom } });
   }
 
   throw new Error("FORTIOS_UNSUPPORTED_FEATURE");

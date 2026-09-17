@@ -1,0 +1,14 @@
+Open and read `MASTER_SECURITY_PLATFORM_TASK.md` completely.
+
+Then:
+1. Read the project memory files listed in the task.
+2. Inspect the current architecture.
+3. Do not attempt all phases in one uncontrolled change.
+4. Implement the "Minimum tangible milestone" first.
+5. Keep the sidebar compact and grouped exactly as specified.
+6. Use external projects only as architectural inspiration or optional adapters.
+7. Preserve ActionPlan confirmation and connector execution safety.
+8. Run all builds/tests.
+9. Update project memory and provide the required final report.
+
+Do not modify `.env` or commit secrets.

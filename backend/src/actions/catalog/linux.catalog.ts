@@ -2,6 +2,11 @@ import { ActionType, AiRiskLevel } from "@prisma/client";
 import { catalogEntry as e } from "./helpers.js";
 
 export const LINUX_COMMAND_CATALOG = Object.freeze([
+  e("linux", "remove_user_from_sudo", "Remove user from sudo", "identity", ActionType.linux_remove_user_from_sudo, ["remove user from sudo", "یوزر رو از sudo خارج کن", "کاربر را از گروه sudo حذف کن"], AiRiskLevel.high, false, ["username"]),
+  e("linux", "add_user_to_sudo", "Add user to sudo", "identity", ActionType.linux_add_user_to_sudo, ["add user to sudo", "کاربر را به sudo اضافه کن"], AiRiskLevel.high, false, ["username"]),
+  e("linux", "check_user_groups", "Check user groups", "identity", ActionType.linux_check_user_groups, ["check user groups", "گروه های کاربر را چک کن"], AiRiskLevel.low, true, ["username"]),
+  e("linux", "lock_user", "Lock Linux user", "identity", ActionType.linux_lock_user, ["lock user", "کاربر را قفل کن"], AiRiskLevel.high, false, ["username"]),
+  e("linux", "unlock_user", "Unlock Linux user", "identity", ActionType.linux_unlock_user, ["unlock user", "قفل کاربر را باز کن"], AiRiskLevel.high, false, ["username"]),
   e("linux", "read_hostname", "Read hostname", "system", ActionType.linux_read_hostname, ["show hostname", "read hostname", "نمایش hostname"], AiRiskLevel.low, true),
   e("linux", "read_interfaces", "Read interfaces", "network", ActionType.linux_read_interfaces, ["show interfaces", "ip addresses", "نمایش اینترفیس"], AiRiskLevel.low, true),
   e("linux", "read_listening_ports", "Read listening ports", "network", ActionType.linux_read_listening_ports, ["show listening ports", "read open ports", "نمایش پورت های باز"], AiRiskLevel.low, true),

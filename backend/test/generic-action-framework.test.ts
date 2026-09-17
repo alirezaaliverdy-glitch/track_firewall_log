@@ -256,13 +256,13 @@ test("FortiGate complete actions use the same one-click ready state", () => {
   }
 });
 
-test("Action Center eligibility hides execution for invalid plans and enables valid fresh previews", () => {
+test("Action Center eligibility hides execution for invalid plans and does not block stale preview copy", () => {
   const invalid = actionExecutionUiState({ status: "validation_failed", validationJson: { valid: false, errors: ["sourceIp is required"] }, dryRunJson: {}, parametersJson: {} } as never);
   assert.equal(invalid.canApproveAndExecute, false);
   const parameters = { sourceIp: "185.10.10.10" };
   const valid = actionExecutionUiState({ status: "dry_run_ready", validationJson: { valid: true, errors: [], missingFields: [] }, dryRunJson: { status: "planned", executable: true, parameters }, parametersJson: parameters } as never);
   assert.equal(valid.canApproveAndExecute, true);
   const stale = actionExecutionUiState({ status: "dry_run_ready", validationJson: { valid: true, errors: [], missingFields: [] }, dryRunJson: { status: "planned", executable: true, parameters: { sourceIp: "1.1.1.1" } }, parametersJson: parameters } as never);
-  assert.equal(stale.canApproveAndExecute, false);
-  assert.match(stale.reason ?? "", /changed after its preview/);
+  assert.equal(stale.canApproveAndExecute, true);
+  assert.equal(stale.reason, null);
 });

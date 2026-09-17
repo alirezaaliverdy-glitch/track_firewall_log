@@ -82,7 +82,9 @@ test("direct controlled mode skips approval only for catalog actions", () => {
 test("raw commands do not become executable catalog actions", () => {
   const routed = routeCatalogIntent("MikroTik execute raw command /user add name=hacker");
   assert.notEqual(routed.status, "matched");
-  assert.equal(parseAiIntent("MikroTik execute raw command /user add name=hacker")?.intentType, "unknown");
+  const proposed = parseAiIntent("MikroTik execute raw command /user add name=hacker");
+  assert.equal(proposed?.intentType, "custom_vendor_action");
+  assert.equal(proposed?.parameters.executionSupport, "manual_or_not_implemented");
 });
 
 test("Action Center exposes Execute and hides manual preview/approval UX", () => {
@@ -93,7 +95,11 @@ test("Action Center exposes Execute and hides manual preview/approval UX", () =>
 });
 
 test("controlled execution records command-plan and result audit events", () => {
-  const source = readFileSync(new URL("../src/services/action-plan.service.ts", import.meta.url), "utf8");
+  const source = [
+    "../src/services/action-plan.service.ts",
+    "../src/actions/action-plan/action-plan-preview.service.ts",
+    "../src/actions/action-plan/action-plan-execution.service.ts",
+  ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   assert.match(source, /command_plan_generated/);
   assert.match(source, /execution_succeeded/);
   assert.match(source, /controlled_execution_blocked/);

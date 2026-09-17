@@ -1,9 +1,10 @@
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyError } from "fastify";
 import { env, isProduction, maxUploadBytes } from "./config/env.js";
-import { prisma } from "./db/prisma.js";
+import { withDatabaseStartupRetry } from "./db/prisma.js";
 import { actionRoutes } from "./routes/actions.js";
 import { loggerConfig } from "./lib/logger.js";
 import { analysisRoutes } from "./routes/analysis.js";
@@ -19,8 +20,29 @@ import { incidentRoutes } from "./routes/incidents.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
 import { assessmentRoutes } from "./routes/assessments.js";
+import { authRoutes } from "./routes/auth.js";
+import { linuxTelemetryRoutes } from "./routes/linux-telemetry.js";
+import { telemetryFindingRoutes } from "./routes/telemetry-findings.js";
+import { commandCatalogRoutes } from "./routes/command-catalog.js";
+import { actionSessionRoutes } from "./routes/action-sessions.js";
+import { dailyCheckRoutes } from "./routes/daily-check.js";
+import { assetRoutes } from "./routes/assets.js";
+import { securityPlatformRoutes } from "./routes/security-platform.js";
+import { vendorRoutes } from "./routes/vendors.js";
+import { linuxHealthRoutes } from "./routes/linux-health.js";
+import { productStateRoutes } from "./routes/product-state.js";
+import { deviceOnboardingRoutes } from "./routes/device-onboarding.js";
+import { deviceWorkspaceRoutes } from "./routes/device-workspaces.js";
+import { diagnosticRoutes } from "./routes/diagnostics.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
+import { COMMAND_CATALOG } from "./commands/catalog/index.js";
+import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
+import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
+import { bootstrapAdmin } from "./services/auth.service.js";
+import { registerSecurityPlugin } from "./plugins/security.plugin.js";
 
-export async function buildApp() {
+export async function buildApp(options: { authRequired?: boolean } = {}) {
+  validateCommandCatalog(COMMAND_CATALOG);
   const app = Fastify({
     logger: loggerConfig,
     bodyLimit: maxUploadBytes
@@ -29,8 +51,10 @@ export async function buildApp() {
   await app.register(helmet);
   await app.register(cors, {
     origin: env.corsOrigins,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true
   });
+  await app.register(cookie);
   await app.register(multipart, {
     limits: {
       fileSize: maxUploadBytes,
@@ -66,7 +90,13 @@ export async function buildApp() {
     });
   });
 
+  const authRequired = options.authRequired !== false;
+  if (authRequired) await withDatabaseStartupRetry("Authentication bootstrap", bootstrapAdmin);
+  await registerSecurityPlugin(app, { authRequired });
+
+  await app.register(authRoutes);
   await app.register(healthRoutes);
+  await app.register(dashboardRoutes);
   await app.register(actionRoutes);
   await app.register(assessmentRoutes);
   await app.register(connectorPlanRoutes);
@@ -77,12 +107,25 @@ export async function buildApp() {
   await app.register(analysisRoutes);
   await app.register(aiRoutes);
   await app.register(deviceRoutes);
+  await app.register(deviceOnboardingRoutes);
+  await app.register(deviceWorkspaceRoutes);
+  await app.register(diagnosticRoutes);
+  await app.register(linuxTelemetryRoutes);
+  await app.register(telemetryFindingRoutes);
+  await app.register(commandCatalogRoutes);
+  await app.register(actionSessionRoutes);
+  await app.register(dailyCheckRoutes);
+  await app.register(assetRoutes);
+  await app.register(securityPlatformRoutes);
+  await app.register(vendorRoutes);
+  await app.register(linuxHealthRoutes);
+  await app.register(productStateRoutes);
   await app.register(eventRoutes);
   await app.register(detectionRoutes);
   await app.register(incidentRoutes);
 
   app.addHook("onClose", async () => {
-    await prisma.$disconnect();
+    stopAllLinuxLogStreams();
   });
 
   return app;

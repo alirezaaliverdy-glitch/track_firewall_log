@@ -3,7 +3,8 @@ import type { StructuredAiResponse, AiProviderInput } from "../ai-provider.servi
 import { parseAiIntent } from "../ai-intent.service.js";
 
 function topSourceIp(input: AiProviderInput) {
-  return input.context.events.topSourceIps[0]?.srcIp ?? null;
+  const events = input.context.evidencePack.recentHighCriticalEvents;
+  return Array.isArray(events) ? String((events[0] as Record<string, unknown> | undefined)?.srcIp ?? "") || null : null;
 }
 
 function openIncidentCount(input: AiProviderInput) {
@@ -32,6 +33,7 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
       shouldCreateIntent: true,
       intent: {
         intentType: parsed.intentType,
+        vendor: (String(parsed.parameters.vendor ?? "unknown") === "linux_edge" ? "linux" : String(parsed.parameters.vendor ?? "unknown")) as StructuredAiResponse["intent"] extends infer _ ? "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "generic" | "unknown" : never,
         riskLevel: parsed.riskLevel,
         targetDeviceHint: null,
         parameters: parsed.parameters,
@@ -44,6 +46,13 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
               "Which services should be allowed during business hours?"
             ]
           : parsedQuestions,
+        executionSupport: String(parsed.parameters.executionSupport ?? "catalog_executable") as "catalog_executable",
+        destructive: Boolean(parsed.parameters.destructive),
+        requiresExplicitReview: Boolean(parsed.parameters.requiresExplicitReview),
+        expectedImpact: String(parsed.parameters.expectedImpact ?? ""),
+        suggestedPrechecks: Array.isArray(parsed.parameters.suggestedPrechecks) ? parsed.parameters.suggestedPrechecks.map(String) : [],
+        suggestedVerification: Array.isArray(parsed.parameters.suggestedVerification) ? parsed.parameters.suggestedVerification.map(String) : [],
+        suggestedRollback: Array.isArray(parsed.parameters.suggestedRollback) ? parsed.parameters.suggestedRollback.map(String) : [],
         explanation: parsed.explanation
       },
       confidence: 0.86
@@ -56,6 +65,7 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
       shouldCreateIntent: true,
       intent: {
         intentType: AiIntentType.create_egress_policy,
+        vendor: "unknown",
         riskLevel: AiRiskLevel.high,
         targetDeviceHint: null,
         parameters: {
@@ -72,6 +82,13 @@ export async function runMockAiProvider(input: AiProviderInput): Promise<Structu
           "Which source and destination interfaces should be used?",
           "Which services should be allowed during business hours?"
         ],
+        executionSupport: "needs_parameters",
+        destructive: false,
+        requiresExplicitReview: false,
+        expectedImpact: "Creates or changes outbound firewall access for the selected source.",
+        suggestedPrechecks: [],
+        suggestedVerification: [],
+        suggestedRollback: [],
         explanation: "Creating an egress policy requires explicit device, interfaces, source, services, controlled planning, and rollback metadata."
       },
       confidence: 0.82

@@ -1,0 +1,54 @@
+﻿route,featureKey,labelFa,labelEn,group,component,state,navigationVisible,backendReady,apiReady,uiReady,tested,reason
+/dashboard,dashboard.overview,نمای کلی,Overview,dashboard,DashboardPage,implemented,true,true,true,true,true,
+/assets,assets.overview,نمای کلی,Overview,assets,AssetsOverviewPage,implemented,true,true,true,true,true,
+/assets/devices,assets.devices,تجهیزات,Devices,assets,AssetListPage,implemented,true,true,true,true,true,
+/assets/devices/new,assets.device_onboarding_new,ثبت دستگاه,Register device,assets,DeviceOnboardingPage,implemented,true,true,true,true,true,
+/assets/onboarding,assets.device_onboarding,راه‌اندازی دستگاه,Device onboarding,assets,DeviceOnboardingPage,implemented,false,true,true,true,true,
+/assets/vendors/:vendorKey/devices/new,assets.vendor_device_onboarding,ثبت دستگاه وندور,Register vendor device,assets,DeviceOnboardingPage,implemented,false,true,true,true,true,
+/assets/devices/:deviceId/setup,assets.device_setup,راه‌اندازی اتصال,Device setup,assets,DeviceOnboardingPage,implemented,false,true,true,true,true,
+/assets/devices/:deviceId,assets.device_detail,فضای کاری تجهیز,Device workspace,assets,AssetDetailPage,implemented,false,true,true,true,true,
+/assets/devices/:deviceId/:section,assets.device_workspace_section,بخش فضای کاری,Workspace section,assets,AssetDetailPage,implemented,false,true,true,true,true,
+/assets/sites,assets.sites,سایت‌ها,Sites,assets,"planned(""سایت‌ها"", ""این مسیر تا تکمیل گردش کار سایت‌ها از ناوبری اصلی خارج شده است."")",planned,false,true,true,false,false,
+/assets/networks,assets.networks,شبکه‌ها و VLANها,Networks,assets,"planned(""شبکه‌ها و VLANها"", ""شبکه و VLAN فعلا فقط در مدل داده وجود دارد و صفحه عملیاتی ندارد."")",planned,false,true,true,false,false,
+/assets/topology,assets.topology,توپولوژی,Topology,assets,"planned(""توپولوژی"", ""توپولوژی در جزئیات دارایی قابل توسعه است؛ نمای گراف عمومی هنوز فعال نیست."")",planned,false,true,true,false,false,
+/assets/sync,assets.sync,همگام‌سازی,Sync,assets,AssetSyncPage,partial,false,true,true,true,true,Only explicit mock NetBox and Wazuh preview workflows are available.
+/assets/vendors,assets.vendors,وندورها,Vendors,assets,CiscoOverviewPage,implemented,true,true,true,true,true,
+/assets/vendors/cisco,assets.vendors.cisco,Cisco,Cisco,assets,CiscoOverviewPage,partial,false,true,true,true,true,IOS-XE read-only foundation exists; live device verification and mutations are not complete.
+/assets/vendors/cisco/devices,assets.vendors.cisco_devices,دستگاه‌های Cisco,Cisco devices,assets,CiscoOverviewPage,unverified,false,true,true,true,true,The API currently returns an honest empty inventory until platform detection is refreshed.
+/assets/vendors/:vendorKey,assets.vendor_detail,جزئیات وندور,Vendor detail,assets,VendorDetailPage,implemented,false,true,true,true,true,
+/security,security.overview,نمای کلی,Overview,security,SecurityOverviewPage,implemented,true,true,true,true,true,
+/security/findings,security.findings,یافته‌ها,Findings,security,FindingsPage,implemented,true,true,true,true,true,
+/security/findings/:findingId,security.finding_detail,جزئیات یافته,Finding detail,security,FindingDetailPage,implemented,false,true,true,true,true,
+/security/events,security.events,رویدادها,Events,security,"planned(""رویدادها"", ""رویدادها در یافته‌ها و پایش مصرف می‌شوند؛ صفحه مستقل هنوز آماده نیست."")",planned,false,true,true,false,false,
+/security/rules,security.rules,قوانین تشخیص,Rules,security,DetectionRulesPage,partial,true,true,true,true,true,The seeded rule library is readable and tested; the full rule lifecycle is deferred to Milestone 19D.
+/security/rules/:ruleId,security.rule_detail,جزئیات قانون,Rule detail,security,"planned(""جزئیات قانون"")",planned,false,true,false,false,false,
+/monitoring,monitoring.overview,وضعیت کلی,Overview,monitoring,MonitoringPage,implemented,true,true,true,true,true,
+/monitoring/linux,monitoring.linux,Linux,Linux,monitoring,LinuxMonitoringPage,partial,true,true,true,true,true,Read APIs degrade safely; persisted refresh requires the pending observability migration.
+/monitoring/linux/:deviceId,monitoring.linux_detail,Linux detail,Linux detail,monitoring,LinuxMonitoringPage,partial,false,true,true,true,true,
+/monitoring/devices,monitoring.devices,مانیتورینگ تجهیزات,Device monitoring,monitoring,MonitoringPage,partial,false,true,true,true,true,This route currently shares the monitoring overview instead of a distinct route contract.
+/monitoring/devices/:deviceId,monitoring.device_detail,جزئیات مانیتورینگ,Monitoring detail,monitoring,MonitoringPage,partial,false,true,true,true,true,
+/monitoring/connectors,monitoring.connectors,سلامت Connectorها,Connectors,monitoring,"planned(""سلامت Connectorها"", ""وضعیت Connectorها فعلا در صفحات پایش و اقدام‌ها نمایش داده می‌شود."")",planned,false,true,false,false,false,
+/monitoring/daily-check,monitoring.daily_check,چک روزانه,Daily Check,monitoring,MonitoringPage,partial,false,true,true,true,true,Linux and MikroTik execute; other vendor profiles remain manual-only.
+/actions,actions.center,مرکز اقدام,Action Center,actions,ActionsPage,implemented,true,true,true,true,true,
+/actions/guided,actions.guided,اقدام راهنما,Guided Actions,actions,"planned(""اقدام راهنما"", ""جلسه‌های موجود با مسیر /guided-actions/:sessionId باز می‌مانند."")",planned,false,true,true,false,false,
+/actions/pending,actions.pending,تأییدهای منتظر,Pending,actions,ActionsPage,partial,false,true,true,true,true,The route currently reuses the complete Action Center without a dedicated pending filter.
+/actions/history,actions.history,تاریخچه اجرا,History,actions,ActionsPage,partial,false,true,true,true,true,The route currently reuses the complete Action Center without a dedicated history filter.
+/actions/:actionId,actions.detail,جزئیات Action,Action detail,actions,ActionsPage,implemented,false,true,true,true,true,
+/assistant,assistant,دستیار هوشمند,Assistant,assistant,AssistantPage,partial,true,true,true,true,true,Proposal and guided-workflow paths work; provider availability remains environment-dependent.
+/tools,tools.overview,ابزارهای تشخیصی,Diagnostic tools,integrations,ToolsPage,partial,false,true,true,true,true,Check-Host-backed public DNS/HTTP/Ping/TCP sessions persist through AuditLog; Nmap and monitors remain gated.
+/tools/network-check,tools.network_check,تست سریع شبکه,Network quick check,integrations,ToolsPage,partial,false,true,true,true,true,Public Check-Host-backed quick checks persist session evidence; private targets and Nmap remain policy-gated.
+/tools/domain-check,tools.domain_check,بررسی دامنه,Domain check,integrations,ToolsPage,partial,false,true,true,true,true,Shares persisted Check-Host diagnostic session workflow.
+/tools/ip-check,tools.ip_check,بررسی IP,IP check,integrations,ToolsPage,partial,false,true,true,true,true,Shares persisted Check-Host diagnostic session workflow.
+/tools/nmap,tools.nmap,Nmap,Nmap,integrations,ToolsPage,planned,false,false,false,true,false,Safe isolated worker is not implemented yet.
+/tools/dns,tools.dns,DNS,DNS,integrations,ToolsPage,partial,false,true,true,true,true,Shares persisted Check-Host diagnostic session workflow.
+/tools/http,tools.http,HTTP و TLS,HTTP and TLS,integrations,ToolsPage,partial,false,true,true,true,true,Shares persisted Check-Host diagnostic session workflow.
+/tools/ports,tools.ports,پورت‌ها,Ports,integrations,ToolsPage,partial,false,true,true,true,true,Shares persisted Check-Host TCP workflow.
+/tools/traceroute,tools.traceroute,مسیر,Traceroute,integrations,ToolsPage,planned,false,false,false,true,false,Traceroute provider is not implemented yet.
+/tools/ip-info,tools.ip_info,اطلاعات IP,IP info,integrations,ToolsPage,planned,false,false,false,true,false,IP/ASN enrichment provider is not implemented yet.
+/tools/subnet,tools.subnet,Subnet,Subnet,integrations,ToolsPage,planned,false,false,false,true,false,Subnet calculator is not implemented yet.
+/tools/history,tools.history,تاریخچه,History,integrations,ToolsPage,partial,false,true,true,true,true,Displays persisted diagnostic AuditLog sessions.
+/tools/monitors,tools.monitors,مانیتورها,Monitors,integrations,ToolsPage,planned,false,false,false,true,false,Scheduler and monitor run history are not implemented yet.
+/integrations,integrations.overview,وضعیت کلی,Overview,integrations,IntegrationsPage,partial,true,true,true,true,true,The page exposes explicit mock preview workflows only.
+/integrations/netbox,integrations.netbox,NetBox,NetBox,integrations,IntegrationsPage,not_configured,false,true,true,true,true,Only a mock adapter is configured; production apply is disabled.
+/integrations/wazuh,integrations.wazuh,Wazuh,Wazuh,integrations,IntegrationsPage,not_configured,false,true,true,true,true,Only a mock adapter is configured; production apply is disabled.
+/settings,settings,تنظیمات,Settings,settings,SettingsPage,planned,false,false,false,false,false,Milestone 19F owns the functional Settings Center; 19A must not fake it.

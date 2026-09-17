@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Firewall Log Analyzer">
+  <rect width="192" height="192" rx="38" fill="#07111a"/>
+  <path d="M96 24 154 46v44c0 38-22 66-58 78-36-12-58-40-58-78V46l58-22Z" fill="#0e7490" stroke="#67e8f9" stroke-width="8"/>
+  <path d="M64 86h64M72 111h48M82 62h28" stroke="#ecfeff" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="96" cy="128" r="10" fill="#22c55e"/>
+</svg>

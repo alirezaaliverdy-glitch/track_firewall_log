@@ -53,7 +53,7 @@ test("assessment UI uses cards and does not render findings as raw JSON", () => 
 });
 
 test("full-analysis and standalone hardening keep a stable Persian 200 contract", async () => {
-  const app = await buildApp();
+  const app = await buildApp({ authRequired: false });
   try {
     const full = await app.inject({ method: "POST", url: "/api/assessments/full-analysis", payload: { collectConnectorData: false } });
     assert.equal(full.statusCode, 200);

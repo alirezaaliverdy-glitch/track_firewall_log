@@ -264,10 +264,10 @@ export default function DeviceRegistryPanel() {
   const safeCredentials = normalizeArray<DeviceCredential>(credentials);
 
   return (
-    <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
+    <section dir="rtl" className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-left text-lg font-semibold text-zinc-100">Device Registry</h2>
+          <h2 className="text-right text-lg font-semibold text-zinc-100">مدیریت دستگاه‌ها</h2>
           <p className="mt-1 text-left text-sm text-zinc-400">
             Edge and firewall inventory for future monitored integrations.
           </p>
@@ -299,7 +299,7 @@ export default function DeviceRegistryPanel() {
           </div>
           <div className="grid gap-3">
             <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-              Name
+              نام اعتبارنامه
               <Input
                 value={credentialForm.name}
                 onChange={(event) => setCredentialForm((prev) => ({ ...prev, name: event.target.value }))}
@@ -320,7 +320,7 @@ export default function DeviceRegistryPanel() {
                 </select>
               </label>
               <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-                Username
+                نام کاربری
                 <Input
                   value={credentialForm.username}
                   onChange={(event) => setCredentialForm((prev) => ({ ...prev, username: event.target.value }))}
@@ -373,7 +373,7 @@ export default function DeviceRegistryPanel() {
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
-              Save credential
+              ذخیره اعتبارنامه
             </button>
           </div>
         </form>
@@ -424,7 +424,7 @@ export default function DeviceRegistryPanel() {
 
           <div className="grid gap-3">
             <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-              Name
+              نام دستگاه
               <Input
                 value={form.name}
                 onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
@@ -461,7 +461,7 @@ export default function DeviceRegistryPanel() {
               </label>
 
               <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-                Protocol
+                روش اتصال
                 <select
                   value={form.protocol}
                   onChange={(event) => {
@@ -483,7 +483,7 @@ export default function DeviceRegistryPanel() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_112px]">
               <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-                Host
+                آدرس
                 <Input
                   value={form.host}
                   onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))}
@@ -492,7 +492,7 @@ export default function DeviceRegistryPanel() {
                 />
               </label>
               <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-                Port
+                پورت
                 <Input
                   type="number"
                   min={1}
@@ -505,7 +505,7 @@ export default function DeviceRegistryPanel() {
             </div>
 
             <label className="grid gap-1 text-left text-xs font-medium text-zinc-400">
-              Credential
+              اعتبارنامه
               <select
                 value={form.credentialId ?? ""}
                 onChange={(event) => {
@@ -531,7 +531,7 @@ export default function DeviceRegistryPanel() {
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
-              {editingDevice ? "Save device" : "Add device"}
+              {editingDevice ? "ذخیره دستگاه" : "افزودن دستگاه"}
             </button>
           </div>
         </form>
@@ -545,7 +545,7 @@ export default function DeviceRegistryPanel() {
           ) : safeDevices.length === 0 ? (
             <div className="flex min-h-[260px] flex-col items-center justify-center gap-2 p-6 text-center text-zinc-500">
               <Server className="h-8 w-8" aria-hidden="true" />
-              <p className="text-sm">No devices registered yet.</p>
+              <p className="text-sm">هنوز دستگاهی ثبت نشده است.</p>
             </div>
           ) : (
             <div className="divide-y divide-zinc-800">
@@ -710,7 +710,7 @@ export default function DeviceRegistryPanel() {
                         className="inline-flex h-8 items-center gap-1.5 rounded border border-blue-800/70 bg-blue-950/40 px-2.5 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-900/50 disabled:opacity-60"
                       >
                         <PlugZap className="h-3.5 w-3.5" aria-hidden="true" />
-                        {testingId === device.id ? "Testing" : "Test"}
+                        {testingId === device.id ? "در حال تست" : "تست اتصال"}
                       </button>
                       <button
                         type="button"

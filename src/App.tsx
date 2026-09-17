@@ -1,121 +1,132 @@
 import "./App.css";
-import { Suspense } from "react";
-import { ShieldCheck } from "lucide-react";
+import { Suspense, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { LogProvider } from "@/context/LogContext";
-import CsvUploader from "./components/csv-uploader";
-import FirewallTypeSelector from "./components/upload/FirewallTypeSelector";
-import ColumnMappingWizard from "./components/upload/ColumnMappingWizard";
-import SummaryCards from "./components/dashboard/SummaryCards";
-import DataQualityPanel from "./components/dashboard/DataQualityPanel";
-import TrafficDirectionPanel from "./components/dashboard/TrafficDirectionPanel";
-import SensitivePortsExplorer from "./components/dashboard/SensitivePortsExplorer";
-import PolicyReviewPanel from "./components/policies/PolicyReviewPanel";
-import FindingsPanel from "./components/findings/FindingsPanel";
-import EvidenceOverviewBanner from "./components/findings/EvidenceOverviewBanner";
-import FindingDetails from "./components/findings/FindingDetails";
-import ActionDistributionChart from "./components/charts/ActionDistributionChart";
-import TopPortsChart from "./components/charts/TopPortsChart";
-import LogChart from "./components/log-chart";
-import LogTable from "./components/log-table";
-import ExportButtons from "./components/export/ExportButtons";
-import WorkflowGuide from "./components/layout/WorkflowGuide";
-import DeviceRegistryPanel from "./components/devices/DeviceRegistryPanel";
-import SecurityEventsPanel from "./components/events/SecurityEventsPanel";
-import ErrorBoundary from "./components/common/ErrorBoundary";
-import IncidentsPanel from "./components/incidents/IncidentsPanel";
-import AiSecurityAssistantPanel from "./components/ai/AiSecurityAssistantPanel";
-import ActionCenterPanel from "./components/actions/ActionCenterPanel";
-import FortiGateCapabilityMatrixPanel from "./components/fortigate/FortiGateCapabilityMatrixPanel";
+import AppBackground from "@/components/background/AppBackground";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
+import ActionResultView from "@/components/actions/ActionResultView";
+import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
+import CommandCatalogPanel from "@/components/commands/CommandCatalogPanel";
+import { AppShell } from "@/components/layout/AppShell";
+import { appRoutes, type AppRoute } from "@/routes/appRoutes";
+import WorkflowLabPage from "@/features/tools/pages/WorkflowLabPage";
+import { normalizeAppDeepLink } from "@/lib/deepLinks";
+import LandingStoryPage from "@/features/landing/pages/LandingStoryPage";
+
+function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="authenticated-app" data-page-id="actions.guided.session">
+      <AppBackground />
+      <main className="App relative z-10 mx-auto max-w-screen-lg px-4 pb-12 pt-6 sm:px-6">
+        <h1 dir="rtl" className="mb-4 text-right text-2xl font-bold text-slate-100">ساخت مرحله ای اکشن</h1>
+        <GuidedActionWizard sessionId={sessionId} onClose={() => navigate("/actions")} />
+      </main>
+    </div>
+  );
+}
+
+const legacyDashboardShortcutKey = "dashboard.shortcuts.library";
+void legacyDashboardShortcutKey;
+
+function GuidedActionRoute() {
+  const { sessionId = "" } = useParams();
+  return <StandaloneGuidedAction sessionId={sessionId} />;
+}
+
+function ActionResultRoute() {
+  const { actionId = "" } = useParams();
+  return <div className="authenticated-app" data-page-id="actions.result"><AppBackground /><ActionResultView actionPlanId={actionId} /></div>;
+}
+
+function MonitoringActionResultRoute() {
+  const { actionId = "" } = useParams();
+  return <div className="authenticated-app" data-page-id="monitoring.action_result"><AppBackground /><ActionResultView actionPlanId={actionId} /></div>;
+}
+
+function FeatureRoute({ route }: { route: AppRoute }) {
+  const params = useParams();
+  const Page = route.component;
+  return (
+    <div className="authenticated-app" data-page-id={route.featureKey}>
+      <AppBackground />
+      <AppShell currentPath={route.path}>
+        <ErrorBoundary title={route.labelFa}>
+          <Page params={params as Record<string, string>} />
+        </ErrorBoundary>
+      </AppShell>
+    </div>
+  );
+}
+
+function WorkflowLabRoute() {
+  const { t } = useTranslation();
+  return (
+    <div className="authenticated-app" data-page-id="tools.workflow_lab">
+      <AppBackground />
+      <AppShell currentPath="/tools">
+        <ErrorBoundary title={t("workflowLab.title")}><WorkflowLabPage /></ErrorBoundary>
+      </AppShell>
+    </div>
+  );
+}
+
+function ActionLibraryRoute() {
+  const { t } = useTranslation();
+  return (
+    <div className="authenticated-app" data-page-id="actions.library">
+      <AppBackground />
+      <AppShell currentPath="/actions">
+        <ErrorBoundary title={t("error.actionLibrary")}><CommandCatalogPanel /></ErrorBoundary>
+      </AppShell>
+    </div>
+  );
+}
+
+function NotFoundPage() {
+  return (
+    <div className="authenticated-app" data-page-id="not-found">
+      <AppBackground />
+      <AppShell currentPath="">
+        <section className="state-card" role="alert">
+          <h1>404</h1>
+          <p>Page not found / صفحه پیدا نشد</p>
+        </section>
+      </AppShell>
+    </div>
+  );
+}
+
+function RouterNavigationBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const to = event instanceof CustomEvent && typeof event.detail?.to === "string" ? event.detail.to : "";
+      if (to) navigate(normalizeAppDeepLink(to));
+    };
+    window.addEventListener("app:navigate", handler);
+    return () => window.removeEventListener("app:navigate", handler);
+  }, [navigate]);
+  return null;
+}
 
 function App() {
   return (
-    <Suspense fallback={<h1>loading logs ...</h1>}>
+    <Suspense fallback={<h1>loading...</h1>}>
       <LogProvider>
-        <div className="App max-w-screen-2xl mx-auto px-4 pb-12 pt-4 sm:px-6">
-          <div className="mb-4 overflow-hidden rounded-xl border border-blue-900/50 bg-slate-950/70 shadow-[inset_0_1px_0_rgba(59,130,246,0.14)]">
-            <div className="h-1 bg-gradient-to-r from-blue-600 via-sky-400 to-blue-900" />
-            <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h1 className="text-left text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
-                  Firewall Log Analyzer
-                </h1>
-                <p className="mt-1 text-left text-sm text-slate-400">
-                  Backend-powered firewall import, findings, evidence, and export review.
-                </p>
-              </div>
-              <div className="inline-flex w-fit items-center gap-2 rounded-md border border-blue-800/70 bg-blue-950/40 px-3 py-1.5 text-xs font-medium text-blue-200">
-                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                Backend analysis
-              </div>
-            </div>
-          </div>
-
-          <ErrorBoundary title="AI Security Assistant unavailable">
-            <AiSecurityAssistantPanel />
-          </ErrorBoundary>
-          <ErrorBoundary title="Action Center unavailable">
-            <ActionCenterPanel />
-          </ErrorBoundary>
-          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Manage Devices</summary>
-            <div className="mt-4">
-              <ErrorBoundary title="Device Registry unavailable">
-                <DeviceRegistryPanel />
-              </ErrorBoundary>
-            </div>
-          </details>
-          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Events / Incidents / Logs</summary>
-            <div className="mt-4">
-              <ErrorBoundary title="Upload panel unavailable">
-                <div id="log-upload" className="scroll-mt-4">
-                  <FirewallTypeSelector />
-                  <CsvUploader />
-                </div>
-              </ErrorBoundary>
-              <ErrorBoundary title="Security Events unavailable">
-                <SecurityEventsPanel />
-              </ErrorBoundary>
-              <ErrorBoundary title="Incidents unavailable">
-                <IncidentsPanel />
-              </ErrorBoundary>
-              <details className="mb-4 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Import Diagnostics</summary>
-                <div className="mt-4">
-                  <DataQualityPanel />
-                </div>
-              </details>
-            </div>
-          </details>
-          <WorkflowGuide />
-          <ColumnMappingWizard />
-          <SummaryCards />
-
-          <div id="analysis-overview" className="scroll-mt-4">
-            <EvidenceOverviewBanner />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <ActionDistributionChart />
-              <TopPortsChart />
-            </div>
-          </div>
-          <LogChart />
-
-          <TrafficDirectionPanel />
-          <PolicyReviewPanel />
-          <FindingsPanel />
-          <FindingDetails />
-          <LogTable />
-          <SensitivePortsExplorer />
-          <ExportButtons />
-          <details className="mb-4 rounded-lg border border-zinc-800 bg-slate-950/60 p-4 text-left">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-100">Vendor Readiness / Admin</summary>
-            <div className="mt-4">
-              <ErrorBoundary title="FortiGate Capability Matrix unavailable">
-                <FortiGateCapabilityMatrixPanel />
-              </ErrorBoundary>
-            </div>
-          </details>
-        </div>
+        <RouterNavigationBridge />
+        <Routes>
+          <Route path="/" element={<Navigate to="/landing" replace />} />
+          <Route path="/landing" element={<LandingStoryPage />} />
+          <Route path="/action-library" element={<ActionLibraryRoute />} />
+          <Route path="/guided-actions/:sessionId" element={<GuidedActionRoute />} />
+          <Route path="/actions/:actionId/result" element={<ActionResultRoute />} />
+          <Route path="/monitoring/actions/:actionId/result" element={<MonitoringActionResultRoute />} />
+          {import.meta.env.DEV ? <Route path="/tools/workflow-lab" element={<WorkflowLabRoute />} /> : null}
+          {appRoutes.map((route) => <Route key={route.featureKey} path={route.path} element={<FeatureRoute route={route} />} />)}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
       </LogProvider>
     </Suspense>
   );

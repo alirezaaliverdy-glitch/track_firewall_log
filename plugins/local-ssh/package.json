@@ -1,0 +1,17 @@
+{
+  "name": "@firewallsoar/local-ssh",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    },
+    "ios": {
+      "src": "ios"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": "^8.4.0"
+  }
+}

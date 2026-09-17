@@ -1,15 +1,17 @@
 import type { FastifyPluginAsync } from "fastify";
-import { buildSecurityContext } from "../services/ai-context.service.js";
+import { buildSecurityOrchestratorContext } from "../ai/context/security-orchestrator-context.js";
 import { chatWithAssistant, clearAiChatSessionMessages, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
 import { completeAiActionRequest, getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
 import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
-  app.post<{ Body: { sessionId?: string; message?: string } }>("/api/ai/chat", async (request, reply) => {
+  app.post<{ Body: { sessionId?: string; message?: string; deviceId?: string; selectedDeviceId?: string; selectedVendor?: string; selectedConnectorType?: string; selectedDeviceName?: string; intentModeOverride?: "Auto" | "Chat" | "Action" | string } }>("/api/ai/chat", async (request, reply) => {
     try {
       return await chatWithAssistant({
         sessionId: request.body?.sessionId,
-        message: request.body?.message ?? ""
+        message: request.body?.message ?? "",
+        deviceId: request.body?.selectedDeviceId ?? request.body?.deviceId,
+        intentModeOverride: request.body?.intentModeOverride
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI chat failed";
@@ -19,7 +21,8 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
           statusCode: error.statusCode,
           provider: error.provider,
           attemptedModels: error.attemptedModels,
-          message
+          message: "اتصال هوش مصنوعی آماده نیست. تنظیمات provider را بررسی کنید.",
+          detail: message
         });
       }
       return reply.code(400).send({
@@ -49,7 +52,7 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get("/api/ai/context/security-summary", async () => buildSecurityContext());
+  app.get("/api/ai/context/security-summary", async () => buildSecurityOrchestratorContext());
 
   app.get("/api/ai/provider/status", async () => getAiProviderStatus());
 

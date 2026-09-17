@@ -4,6 +4,8 @@ import { selectDeviceConnector } from "../connectors/connector-registry.service.
 import { prisma } from "../db/prisma.js";
 import { buildSecurityContext } from "./ai-context.service.js";
 import { proposeActionPlan } from "./action-plan.service.js";
+import { analyzeVendorDevice, buildCompactVendorAiContext, normalizeAnalysisVendor } from "../assessments/vendor-analysis-profiles.js";
+import { buildEvidencePack } from "../ai/context/evidence-pack.service.js";
 
 type SecurityContext = Awaited<ReturnType<typeof buildSecurityContext>>;
 type AssessmentFinding = {
@@ -55,7 +57,7 @@ function severityCount(context: SecurityContext, severity: string) {
   return context.incidents.countBySeverity.find((row) => row.severity === severity)?.count ?? 0;
 }
 
-export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0) {
+export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0, snapshotRecords: Array<{ deviceId: string; snapshotType: string; dataJson: unknown }> = []) {
   const findings: AssessmentFinding[] = [];
   const criticalIncidents = severityCount(context, "critical");
   const highIncidents = severityCount(context, "high");
@@ -147,7 +149,8 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
       ? "ریسک امنیتی متوسط است؛ چند بهبود مهم در ایمن‌سازی و مشاهده‌پذیری لازم است."
       : "ریسک مشاهده‌شده پایین است؛ ایمن‌سازی دوره‌ای و کنترل پوشش لاگ باید ادامه یابد.";
 
-  const vendorCounts = Object.fromEntries(["mikrotik", "fortigate", "linux"].map((vendor) => [vendor, context.devices.filter((d) => normalizeVendor(d.vendor || d.type) === vendor).length]));
+  const vendorCounts = Object.fromEntries(["mikrotik", "fortigate", "linux", "pfsense", "cisco", "generic"].map((vendor) => [vendor, context.devices.filter((d) => normalizeAnalysisVendor(d.vendor || d.type) === vendor).length]));
+  const vendorAnalyses = context.devices.map((device) => analyzeVendorDevice(device, snapshotRecords.filter((snapshot) => snapshot.deviceId === device.id)));
   const connected = context.devices.filter((d) => ["online", "connected"].includes(String(d.status).toLowerCase())).length;
   const noDeviceData = snapshotCount === 0;
   const riskLabel = score >= 70 ? "بحرانی" : score >= 40 ? "بالا" : score >= 20 ? "متوسط" : "پایین";
@@ -192,12 +195,14 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
     },
     explanation: "امتیاز به‌صورت قطعی از شدت رخدادها، ترافیک پورت حساس، سلامت دستگاه، شکست اکشن و پوشش داده محاسبه شده است.",
     recommendedNextSteps: findings.map((finding) => finding.recommendedNextStep),
-    catalogCoverage
+    catalogCoverage,
+    vendorAnalyses,
+    aiContext: buildCompactVendorAiContext(vendorAnalyses)
   };
 }
 
-async function collectReadOnlySnapshots() {
-  const devices = await prisma.device.findMany();
+async function collectReadOnlySnapshots(scopeId?: string) {
+  const devices = await prisma.device.findMany({ where: scopeId ? { id: scopeId } : undefined });
   const snapshots = await Promise.all(devices.map(async (device) => {
     const connector = selectDeviceConnector(device);
     if (!connector || (!device.credentialId && !device.credentialRef)) return null;
@@ -218,15 +223,19 @@ async function collectReadOnlySnapshots() {
 export async function runFullAnalysis(input: { scopeType?: string; scopeId?: string; collectConnectorData?: boolean } = {}) {
   const [context, snapshots] = await Promise.all([
     buildSecurityContext({ recentMinutes: 1440 }),
-    input.collectConnectorData === false ? Promise.resolve([]) : collectReadOnlySnapshots()
+    input.collectConnectorData === false ? Promise.resolve([]) : collectReadOnlySnapshots(input.scopeType === "device" ? input.scopeId : undefined)
   ]);
-  const [credentialLinks, capabilityRecords, storedSnapshots, auditLogs] = await Promise.all([
+  const [credentialLinks, capabilityRecords, storedSnapshots, auditLogs, latestSnapshots, evidencePack] = await Promise.all([
     prisma.device.count({ where: { OR: [{ credentialId: { not: null } }, { credentialRef: { not: null } }] } }),
     prisma.deviceCapability.count(),
     prisma.deviceSnapshot.count(),
-    prisma.actionAuditLog.count()
+    prisma.actionAuditLog.count(),
+    prisma.deviceSnapshot.findMany({ orderBy: { collectedAt: "desc" }, take: 100, select: { deviceId: true, snapshotType: true, dataJson: true } }),
+    buildEvidencePack({ selectedDeviceId: input.scopeType === "device" ? input.scopeId : undefined })
   ]);
-  const draft = buildAssessmentDraft(context, snapshots.length);
+  const scopedContext = input.scopeType === "device" && input.scopeId ? { ...context, devices: context.devices.filter((device) => device.id === input.scopeId) } : context;
+  const relevantSnapshots = latestSnapshots.filter((snapshot) => scopedContext.devices.some((device) => device.id === snapshot.deviceId));
+  const draft = buildAssessmentDraft(scopedContext as SecurityContext, relevantSnapshots.length, relevantSnapshots);
   return prisma.securityAssessment.create({
     data: {
       scopeType: input.scopeType?.trim() || "all",
@@ -235,7 +244,7 @@ export async function runFullAnalysis(input: { scopeType?: string; scopeId?: str
       riskScore: draft.riskScore,
       summary: draft.summary,
       findingsJson: toJson(draft),
-      dataSourcesJson: toJson({ device: context.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
+      dataSourcesJson: toJson({ device: scopedContext.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, rawLogsSentToAi: false, compactVendorAiContext: draft.aiContext, evidencePackMetadata: evidencePack.metadata, availableActionHints: evidencePack.availableActionHints, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
       language: "fa"
     },
     include: { recommendations: { include: { device: { select: { id: true, name: true, vendor: true, type: true } } } } }
@@ -324,10 +333,12 @@ export async function generateStandaloneHardeningSuggestions() {
 }
 
 export async function getSecurityAssessment(id: string) {
-  return prisma.securityAssessment.findUnique({
+  const assessment = await prisma.securityAssessment.findUnique({
     where: { id },
     include: { recommendations: { orderBy: [{ executable: "desc" }, { createdAt: "asc" }], include: { device: { select: { id: true, name: true, vendor: true, type: true } } } } }
   });
+  if (!assessment) return null;
+  return { ...assessment, recommendations: assessment.recommendations.map((item) => ({ ...item, createActionSupported: item.executable, actionHint: item.catalogActionId ?? (item.actionType === "custom_vendor_action" ? "generic_security_action" : null), impact: item.reason, recommendedFix: item.recommendation, evidence: item.evidenceJson })) };
 }
 
 function catalogRecommendation(input: Omit<RecommendationDraft, "actionType" | "executable">): RecommendationDraft {
@@ -348,7 +359,7 @@ export function buildHardeningRecommendationDrafts(
   const recommendations: RecommendationDraft[] = [];
 
   for (const device of devices) {
-    const vendor = normalizeVendor(device.vendor || device.type);
+    const vendor = normalizeAnalysisVendor(device.vendor || device.type);
     if (vendor === "mikrotik") {
       recommendations.push(catalogRecommendation({
         deviceId: device.id, vendor, title: "تهیه خروجی امن و به‌روز از تنظیمات MikroTik", severity: "medium", category: "پشتیبان‌گیری و بازیابی",
@@ -385,6 +396,29 @@ export function buildHardeningRecommendationDrafts(
         reason: "این مبدأ بیشترین حجم رویداد اخیر را ایجاد کرده است.", evidence: { sourceIp: leadingSource, source: topSources[0] },
         recommendation: "پس از تأیید مخرب بودن مبدأ، مسدودسازی مدیریت‌شده و زمان‌دار UFW اعمال شود.", catalogActionId: "linux.temporary_block_ip", parameters: { srcIp: leadingSource, durationMinutes: 30 }
       }));
+    } else {
+      const templates: Record<string, { title: string; reason: string; fix: string }> = {
+        pfsense: { title: "محدودسازی دسترسی مدیریتی pfSense از WAN", reason: "قاعده WAN با دسترسی مدیریتی می‌تواند سطح حمله را افزایش دهد.", fix: "مبدأ دسترسی WAN به شبکه‌های مورد اعتماد محدود شود." },
+        cisco: { title: "غیرفعال‌سازی Telnet و استفاده از SSH در Cisco", reason: "Telnet رمزنگاری ندارد و اطلاعات ورود را در معرض قرار می‌دهد.", fix: "Telnet غیرفعال و SSH با AAA و ACL مدیریتی فعال شود." },
+        generic: { title: "بازبینی سطح سرویس و تلمتری دستگاه ناشناخته", reason: "Vendor یا قابلیت‌های دستگاه هنوز تأیید نشده است.", fix: "اتصال، سرویس‌های باز، لاگ احراز هویت و قابلیت‌ها جمع‌آوری شوند." }
+      };
+      const copy = templates[vendor] ?? templates.generic;
+      recommendations.push({ deviceId: device.id, vendor, title: copy.title, severity: "high", category: "Vendor Hardening", reason: copy.reason, evidence: { device: device.name, status: "داده کافی جمع‌آوری نشده است" }, recommendation: copy.fix, catalogActionId: null, actionType: "custom_vendor_action", parameters: { vendor, requestedOperation: copy.fix, operationCategory: "hardening", executionSupport: "manual_or_not_implemented", requiresExplicitReview: true }, executable: true });
+    }
+  }
+
+  const vendorAnalyses = Array.isArray(details.vendorAnalyses) ? details.vendorAnalyses.map(object) : [];
+  for (const analysis of vendorAnalyses) {
+    const analysisFindings = Array.isArray(analysis.findings) ? analysis.findings.map(object) : [];
+    for (const finding of analysisFindings.filter((item) => item.id && item.title)) {
+      const deviceId = typeof analysis.deviceId === "string" ? analysis.deviceId : null;
+      const vendor = normalizeAnalysisVendor(analysis.vendor);
+      const recommendedFix = String(finding.recommendedFix ?? "Review the finding and apply a controlled hardening change.");
+      recommendations.push({
+        deviceId, vendor, title: `${String(finding.title)} — پیشنهاد ایمن‌سازی`, severity: String(finding.severity ?? "medium"), category: "Vendor Finding", reason: `اثر امنیتی: ${String(finding.impact ?? "نیازمند بررسی")}`,
+        evidence: { evidence: finding.evidence ?? "data not collected", findingId: finding.id }, recommendation: `${recommendedFix} (پس از بازبینی)`, catalogActionId: null, actionType: "custom_vendor_action",
+        parameters: { vendor, requestedOperation: recommendedFix, operationCategory: "hardening", executionSupport: "manual_or_not_implemented", requiresExplicitReview: true, findingId: finding.id }, executable: Boolean(deviceId)
+      });
     }
   }
 
@@ -431,15 +465,16 @@ export async function createActionPlanFromRecommendation(id: string) {
     const existing = await prisma.actionPlan.findUnique({ where: { id: recommendation.actionPlanId }, include: { device: true } });
     if (existing) return { recommendationId: id, actionPlan: existing };
   }
-  if (!recommendation.executable || !recommendation.catalogActionId || !recommendation.actionType || !recommendation.deviceId) {
+  if (!recommendation.executable || !recommendation.actionType || !recommendation.deviceId) {
     throw new Error("این پیشنهاد دستی است یا هنوز در کاتالوگ کنترل‌شده پشتیبانی نمی‌شود.");
   }
-  const entry = getCommandCatalogEntry(recommendation.catalogActionId);
-  if (!entry?.supportsExecution || entry.actionType !== recommendation.actionType || !Object.values(ActionType).includes(recommendation.actionType as ActionType)) {
+  const entry = recommendation.catalogActionId ? getCommandCatalogEntry(recommendation.catalogActionId) : null;
+  const isGenericProposal = !recommendation.catalogActionId && recommendation.actionType === "custom_vendor_action";
+  if (!isGenericProposal && (!entry?.supportsExecution || entry.actionType !== recommendation.actionType || !Object.values(ActionType).includes(recommendation.actionType as ActionType))) {
     throw new Error("این پیشنهاد دیگر به اکشن اجرایی کاتالوگ کنترل‌شده نگاشت نمی‌شود.");
   }
   const parameters = object(recommendation.parametersJson);
-  const missing = entry.requiredParams.filter((field) => parameters[field] === undefined || parameters[field] === "");
+  const missing = entry?.requiredParams.filter((field) => parameters[field] === undefined || parameters[field] === "") ?? [];
   if (missing.length > 0) throw new Error(`Recommendation requires: ${missing.join(", ")}.`);
   const plan = await proposeActionPlan({
     source: "system",
@@ -447,7 +482,7 @@ export async function createActionPlanFromRecommendation(id: string) {
     deviceId: recommendation.deviceId,
     vendor: recommendation.vendor,
     actionType: recommendation.actionType,
-    riskLevel: entry.risk as AiRiskLevel,
+    riskLevel: (entry?.risk ?? recommendation.severity) as AiRiskLevel,
     parametersJson: parameters
   });
   await prisma.hardeningRecommendation.update({ where: { id }, data: { status: "action_plan_created", actionPlanId: plan.id } });

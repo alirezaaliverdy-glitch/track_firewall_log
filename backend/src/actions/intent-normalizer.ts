@@ -4,7 +4,7 @@ import { normalizeVendor, type NormalizedVendor } from "../services/ai-normaliza
 export const CANONICAL_INTENT_FIELDS = [
   "deviceId", "vendor", "actionType", "sourceIp", "sourceCidr", "destinationIp", "destinationCidr",
   "trustedSource", "trustedSourceCidr", "srcInterface", "dstInterface", "srcZone", "dstZone",
-  "serviceName", "services", "port", "newPort", "protocol", "schedule", "nat", "logTraffic", "comment"
+  "serviceName", "services", "username", "port", "newPort", "protocol", "schedule", "nat", "logTraffic", "comment"
 ] as const;
 
 export type CanonicalIntentField = typeof CANONICAL_INTENT_FIELDS[number];

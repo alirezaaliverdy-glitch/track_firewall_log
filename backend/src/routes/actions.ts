@@ -16,11 +16,18 @@ import {
 } from "../services/action-plan.service.js";
 import { commandCatalogForVendor, VENDOR_COMMAND_CATALOG } from "../actions/catalog/index.js";
 import { routeCatalogIntent } from "../actions/intent-router.js";
+import { cancelActionCenterItem, clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, updateActionCenterTarget } from "../services/action-center.service.js";
+import { requiredExecutionPermissionForRisk } from "../security/authorization.js";
+import { hasPermission } from "../security/permissions.js";
+import { getActionParameterSchema } from "../actions/parameter-schema-registry.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
+  const actor = (request: { authUser?: { id: string } }) => request.authUser?.id;
+  const actorRole = (request: { authUser?: { role: string } }) => request.authUser?.role;
+
   app.post<{ Body: Record<string, unknown> }>("/api/actions/propose", async (request, reply) => {
     try {
-      return reply.code(201).send(await proposeActionPlan(request.body ?? {}));
+      return reply.code(201).send(await proposeActionPlan({ ...(request.body ?? {}), requestedBy: actor(request) }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to propose action plan";
       return reply.code(400).send({ error: "Failed to propose action plan", detail: message });
@@ -28,6 +35,47 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/api/actions", async () => listActionPlans());
+
+  app.get<{ Querystring: Record<string, unknown> }>("/api/action-center", async (request) => listActionCenter(request.query));
+
+  app.delete<{ Body: { confirmation?: string } }>("/api/action-center/history", async (request, reply) => {
+    if (request.authUser?.role !== "admin") return reply.code(403).send({ error: { code: "ADMIN_REQUIRED", message: "Only an administrator can clear ActionPlan history." } });
+    if (request.body?.confirmation !== "DELETE ACTION HISTORY") return reply.code(400).send({ error: { code: "CONFIRMATION_REQUIRED", message: "Confirm clearing completed ActionPlan history." } });
+    return clearActionCenterHistory();
+  });
+
+  app.get<{ Params: { id: string } }>("/api/action-center/:id", async (request, reply) => {
+    const item = await getActionCenterItem(request.params.id);
+    return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+  });
+
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>("/api/action-center/:id/cancel", async (request, reply) => {
+    try {
+      const item = await cancelActionCenterItem(request.params.id, actor(request), request.body?.reason);
+      return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      return reply.code(409).send({ error: { code: "ACTION_CANCEL_BLOCKED", message: error instanceof Error ? error.message : "ActionPlan cannot be cancelled." } });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/action-center/:id/retry", async (request, reply) => {
+    try {
+      const item = await retryActionCenterItem(request.params.id, actor(request));
+      return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      return reply.code(409).send({ error: { code: "ACTION_RETRY_BLOCKED", message: error instanceof Error ? error.message : "ActionPlan cannot be retried." } });
+    }
+  });
+
+  app.patch<{ Params: { id: string }; Body: { deviceId?: string } }>("/api/action-center/:id/target", async (request, reply) => {
+    try {
+      if (!request.body?.deviceId) return reply.code(400).send({ error: { code: "DEVICE_SELECTION_REQUIRED", message: "Select a target device." } });
+      const item = await updateActionCenterTarget(request.params.id, request.body.deviceId);
+      return item ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      return reply.code(409).send({ error: { code: "ACTION_TARGET_CHANGE_BLOCKED", message: error instanceof Error ? error.message : "Target device cannot be changed." } });
+    }
+  });
 
   app.get("/api/actions/catalog", async () => ({ actions: VENDOR_COMMAND_CATALOG }));
 
@@ -44,8 +92,24 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/api/actions/:id", async (request, reply) => {
     const plan = await getActionPlan(request.params.id);
-    if (!plan) return reply.code(404).send({ error: "Action plan not found" });
+    if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
     return plan;
+  });
+
+  app.get<{ Params: { id: string } }>("/api/actions/:id/parameter-schema", async (request, reply) => {
+    const plan = await getActionPlan(request.params.id);
+    if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
+    const parametersJson = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson) ? plan.parametersJson as Record<string, unknown> : {};
+    const metadata = parametersJson.metadata && typeof parametersJson.metadata === "object" && !Array.isArray(parametersJson.metadata) ? parametersJson.metadata as Record<string, unknown> : {};
+    return {
+      actionPlanId: plan.id,
+      schema: getActionParameterSchema({
+        actionType: plan.actionType,
+        vendor: plan.device?.vendor ?? undefined,
+        platform: typeof metadata.platform === "string" ? metadata.platform : null,
+        parametersJson,
+      }),
+    };
   });
 
   app.post<{ Params: { id: string } }>("/api/actions/:id/validate", async (request, reply) => {
@@ -73,7 +137,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/approve", async (request, reply) => {
     try {
-      const plan = await approveActionPlan(request.params.id, request.body ?? {});
+      const plan = await approveActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request), approvedByRole: actorRole(request) });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
     } catch (error) {
@@ -85,18 +149,28 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/reject", async (request, reply) => {
-    const plan = await rejectActionPlan(request.params.id, request.body ?? {});
+    const plan = await rejectActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request), approvedByRole: actorRole(request) });
     if (!plan) return reply.code(404).send({ error: "Action plan not found" });
     return plan;
   });
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/execute", async (request, reply) => {
     try {
+      const existingPlan = await getActionPlan(request.params.id);
+      const requiredPermission = requiredExecutionPermissionForRisk(existingPlan?.riskLevel);
+      if (request.authUser && !hasPermission(request.authUser.role, requiredPermission)) {
+        return reply.code(403).send({
+          error: "forbidden",
+          reasonCode: "HIGH_RISK_PERMISSION_REQUIRED",
+          messageFa: "نقش کاربری شما اجازه اجرای عملیات پرریسک را ندارد."
+        });
+      }
       const plan = await executeActionPlan(request.params.id, request.body ?? {});
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
       return plan;
     } catch (error) {
       if (error instanceof ActionExecutionError) {
+        if (error.code === "COMMAND_PLAN_STALE") return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message, ...(error.details ?? {}) } });
         return reply.code(error.statusCode).send({
           error: error.code,
           detail: error.message
@@ -109,9 +183,20 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/actions/:id/quick-execute", async (request, reply) => {
     try {
-      const plan = await quickExecuteActionPlan(request.params.id, request.body ?? {});
+      const existingPlan = await getActionPlan(request.params.id);
+      const requiredPermission = requiredExecutionPermissionForRisk(existingPlan?.riskLevel);
+      if (request.authUser && !hasPermission(request.authUser.role, requiredPermission)) {
+        return reply.code(403).send({
+          error: "forbidden",
+          reasonCode: "HIGH_RISK_PERMISSION_REQUIRED",
+          messageFa: "نقش کاربری شما اجازه اجرای عملیات پرریسک را ندارد."
+        });
+      }
+      const plan = await quickExecuteActionPlan(request.params.id, { ...(request.body ?? {}), approvedBy: actor(request), approvedByRole: actorRole(request) }, {
+        trace: (stage, payload) => request.log.info({ ...payload, stage }, stage)
+      });
       if (!plan) return reply.code(404).send({ error: "Action plan not found" });
-      return plan;
+      return { ...plan, resultUrl: `/actions/${plan.id}/result` };
     } catch (error) {
       if (error instanceof QuickExecuteConfirmationRequiredError) {
         return reply.code(error.statusCode).send({
@@ -121,6 +206,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       if (error instanceof ActionExecutionError) {
+        if (error.code === "COMMAND_PLAN_STALE") return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message, ...(error.details ?? {}) } });
         return reply.code(error.statusCode).send({
           error: error.code,
           detail: error.message

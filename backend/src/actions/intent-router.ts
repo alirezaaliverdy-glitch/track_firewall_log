@@ -66,6 +66,7 @@ function extractedParameters(entry: CommandCatalogEntry, text: string) {
   const ips = addresses(text);
   const foundPorts = ports(text, ips);
   const parameters: Record<string, unknown> = { vendor: entry.vendor, targetDeviceHint: entry.vendor };
+  const username = text.match(/(?:user|یوزر|کاربر)\s+([a-z_][a-z0-9_.-]{0,31})\b/i)?.[1];
 
   if (entry.id === "mikrotik.change_service_port") {
     parameters.serviceName = text.includes("ssh") ? "ssh" : text.includes("www") ? "www" : "ssh";
@@ -124,6 +125,13 @@ function extractedParameters(entry: CommandCatalogEntry, text: string) {
     }
     parameters.protocol = text.includes("udp") ? "udp" : "tcp";
     parameters.serviceName = text.match(/\b(nginx|apache2?|httpd|ssh|sshd|ufw|docker|postgresql|mysql|redis)\b/)?.[0] ?? "system";
+    if (username) parameters.username = username;
+  }
+
+  const missingFields = entry.requiredParams.filter((field) => parameters[field] === undefined || parameters[field] === "");
+  if (missingFields.length) {
+    parameters.missingFields = missingFields;
+    parameters.clarificationQuestions = missingFields.map((field) => field === "username" ? "نام کاربر لینوکس چیست؟" : `مقدار ${field} چیست؟`);
   }
 
   return parameters;

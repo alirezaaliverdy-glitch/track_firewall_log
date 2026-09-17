@@ -5,8 +5,6 @@ import {
   type AiActionIntent,
   type Prisma
 } from "@prisma/client";
-import { fortiGateSupportedActions } from "../actions/fortigate-action-catalog.js";
-import { mikroTikSupportedActions } from "../actions/mikrotik-action-catalog.js";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "./action-plan.service.js";
 import { normalizeIntentType, normalizeVendor, resolveDeviceIdFromCandidates } from "./ai-normalization.js";
@@ -64,6 +62,40 @@ function containsAny(text: string, values: string[]) {
   return values.some((value) => text.includes(value));
 }
 
+function customAction(input: {
+  vendor: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "generic" | "unknown";
+  requestedOperation: string;
+  category?: string;
+  critical?: boolean;
+  destructive?: boolean;
+  targetDeviceHint?: string;
+  expectedImpact?: string;
+}): ParsedIntent {
+  const destructive = Boolean(input.destructive || input.critical);
+  return {
+    intentType: AiIntentType.custom_vendor_action,
+    riskLevel: input.critical ? AiRiskLevel.critical : AiRiskLevel.high,
+    parameters: {
+      vendor: input.vendor,
+      targetDeviceHint: input.targetDeviceHint ?? input.vendor,
+      requestedOperation: input.requestedOperation,
+      operationCategory: input.category ?? "other",
+      destructive,
+      requiresExplicitReview: destructive || Boolean(input.critical),
+      executionSupport: input.vendor === "unknown" ? "unsupported_vendor" : "manual_or_not_implemented",
+      expectedImpact: input.expectedImpact ?? "The requested change may alter device security, availability, or connectivity.",
+      requiredParameters: [],
+      providedParameters: {},
+      missingFields: [],
+      clarificationQuestions: [],
+      suggestedPrechecks: ["Confirm the target device and capture the current configuration state."],
+      suggestedVerification: ["Verify the requested state and confirm management connectivity after the change."],
+      suggestedRollback: ["Restore the previous configuration or revert the specific change if verification fails."]
+    },
+    explanation: "A reviewable custom action proposal was created because no controlled catalog execution path is available."
+  };
+}
+
 function normalizeUnicodePersian(value: string) {
   return value.replace(/[\u06f0-\u06f9\u0660-\u0669]/g, (digit) => {
     if (digit >= "\u06f0" && digit <= "\u06f9") return String(digit.charCodeAt(0) - 0x06f0);
@@ -82,9 +114,9 @@ function durationTimeoutFromText(text: string, nums: number[]) {
   if (containsAny(text, ["\u0646\u06cc\u0645 \u0633\u0627\u0639\u062a", "\u0646\u064a\u0645 \u0633\u0627\u0639\u062a"])) return "30m";
   const amount = nums.find((num) => num > 0 && num <= 3650) ?? persianNumber(text);
   if (!amount) return durationText(text, nums);
-  if (containsAny(text, ["hour", "Ø³Ø§Ø¹Øª", "\u0633\u0627\u0639\u062a"])) return `${amount}h`;
-  if (containsAny(text, ["day", "Ø±ÙˆØ²", "\u0631\u0648\u0632"])) return `${amount}d`;
-  if (containsAny(text, ["week", "Ù‡ÙØªÙ‡", "\u0647\u0641\u062a\u0647"])) return `${amount}w`;
+  if (containsAny(text, ["hour", "ساعت", "\u0633\u0627\u0639\u062a"])) return `${amount}h`;
+  if (containsAny(text, ["day", "روز", "\u0631\u0648\u0632"])) return `${amount}d`;
+  if (containsAny(text, ["week", "هفته", "\u0647\u0641\u062a\u0647"])) return `${amount}w`;
   return `${amount}m`;
 }
 
@@ -147,15 +179,41 @@ export function parseAiIntent(message: string): ParsedIntent | null {
   const text = normalizeUnicodePersian(normalizeText(message));
   const ip = ipAddress(text);
   const nums = numbers(ip ? text.replace(ip, " ") : text);
+  const commonService = ["nginx", "apache2", "apache", "docker", "ssh", "sshd", "fail2ban"].find((service) => text.includes(service));
+  if (commonService && containsAny(text, ["وضعیت", "status", "چک", "بررسی", "ببین"])) {
+    return { intentType: AiIntentType.linux_check_service_status, riskLevel: AiRiskLevel.low, parameters: { serviceName: commonService === "apache" ? "apache2" : commonService }, explanation: "Checks the selected Linux service through a controlled read-only template." };
+  }
+  if (containsAny(text, ["چک روزانه", "daily check", "daily-check"])) {
+    const vendor = targetHint(text, nums);
+    return { intentType: vendor === "mikrotik" ? AiIntentType.mikrotik_daily_check : AiIntentType.linux_daily_check, riskLevel: AiRiskLevel.low, parameters: vendor ? { targetDeviceHint: vendor } : {}, explanation: "Vendor daily check uses a controlled read-only connector template." };
+  }
   const fortigate = containsAny(text, ["fortigate", "fortinet", "fortios"]);
+  const username = text.match(/(?:user|یوزر|کاربر)\s+([a-z_][a-z0-9_.-]{0,31})\b/i)?.[1];
+
+  const linuxUserIntent = (intentType: AiIntentType, riskLevel: AiRiskLevel, explanation: string): ParsedIntent => ({
+    intentType, riskLevel,
+    parameters: { vendor: "linux", targetDeviceHint: "linux", username, executionSupport: "connector", missingFields: username ? [] : ["username"], clarificationQuestions: username ? [] : ["نام کاربر لینوکس چیست؟"] },
+    explanation
+  });
+  if (containsAny(text, ["sudo", "wheel"]) && containsAny(text, ["خارج", "حذف", "remove"])) return linuxUserIntent(AiIntentType.linux_remove_user_from_sudo, AiRiskLevel.high, "کاربر از گروه sudo با template کنترل‌شده حذف می‌شود.");
+  if (containsAny(text, ["sudo", "wheel"]) && containsAny(text, ["اضافه", "add"])) return linuxUserIntent(AiIntentType.linux_add_user_to_sudo, AiRiskLevel.high, "کاربر با template کنترل‌شده به گروه sudo افزوده می‌شود.");
+  if (containsAny(text, ["گروه", "groups"]) && containsAny(text, ["چک", "بررسی", "check"])) return linuxUserIntent(AiIntentType.linux_check_user_groups, AiRiskLevel.low, "گروه‌های کاربر با template فقط‌خواندنی بررسی می‌شوند.");
+  if ((text.includes("قفل") || /\bunlock\b/.test(text)) && containsAny(text, ["باز", "unlock"])) return linuxUserIntent(AiIntentType.linux_unlock_user, AiRiskLevel.high, "قفل کاربر با template کنترل‌شده باز می‌شود.");
+  if (text.includes("قفل") || /\block\b/.test(text)) return linuxUserIntent(AiIntentType.linux_lock_user, AiRiskLevel.high, "کاربر با template کنترل‌شده قفل می‌شود.");
 
   if (text.trim().startsWith("/") || containsAny(text, ["raw cli", "raw command", "execute command", "run command"])) {
-    return {
-      intentType: AiIntentType.unknown,
-      riskLevel: AiRiskLevel.critical,
-      parameters: { blocked: true, reason: "Raw device commands are not supported by the controlled action catalog.", rawCommandRejected: true },
-      explanation: "Raw CLI requests are blocked. Use a supported catalog action so the system can build a controlled command plan with rollback metadata and an audit trail."
-    };
+    const vendor = containsAny(text, ["mikrotik", "routeros", "/ip ", "/system "]) ? "mikrotik"
+      : containsAny(text, ["fortigate", "fortios", "config "]) ? "fortigate"
+        : containsAny(text, ["cisco", "ios "]) ? "cisco"
+          : containsAny(text, ["linux", "bash", "shell"]) ? "linux" : "unknown";
+    return customAction({
+      vendor,
+      requestedOperation: message,
+      critical: true,
+      destructive: containsAny(text, ["reset", "remove all", "delete all", "erase", "factory"]),
+      category: containsAny(text, ["reset", "factory"]) ? "system" : "other",
+      expectedImpact: "The raw or vendor-specific operation could cause configuration loss, service disruption, or loss of connectivity. It is proposed for explicit review only and will not execute as a raw command."
+    });
   }
 
   if (containsAny(text, ["linux", "\u0644\u06cc\u0646\u0648\u06a9\u0633"]) && containsAny(text, ["status", "check", "\u0648\u0636\u0639\u06cc\u062a", "\u0686\u06a9"])) {
@@ -174,12 +232,7 @@ export function parseAiIntent(message: string): ParsedIntent | null {
   }
 
   if (fortigate && containsAny(text, ["factory reset", "factoryreset", "raw cli", "execute ", "config "])) {
-    return {
-      intentType: AiIntentType.unknown,
-      riskLevel: AiRiskLevel.critical,
-      parameters: { blocked: true, reason: "FortiGate command is outside the controlled action catalog.", rawCommandRejected: true },
-      explanation: "This FortiGate request is blocked. The AI cannot execute raw FortiOS CLI or create an ActionPlan outside the controlled catalog."
-    };
+    return customAction({ vendor: "fortigate", requestedOperation: message, category: "system", critical: true, destructive: text.includes("reset") });
   }
 
   if (fortigate && containsAny(text, ["vip", "443", "port 443"])) {
@@ -303,9 +356,9 @@ export function parseAiIntent(message: string): ParsedIntent | null {
       explanation: "Maps to a FortiGate egress policy intent. Missing interfaces/services must be confirmed from discovery; the AI will not guess silently."
     };
   }
-  const mikrotik = containsAny(text, ["mikrotik", "routeros", "میکروتیک"]);
+  const mikrotik = containsAny(text, ["mikrotik", "routeros", "میکروتیک", "ميکروتيک"]);
 
-  if (mikrotik && containsAny(text, ["ssh", "secure shell"]) && containsAny(text, ["change", "set", "move", "عوض", "تغییر"])) {
+  if (mikrotik && containsAny(text, ["ssh", "secure shell"]) && containsAny(text, ["change", "set", "move", "بکن", "کن", "عوض", "تغییر"])) {
     const trustedSource = ipv4OrCidr(text);
     const portCandidates = numbers(trustedSource ? text.replace(trustedSource, " ") : text);
     const newPort = portCandidates.length > 0 ? portCandidates[portCandidates.length - 1] : undefined;
@@ -349,16 +402,16 @@ export function parseAiIntent(message: string): ParsedIntent | null {
   }
 
   if (mikrotik && containsAny(text, ["reset-configuration", "show-sensitive", "/user", "/certificate"])) {
-    return {
-      intentType: AiIntentType.unknown,
-      riskLevel: AiRiskLevel.critical,
-      parameters: {
-        blocked: true,
-        reason: "MikroTik command is outside the controlled action catalog.",
-        rawCommandRejected: true
-      },
-      explanation: "This MikroTik request is blocked. The AI cannot execute raw RouterOS commands or create an ActionPlan outside the controlled catalog."
-    };
+    return customAction({
+      vendor: "mikrotik",
+      requestedOperation: message,
+      category: text.includes("reset") ? "system" : text.includes("/user") ? "user_management" : "other",
+      critical: true,
+      destructive: text.includes("reset"),
+      expectedImpact: text.includes("reset")
+        ? "Resetting the MikroTik may erase configuration and immediately interrupt management and network connectivity."
+        : "This sensitive MikroTik operation can affect access, identity, or device security and requires explicit review."
+    });
   }
 
   if (mikrotik && containsAny(text, ["reboot", "/system reboot", "restart", "schedule reboot"])) {
@@ -581,7 +634,24 @@ export function parseAiIntent(message: string): ParsedIntent | null {
     };
   }
 
-  return null;
+  const vendor = containsAny(text, ["cisco", "ios xe", "nx-os"]) ? "cisco"
+    : containsAny(text, ["pfsense", "pf sense"]) ? "pfsense"
+      : containsAny(text, ["fortigate", "fortinet", "fortios"]) ? "fortigate"
+        : containsAny(text, ["mikrotik", "routeros"]) ? "mikrotik"
+          : containsAny(text, ["linux", "ubuntu", "debian", "centos"]) ? "linux" : "unknown";
+  const operational = containsAny(text, [
+    "add", "create", "set", "change", "remove", "delete", "disable", "enable", "reset",
+    "block", "allow", "deny", "configure", "apply", "restore", "backup",
+    "\u0627\u0636\u0627\u0641\u0647", "\u0628\u0633\u0627\u0632", "\u062a\u063a\u06cc\u06cc\u0631", "\u062d\u0630\u0641", "\u0641\u0639\u0627\u0644", "\u063a\u06cc\u0631\u0641\u0639\u0627\u0644"
+  ]);
+  if (!operational) return null;
+  const destructive = containsAny(text, ["reset", "factory", "remove all", "delete all", "erase"]);
+  const category = containsAny(text, ["acl", "firewall", "policy", "rule"]) ? "firewall"
+    : text.includes("nat") ? "nat"
+      : text.includes("vpn") ? "vpn"
+        : containsAny(text, ["ssh", "service", "port"]) ? "service_management"
+          : destructive ? "system" : "other";
+  return customAction({ vendor, requestedOperation: message, category, critical: destructive, destructive });
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -617,27 +687,16 @@ export async function createAiActionIntent(input: {
   const deviceId = input.deviceId ?? parameterDeviceId ?? await resolveDeviceHint(parameters, intentType);
   const persistedParameters: Record<string, unknown> = { ...parameters };
   if (deviceId) delete persistedParameters.targetDeviceHint;
-  const device = deviceId ? await prisma.device.findUnique({ where: { id: deviceId }, select: { type: true, vendor: true } }) : null;
-  const isMikroTik = device?.type === "mikrotik" || String(device?.vendor ?? "").toLowerCase().includes("mikrotik");
-  const isFortiGate = device?.type === "fortigate" || String(device?.vendor ?? "").toLowerCase().includes("forti");
-  const mikrotikSupported = new Set<string>(mikroTikSupportedActions());
-  const fortigateSupported = new Set<string>(fortiGateSupportedActions());
-  const mikrotikBlocked = Boolean(isMikroTik && intentType !== AiIntentType.explain_security_status && !mikrotikSupported.has(intentType));
-  const fortigateBlocked = Boolean(isFortiGate && intentType !== AiIntentType.explain_security_status && !fortigateSupported.has(intentType));
   return prisma.aiActionIntent.create({
     data: {
       sessionId: input.sessionId,
       messageId: input.messageId,
       deviceId,
       intentType,
-      status: mikrotikBlocked || fortigateBlocked ? AiActionIntentStatus.discarded : AiActionIntentStatus.proposed,
+      status: AiActionIntentStatus.proposed,
       riskLevel: input.parsedIntent.riskLevel,
       parametersJson: toJson(persistedParameters),
-      explanation: mikrotikBlocked
-        ? `${input.parsedIntent.explanation} This MikroTik request is not in the controlled action catalog; no action plan or command execution is allowed.`
-        : fortigateBlocked
-          ? `${input.parsedIntent.explanation} This FortiGate request is not in the controlled action catalog; no action plan or command execution is allowed.`
-        : input.parsedIntent.explanation
+      explanation: input.parsedIntent.explanation
     }
   });
 }
@@ -759,7 +818,7 @@ export async function completeAiActionRequest(id: string, input: { fields?: Reco
 
   const canCreateActionPlan = updatedIntent.status === AiActionIntentStatus.proposed &&
     updatedIntent.intentType !== AiIntentType.unknown &&
-    Boolean(updatedIntent.deviceId) &&
+    (Boolean(updatedIntent.deviceId) || updatedIntent.intentType === AiIntentType.custom_vendor_action || updatedIntent.intentType === AiIntentType.generic_security_action) &&
     missingFields.length === 0;
 
   if (!canCreateActionPlan) {
@@ -769,7 +828,7 @@ export async function completeAiActionRequest(id: string, input: { fields?: Reco
       status: updatedIntent.status,
       missingFields: [
         ...missingFields,
-        ...(!updatedIntent.deviceId ? ["deviceId"] : [])
+        ...(!updatedIntent.deviceId && updatedIntent.intentType !== AiIntentType.custom_vendor_action && updatedIntent.intentType !== AiIntentType.generic_security_action ? ["deviceId"] : [])
       ],
       blockedReason: updatedIntent.status === AiActionIntentStatus.discarded || updatedIntent.intentType === AiIntentType.unknown
         ? "not_supported_yet"

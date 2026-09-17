@@ -1,19 +1,48 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { apiRequest } from "./apiTransport";
+import { dispatchMobileActionNotification, withMobileActionRequest } from "./mobileActionGuards";
 
 export type ActionPlanSource = "ai" | "user" | "system" | "detection";
 export type ActionPlanStatus =
   | "proposed"
+  | "needs_input"
   | "validation_failed"
-  | "dry_run_ready"
   | "awaiting_approval"
-  | "approved"
-  | "rejected"
-  | "executing"
+  | "dry_run_ready"
+  | "running"
   | "succeeded"
   | "failed"
-  | "rolled_back";
+  | "blocked"
+  | "rollback_needed"
+  | "rolled_back"
+  // Backend legacy/persisted states kept for compatibility until the status lifecycle is refactored.
+  | "approved"
+  | "rejected"
+  | "executing";
+
+export const ACTION_PLAN_STATUS_LABELS: Record<string, string> = {
+  proposed: "proposed",
+  needs_input: "needs input",
+  validation_failed: "validation failed",
+  awaiting_approval: "awaiting approval",
+  dry_run_ready: "dry run ready",
+  running: "running",
+  executing: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+  blocked: "blocked",
+  rollback_needed: "rollback needed",
+  rolled_back: "rolled back",
+  approved: "approved",
+  rejected: "rejected"
+};
+
+export function actionPlanStatusLabel(status: string) {
+  return ACTION_PLAN_STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+}
 
 export type ActionType =
+  | "custom_vendor_action"
+  | "generic_security_action"
   | "create_egress_policy"
   | "update_policy_schedule"
   | "block_source_ip_temporary"
@@ -137,7 +166,27 @@ export type ActionType =
   | "fortigate_create_policy"
   | "fortigate_create_zone_policy"
   | "fortigate_update_policy"
-  | "linux_check_service_status";
+  | "linux_check_service_status"
+  | "linux_list_running_services"
+  | "linux_list_failed_services"
+  | "linux_check_important_services"
+  | "linux_daily_check"
+  | "mikrotik_daily_check"
+  | "fortigate_daily_check"
+  | "fortigate_show_interfaces"
+  | "fortigate_route_dns_check"
+  | "fortigate_license_status"
+  | "fortigate_admin_users"
+  | "mikrotik_show_logs"
+  | "mikrotik_list_ip_services"
+  | "linux_open_port"
+  | "linux_list_open_ports"
+  | "linux_check_firewall_status"
+  | "linux_block_ip"
+  | "linux_read_listening_ports"
+  | "linux_read_firewall_status"
+  | "linux_check_sudo_users"
+  | "close_port";
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
@@ -171,6 +220,27 @@ export type ActionAuditEntry = {
   message: string;
   metadataJson: Record<string, unknown>;
   createdAt: string;
+};
+
+export type ActionParameterField = {
+  key: string;
+  label: string;
+  type: "string" | "number" | "boolean" | "cidr" | "ip" | "secretRef";
+  required: boolean;
+  secure?: boolean;
+  defaultValue?: unknown;
+  dependsOn?: string[];
+};
+
+export type ActionParameterSchema = {
+  schemaVersion: string;
+  actionType: string;
+  vendor: string;
+  platform?: string | null;
+  fields: ActionParameterField[];
+  validationRules: Array<{ field: string; rule: string; message: string }>;
+  derivedValues: Array<{ field: string; from: string[]; rule: string }>;
+  secretFields: string[];
 };
 
 export type ProposeActionInput = {
@@ -222,34 +292,41 @@ function parsePayload(text: string): unknown {
   }
 }
 
-function apiErrorMessage(url: string, status: number, payload: unknown) {
+function apiErrorMessage(status: number, payload: unknown) {
   const body = normalizeObject(payload);
+  const structured = normalizeObject(body.error);
   const detail = typeof body.error === "string"
     ? `${body.error}${typeof body.detail === "string" ? `: ${body.detail}` : ""}`
+    : typeof structured.message === "string"
+      ? `${typeof structured.code === "string" ? `${structured.code}: ` : ""}${structured.message}`
     : typeof body.message === "string"
       ? body.message
       : "No response details were provided.";
-  return `Action API error ${status}: ${detail} [${url}]`;
+  return `Action API error ${status}: ${detail}`;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit, options?: { allowConflict?: boolean }): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
   let response: Response;
 
   try {
-    response = await fetch(url, {
-      headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
-      ...init,
-    });
+    response = await apiRequest(path, withMobileActionRequest(path, init));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Network request failed.";
-    throw new Error(`Action API network error: ${message} [${url}]`);
+    throw new Error(`Action API network error: ${message}`);
   }
 
   const payload = parsePayload(await response.text());
   if (!response.ok && !(options?.allowConflict && response.status === 409)) {
-    const error = new Error(apiErrorMessage(url, response.status, payload)) as QuickExecuteError;
+    const error = new Error(apiErrorMessage(response.status, payload)) as QuickExecuteError;
     const body = normalizeObject(payload);
+    const structured = normalizeObject(body.error);
+    error.status = response.status;
+    error.code = String(structured.code ?? (typeof body.error === "string" ? body.error : "ACTION_API_ERROR"));
+    error.retryable = structured.retryable === true;
+    error.recovery = typeof structured.recovery === "string" ? structured.recovery : null;
+    error.currentRevision = Number.isInteger(Number(structured.currentRevision)) ? Number(structured.currentRevision) : null;
+    error.approvedRevision = Number.isInteger(Number(structured.approvedRevision)) ? Number(structured.approvedRevision) : null;
+    error.changedFields = normalizeArray<unknown>(structured.changedFields).map(String);
     if (body.plan) error.plan = normalizeActionPlan(body.plan);
     throw error;
   }
@@ -281,7 +358,16 @@ export function normalizeActionPlan(value: unknown): ActionPlan {
   };
 }
 
-export type QuickExecuteError = Error & { plan?: ActionPlan };
+export type QuickExecuteError = Error & {
+  plan?: ActionPlan;
+  status?: number;
+  code?: string;
+  retryable?: boolean;
+  recovery?: string | null;
+  currentRevision?: number | null;
+  approvedRevision?: number | null;
+  changedFields?: string[];
+};
 
 export function normalizeActionAuditEntry(value: unknown): ActionAuditEntry {
   const source = normalizeObject(value);
@@ -313,6 +399,12 @@ export async function getAction(id: string) {
   return requestJson<unknown>(`/actions/${id}`).then(normalizeActionPlan);
 }
 
+export async function getActionParameterSchema(id: string) {
+  const payload = await requestJson<unknown>(`/actions/${id}/parameter-schema`);
+  const source = normalizeObject(payload);
+  return normalizeObject(source.schema) as ActionParameterSchema;
+}
+
 export async function validateAction(id: string) {
   return requestJson<unknown>(`/actions/${id}/validate`, { method: "POST" }).then(normalizeActionPlan);
 }
@@ -329,10 +421,12 @@ export async function dryRunAction(id: string) {
 }
 
 export async function approveAction(id: string, input: ApprovalInput = {}) {
-  return requestJson<unknown>(`/actions/${id}/approve`, {
+  const plan = await requestJson<unknown>(`/actions/${id}/approve`, {
     method: "POST",
     body: JSON.stringify(input),
   }).then(normalizeActionPlan);
+  dispatchMobileActionNotification({ event: "approval_requested", actionPlanId: id, target: "approval" });
+  return plan;
 }
 
 export async function rejectAction(id: string, input: ApprovalInput = {}) {
@@ -343,17 +437,38 @@ export async function rejectAction(id: string, input: ApprovalInput = {}) {
 }
 
 export async function executeAction(id: string, input: Record<string, unknown> = {}) {
-  return requestJson<unknown>(`/actions/${id}/execute`, {
+  const latest = await getAction(id);
+  dispatchMobileActionNotification({ event: "execution_started", actionPlanId: id, target: "result" });
+  const plan = await requestJson<unknown>(`/actions/${id}/execute`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, actionPlanRevision: actionPlanRevision(latest) }),
   }).then(normalizeActionPlan);
+  dispatchMobileActionNotification({ event: plan.status === "failed" ? "verification_failed" : "execution_completed", actionPlanId: id, target: "result" });
+  return plan;
 }
 
 export async function quickExecuteAction(id: string, input: Record<string, unknown> = {}) {
-  return requestJson<unknown>(`/actions/${id}/quick-execute`, {
+  const latest = await getAction(id);
+  if (input.intent === "execute") dispatchMobileActionNotification({ event: "execution_started", actionPlanId: id, target: "result" });
+  const plan = await requestJson<unknown>(`/actions/${id}/quick-execute`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, actionPlanRevision: actionPlanRevision(latest) }),
   }).then(normalizeActionPlan);
+  if (input.intent === "execute") {
+    dispatchMobileActionNotification({ event: plan.status === "failed" ? "verification_failed" : "execution_completed", actionPlanId: id, target: "result" });
+  }
+  return plan;
+}
+
+export function actionPlanRevision(plan: ActionPlan) {
+  const metadata = normalizeObject(plan.parametersJson.metadata);
+  const approval = normalizeObject(plan.approvalJson);
+  const revision = Number(metadata.planRevision ?? approval.planRevision ?? 1);
+  return Number.isInteger(revision) && revision > 0 ? revision : 1;
+}
+
+export async function quickExecuteLatestAction(id: string, input: Record<string, unknown> = {}) {
+  return quickExecuteAction(id, input);
 }
 
 export async function getActionAudit(id: string) {

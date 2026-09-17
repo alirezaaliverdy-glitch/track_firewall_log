@@ -1,0 +1,24 @@
+import { useMemo, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { AssetTable } from "../components/AssetTable";
+import { useAssets } from "../hooks/useAssets";
+import { Link } from "react-router-dom";
+
+export default function AssetListPage() {
+  const { assets, loading, error, refresh } = useAssets();
+  const [query, setQuery] = useState("");
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const filtered = useMemo(() => assets.filter((asset) => !hiddenIds.includes(asset.id) && [asset.name, asset.hostname, asset.managementIp, asset.vendor?.name, asset.site?.name].some((value) => String(value ?? "").toLowerCase().includes(query.toLowerCase()))), [assets, hiddenIds, query]);
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  return (
+    <section className="page-stack">
+      <PageHeader title="تجهیزات" eyebrow="دارایی ها / تجهیزات" description="جدول دارایی های متصل به API با جست وجوی سبک و مسیر جزئیات." actions={<Link className="primary-link" to="/assets/devices/new">ثبت دستگاه</Link>} />
+      <div className="filter-bar"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="جست وجو بر اساس نام، IP، وندور یا سایت" /></div>
+      {filtered.length ? <AssetTable assets={filtered} onRemoved={(assetId) => setHiddenIds((current) => [...current, assetId])} /> : <EmptyState title="دارایی پیدا نشد" description="فیلترها را تغییر دهید یا sync را اجرا کنید." />}
+    </section>
+  );
+}

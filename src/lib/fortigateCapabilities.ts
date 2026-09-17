@@ -30,7 +30,7 @@ export type FortiGateCapabilityResponse = {
 
 export async function getFortiGateCapabilities(): Promise<FortiGateCapabilityResponse> {
   const url = `${API_BASE_URL}/vendors/fortigate/capabilities`;
-  const response = await fetch(url);
+  const response = await fetch(url, { credentials: "include" });
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 300);
     throw new Error(`FortiGate capability API error ${response.status}${detail ? `: ${detail}` : ""} [${url}]`);

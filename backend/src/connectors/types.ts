@@ -1,6 +1,6 @@
 import type { ActionPlan, ActionType, AiRiskLevel, Device, DeviceProtocol, DeviceType } from "@prisma/client";
 
-export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "generic";
+export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "cisco" | "generic";
 export type CommandPlanStatus = "planned" | "needs_clarification" | "unsupported";
 export type CommandTransport = "ssh" | "api" | "manual";
 
@@ -69,7 +69,7 @@ export type DeviceConnectionTestResult = {
   mikrotik?: MikroTikDiscovery;
   fortigate?: FortiGateDiscovery;
   stages: Array<{
-    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
+    name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "shell" | "prompt" | "privilege" | "platform_detection" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
     status: "ok" | "warning" | "failed";
     code?: string;
     message?: string;
@@ -89,6 +89,7 @@ export type DeviceConnectionTestResult = {
   };
   errorCode?: string;
   message?: string;
+  diagnostic?: Record<string, unknown>;
 };
 
 export type DeviceCapabilities = {
@@ -147,10 +148,20 @@ export type FortiGateDiscovery = {
   model?: string;
   serial?: string;
   hostname?: string;
+  operationMode?: string;
+  systemTime?: string;
+  licenseStatus?: string;
+  cpuUsage?: number;
+  memoryUsage?: number;
+  sessionCount?: number;
   vdomMode?: "enabled" | "disabled" | "unknown";
   currentVdom?: string;
   zones: string[];
   interfaces: string[];
+  interfaceDetails: Array<{ name: string; ip?: string; allowAccess: string[]; status?: string }>;
+  defaultRoute?: { gateway?: string; interface?: string };
+  dnsServers: string[];
+  adminUsers: Array<{ name: string; profile?: string; trustHosts: string[] }>;
   policies: string[];
   addressObjects: string[];
   addressGroups: string[];

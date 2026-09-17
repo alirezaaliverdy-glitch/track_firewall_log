@@ -7,18 +7,22 @@ import { fortigatePlanner } from "./vendors/fortigate.planner.js";
 import { linuxEdgePlanner } from "./vendors/linux-edge.planner.js";
 import { mikrotikPlanner } from "./vendors/mikrotik.planner.js";
 import { pfsensePlanner } from "./vendors/pfsense.planner.js";
+import { ciscoIosXePlanner } from "./vendors/cisco-ios-xe.planner.js";
+import { ciscoIosXeConnector } from "./cisco-ios-xe.connector.js";
 
 const planners: VendorPlanner[] = [
   fortigatePlanner,
   mikrotikPlanner,
   linuxEdgePlanner,
+  ciscoIosXePlanner,
   pfsensePlanner
 ];
 
 const connectors: DeviceConnector[] = [
   fortigateSshConnector,
   mikrotikSshConnector,
-  linuxSshConnector
+  linuxSshConnector,
+  ciscoIosXeConnector
 ];
 
 export function getVendorPlanners() {
@@ -62,6 +66,13 @@ export function getConnectorCapabilities(): ConnectorCapability[] {
       deviceTypes: [DeviceType.linux_edge],
       protocols: [DeviceProtocol.ssh, DeviceProtocol.agent],
       supportedActions: linuxEdgePlanner.supportedActions,
+      executionEnabled: true
+    },
+    {
+      vendor: "cisco",
+      deviceTypes: [DeviceType.generic_firewall],
+      protocols: [DeviceProtocol.ssh],
+      supportedActions: ciscoIosXePlanner.supportedActions,
       executionEnabled: true
     },
     {
