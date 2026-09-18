@@ -1405,3 +1405,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - The full assistant now accepts safe `prompt`, `mode`, and device query handoff from dashboard links without auto-submitting or executing anything.
 - Responsive layouts stack the assistant below the operational workspace on narrower screens and preserve reduced-motion behavior.
 - Frontend production build, targeted ESLint, UTF-8 scan of 388 files, locale parity for 860 keys, Persian primary-copy checks, Nginx route smoke, API health, and all four required container health checks passed. The latest `firewall-web` image is deployed without a Desktop archive.
+## 2026-09-18 - Clone-and-run production deployment
+
+- Promoted the root Docker Compose file to a complete production stack containing PostgreSQL, backend, frontend, a one-shot runtime-secret initializer, and a Caddy HTTPS gateway.
+- Removed mandatory pre-deployment env work from the default path: strong database, session, and credential-encryption secrets are generated once in a private persistent volume.
+- Added automatic Prisma migrations, idempotent administrator bootstrap, persistent uploads/telemetry, health-gated startup, private application networks, HTTP-to-HTTPS redirect, and security headers.
+- Validated the stack from a clean isolated Compose project: production images built, database/API/web/gateway became healthy, UI and API readiness returned HTTP 200 through HTTPS, HTTP redirected, and bootstrap login plus authenticated session both returned HTTP 200.

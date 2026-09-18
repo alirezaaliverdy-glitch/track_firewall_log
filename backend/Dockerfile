@@ -17,11 +17,15 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 COPY prisma ./prisma
 COPY prisma.config.ts ./
+COPY docker-entrypoint.sh /usr/local/bin/firewall-entrypoint
 COPY --from=build /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /tmp/generated-prisma-client
 RUN set -eu; client_dir="$(dirname "$(readlink -f node_modules/@prisma/client)")"; cp -a /tmp/generated-prisma-client "$client_dir/../.prisma"; rm -rf /tmp/generated-prisma-client
 COPY --from=build /app/dist ./dist
 RUN mkdir -p src/config && cp dist/config/database-url.js src/config/database-url.js
-RUN mkdir -p /app/storage/uploads /app/storage/bootstrap /app/storage/telemetry && chown -R node:node /app/storage
+RUN sed -i 's/\r$//' /usr/local/bin/firewall-entrypoint \
+  && chmod 0755 /usr/local/bin/firewall-entrypoint \
+  && mkdir -p /app/storage/uploads /app/storage/bootstrap /app/storage/telemetry \
+  && chown -R node:node /app/storage
 USER node
 EXPOSE 4000
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma && ./node_modules/.bin/prisma db seed --schema prisma/schema.prisma && node dist/server.js"]
+ENTRYPOINT ["/usr/local/bin/firewall-entrypoint"]

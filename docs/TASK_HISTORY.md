@@ -1501,3 +1501,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Kept the operations and Linux sections linked to their real detail pages and retained the 60-second dashboard refresh plus manual collection controls.
 - Verified the production TypeScript/Vite build in Docker, targeted ESLint, UTF-8 and i18n checks, then rebuilt only `firewall-web` using the guarded deployment script.
 - Confirmed HTTP 200 for `/firewall/dashboard` and `/firewall/api/health`, verified the deployed assistant assets, and confirmed `firewall-web`, `firewall-api`, `firewall-db`, and `main-nginx` are healthy.
+## 2026-09-18 - Zero-configuration production Compose
+
+- Replaced the database-only root compose with a complete clone-and-run production deployment.
+- Added persistent random secret generation without committing credentials or requiring an .env file.
+- Added a non-root API entrypoint that loads file-backed secrets, deploys Prisma migrations, runs the idempotent bootstrap seed, and starts the service.
+- Added a Caddy HTTPS gateway that exposes only ports 80/443 while keeping PostgreSQL, API, and web services private.
+- Rewrote the Persian quick-start and aligned deployment/environment documentation with docker compose up -d.
+- Smoke-tested a clean isolated deployment, HTTPS UI/API routing, redirect behavior, initial administrator login, and authenticated session.

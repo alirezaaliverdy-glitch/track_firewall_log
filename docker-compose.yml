@@ -1,20 +1,173 @@
+name: firewall-soar
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: firewall_log_analyzer_postgres
-    environment:
-      POSTGRES_DB: firewall_log_analyzer
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+  secrets-init:
+    image: caddy:2.10-alpine
+    network_mode: none
+    restart: "no"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - firewall_runtime_secrets:/run/firewall-secrets
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        umask 077
+        create_secret() {
+          target="$$1"
+          bytes="$$2"
+          if [ ! -s "$$target" ]; then
+            head -c "$$bytes" /dev/urandom | base64 | tr -d '\n' > "$$target"
+          fi
+          chmod 0444 "$$target"
+        }
+        create_secret /run/firewall-secrets/postgres_password 48
+        create_secret /run/firewall-secrets/auth_session_secret 48
+        create_secret /run/firewall-secrets/credential_encryption_key 48
+
+  firewall-db:
+    image: postgres:16-alpine
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-firewall_log_analyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-firewall_app}
+      POSTGRES_PASSWORD_FILE: /run/firewall-secrets/postgres_password
+    volumes:
+      - firewall_db_data:/var/lib/postgresql/data
+      - firewall_runtime_secrets:/run/firewall-secrets:ro
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d firewall_log_analyzer"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  firewall-api:
+    image: firewall-soar-api:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
+      firewall-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_PROFILE: production
+      PRODUCT_MODE: persian_command_catalog
+      PORT: 4000
+      TRUST_PROXY: "true"
+      POSTGRES_DB: ${POSTGRES_DB:-firewall_log_analyzer}
+      POSTGRES_USER: ${POSTGRES_USER:-firewall_app}
+      DATABASE_SECRET_FILE: /run/firewall-secrets/postgres_password
+      AUTH_SESSION_SECRET_FILE: /run/firewall-secrets/auth_session_secret
+      CREDENTIAL_ENCRYPTION_KEY_FILE: /run/firewall-secrets/credential_encryption_key
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://firewall.local}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://firewall.local/firewall}
+      UPLOAD_DIR: /app/storage/uploads
+      TELEMETRY_STORE_DIR: /app/storage/telemetry
+      BOOTSTRAP_ADMIN_CREDENTIALS_FILE: /app/storage/bootstrap/initial-admin.json
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:-Administrator}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-openrouter/free}
+      OPENAI_FALLBACK_MODELS: ${OPENAI_FALLBACK_MODELS:-nvidia/nemotron-3-super:free,openai/gpt-oss-20b:free,google/gemma-4-31b-it:free}
+      ACTION_EXECUTION_MODE: ${ACTION_EXECUTION_MODE:-safe}
+      ACTION_REQUIRE_MANAGEMENT_SOURCE: ${ACTION_REQUIRE_MANAGEMENT_SOURCE:-true}
+      ACTION_DEFAULT_TRUSTED_SOURCE: ${ACTION_DEFAULT_TRUSTED_SOURCE:-auto}
+      ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT: "false"
+      SECURITY_MONITORING_ENABLED: ${SECURITY_MONITORING_ENABLED:-true}
+      SECURITY_MONITOR_TICK_SECONDS: ${SECURITY_MONITOR_TICK_SECONDS:-5}
+      SECURITY_COLLECTOR_INTERVAL_SECONDS: ${SECURITY_COLLECTOR_INTERVAL_SECONDS:-60}
+      SSH_CONNECT_TIMEOUT_MS: ${SSH_CONNECT_TIMEOUT_MS:-15000}
+      SSH_HANDSHAKE_TIMEOUT_MS: ${SSH_HANDSHAKE_TIMEOUT_MS:-15000}
+      SSH_COMMAND_TIMEOUT_MS: ${SSH_COMMAND_TIMEOUT_MS:-10000}
+    volumes:
+      - firewall_runtime_secrets:/run/firewall-secrets:ro
+      - firewall_uploads:/app/storage/uploads
+      - firewall_bootstrap:/app/storage/bootstrap
+      - firewall_telemetry:/app/storage/telemetry
+    networks:
+      - backend
+    expose:
+      - "4000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  firewall-web:
+    image: firewall-soar-web:local
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_BASE_PATH: /firewall/
+        VITE_API_BASE_URL: /firewall-api
+        VITE_APP_ENV: production
+    networks:
+      - frontend
+    expose:
+      - "50"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:50/firewall/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    restart: unless-stopped
+
+  gateway:
+    image: caddy:2.10-alpine
+    depends_on:
+      firewall-api:
+        condition: service_healthy
+      firewall-web:
+        condition: service_healthy
+    environment:
+      FIREWALL_HTTPS_PORT: ${FIREWALL_HTTPS_PORT:-443}
+    ports:
+      - "${FIREWALL_HTTP_PORT:-80}:80"
+      - "${FIREWALL_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - firewall_caddy_data:/data
+      - firewall_caddy_config:/config
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/firewall/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+networks:
+  frontend:
+  backend:
+    internal: true
 
 volumes:
-  postgres_data:
+  firewall_db_data:
+  firewall_runtime_secrets:
+  firewall_uploads:
+  firewall_bootstrap:
+  firewall_telemetry:
+  firewall_caddy_data:
+  firewall_caddy_config:
