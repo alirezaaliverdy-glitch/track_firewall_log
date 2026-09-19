@@ -91,36 +91,52 @@ async function main() {
       prisma.appUser.count({ where: { role: "admin" } })
     ]);
 
-    if (adminCount > 0 || userCount > 0) {
+    if (adminCount === 0 && userCount === 0) {
+      const username = resolveBootstrapUsername();
+      const displayName = resolveBootstrapDisplayName();
+      const credentialsFile = resolveCredentialsFile();
+      const password = await getBootstrapPassword(credentialsFile, username);
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      await prisma.appUser.create({
+        data: { username, passwordHash, displayName, role: "admin" }
+      });
+
+      console.info(JSON.stringify({ event: "seed_admin_created", username, credentialsFile }));
+    } else {
       console.info(JSON.stringify({
         event: "seed_admin_skipped",
         reasonCode: adminCount > 0 ? "ADMIN_EXISTS" : "USERS_EXIST",
         userCount,
         adminCount
       }));
-      return;
     }
 
-    const username = resolveBootstrapUsername();
-    const displayName = resolveBootstrapDisplayName();
-    const credentialsFile = resolveCredentialsFile();
-    const password = await getBootstrapPassword(credentialsFile, username);
-    const passwordHash = await bcrypt.hash(password, 12);
+    const users = await prisma.appUser.findMany({ orderBy: [{ role: "asc" }, { createdAt: "asc" }] });
+    for (const user of users) {
+      await prisma.company.upsert({
+        where: { ownerId_code: { ownerId: user.id, code: "DEFAULT" } },
+        update: {},
+        create: {
+          ownerId: user.id,
+          name: user.role === "admin" ? "شرکت اصلی" : `شرکت ${user.displayName}`,
+          code: "DEFAULT",
+          description: "شرکت پیش‌فرض برای دارایی‌های موجود"
+        }
+      });
+    }
 
-    await prisma.appUser.create({
-      data: {
-        username,
-        passwordHash,
-        displayName,
-        role: "admin"
-      }
-    });
-
-    console.info(JSON.stringify({
-      event: "seed_admin_created",
-      username,
-      credentialsFile
-    }));
+    const legacyOwner = users.find((user) => user.role === "admin") ?? users[0];
+    if (legacyOwner) {
+      const defaultCompany = await prisma.company.findUniqueOrThrow({
+        where: { ownerId_code: { ownerId: legacyOwner.id, code: "DEFAULT" } }
+      });
+      await prisma.$transaction([
+        prisma.device.updateMany({ where: { companyId: null }, data: { companyId: defaultCompany.id } }),
+        prisma.asset.updateMany({ where: { companyId: null }, data: { companyId: defaultCompany.id } })
+      ]);
+      console.info(JSON.stringify({ event: "seed_company_tenancy_ready", ownerId: legacyOwner.id }));
+    }
   } finally {
     await prisma.$disconnect();
     await pool.end();

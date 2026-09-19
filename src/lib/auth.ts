@@ -170,3 +170,12 @@ export async function resetManagedUserPassword(id: string, password: string) {
   if (!response.ok) throw await authError(response, "password_reset_failed");
   return response.json() as Promise<{ ok: true; sessionsRevoked: true }>;
 }
+
+export async function deleteManagedUser(id: string, confirmation: string) {
+  const response = await authRequest(`/admin/users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirmation })
+  });
+  if (!response.ok) throw await authError(response, "user_delete_failed");
+  return response.json() as Promise<{ id: string; permanentlyDeleted: true; cascadedCompaniesAndAssets: true }>;
+}

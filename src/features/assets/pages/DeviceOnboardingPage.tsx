@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { WorkflowPrimaryAction, WorkflowReviewSummary, WorkflowStateCallout, WorkflowStepper, type WorkflowStepStatus } from "@/components/workflows";
 import { createCredential, listCredentials, type CredentialInput, type DeviceCredential } from "@/lib/credentials";
 import { nextAvailableCredentialName } from "@/lib/credentialNames";
+import { ACTIVE_COMPANY_STORAGE_KEY, listCompanies, type Company } from "@/lib/companies";
 import {
   OnboardingApiError,
   answerOnboarding,
@@ -103,6 +104,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const [session, setSession] = useState<OnboardingSession | null>(null);
   const [form, setForm] = useState<OnboardingDraft | null>(null);
   const [credentials, setCredentials] = useState<DeviceCredential[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [credentialMode, setCredentialMode] = useState<"existing" | "new">("existing");
   const [credentialForm, setCredentialForm] = useState<CredentialInput>(emptyCredential);
   const [enableSecret, setEnableSecret] = useState("");
@@ -117,10 +119,12 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     if (started.current) return;
     started.current = true;
     const vendor = initialVendor({ vendorKey: params.vendorKey ?? "" });
-    Promise.all([
-      startOnboarding({ vendor, platform: platforms[vendor], deviceId: params.deviceId || undefined }),
-      listCredentials()
-    ]).then(([next, refs]) => {
+    Promise.all([listCompanies("active"), listCredentials()]).then(async ([companyRows, refs]) => {
+      const storedCompanyId = localStorage.getItem(ACTIVE_COMPANY_STORAGE_KEY) ?? "";
+      const initialCompanyId = companyRows.some((company) => company.id === storedCompanyId) ? storedCompanyId : companyRows[0]?.id ?? "";
+      if (!params.deviceId && !initialCompanyId) throw new Error("برای ثبت دستگاه ابتدا یک شرکت در بخش دارایی‌ها تعریف کنید.");
+      const next = await startOnboarding({ vendor, platform: platforms[vendor], deviceId: params.deviceId || undefined, ...(!params.deviceId ? { companyId: initialCompanyId } : {}) });
+      setCompanies(companyRows);
       setSession(next);
       setForm({ ...next.draft, platform: next.draft.platform || platforms[vendor] });
       setCredentials(refs);
@@ -145,7 +149,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const activeSession = session;
   const change = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => {
     setForm((current) => current ? { ...current, [key]: value } : current);
-    if (["host", "managementPort", "credentialId", "enableCredentialId", "ciscoLegacyCompatibilityApproved"].includes(key)) {
+    if (["companyId", "host", "managementPort", "credentialId", "enableCredentialId", "ciscoLegacyCompatibilityApproved"].includes(key)) {
       setSession((current) => current ? { ...current, status: "draft", test: null, detection: null, discovery: null, preview: null } : current);
       setMessage("");
     }
@@ -166,6 +170,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   function validateIdentity(candidate: OnboardingDraft = activeForm) {
+    if (!candidate.companyId.trim()) { setError("انتخاب شرکت الزامی است."); return false; }
     if (!candidate.name.trim()) { setError(t("onboarding.errors.nameRequired")); setInvalidField("name"); nameInput.current?.focus(); return false; }
     if (!candidate.host.trim()) { setError(t("onboarding.errors.hostRequired")); setInvalidField("host"); hostInput.current?.focus(); return false; }
     if (!Number.isInteger(candidate.managementPort) || candidate.managementPort < 1 || candidate.managementPort > 65535) { setError(t("onboarding.errors.portRange")); setInvalidField("port"); return false; }
@@ -298,6 +303,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
               {vendorChoices.map((item) => { const Icon = item.icon; const selected = activeForm.vendor === item.key; return <button key={item.key} type="button" role="radio" aria-checked={selected} className={`onboarding-vendor-choice onboarding-vendor-choice--${item.tone}`} onClick={() => selectVendor(item.key)}><span className="onboarding-vendor-choice__icon"><Icon size={22} /></span><span><strong>{item.title}</strong><small>{t(item.descriptionKey)}</small></span>{selected ? <CircleCheck className="onboarding-vendor-choice__check" size={18} /> : null}</button>; })}
             </div></fieldset>
             <div className="onboarding-field-grid">
+              <label className="onboarding-field onboarding-field--wide"><span>شرکت مالک دستگاه<b>{t("onboarding.required")}</b></span><select value={activeForm.companyId} onChange={(event) => { change("companyId", event.target.value); localStorage.setItem(ACTIVE_COMPANY_STORAGE_KEY, event.target.value); }}><option value="">انتخاب شرکت</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name} — {company.code}</option>)}</select><small>این دستگاه و همه اطلاعات جمع‌آوری‌شده فقط در دارایی‌های همین شرکت نمایش داده می‌شود.</small></label>
               <label className="onboarding-field"><span>{t("onboarding.fields.name")}<b>{t("onboarding.required")}</b></span><input ref={nameInput} value={activeForm.name} onChange={(event) => change("name", event.target.value)} placeholder={t("onboarding.placeholders.name")} aria-invalid={invalidField === "name"} /><small>{t("onboarding.help.name")}</small></label>
               <label className="onboarding-field"><span>{t("onboarding.fields.management")}<b>{t("onboarding.required")}</b></span><input ref={hostInput} value={activeForm.host} onChange={(event) => change("host", event.target.value)} dir="ltr" placeholder={t("onboarding.placeholders.host")} aria-invalid={invalidField === "host"} /><small>{activeForm.vendor === "sophos" ? (isFa ? "آدرس مدیریتی Sophos Firewall؛ دسترسی API باید برای IP سرور برنامه مجاز باشد." : "Sophos management address; API access must allow the application server IP.") : t("onboarding.help.management")}</small></label>
               <label className="onboarding-field onboarding-field--port"><span>{t("onboarding.fields.port")}<b>{t("onboarding.required")}</b></span><input type="number" min="1" max="65535" value={activeForm.managementPort} onChange={(event) => change("managementPort", Number(event.target.value))} aria-invalid={invalidField === "port"} dir="ltr" /><small>{t("onboarding.help.port")}</small></label>
@@ -320,6 +326,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
             <header className="onboarding-stage__heading"><span>{verified ? <CheckCircle2 size={21} /> : <ShieldAlert size={21} />}</span><div><small>{t("onboarding.stage.step", { current: 3, total: 3 })}</small><h2>{t("onboarding.step3.title")}</h2><p>{t("onboarding.step3.description")}</p></div></header>
             <div className={`onboarding-result-hero ${verified ? "is-verified" : "is-unverified"}`}><span>{verified ? <CheckCircle2 size={27} /> : <ShieldAlert size={27} />}</span><div><strong>{verified ? t("onboarding.status.verified") : t("onboarding.status.notVerified")}</strong><p>{verified ? t("onboarding.messages.verified") : t("onboarding.messages.unverifiedWarning")}</p></div></div>
             <WorkflowReviewSummary title={t("workflowLab.reviewTitle")} items={[
+              { id: "company", label: "شرکت", value: companies.find((company) => company.id === activeForm.companyId)?.name ?? "—" },
               { id: "name", label: t("onboarding.fields.name"), value: activeForm.name },
               { id: "vendor", label: t("onboarding.result.vendorPlatform"), value: `${activeForm.vendor} / ${activeForm.platform || "auto-detect"}`, technical: true },
               { id: "management", label: t("onboarding.result.management"), value: `${activeForm.host}:${activeForm.managementPort}`, technical: true },

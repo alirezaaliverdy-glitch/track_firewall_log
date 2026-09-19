@@ -1509,3 +1509,12 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a Caddy HTTPS gateway that exposes only ports 80/443 while keeping PostgreSQL, API, and web services private.
 - Rewrote the Persian quick-start and aligned deployment/environment documentation with docker compose up -d.
 - Smoke-tested a clean isolated deployment, HTTPS UI/API routing, redirect behavior, initial administrator login, and authenticated session.
+
+## 2026-09-19 - Add company ownership and tenant-safe asset management
+
+- Introduced `Company` as the ownership boundary between `AppUser` and operational devices/assets, with token-scoped company, device, topology, workspace, onboarding, and asset APIs.
+- Added company create/edit/archive/restore flows to the asset screen and company selection to device registration. Company archival and permanent user deletion use dedicated impact dialogs and typed confirmation instead of browser-native confirms.
+- Implemented recoverable company deletion and support restoration, plus a deliberately separate admin-only permanent purge. Database cascades remove dependent operational inventory when a company or user is permanently deleted.
+- Converted asset identity uniqueness and IP address handling to company scope, allowing separate customers to use the same RFC1918 addresses without overwriting each other's inventory.
+- Added legacy backfill in the bootstrap seed and a migration with explicit foreign keys, composite indexes, and cascade rules.
+- Verified with production backend/frontend builds, catalog validation (209/209), a clean PostgreSQL migration, and a focused database integration test (1/1) spanning tenancy, soft delete, restore, and both company/user cascades.

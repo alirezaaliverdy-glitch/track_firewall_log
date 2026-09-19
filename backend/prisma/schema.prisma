@@ -19,6 +19,28 @@ model AppUser {
   sessions     AuthSession[]
   securityAlertChannels SecurityAlertChannel[]
   scheduledTasks ScheduledTask[]
+  companies     Company[]
+  onboardingSessions DeviceOnboardingSession[]
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  ownerId     String
+  owner       AppUser   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  code        String
+  description String?
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  devices     Device[]
+  assets      Asset[]
+  ipAddresses AssetIpAddress[]
+
+  @@unique([ownerId, code])
+  @@index([ownerId, deletedAt])
+  @@index([deletedAt])
 }
 
 model AuthSession {
@@ -102,6 +124,8 @@ model AnalysisRun {
 
 model Device {
   id                       String                    @id @default(cuid())
+  companyId                String?
+  company                  Company?                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name                     String
   vendor                   String
   type                     DeviceType
@@ -115,6 +139,7 @@ model Device {
   tags                     String[]                  @default([])
   status                   DeviceStatus              @default(unknown)
   capabilities             Json?
+  deletedAt                DateTime?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   authProfiles             DeviceAuthProfile[]
@@ -142,6 +167,7 @@ model Device {
   scheduledTasks           ScheduledTask[]
 
   @@index([type])
+  @@index([companyId, deletedAt])
   @@index([host])
   @@index([credentialId])
   @@index([credentialRef])
@@ -150,6 +176,8 @@ model Device {
 
 model DeviceOnboardingSession {
   id                  String   @id
+  ownerId             String?
+  owner               AppUser? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   deviceId            String?
   status              String
   step                String
@@ -165,6 +193,7 @@ model DeviceOnboardingSession {
   expiresAt           DateTime
 
   @@index([deviceId])
+  @@index([ownerId])
   @@index([status])
   @@index([expiresAt])
 }
@@ -232,6 +261,8 @@ model AssetPlatform {
 
 model Asset {
   id                String              @id @default(cuid())
+  companyId         String?
+  company           Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name              String
   hostname          String?
   managementIp      String?
@@ -256,6 +287,7 @@ model Asset {
   source            AssetSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   tagsJson          Json                @default("[]")
   metadataJson      Json                @default("{}")
+  deletedAt         DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   interfaces        AssetInterface[]
@@ -271,9 +303,10 @@ model Asset {
   monitorIncidents  MonitorIncident[]
   collectionRuns    CollectionRun[]
 
-  @@unique([managementIp])
-  @@unique([serial])
-  @@unique([externalId])
+  @@unique([companyId, managementIp])
+  @@unique([companyId, serial])
+  @@unique([companyId, externalId])
+  @@index([companyId, deletedAt])
   @@index([hostname])
   @@index([managedState])
   @@index([healthState])
@@ -301,7 +334,9 @@ model AssetInterface {
 
 model AssetIpAddress {
   id          String          @id @default(cuid())
-  address     String          @unique
+  companyId   String?
+  company     Company?        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  address     String
   assetId     String?
   asset       Asset?          @relation(fields: [assetId], references: [id], onDelete: Cascade)
   interfaceId String?
@@ -313,6 +348,8 @@ model AssetIpAddress {
   updatedAt   DateTime        @updatedAt
 
   @@index([assetId])
+  @@unique([companyId, address])
+  @@index([companyId])
   @@index([interfaceId])
   @@index([prefixId])
 }

@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
-import { createManagedUser, listManagedUsers, resetManagedUserPassword, updateManagedUser, userAccessCatalog } from "../services/user-management.service.js";
+import { createManagedUser, deleteManagedUser, listManagedUsers, resetManagedUserPassword, updateManagedUser, userAccessCatalog } from "../services/user-management.service.js";
 
 function requireAdmin(request: FastifyRequest) {
   if (request.authUser?.role !== "admin") throw new Error("ADMIN_REQUIRED");
@@ -75,6 +75,18 @@ export async function adminUserRoutes(app: FastifyInstance) {
       const actor = requireAdmin(request);
       const result = await resetManagedUserPassword(actor.id, request.params.id, request.body?.password);
       auditUserManagement(request, "admin.user.password_reset", request.params.id, { sessionsRevoked: true });
+      return result;
+    } catch (error) {
+      const result = managementError(error);
+      return reply.code(responseCode(result.code)).send({ error: result.code, violations: result.violations });
+    }
+  });
+
+  app.delete<{ Params: { id: string }; Body: { confirmation?: unknown } }>("/api/admin/users/:id", async (request, reply) => {
+    try {
+      const actor = requireAdmin(request);
+      const result = await deleteManagedUser(actor.id, request.params.id, request.body?.confirmation);
+      auditUserManagement(request, "admin.user.permanent_delete", request.params.id, { irreversible: true, cascadedCompaniesAndAssets: true });
       return result;
     } catch (error) {
       const result = managementError(error);

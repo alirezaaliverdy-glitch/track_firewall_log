@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listPlatformAssets, type PlatformAsset } from "@/lib/platform";
 
-export function useAssets() {
+export function useAssets(companyId?: string) {
   const [assets, setAssets] = useState<PlatformAsset[]>([]);
   const [summary, setSummary] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
@@ -10,14 +10,14 @@ export function useAssets() {
   const refresh = useCallback(() => {
     setLoading(true);
     setError("");
-    listPlatformAssets()
+    listPlatformAssets("active", companyId)
       .then((result) => {
         setAssets(result.assets ?? []);
         setSummary(result.summary ?? {});
       })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Asset API unavailable"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [companyId]);
 
   useEffect(() => refresh(), [refresh]);
 

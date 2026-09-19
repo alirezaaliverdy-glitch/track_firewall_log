@@ -1411,3 +1411,12 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Removed mandatory pre-deployment env work from the default path: strong database, session, and credential-encryption secrets are generated once in a private persistent volume.
 - Added automatic Prisma migrations, idempotent administrator bootstrap, persistent uploads/telemetry, health-gated startup, private application networks, HTTP-to-HTTPS redirect, and security headers.
 - Validated the stack from a clean isolated Compose project: production images built, database/API/web/gateway became healthy, UI and API readiness returned HTTP 200 through HTTPS, HTTP redirected, and bootstrap login plus authenticated session both returned HTTP 200.
+
+## 2026-09-19 - Company-scoped asset tenancy and recoverable deletion
+
+- Added first-class companies owned by application users. A user can own multiple companies, while devices, inventory assets, and their IP records are scoped to one company and filtered by the authenticated token owner.
+- Device onboarding now requires a company selection, the asset workspace provides a responsive company switcher and management dialog, and overlapping private IP addresses remain isolated between companies.
+- Company deletion is recoverable by default: the operator must type the exact company name, then the company and its devices/assets are soft-deleted together. Support administrators can restore the complete company tree.
+- Permanent deletion is a separate administrator-only endpoint, is available only after archival, requires the exact `DELETE <company-code>` phrase, and then relies on database `ON DELETE CASCADE` constraints. User management also has an irreversible typed-confirmation dialog; deleting a user cascades through companies, devices, assets, IP records, and onboarding sessions.
+- Existing installations are migrated safely by creating a default company per user and assigning legacy unscoped devices/assets during the idempotent bootstrap seed.
+- Validation passed: backend and frontend production builds, all 209 catalog commands, clean migration deployment on PostgreSQL 16, and an isolated database test covering cross-user isolation, duplicate private IPs, archive/restore, permanent company cascade, and user cascade.

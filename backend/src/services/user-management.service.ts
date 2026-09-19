@@ -134,6 +134,19 @@ export async function resetManagedUserPassword(actorId: string, userId: string, 
   return { ok: true, sessionsRevoked: true };
 }
 
+export async function deleteManagedUser(actorId: string, userId: string, confirmation: unknown) {
+  if (actorId === userId) throw new Error("CANNOT_DELETE_SELF");
+  const user = await prisma.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, role: true, isActive: true } });
+  if (!user) throw new Error("USER_NOT_FOUND");
+  if (String(confirmation ?? "").trim().toLowerCase() !== `delete ${user.username}`) throw new Error("USER_DELETE_CONFIRMATION_MISMATCH");
+  if (user.role === "admin" && user.isActive) {
+    const otherActiveAdmins = await prisma.appUser.count({ where: { id: { not: userId }, role: "admin", isActive: true } });
+    if (!otherActiveAdmins) throw new Error("LAST_ACTIVE_ADMIN_REQUIRED");
+  }
+  await prisma.appUser.delete({ where: { id: userId } });
+  return { id: userId, permanentlyDeleted: true, cascadedCompaniesAndAssets: true };
+}
+
 export function userAccessCatalog() {
   return {
     sections: [...APPLICATION_SECTIONS],

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Bot, Boxes, Check, Clock3, Crosshair, Eye, Gauge, KeyRound, Laptop, LayoutDashboard, LogOut, Pencil, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
+import { Bot, Boxes, Check, Clock3, Crosshair, Eye, Gauge, KeyRound, Laptop, LayoutDashboard, LogOut, Pencil, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2, UserRound, UsersRound, Wrench, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/context/AuthContext";
-import { AuthApiError, createManagedUser, listManagedUsers, listSessions, resetManagedUserPassword, revokeSession, updateManagedUser, type ApplicationSection, type AuthSession, type AuthUser, type ManagedUser, type UserAccessCatalog } from "@/lib/auth";
+import { AuthApiError, createManagedUser, deleteManagedUser, listManagedUsers, listSessions, resetManagedUserPassword, revokeSession, updateManagedUser, type ApplicationSection, type AuthSession, type AuthUser, type ManagedUser, type UserAccessCatalog } from "@/lib/auth";
 import { CredentialManager } from "@/features/settings/components/CredentialManager";
 import "./SettingsPage.css";
 
@@ -52,6 +52,10 @@ export default function SettingsPage() {
   const [editorError, setEditorError] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<ManagedUser | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const [sessions, setSessions] = useState<AuthSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -105,6 +109,8 @@ export default function SettingsPage() {
       LAST_ACTIVE_ADMIN_REQUIRED: isFa ? "آخرین مدیر فعال را نمی‌توان غیرفعال یا تنزل داد." : "The last active admin cannot be disabled or demoted.",
       CANNOT_DEMOTE_SELF: isFa ? "نقش حساب فعلی را از این بخش تغییر ندهید." : "You cannot change your current account's role.",
       CANNOT_DEACTIVATE_SELF: isFa ? "حساب فعلی را نمی‌توان غیرفعال کرد." : "You cannot disable your current account.",
+      CANNOT_DELETE_SELF: isFa ? "حساب فعلی را نمی‌توان حذف کرد." : "You cannot delete your current account.",
+      USER_DELETE_CONFIRMATION_MISMATCH: isFa ? "عبارت تأیید حذف صحیح نیست." : "The deletion confirmation is incorrect.",
       INVALID_USERNAME: isFa ? "نام کاربری معتبر وارد کنید (حداقل ۳ نویسه انگلیسی)." : "Enter a valid username.",
       INVALID_DISPLAY_NAME: isFa ? "نام نمایشی معتبر وارد کنید." : "Enter a valid display name."
     };
@@ -130,6 +136,17 @@ export default function SettingsPage() {
     try { await resetManagedUserPassword(editor.id, resetPassword); setResetPassword(""); await loadUsers(); }
     catch (cause) { setEditorError(userErrorCopy(cause)); }
     finally { setResetting(false); }
+  }
+  async function deleteManagedUserNow() {
+    if (!deletingUser || deleteConfirmation !== `delete ${deletingUser.username}`) return;
+    setDeleting(true); setDeleteError("");
+    try {
+      await deleteManagedUser(deletingUser.id, deleteConfirmation);
+      if (editor?.id === deletingUser.id) setEditor(null);
+      setDeletingUser(null); setDeleteConfirmation("");
+      await loadUsers();
+    } catch (cause) { setDeleteError(userErrorCopy(cause)); }
+    finally { setDeleting(false); }
   }
 
   function passwordErrorCopy(cause: unknown) {
@@ -181,7 +198,9 @@ export default function SettingsPage() {
           {editorError ? <p className="settings-error" role="alert">{editorError}</p> : null}<footer><button type="button" className="secondary-button" onClick={() => setEditor(null)}>{isFa ? "انصراف" : "Cancel"}</button><button type="submit" className="primary-button" disabled={savingUser}><Save />{savingUser ? (isFa ? "در حال ذخیره..." : "Saving...") : (isFa ? "ذخیره حساب" : "Save account")}</button></footer>
         </form>
         {editor.id && editor.id !== user?.id ? <div className="password-reset-row"><div><KeyRound /><span><strong>{isFa ? "بازنشانی رمز" : "Reset password"}</strong><small>{isFa ? "نشست‌های کاربر بسته می‌شوند." : "User sessions will be revoked."}</small></span></div><input type="password" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} minLength={6} maxLength={128} placeholder={isFa ? "رمز جدید" : "New password"} /><button type="button" className="secondary-button" disabled={resetting || resetPassword.length < 6} onClick={() => void resetManagedPasswordNow()}>{resetting ? (isFa ? "در حال تغییر..." : "Resetting...") : (isFa ? "تغییر رمز" : "Reset")}</button></div> : null}
+        {editor.id && editor.id !== user?.id ? <div className="user-delete-row"><div><Trash2 /><span><strong>{isFa ? "حذف دائمی حساب" : "Permanently delete account"}</strong><small>{isFa ? "شرکت‌ها، دستگاه‌ها و دارایی‌های این کاربر نیز حذف می‌شوند." : "The user's companies, devices and assets will also be deleted."}</small></span></div><button type="button" className="danger-button" onClick={() => { const target = managedUsers.find((item) => item.id === editor.id); if (target) { setDeletingUser(target); setDeleteConfirmation(""); setDeleteError(""); } }}><Trash2 />{isFa ? "حذف حساب" : "Delete account"}</button></div> : null}
       </section> : null}
+      {deletingUser ? <div className="settings-delete-backdrop" role="dialog" aria-modal="true" aria-labelledby="delete-user-title"><section className="settings-delete-dialog"><header><span><Trash2 /></span><div><h2 id="delete-user-title">{isFa ? `حذف دائمی ${deletingUser.displayName}؟` : `Permanently delete ${deletingUser.displayName}?`}</h2><p>{isFa ? "این عملیات بازگشت‌ناپذیر است و پشتیبانی نیز امکان بازیابی ندارد." : "This operation is irreversible and cannot be recovered by support."}</p></div><button type="button" className="icon-button" onClick={() => setDeletingUser(null)} aria-label={isFa ? "بستن" : "Close"}><X /></button></header><div className="settings-delete-impact"><strong>{isFa ? "مواردی که هم‌زمان حذف می‌شوند" : "Data deleted at the same time"}</strong><p>{isFa ? "حساب کاربری، همه نشست‌ها، تمام شرکت‌های متعلق به کاربر و کلیه دستگاه‌ها و دارایی‌های وابسته." : "The account, all sessions, owned companies, and every related device and asset."}</p></div><label><span>{isFa ? "برای تأیید عبارت زیر را دقیق وارد کنید:" : "Type the following phrase exactly:"} <b dir="ltr">delete {deletingUser.username}</b></span><input dir="ltr" autoFocus value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>{deleteError ? <p className="settings-delete-error" role="alert">{deleteError}</p> : null}<footer><button type="button" className="secondary-button" onClick={() => setDeletingUser(null)}>{isFa ? "انصراف" : "Cancel"}</button><button type="button" className="danger-button" disabled={deleting || deleteConfirmation !== `delete ${deletingUser.username}`} onClick={() => void deleteManagedUserNow()}><Trash2 />{deleting ? (isFa ? "در حال حذف..." : "Deleting...") : (isFa ? "حذف دائمی کاربر و همه دارایی‌ها" : "Delete user and all assets")}</button></footer></section></div> : null}
     </div> : tab === "credentials" && isAdmin ? <CredentialManager isFa={isFa} /> : <div className="account-security-workspace">
       <section className="account-identity-card"><span><UserRound /></span><div><small>{t("auth.account.identity")}</small><strong>{user?.displayName || user?.username}</strong></div><dl><div><dt>{t("auth.account.username")}</dt><dd dir="ltr">{user?.username}</dd></div><div><dt>{t("auth.account.role")}</dt><dd>{user?.role}</dd></div></dl><span className="account-security-state"><ShieldCheck />Cookie session · CSRF · RBAC</span></section>
       <div className="account-security-grid"><section className="account-security-panel"><header><span><KeyRound /></span><div><h2>{t("auth.account.passwordTitle")}</h2><p>{t("auth.account.passwordHelp")}</p></div></header><form className="account-password-form" onSubmit={submitPassword}><label>{t("auth.account.currentPassword")}<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" maxLength={128} required /></label><label>{t("auth.account.newPassword")}<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" minLength={12} maxLength={128} required /></label><div className="account-password-meter"><i data-active={passwordScore >= 1} /><i data-active={passwordScore >= 2} /><i data-active={passwordScore >= 3} /><i data-active={passwordScore >= 4} /></div><label>{t("auth.account.confirmPassword")}<input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} maxLength={128} required /></label>{passwordError ? <p className="settings-error" role="alert">{passwordError}</p> : null}<button className="primary-button" type="submit" disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}>{changingPassword ? t("auth.account.changingPassword") : t("auth.account.changePassword")}</button></form></section>

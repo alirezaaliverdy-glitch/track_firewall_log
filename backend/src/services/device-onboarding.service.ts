@@ -61,6 +61,7 @@ type SessionStatus =
   | "cancelled";
 
 type Draft = {
+  companyId: string;
   vendor: OnboardingVendor;
   platform: string;
   connectionMethod: "ssh" | "api";
@@ -77,6 +78,7 @@ type Draft = {
 
 type OnboardingSession = {
   id: string;
+  ownerId?: string;
   deviceId?: string;
   status: SessionStatus;
   step: string;
@@ -139,12 +141,12 @@ function nullableJson(value: Record<string, unknown> | null) {
 }
 
 function hydrateSession(row: {
-  id: string; deviceId: string | null; status: string; step: string; draftJson: unknown;
+  id: string; ownerId: string | null; deviceId: string | null; status: string; step: string; draftJson: unknown;
   testJson: unknown; detectionJson: unknown; discoveryJson: unknown; previewJson: unknown;
   resultJson: unknown; privateEvidenceJson: unknown; createdAt: Date; updatedAt: Date; expiresAt: Date;
 }): OnboardingSession {
   return {
-    id: row.id, deviceId: row.deviceId ?? undefined, status: row.status as SessionStatus, step: row.step,
+    id: row.id, ownerId: row.ownerId ?? undefined, deviceId: row.deviceId ?? undefined, status: row.status as SessionStatus, step: row.step,
     draft: row.draftJson as Draft,
     test: row.testJson as Record<string, unknown> | null,
     detection: row.detectionJson as Record<string, unknown> | null,
@@ -158,7 +160,7 @@ function hydrateSession(row: {
 
 async function persistSession(session: OnboardingSession) {
   const data = {
-    deviceId: session.deviceId ?? null, status: session.status, step: session.step,
+    ownerId: session.ownerId ?? null, deviceId: session.deviceId ?? null, status: session.status, step: session.step,
     draftJson: json(session.draft), testJson: nullableJson(session.test), detectionJson: nullableJson(session.detection),
     discoveryJson: nullableJson(session.discovery), previewJson: nullableJson(session.preview), resultJson: nullableJson(session.result),
     privateEvidenceJson: json(session.privateEvidence), expiresAt: new Date(session.expiresAt)
@@ -170,7 +172,7 @@ async function persistSession(session: OnboardingSession) {
   sessions.set(session.id, session);
 }
 
-async function activeSession(id: string) {
+async function activeSession(id: string, ownerId?: string) {
   let session = sessions.get(id);
   if (!session) {
     const row = await prisma.deviceOnboardingSession.findUnique({ where: { id } });
@@ -178,6 +180,7 @@ async function activeSession(id: string) {
     if (session) sessions.set(id, session);
   }
   if (!session) throw new Error("Onboarding session not found.");
+  if (ownerId && session.ownerId !== ownerId) throw new Error("Onboarding session not found.");
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
     throw new Error("Onboarding session expired. Start a new session.");
   }
@@ -212,6 +215,8 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
   const timestamp = new Date();
   return {
     id: session.deviceId ?? session.id,
+    companyId: draft.companyId || null,
+    deletedAt: null,
     name: draft.name || `${draft.vendor}-device`,
     vendor: draft.vendor,
     type: deviceType(draft.vendor),
@@ -232,6 +237,7 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
 function requireConnectionDraft(session: OnboardingSession) {
   const { draft } = session;
   if (!draft.name.trim()) throw new Error("Device name is required.");
+  if (!draft.companyId.trim()) throw new Error("Company is required.");
   if (!draft.host.trim()) throw new Error("Management address is required.");
   if (!Number.isInteger(draft.managementPort) || draft.managementPort < 1 || draft.managementPort > 65535) throw new Error("Management port must be between 1 and 65535.");
   if (!draft.credentialId) {
@@ -243,17 +249,25 @@ function requireConnectionDraft(session: OnboardingSession) {
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
 }
 
-export async function createOnboardingSession(input: Record<string, unknown> = {}) {
+async function assertOnboardingCompany(companyId: string, ownerId?: string) {
+  if (!ownerId) return;
+  const company = await prisma.company.findFirst({ where: { id: companyId, ownerId, deletedAt: null }, select: { id: true } });
+  if (!company) throw new Error("Company not found or unavailable.");
+}
+
+export async function createOnboardingSession(input: Record<string, unknown> = {}, ownerId?: string) {
   assertNoSecrets(input);
-  const existing = typeof input.deviceId === "string" && input.deviceId ? await getDeviceById(input.deviceId) : null;
+  const existing = typeof input.deviceId === "string" && input.deviceId ? await getDeviceById(input.deviceId, ownerId) : null;
   const vendor = normalizeVendor(input.vendor ?? existing?.vendor ?? existing?.type ?? "linux");
   const method = String(input.connectionMethod ?? existing?.protocol ?? "ssh") === "api" ? "api" : "ssh";
   const session: OnboardingSession = {
     id: randomUUID(),
+    ownerId,
     deviceId: existing?.id,
     status: "draft",
     step: "vendor",
     draft: {
+      companyId: String(input.companyId ?? existing?.companyId ?? ""),
       vendor,
       platform: String(input.platform ?? defaultPlatform(vendor)),
       connectionMethod: method,
@@ -277,19 +291,21 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
     updatedAt: now(),
     expiresAt: expiresAt()
   };
+  await assertOnboardingCompany(session.draft.companyId, ownerId);
   await persistSession(session);
   return publicSession(session);
 }
 
-export async function getOnboardingSession(id: string) { return publicSession(await activeSession(id)); }
+export async function getOnboardingSession(id: string, ownerId?: string) { return publicSession(await activeSession(id, ownerId)); }
 
-export async function answerOnboardingSession(id: string, input: Record<string, unknown>) {
+export async function answerOnboardingSession(id: string, input: Record<string, unknown>, ownerId?: string) {
   assertNoSecrets(input);
-  const session = await activeSession(id);
+  const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const nextVendor = input.vendor === undefined ? session.draft.vendor : normalizeVendor(input.vendor);
   const nextMethod = input.connectionMethod === undefined ? session.draft.connectionMethod : String(input.connectionMethod) === "api" ? "api" : "ssh";
   session.draft = {
+    companyId: String(input.companyId ?? session.draft.companyId).trim(),
     vendor: nextVendor,
     platform: String(input.platform ?? (nextVendor === session.draft.vendor ? session.draft.platform : defaultPlatform(nextVendor))),
     connectionMethod: nextMethod,
@@ -303,6 +319,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     location: String(input.location ?? session.draft.location).trim(),
     environment: String(input.environment ?? session.draft.environment) as Draft["environment"]
   };
+  await assertOnboardingCompany(session.draft.companyId, ownerId);
   try {
     requireConnectionDraft(session);
   } catch (error) {
@@ -320,8 +337,8 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
   return response;
 }
 
-export async function testOnboardingConnection(id: string) {
-  const session = await activeSession(id);
+export async function testOnboardingConnection(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   try {
     requireConnectionDraft(session);
     try {
@@ -416,8 +433,8 @@ export async function testOnboardingConnection(id: string) {
   }
 }
 
-export async function detectOnboardingPlatform(id: string) {
-  const session = await activeSession(id);
+export async function detectOnboardingPlatform(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.test?.connected !== true || session.test?.connectorInvoked !== true) throw new Error("Run a successful connector-backed connection test first.");
   touch(session, "platform_detecting", "platform");
   if (session.draft.vendor === "cisco") {
@@ -445,8 +462,8 @@ export async function detectOnboardingPlatform(id: string) {
   return response;
 }
 
-export async function discoverOnboardingInventory(id: string) {
-  const session = await activeSession(id);
+export async function discoverOnboardingInventory(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.detection?.supported !== true) throw new Error("A supported platform must be detected before discovery.");
   touch(session, "discovery_running", "discover");
   try {
@@ -508,8 +525,8 @@ export async function discoverOnboardingInventory(id: string) {
   }
 }
 
-export async function previewOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function previewOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.discovery?.connectorInvoked !== true) throw new Error("Connector-backed discovery is required before preview.");
   try {
     session.preview = {
@@ -591,8 +608,8 @@ type RegistrationTarget = { deviceId: string | null; assetId: string | null; rea
 
 async function resolveOnboardingRegistrationTarget(tx: Prisma.TransactionClient, draft: Draft, sessionDeviceId?: string): Promise<RegistrationTarget> {
   const managementIp = normalizeManagementAddress(draft.host);
-  const asset = await tx.asset.findUnique({ where: { managementIp }, include: { device: true } });
-  const devices = await tx.device.findMany({ where: { host: { equals: managementIp, mode: "insensitive" } }, orderBy: { updatedAt: "desc" }, take: 10 });
+  const asset = await tx.asset.findFirst({ where: { companyId: draft.companyId, managementIp }, include: { device: true } });
+  const devices = await tx.device.findMany({ where: { companyId: draft.companyId, host: { equals: managementIp, mode: "insensitive" } }, orderBy: { updatedAt: "desc" }, take: 10 });
   const byId = new Map<string, typeof devices[number]>();
   for (const device of devices) byId.set(device.id, device);
   if (asset?.device) byId.set(asset.device.id, asset.device);
@@ -628,7 +645,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   if (!Number.isInteger(managementPort) || managementPort < 1 || managementPort > 65535) throw new Error("Management port must be an integer between 1 and 65535.");
   if (!(["lab", "staging", "production"] as string[]).includes(environment)) throw new Error("Environment must be lab, staging, or production.");
   return {
-    vendor, platform, name, host, managementPort, environment, connectionMethod,
+    companyId: String(input.companyId ?? session.draft.companyId).trim(), vendor, platform, name, host, managementPort, environment, connectionMethod,
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
@@ -637,10 +654,11 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   } satisfies Draft;
 }
 
-export async function registerUnverifiedOnboardingSession(id: string, input: Record<string, unknown> = {}) {
-  const session = await activeSession(id);
+export async function registerUnverifiedOnboardingSession(id: string, input: Record<string, unknown> = {}, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const draft = validateUnverifiedDraft(session, input);
+  await assertOnboardingCompany(draft.companyId, ownerId);
   const normalizedVendor = draft.vendor.toLowerCase();
 
   touch(session, "saving", "save");
@@ -665,6 +683,8 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       const existingDevice = target.deviceId ? await tx.device.findUnique({ where: { id: target.deviceId } }) : null;
       const wasUpdate = Boolean(target.deviceId);
       const data = {
+        companyId: draft.companyId,
+        deletedAt: null,
         name: draft.name,
         vendor: normalizedVendor,
         type: deviceType(draft.vendor),
@@ -734,13 +754,14 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   }
 }
 
-export async function commitOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function commitOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.status !== "preview_ready" || session.test?.connectorInvoked !== true || session.discovery?.connectorInvoked !== true) {
     throw new Error("A connector-backed test, supported detection, discovery, and preview are required before save.");
   }
   touch(session, "saving", "save");
   const draft = session.draft;
+  await assertOnboardingCompany(draft.companyId, ownerId);
 
   const capabilities: Record<string, unknown> = {
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
@@ -764,6 +785,7 @@ export async function commitOnboardingSession(id: string) {
       const existingDevice = target.deviceId ? await tx.device.findUnique({ where: { id: target.deviceId } }) : null;
       const wasUpdate = Boolean(target.deviceId);
       const data = {
+        companyId: draft.companyId, deletedAt: null,
         name: draft.name, vendor: draft.vendor, type: deviceType(draft.vendor), host: draft.host,
         managementPort: draft.managementPort, protocol: draft.connectionMethod === "api" ? DeviceProtocol.api : DeviceProtocol.ssh, credentialId: draft.credentialId,
         environment: draft.environment as DeviceEnvironment,
@@ -834,15 +856,15 @@ export async function commitOnboardingSession(id: string) {
   }
 }
 
-export async function cancelOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function cancelOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   const response = touch(session, "cancelled", "cancelled");
   await persistSession(session);
   return response;
 }
 
-export async function retryOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function retryOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions cannot be retried.");
   if (session.status === "cancelled") throw new Error("Cancelled onboarding sessions cannot be retried. Start a new session.");
   if (session.status === "draft") {

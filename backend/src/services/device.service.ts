@@ -57,6 +57,7 @@ const SENSITIVE_INPUT_KEYS = new Set([
 ]);
 
 type DeviceInput = {
+  companyId?: unknown;
   name?: unknown;
   vendor?: unknown;
   type?: unknown;
@@ -135,6 +136,7 @@ function asOptionalId(value: unknown, field: string) {
 function normalizeCreateInput(input: DeviceInput) {
   const type = asEnum<DeviceType>(input.type, DEVICE_TYPES, "type");
   return {
+    companyId: asOptionalId(input.companyId, "companyId"),
     name: asNonEmptyString(input.name, "name"),
     vendor: typeof input.vendor === "string" && input.vendor.trim() !== "" ? input.vendor.trim() : type,
     type,
@@ -177,9 +179,18 @@ function normalizePatchInput(input: DeviceInput) {
   return data;
 }
 
+async function assertOwnedCompany(companyId: string | null, ownerId?: string) {
+  if (!ownerId) return;
+  if (!companyId) throw new Error("companyId is required");
+  const company = await prisma.company.findFirst({ where: { id: companyId, ownerId, deletedAt: null }, select: { id: true } });
+  if (!company) throw new Error("Company not found or unavailable");
+}
+
 function toDeviceResponse(device: NonNullable<Awaited<ReturnType<typeof getDeviceById>>>) {
   return {
     id: device.id,
+    companyId: device.companyId,
+    company: device.company,
     name: device.name,
     vendor: device.vendor,
     type: device.type,
@@ -231,8 +242,13 @@ async function writeAudit(input: {
   });
 }
 
-export async function listDevices() {
+export async function listDevices(ownerId?: string, companyId?: string) {
   const devices = await prisma.device.findMany({
+    where: {
+      deletedAt: null,
+      ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}),
+      ...(companyId ? { companyId } : {})
+    },
     orderBy: { createdAt: "desc" },
     include: {
       statusChecks: {
@@ -241,15 +257,16 @@ export async function listDevices() {
       },
       credential: {
         select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
-      }
+      },
+      company: { select: { id: true, name: true, code: true } }
     }
   });
   return devices.filter((device) => !isInventoryArchived(device.capabilities)).map(toDeviceResponse);
 }
 
-export async function getDeviceById(id: string) {
-  return prisma.device.findUnique({
-    where: { id },
+export async function getDeviceById(id: string, ownerId?: string) {
+  return prisma.device.findFirst({
+    where: { id, deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) },
     include: {
       statusChecks: {
         orderBy: { checkedAt: "desc" },
@@ -257,22 +274,29 @@ export async function getDeviceById(id: string) {
       },
       credential: {
         select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true }
-      }
+      },
+      company: { select: { id: true, name: true, code: true } }
     }
   });
 }
 
-export async function createDevice(rawInput: Record<string, unknown>) {
+export async function createDevice(rawInput: Record<string, unknown>, ownerId?: string) {
   assertNoPlaintextSecrets(rawInput);
   const input = normalizeCreateInput(rawInput);
-  const { credentialId, ...deviceInput } = input;
+  const { credentialId, companyId: requestedCompanyId, ...deviceInput } = input;
+  let companyId = requestedCompanyId;
+  if (ownerId && !companyId) {
+    companyId = (await prisma.company.findFirst({ where: { ownerId, deletedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true } }))?.id ?? null;
+  }
+  await assertOwnedCompany(companyId, ownerId);
 
   const device = await prisma.$transaction(async (tx) => {
     const duplicate = await tx.device.findFirst({
       where: {
         vendor: { equals: input.vendor, mode: "insensitive" },
         host: { equals: input.host, mode: "insensitive" },
-        managementPort: input.managementPort
+        managementPort: input.managementPort,
+        ...(companyId ? { companyId } : {})
       },
       select: { id: true, capabilities: true }
     });
@@ -281,6 +305,7 @@ export async function createDevice(rawInput: Record<string, unknown>) {
     const created = await tx.device.create({
       data: {
         ...deviceInput,
+        ...(companyId ? { company: { connect: { id: companyId } } } : {}),
         ...(credentialId ? { credential: { connect: { id: credentialId } } } : {}),
         deviceCapabilities: {
           create: [
@@ -307,7 +332,8 @@ export async function createDevice(rawInput: Record<string, unknown>) {
       },
       include: {
         statusChecks: { orderBy: { checkedAt: "desc" }, take: 5 },
-        credential: { select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true } }
+        credential: { select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true } },
+        company: { select: { id: true, name: true, code: true } }
       }
     });
     await syncDeviceRecordToAsset(tx, created);
@@ -324,9 +350,14 @@ export async function createDevice(rawInput: Record<string, unknown>) {
   return toDeviceResponse(device);
 }
 
-export async function updateDevice(id: string, rawInput: Record<string, unknown>) {
+export async function updateDevice(id: string, rawInput: Record<string, unknown>, ownerId?: string) {
   assertNoPlaintextSecrets(rawInput);
   const input = normalizePatchInput(rawInput);
+  const current = await getDeviceById(id, ownerId);
+  if (!current) throw new Error("Record to update not found");
+  const companyId = rawInput.companyId === undefined ? current.companyId : asOptionalId(rawInput.companyId, "companyId");
+  await assertOwnedCompany(companyId, ownerId);
+  if (rawInput.companyId !== undefined) input.company = companyId ? { connect: { id: companyId } } : { disconnect: true };
 
   const device = await prisma.$transaction(async (tx) => {
     const updated = await tx.device.update({
@@ -334,7 +365,8 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
       data: input,
       include: {
         statusChecks: { orderBy: { checkedAt: "desc" }, take: 5 },
-        credential: { select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true } }
+        credential: { select: { id: true, name: true, type: true, username: true, sudo: true, createdAt: true, updatedAt: true } },
+        company: { select: { id: true, name: true, code: true } }
       }
     });
     await syncDeviceRecordToAsset(tx, updated);
@@ -351,10 +383,10 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
   return toDeviceResponse(device);
 }
 
-export async function deleteDevice(id: string) {
+export async function deleteDevice(id: string, ownerId?: string) {
   const removedAt = new Date();
   const reason = "removed_from_inventory";
-  const device = await prisma.device.findUnique({ where: { id }, include: { asset: true } });
+  const device = await prisma.device.findFirst({ where: { id, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) }, include: { asset: true } });
   if (!device) return null;
 
   const alreadyArchived = isInventoryArchived(device.capabilities) && device.asset?.managedState === "archived";
@@ -364,6 +396,7 @@ export async function deleteDevice(id: string) {
         where: { id },
         data: {
           status: DeviceStatus.unknown,
+          deletedAt: removedAt,
           capabilities: archivedCapabilities(device.capabilities, removedAt.toISOString(), reason)
         }
       });
@@ -375,6 +408,7 @@ export async function deleteDevice(id: string) {
           data: {
             managedState: "archived",
             healthState: "archived",
+            deletedAt: removedAt,
             metadataJson: toJson({
               ...capabilityObject(asset.metadataJson),
               inventoryStatus: "archived",
@@ -437,8 +471,8 @@ function tcpCheck(host: string, port: number, timeoutMs = 2500) {
   });
 }
 
-export async function testDeviceConnection(id: string) {
-  const device = await prisma.device.findUnique({ where: { id } });
+export async function testDeviceConnection(id: string, ownerId?: string) {
+  const device = await prisma.device.findFirst({ where: { id, deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) } });
   if (!device) return null;
 
   const connector = selectDeviceConnector(device);

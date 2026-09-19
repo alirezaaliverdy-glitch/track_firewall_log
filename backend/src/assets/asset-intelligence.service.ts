@@ -31,6 +31,7 @@ type ImportAssetInput = {
 };
 
 type ImportInput = {
+  companyId?: string;
   sourceType?: string;
   idempotencyKey?: string;
   assets?: ImportAssetInput[];
@@ -78,7 +79,7 @@ function assertNoSecrets(value: unknown, path = "payload") {
 function normalizeImport(input: ImportInput) {
   const sourceType = cleanText(input.sourceType, "manual_json") || "manual_json";
   const assets = Array.isArray(input.assets) ? input.assets.slice(0, MAX_IMPORT_ASSETS) : [];
-  return { sourceType, idempotencyKey: cleanText(input.idempotencyKey), assets };
+  return { companyId: cleanText(input.companyId), sourceType, idempotencyKey: cleanText(input.idempotencyKey), assets };
 }
 
 function assetIdentity(input: ImportAssetInput) {
@@ -89,14 +90,14 @@ function assetIdentity(input: ImportAssetInput) {
   return { managementIp, serial, hostname, externalId };
 }
 
-function duplicateWhere(input: ImportAssetInput): Prisma.AssetWhereInput {
+function duplicateWhere(input: ImportAssetInput, companyId?: string): Prisma.AssetWhereInput {
   const identity = assetIdentity(input);
   const OR: Prisma.AssetWhereInput[] = [];
   if (identity.externalId) OR.push({ externalId: identity.externalId });
   if (identity.serial) OR.push({ serial: identity.serial });
   if (identity.managementIp) OR.push({ managementIp: identity.managementIp });
   if (identity.hostname) OR.push({ hostname: { equals: identity.hostname, mode: "insensitive" } });
-  return OR.length ? { OR } : { id: "__no_match__" };
+  return OR.length ? { ...(companyId ? { companyId } : {}), OR } : { id: "__no_match__" };
 }
 
 async function upsertNameModel<T extends "assetRole" | "assetVendor" | "assetPlatform" | "assetSite">(
@@ -131,7 +132,20 @@ async function upsertSource(tx: Prisma.TransactionClient, sourceType: string) {
   });
 }
 
-type DeviceAssetProjection = Pick<Device, "id" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags" | "capabilities">;
+async function upsertAssetIpAddress(
+  tx: Prisma.TransactionClient,
+  companyId: string | null | undefined,
+  address: string,
+  data: { assetId: string; interfaceId?: string | null; role?: string | null }
+) {
+  const scope = { companyId: companyId ?? null, address };
+  const existing = await tx.assetIpAddress.findFirst({ where: scope, select: { id: true } });
+  return existing
+    ? tx.assetIpAddress.update({ where: { id: existing.id }, data: { ...data, companyId: companyId ?? null } })
+    : tx.assetIpAddress.create({ data: { ...data, ...scope } });
+}
+
+type DeviceAssetProjection = Pick<Device, "id" | "companyId" | "deletedAt" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags" | "capabilities">;
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -146,6 +160,7 @@ function isArchivedDevice(device: Pick<Device, "capabilities">) {
 async function projectionCandidates(tx: Prisma.TransactionClient, device: DeviceAssetProjection) {
   return tx.asset.findMany({
     where: {
+      ...(device.companyId ? { companyId: device.companyId } : {}),
       OR: [
         { deviceId: device.id },
         {
@@ -192,10 +207,12 @@ export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, devi
   const existing = linked[0] ?? unlinked[0];
   const data = {
     name: device.name,
+    companyId: device.companyId,
     hostname: collectedHostname,
     managementIp: device.host,
     serial: collectedSerial,
     managedState: "managed",
+    deletedAt: device.deletedAt,
     healthState: device.status,
     deviceId: device.id,
     vendorId,
@@ -207,11 +224,7 @@ export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, devi
     metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort, cisco: { inventoryStatus: cisco.inventoryStatus ?? null, capabilityStatus: cisco.capabilityStatus ?? null, platform: collectedPlatform } })
   };
   const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
-  await tx.assetIpAddress.upsert({
-    where: { address: device.host },
-    update: { assetId: asset.id, role: "management" },
-    create: { address: device.host, assetId: asset.id, role: "management" }
-  });
+  await upsertAssetIpAddress(tx, device.companyId, device.host, { assetId: asset.id, role: "management" });
   return { asset, created: !existing };
 }
 
@@ -265,8 +278,8 @@ export async function repairDeviceAssetReconciliation(apply = false) {
   return { mode: "apply" as const, audit: await auditDeviceAssetReconciliation(), changed };
 }
 
-export async function syncExistingDevicesToAssets() {
-  const devices = await prisma.device.findMany({ orderBy: { id: "asc" } });
+export async function syncExistingDevicesToAssets(ownerId?: string) {
+  const devices = await prisma.device.findMany({ where: { deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) }, orderBy: { id: "asc" } });
   let created = 0;
   let updated = 0;
   await prisma.$transaction(async (tx) => {
@@ -294,7 +307,7 @@ export async function previewAssetImport(input: ImportInput) {
   for (const item of normalized.assets) {
     const identity = assetIdentity(item);
     if (identity.managementIp && !IPV4_PATTERN.test(identity.managementIp)) throw new Error(`Invalid management IP: ${identity.managementIp}`);
-    const existing = await prisma.asset.findFirst({ where: duplicateWhere(item), select: { id: true, name: true } });
+    const existing = await prisma.asset.findFirst({ where: duplicateWhere(item, normalized.companyId), select: { id: true, name: true } });
     rows.push({
       input: item,
       action: existing ? "update" : "create",
@@ -331,8 +344,9 @@ export async function applyAssetImport(input: ImportInput) {
       const platformId = await upsertNameModel(tx, "assetPlatform", item.platform);
       const roleId = await upsertNameModel(tx, "assetRole", item.role);
       const identity = assetIdentity(item);
-      const existing = await tx.asset.findFirst({ where: duplicateWhere(item) });
+      const existing = await tx.asset.findFirst({ where: duplicateWhere(item, normalized.companyId) });
       const data = {
+        companyId: normalized.companyId || null,
         name: cleanText(item.name || item.hostname || item.managementIp, "Unnamed asset"),
         hostname: identity.hostname || null,
         managementIp: identity.managementIp || null,
@@ -352,13 +366,13 @@ export async function applyAssetImport(input: ImportInput) {
       };
       const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
       if (existing) updated += 1; else created += 1;
-      if (identity.managementIp) await tx.assetIpAddress.upsert({ where: { address: identity.managementIp }, update: { assetId: asset.id, role: "management" }, create: { address: identity.managementIp, assetId: asset.id, role: "management" } });
+      if (identity.managementIp) await upsertAssetIpAddress(tx, normalized.companyId || null, identity.managementIp, { assetId: asset.id, role: "management" });
       for (const iface of Array.isArray(item.interfaces) ? item.interfaces : []) {
         const name = cleanText(iface.name);
         if (!name) continue;
         const saved = await tx.assetInterface.upsert({ where: { assetId_name: { assetId: asset.id, name } }, update: { macAddress: cleanText(iface.macAddress) || null }, create: { assetId: asset.id, name, macAddress: cleanText(iface.macAddress) || null } });
         for (const ip of Array.isArray(iface.ips) ? iface.ips : []) {
-          if (IPV4_PATTERN.test(ip)) await tx.assetIpAddress.upsert({ where: { address: ip }, update: { assetId: asset.id, interfaceId: saved.id }, create: { address: ip, assetId: asset.id, interfaceId: saved.id } });
+          if (IPV4_PATTERN.test(ip)) await upsertAssetIpAddress(tx, normalized.companyId || null, ip, { assetId: asset.id, interfaceId: saved.id });
         }
       }
     }
@@ -377,43 +391,54 @@ export async function applyAssetImport(input: ImportInput) {
   return { ...preview, applied: { created, updated }, syncRunId: run.id, idempotentReplay: false };
 }
 
-export async function listAssets(view: "active" | "archived" | "all" = "active") {
-  await syncExistingDevicesToAssets();
-  const where = view === "all" ? {} : view === "archived" ? { managedState: "archived" } : { managedState: { not: "archived" } };
+export async function listAssets(view: "active" | "archived" | "all" = "active", ownerId?: string, companyId?: string) {
+  await syncExistingDevicesToAssets(ownerId);
+  const scope = { ...(ownerId ? { company: { ownerId } } : {}), ...(companyId ? { companyId } : {}) };
+  const where = view === "all"
+    ? scope
+    : view === "archived"
+      ? { ...scope, OR: [{ managedState: "archived" }, { deletedAt: { not: null } }] }
+      : { ...scope, managedState: { not: "archived" }, deletedAt: null, company: ownerId ? { ownerId, deletedAt: null } : undefined };
   const [assets, total, active, archived, byHealth, byManaged] = await Promise.all([
     prisma.asset.findMany({
       where,
       orderBy: [{ healthState: "asc" }, { name: "asc" }],
       take: 100,
-      include: { site: true, vendor: true, platform: true, device: { select: { id: true, name: true, type: true, host: true } }, ipAddresses: { take: 5 } }
+      include: { company: { select: { id: true, name: true, code: true } }, site: true, vendor: true, platform: true, device: { select: { id: true, name: true, type: true, host: true } }, ipAddresses: { take: 5 } }
     }),
     prisma.asset.count({ where }),
-    prisma.asset.count({ where: { managedState: { not: "archived" } } }),
-    prisma.asset.count({ where: { managedState: "archived" } }),
+    prisma.asset.count({ where: { ...scope, managedState: { not: "archived" }, deletedAt: null } }),
+    prisma.asset.count({ where: { ...scope, OR: [{ managedState: "archived" }, { deletedAt: { not: null } }] } }),
     prisma.asset.groupBy({ by: ["healthState"], where, _count: { _all: true } }),
-    prisma.asset.groupBy({ by: ["managedState"], _count: { _all: true } })
+    prisma.asset.groupBy({ by: ["managedState"], where, _count: { _all: true } })
   ]);
   return { assets, summary: { total, active, archived, view, byHealth, byManaged } };
 }
 
-export async function getAsset(id: string) {
-  return prisma.asset.findUnique({
-    where: { id },
+export async function getAsset(id: string, ownerId?: string) {
+  return prisma.asset.findFirst({
+    where: { id, ...(ownerId ? { company: { ownerId } } : {}) },
     include: {
-      site: true, location: true, role: true, vendor: true, platform: true, source: true,
+      company: { select: { id: true, name: true, code: true } }, site: true, location: true, role: true, vendor: true, platform: true, source: true,
       device: { select: { id: true, name: true, vendor: true, type: true, host: true, managementPort: true, status: true } },
       interfaces: { include: { ipAddresses: true } },
       ipAddresses: true,
-      relationshipsFrom: { include: { toAsset: true } },
-      relationshipsTo: { include: { fromAsset: true } },
+      relationshipsFrom: { ...(ownerId ? { where: { toAsset: { company: { ownerId } } } } : {}), include: { toAsset: true } },
+      relationshipsTo: { ...(ownerId ? { where: { fromAsset: { company: { ownerId } } } } : {}), include: { fromAsset: true } },
       findings: { orderBy: { lastSeen: "desc" }, take: 20 },
       actionPlans: { orderBy: { createdAt: "desc" }, take: 20 }
     }
   });
 }
 
-export async function getAssetTopology(id: string) {
-  const asset = await prisma.asset.findUnique({ where: { id }, include: { relationshipsFrom: { include: { toAsset: true } }, relationshipsTo: { include: { fromAsset: true } } } });
+export async function getAssetTopology(id: string, ownerId?: string) {
+  const asset = await prisma.asset.findFirst({
+    where: { id, ...(ownerId ? { company: { ownerId } } : {}) },
+    include: {
+      relationshipsFrom: { ...(ownerId ? { where: { toAsset: { company: { ownerId } } } } : {}), include: { toAsset: true } },
+      relationshipsTo: { ...(ownerId ? { where: { fromAsset: { company: { ownerId } } } } : {}), include: { fromAsset: true } }
+    }
+  });
   if (!asset) return null;
   return {
     assetId: id,
@@ -451,10 +476,10 @@ function normalizedLegacyEventType(event: { eventType: string; rawMessage: strin
 }
 
 export async function createSecurityEvent(input: SecurityEventInput) {
-  const device = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId }, select: { host: true } }) : null;
+  const device = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId }, select: { host: true, companyId: true } }) : null;
   const assetId = input.assetId ??
     (input.deviceId ? (await prisma.asset.findUnique({ where: { deviceId: input.deviceId }, select: { id: true } }))?.id : undefined) ??
-    (device?.host ? (await prisma.asset.findUnique({ where: { managementIp: device.host }, select: { id: true } }))?.id : undefined);
+    (device?.host ? (await prisma.asset.findFirst({ where: { managementIp: device.host, ...(device.companyId ? { companyId: device.companyId } : {}) }, select: { id: true } }))?.id : undefined);
   return prisma.securityEvent.create({
     data: {
       deviceId: input.deviceId,
@@ -692,9 +717,9 @@ export function validateRuleDsl(rule: unknown) {
   return { valid: errors.length === 0, errors };
 }
 
-export async function removeAssetFromInventory(id: string) {
+export async function removeAssetFromInventory(id: string, ownerId?: string) {
   const removedAt = new Date();
-  const asset = await prisma.asset.findUnique({ where: { id }, include: { device: true } });
+  const asset = await prisma.asset.findFirst({ where: { id, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) }, include: { device: true } });
   if (!asset) return null;
   const alreadyArchived = asset.managedState === "archived";
   if (!alreadyArchived) {
@@ -704,6 +729,7 @@ export async function removeAssetFromInventory(id: string) {
         data: {
           managedState: "archived",
           healthState: "archived",
+          deletedAt: removedAt,
           metadataJson: toJson({ ...object(asset.metadataJson), inventoryStatus: "archived", removedAt: removedAt.toISOString(), removedReason: "removed_from_inventory" })
         }
       });
@@ -711,7 +737,7 @@ export async function removeAssetFromInventory(id: string) {
         const capabilities = object(asset.device.capabilities);
         await tx.device.update({
           where: { id: asset.deviceId },
-          data: { status: "unknown", capabilities: toJson({ ...capabilities, inventoryStatus: "archived", inventory: { ...object(capabilities.inventory), status: "archived", removedAt: removedAt.toISOString(), reason: "removed_from_inventory" } }) }
+          data: { status: "unknown", deletedAt: removedAt, capabilities: toJson({ ...capabilities, inventoryStatus: "archived", inventory: { ...object(capabilities.inventory), status: "archived", removedAt: removedAt.toISOString(), reason: "removed_from_inventory" } }) }
         });
         await tx.deviceOnboardingSession.updateMany({ where: { deviceId: asset.deviceId, status: { notIn: ["completed", "cancelled"] } }, data: { status: "cancelled", step: "removed", expiresAt: removedAt } });
       }

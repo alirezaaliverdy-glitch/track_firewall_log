@@ -691,10 +691,10 @@ function effectiveServiceEndpoints(discovered: ServiceEndpoint[], metadataJson: 
   return [...merged.values()].sort((left, right) => left.port - right.port || left.protocol.localeCompare(right.protocol)).slice(0, SERVICE_LIMIT);
 }
 
-export async function listPortTopology(deviceId?: string) {
+export async function listPortTopology(deviceId?: string, ownerId?: string) {
   const [devices, snapshots] = await Promise.all([
-    prisma.device.findMany({ where: deviceId ? { id: deviceId } : undefined, orderBy: { name: "asc" }, include: { asset: { include: { interfaces: { orderBy: { name: "asc" } } } } } }),
-    prisma.deviceSnapshot.findMany({ where: { ...(deviceId ? { deviceId } : {}), snapshotType: "linux_security" }, orderBy: { collectedAt: "desc" }, take: deviceId ? 1 : 100, select: { deviceId: true, dataJson: true, collectedAt: true } })
+    prisma.device.findMany({ where: { ...(deviceId ? { id: deviceId } : {}), deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) }, orderBy: { name: "asc" }, include: { asset: { include: { interfaces: { orderBy: { name: "asc" } } } } } }),
+    prisma.deviceSnapshot.findMany({ where: { ...(deviceId ? { deviceId } : {}), ...(ownerId ? { device: { company: { ownerId, deletedAt: null } } } : {}), snapshotType: "linux_security" }, orderBy: { collectedAt: "desc" }, take: deviceId ? 1 : 100, select: { deviceId: true, dataJson: true, collectedAt: true } })
   ]);
   const latestSnapshots = new Map<string, { dataJson: unknown; collectedAt: Date }>();
   for (const snapshot of snapshots) if (!latestSnapshots.has(snapshot.deviceId)) latestSnapshots.set(snapshot.deviceId, snapshot);
@@ -741,7 +741,7 @@ function validatedServiceInput(input: Record<string, unknown>): ServiceEndpoint 
 }
 
 export async function saveServiceEndpointOverride(deviceId: string, rawKey: unknown, input: Record<string, unknown>, userId?: string) {
-  const device = await prisma.device.findUnique({ where: { id: deviceId } });
+  const device = await prisma.device.findFirst({ where: { id: deviceId, deletedAt: null, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!device) return null;
   const asset = await ensureAsset(device);
   const requestedKey = text(rawKey, 220);
@@ -761,7 +761,7 @@ export async function saveServiceEndpointOverride(deviceId: string, rawKey: unkn
 
 export async function clearServiceEndpointOverride(deviceId: string, rawKey: unknown, userId?: string) {
   const key = text(rawKey, 220);
-  const asset = await prisma.asset.findUnique({ where: { deviceId } });
+  const asset = await prisma.asset.findFirst({ where: { deviceId, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!asset) return null;
   const currentMetadata = object(asset.metadataJson) as ServiceTopologyMetadata & Record<string, unknown>;
   const storedOverrides = serviceOverrides(currentMetadata);
@@ -774,7 +774,7 @@ export async function clearServiceEndpointOverride(deviceId: string, rawKey: unk
 }
 
 export async function discoverDevicePorts(deviceId: string, userId?: string) {
-  const device = await prisma.device.findUnique({ where: { id: deviceId } });
+  const device = await prisma.device.findFirst({ where: { id: deviceId, deletedAt: null, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!device) return null;
   const ciscoDevice = /cisco/i.test(`${device.vendor} ${device.type}`);
   let liveConnected = false;
@@ -787,7 +787,7 @@ export async function discoverDevicePorts(deviceId: string, userId?: string) {
       connectionErrorCode = error instanceof VendorCapabilityRefreshError ? error.code : "CISCO_LIVE_COLLECTION_FAILED";
     }
   } else {
-    const liveResult = await testDeviceConnection(deviceId);
+    const liveResult = await testDeviceConnection(deviceId, userId);
     liveConnected = Boolean(liveResult && "connected" in liveResult && liveResult.connected);
     connectionErrorCode = liveResult && "errorCode" in liveResult ? text(liveResult.errorCode, 80) || null : null;
   }
@@ -795,11 +795,11 @@ export async function discoverDevicePorts(deviceId: string, userId?: string) {
   const discoveredCount = await mergeDiscoveredPorts(refreshed);
   const serviceEndpointCount = collectServiceEndpoints(refreshed).length;
   await prisma.auditLog.create({ data: { deviceId, action: "asset.port_topology.discovered", targetType: "device", targetId: deviceId, dryRun: true, approvalStatus: "not_required", metadata: toJson({ discoveredCount, serviceEndpointCount, connected: liveConnected, connectionErrorCode, userId, source: "read_only_inventory" }) } });
-  return { discoveredCount, serviceEndpointCount, liveConnected, connectionErrorCode, topology: await listPortTopology(deviceId) };
+  return { discoveredCount, serviceEndpointCount, liveConnected, connectionErrorCode, topology: await listPortTopology(deviceId, userId) };
 }
 
 export async function refreshLinuxServicePorts(deviceId: string, userId?: string) {
-  const device = await prisma.device.findUnique({ where: { id: deviceId } });
+  const device = await prisma.device.findFirst({ where: { id: deviceId, deletedAt: null, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!device) return null;
   if (!/linux/i.test(`${device.vendor} ${device.type}`)) throw new Error("LINUX_DEVICE_REQUIRED");
 
@@ -857,12 +857,12 @@ export async function refreshLinuxServicePorts(deviceId: string, userId?: string
       metadata: toJson({ connected: result.connected, serviceEndpointCount, userId, source: "linux_ss_lightweight" })
     }
   });
-  return { connected: result.connected, serviceEndpointCount, checkedAt: result.checkedAt, topology: await listPortTopology(deviceId) };
+  return { connected: result.connected, serviceEndpointCount, checkedAt: result.checkedAt, topology: await listPortTopology(deviceId, userId) };
 }
 
 export async function savePortOverride(deviceId: string, rawPortName: unknown, input: Record<string, unknown>, userId?: string) {
   const name = portName(rawPortName);
-  const device = await prisma.device.findUnique({ where: { id: deviceId } });
+  const device = await prisma.device.findFirst({ where: { id: deviceId, deletedAt: null, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!device) return null;
   const asset = await ensureAsset(device);
   const existing = await prisma.assetInterface.findUnique({ where: { assetId_name: { assetId: asset.id, name } } });
@@ -897,7 +897,7 @@ export async function savePortOverride(deviceId: string, rawPortName: unknown, i
 
 export async function clearPortOverride(deviceId: string, rawPortName: unknown, userId?: string) {
   const name = portName(rawPortName);
-  const asset = await prisma.asset.findUnique({ where: { deviceId } });
+  const asset = await prisma.asset.findFirst({ where: { deviceId, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!asset) return null;
   const existing = await prisma.assetInterface.findUnique({ where: { assetId_name: { assetId: asset.id, name } } });
   if (!existing) return null;

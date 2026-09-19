@@ -2,6 +2,8 @@ import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type PlatformAsset = {
   id: string;
+  companyId?: string | null;
+  company?: { id: string; name: string; code: string } | null;
   name: string;
   hostname: string | null;
   managementIp: string | null;
@@ -284,7 +286,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export const listPlatformAssets = (view: "active" | "archived" | "all" = "active") => request<{ assets: PlatformAsset[]; summary: Record<string, unknown> }>(`/assets?view=${encodeURIComponent(view)}`);
+export const listPlatformAssets = (view: "active" | "archived" | "all" = "active", companyId?: string) => request<{ assets: PlatformAsset[]; summary: Record<string, unknown> }>(`/assets?view=${encodeURIComponent(view)}${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}`);
 export const getPlatformAsset = (id: string) => request<PlatformAsset>(`/assets/${id}`);
 export const removePlatformAsset = (id: string) => request<{ ok: boolean; assetId: string; deviceId?: string | null; inventoryStatus: string; visibleInActiveInventory: boolean }>(`/assets/${id}`, { method: "DELETE" });
 export const previewAssetImport = (body: Record<string, unknown>) => request<Record<string, unknown>>("/assets/import/preview", { method: "POST", body: JSON.stringify(body) });
