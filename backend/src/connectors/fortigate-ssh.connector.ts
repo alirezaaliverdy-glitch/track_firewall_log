@@ -182,7 +182,7 @@ async function withSshWithCredential<T>(device: Device, credential: FortiGateCre
     client.once("ready", () => {
       callback(client).then((value) => finish(() => resolve(value))).catch((error) => finish(() => reject(error)));
     });
-    client.once("error", (error) => finish(() => reject(mapSshError(error))));
+    client.on("error", (error) => finish(() => reject(mapSshError(error))));
     client.once("timeout", () => finish(() => reject(new FortiGateConnectorError("FORTIGATE_SSH_HANDSHAKE_TIMEOUT", "FortiGate SSH handshake timed out.", 504))));
     client.connect(connectConfig(device, credential));
   });

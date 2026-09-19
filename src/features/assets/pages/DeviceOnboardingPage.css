@@ -1,3 +1,42 @@
+.device-onboarding-bootstrap {
+  min-height: min(720px, calc(100dvh - 150px));
+}
+
+.onboarding-bootstrap-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  width: min(100%, 760px);
+  margin: clamp(8px, 5vh, 64px) auto;
+  border: 1px solid rgba(103, 232, 249, .2);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(7, 24, 38, .94), rgba(3, 12, 23, .96));
+  padding: clamp(22px, 4vw, 38px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .025);
+}
+
+.onboarding-bootstrap-card.is-error { border-color: rgba(251, 113, 133, .32); }
+.onboarding-bootstrap-card.is-warning { border-color: rgba(251, 191, 36, .3); }
+.onboarding-bootstrap-card__icon { display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid rgba(103, 232, 249, .25); border-radius: 17px; background: rgba(8, 145, 178, .12); color: #67e8f9; }
+.onboarding-bootstrap-card.is-error .onboarding-bootstrap-card__icon { border-color: rgba(251, 113, 133, .28); background: rgba(159, 18, 57, .12); color: #fda4af; }
+.onboarding-bootstrap-card.is-warning .onboarding-bootstrap-card__icon { border-color: rgba(251, 191, 36, .28); background: rgba(146, 64, 14, .12); color: #fcd34d; }
+.onboarding-bootstrap-card__icon svg { width: 25px; height: 25px; }
+.onboarding-bootstrap-card__content { display: grid; gap: 9px; min-width: 0; }
+.onboarding-bootstrap-card__content > small { color: #67e8f9; font-size: .65rem; font-weight: 850; }
+.onboarding-bootstrap-card__content h2 { margin: 0; color: var(--app-text); font-size: clamp(1.15rem, 2.2vw, 1.55rem); }
+.onboarding-bootstrap-card__content p { max-width: 640px; margin: 0; color: var(--app-muted); font-size: .76rem; line-height: 1.95; }
+.onboarding-bootstrap-card details { margin-top: 5px; border-top: 1px solid rgba(148, 163, 184, .12); padding-top: 10px; }
+.onboarding-bootstrap-card summary { color: #a9bdd0; font-size: .68rem; cursor: pointer; }
+.onboarding-bootstrap-card code { display: block; overflow: auto; max-height: 130px; margin-top: 8px; border-radius: 10px; background: rgba(2, 8, 16, .75); padding: 10px; color: #93a8bb; font-size: .61rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.onboarding-bootstrap-card__actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 8px; }
+.onboarding-bootstrap-card__actions .primary-button,
+.onboarding-bootstrap-card__actions .primary-link { gap: 7px; text-decoration: none; }
+.onboarding-feedback--warning { display: flex; align-items: center; gap: 9px; border-color: rgba(251, 191, 36, .22); background: rgba(120, 53, 15, .08); color: #fde68a; }
+.onboarding-feedback--warning > span { flex: 1; }
+.is-spinning { animation: onboarding-spin .9s linear infinite; }
+@keyframes onboarding-spin { to { transform: rotate(360deg); } }
+
 .onboarding-cisco-compatibility {
   display: grid;
   gap: 12px;
@@ -93,6 +132,12 @@
 .onboarding-companion-methods article b.is-ready { background:rgba(16,185,129,.1);color:#6ee7b7; }
 
 @media (max-width: 650px) {
+  .device-onboarding-bootstrap { min-height: auto; }
+  .onboarding-bootstrap-card { grid-template-columns: 1fr; margin: 0; border-radius: 18px; padding: 19px; }
+  .onboarding-bootstrap-card__icon { width: 46px; height: 46px; border-radius: 14px; }
+  .onboarding-bootstrap-card__actions { align-items: stretch; flex-direction: column; }
+  .onboarding-bootstrap-card__actions > * { width: 100%; }
+  .onboarding-feedback--warning { align-items: stretch; flex-direction: column; }
   .onboarding-feedback.is-error { align-items: stretch; flex-direction: column-reverse; }
   .onboarding-feedback.is-error .primary-button { width: 100%; }
   .onboarding-credential-manager-link { align-items:flex-start;flex-direction:column; }

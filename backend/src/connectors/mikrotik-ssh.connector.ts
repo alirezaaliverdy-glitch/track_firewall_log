@@ -173,7 +173,7 @@ async function withSshWithCredential<T>(device: Device, credential: MikroTikCred
         .then((value) => finish(() => resolve(value)))
         .catch((error) => finish(() => reject(error)));
     });
-    client.once("error", (error) => finish(() => reject(mapSshError(error))));
+    client.on("error", (error) => finish(() => reject(mapSshError(error))));
     client.once("timeout", () => finish(() => reject(new MikroTikConnectorError("MIKROTIK_SSH_HANDSHAKE_TIMEOUT", "MikroTik SSH handshake timed out.", 504))));
     client.connect(connectConfig(device, credential));
   });

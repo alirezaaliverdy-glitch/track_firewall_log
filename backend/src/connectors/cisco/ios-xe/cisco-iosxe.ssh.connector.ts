@@ -354,7 +354,7 @@ export class CiscoIosXeSshConnector {
           });
         });
         client.on("keyboard-interactive", (_name, _instructions, _language, prompts, finishPrompts) => finishPrompts(prompts.map(() => credential.password ?? "")));
-        client.once("error", (error) => finish(() => reject(mapSshError(error, state))));
+        client.on("error", (error) => finish(() => reject(mapSshError(error, state))));
         client.once("close", () => finish(() => reject(connectorError("CISCO_SSH_CLOSED", state.authenticated ? "shell" : "ssh_negotiation", "The Cisco SSH connection closed before the interactive session was ready.", state, 502, true))));
         const connectConfig = ciscoConnectConfig(device, credential, compatibilityProfile, socket);
         state = { ...state, legacyCompatibilityApplied: Boolean(connectConfig.algorithms), connectionPhase: "ssh_negotiation" };
@@ -412,7 +412,7 @@ export class CiscoIosXeSshConnector {
           });
         });
         client.on("keyboard-interactive", (_name, _instructions, _language, prompts, finishPrompts) => finishPrompts(prompts.map(() => credential.password ?? "")));
-        client.once("error", (error) => finish(() => reject(mapSshError(error, state))));
+        client.on("error", (error) => finish(() => reject(mapSshError(error, state))));
         client.once("close", () => finish(() => reject(connectorError("CISCO_SSH_CLOSED", state.authenticated ? "shell" : "ssh_negotiation", "The Cisco SSH connection closed before the interactive session was ready.", state, 502, true))));
         const connectConfig = ciscoConnectConfig(device, credential, compatibilityProfile, socket);
         state = { ...state, legacyCompatibilityApplied: Boolean(connectConfig.algorithms), connectionPhase: "ssh_negotiation" };

@@ -83,7 +83,7 @@ async function withSsh<T>(device: Device, callback: (client: Client, credential:
         .then((value) => finish(() => resolve(value)))
         .catch((error) => finish(() => reject(error)));
     });
-    client.once("error", (error) => finish(() => reject(error)));
+    client.on("error", (error) => finish(() => reject(error)));
     client.once("timeout", () => finish(() => reject(new Error("SSH_CONNECTION_FAILED"))));
     client.connect(connectConfig(device, credential));
   });

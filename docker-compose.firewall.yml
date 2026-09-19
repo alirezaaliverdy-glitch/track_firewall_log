@@ -60,7 +60,9 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       APP_PROFILE: ${APP_PROFILE:-lab}
       PORT: 4000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://firewall_app@firewall-db:5432/firewall_log_analyzer}
+      # Keep the container database address isolated from a developer .env that points at localhost.
+      # Production operators can still override the internal DSN explicitly with DOCKER_DATABASE_URL.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://firewall_app@firewall-db:5432/firewall_log_analyzer}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost,http://127.0.0.1}
       TRUST_PROXY: ${TRUST_PROXY:-true}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}

@@ -78,7 +78,7 @@ async function collectPfSenseLogs(device: Device) {
         });
       });
     });
-    client.once("error", () => finish(new Error("PFSENSE_SSH_CONNECTION_FAILED")));
+    client.on("error", () => finish(new Error("PFSENSE_SSH_CONNECTION_FAILED")));
     client.once("timeout", () => finish(new Error("PFSENSE_SSH_TIMEOUT")));
     client.connect(config);
   });

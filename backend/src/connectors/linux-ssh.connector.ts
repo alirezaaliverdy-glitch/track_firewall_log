@@ -312,7 +312,7 @@ async function withSshWithCredential<T>(device: Device, credential: SshCredentia
         .then((value) => finish(() => resolve(value)))
         .catch((error) => finish(() => reject(error)));
     });
-    client.once("error", (error) => finish(() => reject(mapSshError(error))));
+    client.on("error", (error) => finish(() => reject(mapSshError(error))));
     client.once("timeout", () => finish(() => reject(new ConnectorError("SSH_HANDSHAKE_TIMEOUT", "SSH handshake timed out.", 504))));
     client.connect(connectConfig(device, credential));
   });
@@ -459,7 +459,7 @@ export async function openLinuxTelemetryStream(
         reject(error);
       }
     });
-    client.once("error", reject);
+    client.on("error", reject);
     client.connect(connectConfig(device, credential));
   });
   await ready;

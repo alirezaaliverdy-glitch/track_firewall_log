@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { Cable, CheckCircle2, ChevronLeft, CircleCheck, KeyRound, LockKeyhole, Network, RadioTower, Router, Server, Shield, ShieldAlert, ShieldCheck, Sparkles, Wifi } from "lucide-react";
+import { AlertTriangle, Building2, Cable, CheckCircle2, ChevronLeft, CircleCheck, KeyRound, LockKeyhole, Network, RadioTower, RefreshCw, Router, Server, Shield, ShieldAlert, ShieldCheck, Sparkles, Wifi } from "lucide-react";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { WorkflowPrimaryAction, WorkflowReviewSummary, WorkflowStateCallout, WorkflowStepper, type WorkflowStepStatus } from "@/components/workflows";
@@ -40,6 +40,7 @@ const stepKeys = ["onboarding.steps.identity", "onboarding.steps.credential", "o
 type Step = 1 | 2 | 3;
 type InvalidField = "name" | "host" | "port" | null;
 type ConflictState = { route?: string; existingDeviceId?: string };
+type BootstrapIssue = "missing_company" | "service_unavailable" | null;
 
 const vendorChoices = [
   { key: "linux", title: "Linux", icon: Server, tone: "cyan", descriptionKey: "onboarding.vendor.linux" },
@@ -107,6 +108,9 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const [credentials, setCredentials] = useState<DeviceCredential[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [connectionProfiles, setConnectionProfiles] = useState<VendorConnectionProfile[]>([]);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [bootstrapIssue, setBootstrapIssue] = useState<BootstrapIssue>(null);
+  const [bootstrapWarning, setBootstrapWarning] = useState("");
   const [credentialMode, setCredentialMode] = useState<"existing" | "new">("existing");
   const [credentialForm, setCredentialForm] = useState<CredentialInput>(emptyCredential);
   const [enableSecret, setEnableSecret] = useState("");
@@ -120,24 +124,66 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    let cancelled = false;
     const vendor = initialVendor({ vendorKey: params.vendorKey ?? "" });
-    Promise.all([listCompanies("active"), listCredentials(), listConnectionProfiles()]).then(async ([companyRows, refs, profiles]) => {
-      const storedCompanyId = localStorage.getItem(ACTIVE_COMPANY_STORAGE_KEY) ?? "";
-      const initialCompanyId = companyRows.some((company) => company.id === storedCompanyId) ? storedCompanyId : companyRows[0]?.id ?? "";
-      if (!params.deviceId && !initialCompanyId) throw new Error("برای ثبت دستگاه ابتدا یک شرکت در بخش دارایی‌ها تعریف کنید.");
-      const next = await startOnboarding({ vendor, platform: platforms[vendor], deviceId: params.deviceId || undefined, ...(!params.deviceId ? { companyId: initialCompanyId } : {}) });
-      setCompanies(companyRows);
-      setConnectionProfiles(profiles);
-      setSession(next);
-      setForm({ ...next.draft, platform: next.draft.platform || platforms[vendor] });
-      setCredentials(refs);
-      setCredentialMode(refs.length ? "existing" : "new");
-    }).catch((failure: unknown) => {
-      const next = mappedError(failure, "onboarding.errors.generic", t, isFa);
-      setError(next.message);
-      setDiagnostic(next.diagnostic);
-    });
-  }, [isFa, params.deviceId, params.vendorKey, t]);
+    setError("");
+    setDiagnostic("");
+    setBootstrapIssue(null);
+    setBootstrapWarning("");
+
+    const bootstrap = async () => {
+      try {
+        const companyRows = await listCompanies("active");
+        if (cancelled) return;
+        setCompanies(companyRows);
+        const storedCompanyId = localStorage.getItem(ACTIVE_COMPANY_STORAGE_KEY) ?? "";
+        const initialCompanyId = companyRows.some((company) => company.id === storedCompanyId) ? storedCompanyId : companyRows[0]?.id ?? "";
+        if (!params.deviceId && !initialCompanyId) {
+          setBootstrapIssue("missing_company");
+          return;
+        }
+
+        const [credentialResult, profileResult] = await Promise.allSettled([listCredentials(), listConnectionProfiles()]);
+        if (cancelled) return;
+        const refs = credentialResult.status === "fulfilled" ? credentialResult.value : [];
+        const profiles = profileResult.status === "fulfilled" ? profileResult.value : [];
+        if (credentialResult.status === "rejected" || profileResult.status === "rejected") {
+          setBootstrapWarning(isFa
+            ? "بخشی از اطلاعات کمکی دریافت نشد؛ فرم همچنان قابل استفاده است و می‌توانید اعتبارنامه تازه بسازید."
+            : "Some helper data could not be loaded. The form is still usable and you can create a new credential.");
+        }
+
+        const next = await startOnboarding({ vendor, platform: platforms[vendor], deviceId: params.deviceId || undefined, ...(!params.deviceId ? { companyId: initialCompanyId } : {}) });
+        if (cancelled) return;
+        setConnectionProfiles(profiles);
+        setSession(next);
+        setForm({ ...next.draft, platform: next.draft.platform || platforms[vendor] });
+        setCredentials(refs);
+        setCredentialMode(refs.length ? "existing" : "new");
+      } catch (failure: unknown) {
+        if (cancelled) return;
+        const next = mappedError(failure, "onboarding.errors.generic", t, isFa);
+        setBootstrapIssue("service_unavailable");
+        setError(isFa ? "فرم ثبت دستگاه آماده نشد. ارتباط با سرویس برنامه را بررسی و دوباره تلاش کنید." : "Device registration could not be prepared. Check the application service and try again.");
+        setDiagnostic(next.diagnostic);
+      }
+    };
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+      started.current = false;
+    };
+  }, [bootstrapAttempt, isFa, params.deviceId, params.vendorKey, t]);
+
+  function retryBootstrap() {
+    started.current = false;
+    setSession(null);
+    setForm(null);
+    setError("");
+    setDiagnostic("");
+    setBootstrapAttempt((current) => current + 1);
+  }
 
   const selectedCredential = useMemo(() => credentials.find((item) => item.id === form?.credentialId) ?? null, [credentials, form?.credentialId]);
   const verified = session?.test?.connected === true && session.test.connectorInvoked === true && session.status === "preview_ready";
@@ -145,7 +191,21 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const connectionFailed = Boolean(session?.test && !verified);
 
   if (!form || !session) {
-    return <section className="page-stack"><PageHeader title={t("onboarding.title.register")} eyebrow={t("onboarding.eyebrow")} /><div className="state-card">{t("onboarding.loading")}</div>{error ? <div className="state-card is-error">{error}</div> : null}</section>;
+    const missingCompany = bootstrapIssue === "missing_company";
+    const failed = bootstrapIssue === "service_unavailable";
+    return <section className="page-stack device-onboarding-bootstrap">
+      <PageHeader title={isEditing ? t("onboarding.title.update") : t("onboarding.title.register")} eyebrow={t("onboarding.eyebrow")} description={t("onboarding.description")} actions={<Link className="secondary-link" to="/assets/devices">{t("onboarding.backToDevices")}</Link>} />
+      <section className={`onboarding-bootstrap-card ${failed ? "is-error" : missingCompany ? "is-warning" : "is-loading"}`} role={failed || missingCompany ? "alert" : "status"} aria-live="polite">
+        <span className="onboarding-bootstrap-card__icon">{failed ? <AlertTriangle /> : missingCompany ? <Building2 /> : <RefreshCw className="is-spinning" />}</span>
+        <div className="onboarding-bootstrap-card__content">
+          <small>{isFa ? "ثبت امن و مرحله‌ای" : "Secure guided registration"}</small>
+          <h2>{failed ? (isFa ? "راه‌اندازی فرم انجام نشد" : "The form could not be started") : missingCompany ? (isFa ? "ابتدا یک شرکت تعریف کنید" : "Create a company first") : t("onboarding.loading")}</h2>
+          <p>{failed ? error : missingCompany ? (isFa ? "هر دستگاه باید به یک شرکت متصل باشد. از صفحه تجهیزات یک شرکت بسازید و سپس به این صفحه برگردید." : "Every device must belong to a company. Create one on the devices page, then return here.") : (isFa ? "شرکت‌ها، اعتبارنامه‌ها و روش‌های اتصال در حال آماده‌سازی هستند." : "Companies, credentials, and connection methods are being prepared.")}</p>
+          {diagnostic ? <details><summary>{t("onboarding.advanced.diagnostics")}</summary><code dir="ltr">{diagnostic}</code></details> : null}
+          {failed || missingCompany ? <div className="onboarding-bootstrap-card__actions">{failed ? <button className="primary-button" type="button" onClick={retryBootstrap}><RefreshCw size={17} />{isFa ? "تلاش دوباره" : "Try again"}</button> : <Link className="primary-link" to="/assets/devices"><Building2 size={17} />{isFa ? "مدیریت شرکت‌ها" : "Manage companies"}</Link>}<Link className="secondary-link" to="/assets/devices">{t("onboarding.backToDevices")}</Link></div> : null}
+        </div>
+      </section>
+    </section>;
   }
 
   const activeForm = form;
@@ -315,6 +375,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
             <nav aria-label={isFa ? "رفتن به مرحله" : "Go to step"}>{step > 1 ? <button type="button" onClick={() => setStep(1)}>{isFa ? "مشخصات" : "Identity"}</button> : null}{step > 2 ? <button type="button" onClick={() => setStep(2)}>{isFa ? "اتصال و تست" : "Connection"}</button> : null}</nav>
           </div>
           {error ? <div role="alert" className="state-card is-error onboarding-feedback"><span>{error}</span>{legacyRescueAvailable ? <button className="primary-button" type="button" disabled={busy === "test"} onClick={retryCiscoWithCompatibility}>{isFa ? "فعال‌سازی سازگاری Cisco و تست دوباره" : "Enable Cisco compatibility and retry"}</button> : null}</div> : null}
+          {bootstrapWarning ? <div role="status" className="state-card onboarding-feedback onboarding-feedback--warning"><AlertTriangle size={17} /><span>{bootstrapWarning}</span><button className="text-button" type="button" onClick={retryBootstrap}>{isFa ? "دریافت دوباره" : "Reload"}</button></div> : null}
           {conflict ? <div className="state-card onboarding-feedback" role="group" aria-label={t("onboarding.conflict.title")}><strong>{t("onboarding.conflict.title")}</strong><p>{t("onboarding.conflict.message")}</p><div className="button-row">{conflict.route ? <button className="primary-button" type="button" onClick={() => navigate(conflict.route!)}>{t("onboarding.conflict.openExisting")}</button> : null}<button className="secondary-button" type="button" onClick={() => { setStep(1); setConflict(null); hostInput.current?.focus(); }}>{t("onboarding.conflict.editAddress")}</button><button className="secondary-button" type="button" onClick={() => setConflict(null)}>{t("onboarding.conflict.cancel")}</button></div></div> : null}
           {diagnostic ? <details className="advanced-section onboarding-feedback"><summary>{t("onboarding.advanced.diagnostics")}</summary><p dir="ltr">{diagnostic}</p></details> : null}
           {message ? <WorkflowStateCallout tone={verified ? "success" : "warning"} title={verified ? t("onboarding.status.verified") : t("onboarding.status.notVerified")} message={message} /> : null}
