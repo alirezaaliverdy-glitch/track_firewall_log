@@ -1518,3 +1518,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Converted asset identity uniqueness and IP address handling to company scope, allowing separate customers to use the same RFC1918 addresses without overwriting each other's inventory.
 - Added legacy backfill in the bootstrap seed and a migration with explicit foreign keys, composite indexes, and cascade rules.
 - Verified with production backend/frontend builds, catalog validation (209/209), a clean PostgreSQL migration, and a focused database integration test (1/1) spanning tenancy, soft delete, restore, and both company/user cascades.
+
+## 2026-09-19 - Strengthen vendor connection methods
+
+- Researched vendor-supported SSH/CLI, REST/API, NETCONF/YANG, RESTCONF/YANG, SNMPv3, Syslog, gNMI, and agent approaches and recorded an honest per-vendor connection matrix.
+- Added connection-method APIs plus a guided onboarding selector with recommended methods, prerequisites, readiness states, automatic protocol/port mapping, and responsive cards.
+- Implemented and registered a read-only MikroTik RouterOS v7 REST connector with timeouts, response bounds, structured errors, stored-credential resolution, safe discovery, and explicit rejection of write operations.
+- Tested the live registered MikroTik, Cisco, and Linux devices through the application connector boundary; all three SSH connection/discovery checks succeeded without logging or persisting supplied secrets.
+- Built backend and frontend production images, passed the focused registry/connector tests, and kept the active API, web, database, and gateway containers healthy.

@@ -1420,3 +1420,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Permanent deletion is a separate administrator-only endpoint, is available only after archival, requires the exact `DELETE <company-code>` phrase, and then relies on database `ON DELETE CASCADE` constraints. User management also has an irreversible typed-confirmation dialog; deleting a user cascades through companies, devices, assets, IP records, and onboarding sessions.
 - Existing installations are migrated safely by creating a default company per user and assigning legacy unscoped devices/assets during the idempotent bootstrap seed.
 - Validation passed: backend and frontend production builds, all 209 catalog commands, clean migration deployment on PostgreSQL 16, and an isolated database test covering cross-user isolation, duplicate private IPs, archive/restore, permanent company cascade, and user cascade.
+
+## 2026-09-19 - Vendor connection strategy and guided onboarding
+
+- Added an authenticated vendor connection catalog for Linux, Cisco, MikroTik, FortiGate, and Sophos. It separates management, inventory, telemetry, and event channels and marks every method as ready, setup-required, or planned instead of implying unsupported connectivity.
+- Device onboarding now presents only connector-backed management choices, recommends the safest practical default, applies the correct default port, explains prerequisites, and shows companion monitoring methods.
+- Added a bounded, read-only RouterOS v7 REST-over-HTTPS connector for structured identity, resources, interfaces, addresses, routes, firewall, services, and log discovery. Effectful RouterOS actions remain on the controlled SSH path.
+- Live connector tests passed for the registered MikroTik SSH, Cisco SSH, and Linux SSH devices. Network probes confirmed that RouterOS REST was not enabled on the tested MikroTik and that NETCONF/gNMI were not exposed on the tested Cisco, so those paths were not falsely reported as verified.
+- Backend and frontend production Docker builds passed, the new connection-registry tests passed 3/3, and all four deployed containers remained healthy. The full legacy suite completed with 556/597 passing; the 41 failures are pre-existing contract/environment mismatches outside this feature.

@@ -3,6 +3,7 @@ import type { ConnectorCapability, DeviceConnector, VendorPlanner } from "./type
 import { fortigateSshConnector } from "./fortigate-ssh.connector.js";
 import { linuxSshConnector } from "./linux-ssh.connector.js";
 import { mikrotikSshConnector } from "./mikrotik-ssh.connector.js";
+import { mikrotikRestConnector } from "./mikrotik-rest.connector.js";
 import { fortigatePlanner } from "./vendors/fortigate.planner.js";
 import { linuxEdgePlanner } from "./vendors/linux-edge.planner.js";
 import { mikrotikPlanner } from "./vendors/mikrotik.planner.js";
@@ -23,6 +24,7 @@ const planners: VendorPlanner[] = [
 
 const connectors: DeviceConnector[] = [
   fortigateSshConnector,
+  mikrotikRestConnector,
   mikrotikSshConnector,
   linuxSshConnector,
   ciscoIosXeConnector,

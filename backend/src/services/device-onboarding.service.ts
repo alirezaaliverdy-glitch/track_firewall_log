@@ -244,7 +244,11 @@ function requireConnectionDraft(session: OnboardingSession) {
     fail(session, "credential_missing", "credential", "A stored credential reference is required.");
     throw new Error("A stored credential reference is required.");
   }
-  const validTransport = draft.vendor === "sophos" ? draft.connectionMethod === "api" : draft.connectionMethod === "ssh";
+  const validTransport = draft.vendor === "sophos"
+    ? draft.connectionMethod === "api"
+    : draft.vendor === "mikrotik"
+      ? draft.connectionMethod === "ssh" || draft.connectionMethod === "api"
+      : draft.connectionMethod === "ssh";
   if (!validTransport) throw new Error(`No registered onboarding connector supports ${draft.vendor}/${draft.connectionMethod}.`);
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
 }

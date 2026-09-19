@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { CheckCircle2, ChevronLeft, CircleCheck, KeyRound, LockKeyhole, Network, Router, Server, Shield, ShieldAlert, ShieldCheck, Sparkles, Wifi } from "lucide-react";
+import { Cable, CheckCircle2, ChevronLeft, CircleCheck, KeyRound, LockKeyhole, Network, RadioTower, Router, Server, Shield, ShieldAlert, ShieldCheck, Sparkles, Wifi } from "lucide-react";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { WorkflowPrimaryAction, WorkflowReviewSummary, WorkflowStateCallout, WorkflowStepper, type WorkflowStepStatus } from "@/components/workflows";
 import { createCredential, listCredentials, type CredentialInput, type DeviceCredential } from "@/lib/credentials";
 import { nextAvailableCredentialName } from "@/lib/credentialNames";
 import { ACTIVE_COMPANY_STORAGE_KEY, listCompanies, type Company } from "@/lib/companies";
+import { listConnectionProfiles, onboardingProtocol, type VendorConnectionMethod, type VendorConnectionProfile } from "@/lib/connectionMethods";
 import {
   OnboardingApiError,
   answerOnboarding,
@@ -105,6 +106,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const [form, setForm] = useState<OnboardingDraft | null>(null);
   const [credentials, setCredentials] = useState<DeviceCredential[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [connectionProfiles, setConnectionProfiles] = useState<VendorConnectionProfile[]>([]);
   const [credentialMode, setCredentialMode] = useState<"existing" | "new">("existing");
   const [credentialForm, setCredentialForm] = useState<CredentialInput>(emptyCredential);
   const [enableSecret, setEnableSecret] = useState("");
@@ -119,12 +121,13 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     if (started.current) return;
     started.current = true;
     const vendor = initialVendor({ vendorKey: params.vendorKey ?? "" });
-    Promise.all([listCompanies("active"), listCredentials()]).then(async ([companyRows, refs]) => {
+    Promise.all([listCompanies("active"), listCredentials(), listConnectionProfiles()]).then(async ([companyRows, refs, profiles]) => {
       const storedCompanyId = localStorage.getItem(ACTIVE_COMPANY_STORAGE_KEY) ?? "";
       const initialCompanyId = companyRows.some((company) => company.id === storedCompanyId) ? storedCompanyId : companyRows[0]?.id ?? "";
       if (!params.deviceId && !initialCompanyId) throw new Error("برای ثبت دستگاه ابتدا یک شرکت در بخش دارایی‌ها تعریف کنید.");
       const next = await startOnboarding({ vendor, platform: platforms[vendor], deviceId: params.deviceId || undefined, ...(!params.deviceId ? { companyId: initialCompanyId } : {}) });
       setCompanies(companyRows);
+      setConnectionProfiles(profiles);
       setSession(next);
       setForm({ ...next.draft, platform: next.draft.platform || platforms[vendor] });
       setCredentials(refs);
@@ -156,15 +159,28 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   };
 
   function selectVendor(vendor: OnboardingDraft["vendor"]) {
+    const profile = connectionProfiles.find((item) => item.vendor === vendor);
+    const method = profile?.methods.find((item) => item.selectable && item.readiness === "ready" && item.recommended)
+      ?? profile?.methods.find((item) => item.selectable && item.readiness === "ready");
+    const connectionMethod = method ? onboardingProtocol(method) : vendor === "sophos" ? "api" : "ssh";
+    const managementPort = method?.defaultPort ?? (connectionMethod === "api" ? (vendor === "sophos" ? 4444 : 443) : 22);
     setForm({
       ...activeForm,
       vendor,
       platform: platforms[vendor],
-      connectionMethod: vendor === "sophos" ? "api" : "ssh",
-      managementPort: vendor === "sophos" ? 4444 : 22,
+      connectionMethod,
+      managementPort,
       enableCredentialId: vendor === "cisco" ? activeForm.enableCredentialId : "",
       ciscoLegacyCompatibilityApproved: false
     });
+    setSession((current) => current ? { ...current, status: "draft", test: null, detection: null, discovery: null, preview: null } : current);
+    setMessage(""); setError(""); setDiagnostic("");
+  }
+
+  function selectConnectionMethod(method: VendorConnectionMethod) {
+    if (!method.selectable || method.readiness !== "ready") return;
+    const connectionMethod = onboardingProtocol(method);
+    setForm({ ...activeForm, connectionMethod, managementPort: method.defaultPort ?? activeForm.managementPort });
     setSession((current) => current ? { ...current, status: "draft", test: null, detection: null, discovery: null, preview: null } : current);
     setMessage(""); setError(""); setDiagnostic("");
   }
@@ -264,6 +280,12 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const steps = stepKeys.map((key, index) => ({ id: key, label: t(key), status: stepStatus(step, index, connectionFailed) }));
   const selectedVendorChoice = vendorChoices.find((item) => item.key === activeForm.vendor) ?? vendorChoices[0];
   const SelectedVendorIcon = selectedVendorChoice.icon;
+  const selectedConnectionProfile = connectionProfiles.find((item) => item.vendor === activeForm.vendor) ?? null;
+  const primaryMethods = selectedConnectionProfile?.methods.filter((item) => item.selectable && item.readiness === "ready") ?? [];
+  const companionMethods = selectedConnectionProfile?.methods.filter((item) => !item.selectable) ?? [];
+  const selectedConnectionMethod = primaryMethods.find((item) => onboardingProtocol(item) === activeForm.connectionMethod && item.defaultPort === activeForm.managementPort)
+    ?? primaryMethods.find((item) => onboardingProtocol(item) === activeForm.connectionMethod)
+    ?? primaryMethods[0];
   const legacyRescueAvailable = activeForm.vendor === "cisco"
     && activeForm.ciscoLegacyCompatibilityApproved !== true
     && diagnostic.includes("CISCO_SSH_NEGOTIATION_FAILED");
@@ -302,6 +324,9 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
             <fieldset className="onboarding-vendor-fieldset"><legend>{t("onboarding.fields.vendor")}</legend><p>{t("onboarding.vendor.help")}</p><div className="onboarding-vendor-grid" role="radiogroup" aria-label={t("onboarding.fields.vendor")}>
               {vendorChoices.map((item) => { const Icon = item.icon; const selected = activeForm.vendor === item.key; return <button key={item.key} type="button" role="radio" aria-checked={selected} className={`onboarding-vendor-choice onboarding-vendor-choice--${item.tone}`} onClick={() => selectVendor(item.key)}><span className="onboarding-vendor-choice__icon"><Icon size={22} /></span><span><strong>{item.title}</strong><small>{t(item.descriptionKey)}</small></span>{selected ? <CircleCheck className="onboarding-vendor-choice__check" size={18} /> : null}</button>; })}
             </div></fieldset>
+            {selectedConnectionProfile ? <fieldset className="onboarding-method-fieldset"><legend>{isFa ? "روش اتصال مدیریتی" : "Management connection"}</legend><p>{isFa ? selectedConnectionProfile.strategyFa : selectedConnectionProfile.strategy}</p><div className="onboarding-method-grid" role="radiogroup" aria-label={isFa ? "روش اتصال مدیریتی" : "Management connection method"}>
+              {primaryMethods.map((method) => { const selected = selectedConnectionMethod?.key === method.key; return <button key={method.key} type="button" role="radio" aria-checked={selected} className={`onboarding-method-card ${selected ? "is-selected" : ""}`} onClick={() => selectConnectionMethod(method)}><span className="onboarding-method-card__icon">{method.key === "ssh" ? <Cable size={20} /> : <Network size={20} />}</span><span><strong>{isFa ? method.titleFa : method.title}{method.recommended ? <b>{isFa ? "پیشنهادی" : "Recommended"}</b> : null}</strong><small>{isFa ? method.summaryFa : method.summary}</small><em dir="ltr">{method.defaultPort ? `TCP ${method.defaultPort}` : "Auto"}</em></span>{selected ? <CircleCheck size={19} /> : null}</button>; })}
+            </div>{selectedConnectionMethod ? <div className="onboarding-method-requirements"><ShieldCheck size={17} /><span><strong>{isFa ? "پیش‌نیاز اتصال" : "Connection prerequisites"}</strong><small>{(isFa ? selectedConnectionMethod.prerequisitesFa : selectedConnectionMethod.prerequisites).join(" • ")}</small></span></div> : null}</fieldset> : null}
             <div className="onboarding-field-grid">
               <label className="onboarding-field onboarding-field--wide"><span>شرکت مالک دستگاه<b>{t("onboarding.required")}</b></span><select value={activeForm.companyId} onChange={(event) => { change("companyId", event.target.value); localStorage.setItem(ACTIVE_COMPANY_STORAGE_KEY, event.target.value); }}><option value="">انتخاب شرکت</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name} — {company.code}</option>)}</select><small>این دستگاه و همه اطلاعات جمع‌آوری‌شده فقط در دارایی‌های همین شرکت نمایش داده می‌شود.</small></label>
               <label className="onboarding-field"><span>{t("onboarding.fields.name")}<b>{t("onboarding.required")}</b></span><input ref={nameInput} value={activeForm.name} onChange={(event) => change("name", event.target.value)} placeholder={t("onboarding.placeholders.name")} aria-invalid={invalidField === "name"} /><small>{t("onboarding.help.name")}</small></label>
@@ -318,6 +343,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
             {credentialMode === "existing" ? <label className="onboarding-field onboarding-field--wide"><span>{t("onboarding.fields.credential")}<b>{t("onboarding.required")}</b></span><select value={activeForm.credentialId} onChange={(event) => change("credentialId", event.target.value)}><option value="">{t("onboarding.credentials.choose")}</option>{credentials.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.username}</option>)}</select><small>{credentials.length ? t("onboarding.credentials.safeReference") : t("onboarding.credentials.empty")}</small></label> : <div className="onboarding-field-grid onboarding-new-credential"><label className="onboarding-field"><span>{t("onboarding.fields.credentialName")}</span><input value={credentialForm.name} onChange={(event) => setCredentialForm({ ...credentialForm, name: event.target.value })} /></label><label className="onboarding-field"><span>{t("onboarding.fields.username")}</span><input autoComplete="username" value={credentialForm.username} onChange={(event) => setCredentialForm({ ...credentialForm, username: event.target.value })} /></label><label className="onboarding-field"><span>{t("onboarding.fields.credentialType")}</span><select value={credentialForm.type} onChange={(event) => setCredentialForm({ ...credentialForm, type: event.target.value as CredentialInput["type"] })}><option value="password">{t("onboarding.fields.password")}</option><option value="private_key">{t("onboarding.fields.privateKey")}</option></select></label>{credentialForm.type === "password" ? <label className="onboarding-field"><span>{t("onboarding.fields.password")}</span><input type="password" autoComplete="new-password" value={credentialForm.password ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, password: event.target.value })} /></label> : <><label className="onboarding-field onboarding-field--wide"><span>{t("onboarding.fields.privateKey")}</span><textarea value={credentialForm.privateKey ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, privateKey: event.target.value })} /></label><label className="onboarding-field"><span>{t("onboarding.fields.passphrase")}</span><input type="password" autoComplete="new-password" value={credentialForm.passphrase ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, passphrase: event.target.value })} /></label></>} {activeForm.vendor === "cisco" ? <label className="onboarding-field"><span>{t("onboarding.fields.enableSecret")}</span><input type="password" autoComplete="new-password" value={enableSecret} onChange={(event) => setEnableSecret(event.target.value)} /></label> : null}</div>}
             <div className="onboarding-credential-manager-link"><span><KeyRound size={17} />{isFa ? "نیاز به تغییر یا حذف اعتبارنامه ذخیره‌شده دارید؟" : "Need to edit or delete a stored credential?"}</span><Link to="/settings?tab=credentials">{isFa ? "مدیریت اعتبارنامه‌ها" : "Manage credentials"}</Link></div>
             {activeForm.vendor === "cisco" ? <section className={`onboarding-cisco-compatibility ${activeForm.ciscoLegacyCompatibilityApproved ? "is-enabled" : ""}`}><div><ShieldAlert size={20} /><span><strong>{t("onboarding.advanced.ciscoTitle")}</strong><small>{t("onboarding.advanced.ciscoWarning")}</small></span></div><label className="warning-check"><input type="checkbox" checked={activeForm.ciscoLegacyCompatibilityApproved === true} onChange={(event) => change("ciscoLegacyCompatibilityApproved", event.target.checked)} /><span>{t("onboarding.advanced.ciscoLegacy")}</span></label></section> : null}
+            {companionMethods.length ? <section className="onboarding-companion-methods"><header><RadioTower size={19} /><span><strong>{isFa ? "کانال‌های تکمیلی پایش" : "Companion monitoring channels"}</strong><small>{isFa ? "این کانال‌ها جای اتصال مدیریتی را نمی‌گیرند و پس از ثبت دستگاه فعال می‌شوند." : "These channels complement, rather than replace, the management connection."}</small></span></header><div>{companionMethods.map((method) => <article key={method.key}><span><strong>{isFa ? method.titleFa : method.title}</strong><small>{isFa ? method.summaryFa : method.summary}</small></span><b className={`is-${method.readiness}`}>{method.readiness === "ready" ? (isFa ? "آماده" : "Ready") : method.readiness === "planned" ? (isFa ? "در نقشه راه" : "Planned") : (isFa ? "نیازمند تنظیم" : "Setup required")}</b></article>)}</div></section> : null}
             <div className="onboarding-connection-preview"><span className={`onboarding-connection-preview__icon onboarding-selected-vendor--${selectedVendorChoice.tone}`}><Network size={20} /></span><div><small>{t("onboarding.connection.target")}</small><strong dir="ltr">{activeForm.host}:{activeForm.managementPort}</strong><span>{selectedVendorChoice.title} · {activeForm.connectionMethod.toUpperCase()} · {t("onboarding.connection.readOnly")}</span></div></div>
             <footer className="onboarding-stage__actions onboarding-stage__actions--split"><button className="secondary-button" type="button" onClick={() => setStep(1)}><ChevronLeft aria-hidden="true" />{t("common.back")}</button><div><button className="onboarding-skip-button" type="button" disabled={Boolean(busy)} onClick={() => void skipTest()}>{t("onboarding.actions.skip")}</button><WorkflowPrimaryAction busy={busy === "test"} busyLabel={t("onboarding.actions.testing")} disabled={busy === "test"} onClick={() => void runTest()} icon={<Network aria-hidden="true" />}>{t("onboarding.actions.test")}</WorkflowPrimaryAction></div></footer>
           </section>}
