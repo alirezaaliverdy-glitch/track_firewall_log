@@ -5,7 +5,7 @@ const MAX_OBJECT_KEYS = 200;
 
 const SENSITIVE_KEY = /(?:^|[_\-.])(password|passwd|passphrase|privatekey|private_key|private-key|psk|api[_\-.]?key|token|authorization|cookie|secret|credential)(?:$|[_\-.])/i;
 const SAFE_REFERENCE_KEY = /(?:secret|credential)(?:Ref|Id)$/i;
-const TERMINAL_CONTROL = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+const TERMINAL_CONTROL = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, "g");
 const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi;
 const INLINE_SECRET = /\b(password|passwd|passphrase|psksecret|psk|api[_-]?key|token|authorization|private[_ -]?key|secret)\b\s*[:= ]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
@@ -14,6 +14,14 @@ export const sensitiveLogPaths = [
   "req.headers.authorization",
   "req.headers.cookie",
   "req.body.password",
+  "req.body.currentPassword",
+  "req.body.newPassword",
+  "req.body.confirmPassword",
+  "req.body.initialPassword",
+  "req.body.fields.initialPassword",
+  "req.body.fields.confirmPassword",
+  "req.body.parametersJson.initialPassword",
+  "req.body.parametersJson.confirmPassword",
   "req.body.passphrase",
   "req.body.privateKey",
   "req.body.token",
@@ -27,6 +35,8 @@ export const sensitiveLogPaths = [
   "req.query.secret",
   "res.body.token",
   "res.body.password",
+  "res.body.currentPassword",
+  "res.body.newPassword",
   "res.body.secret"
 ];
 

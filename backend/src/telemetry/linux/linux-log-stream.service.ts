@@ -7,12 +7,13 @@ import { redactLinuxTelemetry } from "./linux-telemetry.service.js";
 import type { LinuxLiveLogEvent, LinuxTelemetrySeverity } from "./linux-telemetry.types.js";
 import { processVendorTelemetry, type NormalizedFinding } from "../vendor-finding-engine.js";
 import { boundedTelemetryStore, type StoredTelemetryEvent } from "../bounded-telemetry-store.js";
+import { scheduleSecurityDetection } from "../../services/security-detection-dispatcher.service.js";
 
 const MAX_BUFFER = 500;
 const MAX_RUNTIME_MS = 30 * 60 * 1000;
 const allowedSources = new Set<LinuxStreamSource>(["auth", "system", "kernel", "firewall", "nginx", "apache", "fail2ban", "docker"]);
 type StreamHandle = { close: () => void };
-type Session = { id: string; deviceId: string; sources: LinuxStreamSource[]; startedAt: Date; status: "starting" | "running" | "stopped"; warnings: string[]; events: LinuxLiveLogEvent[]; emitter: EventEmitter; handles: StreamHandle[]; timer: NodeJS.Timeout; counters: Map<string, number[]> };
+type Session = { id: string; deviceId: string; sources: LinuxStreamSource[]; startedAt: Date; status: "starting" | "running" | "stopped"; warnings: string[]; events: LinuxLiveLogEvent[]; emitter: EventEmitter; handles: StreamHandle[]; timer: NodeJS.Timeout; counters: Map<string, number[]>; recentRaw: Map<string, number> };
 const sessions = new Map<string, Session>();
 
 function ip(line: string) { return line.match(/\b(?:from|SRC=)\s*=?\s*((?:\d{1,3}\.){3}\d{1,3})\b/i)?.[1]; }
@@ -37,9 +38,9 @@ export function parseLinuxLiveLogLine(source: LinuxStreamSource, line: string, c
   let summary = `${source} log event`;
   const tags: string[] = [source];
   let suspicious = false;
-  if (/sudo.*authentication failure|sudo:|incorrect password/.test(lower)) { summary = "Sudo authentication failure"; tags.push("sudo_failure"); suspicious = true; }
-  else if (/failed password|authentication failure/.test(lower)) { summary = "Failed SSH authentication"; tags.push("auth_failure"); suspicious = true; }
-  else if (/invalid user/.test(lower)) { summary = "Invalid SSH user attempt"; tags.push("invalid_user"); suspicious = true; }
+  if (/sudo(?:\[\d+\])?:.*(?:authentication failure|incorrect password|not in the sudoers|permission denied)/.test(lower)) { summary = "Sudo authentication failure"; tags.push("sudo_failure"); suspicious = true; }
+  else if (/(?:sshd|pam_unix\(sshd:auth\)).*(?:failed password|authentication failure)/.test(lower) || /failed password for/.test(lower)) { summary = "Failed SSH authentication"; tags.push("auth_failure"); suspicious = true; }
+  else if (/(?:sshd.*)?invalid user .* from/.test(lower)) { summary = "Invalid SSH user attempt"; tags.push("invalid_user"); suspicious = true; }
   else if (/accepted password|accepted publickey/.test(lower)) { summary = "Successful SSH login"; tags.push("auth_success"); }
   else if (/ufw block|iptables.*drop|nft.*drop/.test(lower)) { summary = "Firewall blocked traffic"; tags.push("firewall_block"); suspicious = true; }
   else if (source === "nginx" && /\s(?:401|403|404)\s/.test(raw)) { summary = "Nginx denied/not-found response"; tags.push("web_denied"); suspicious = (context?.repeated ?? 0) >= 10; }
@@ -89,16 +90,25 @@ function recentCount(session: Session, key: string) {
   return values.length;
 }
 
+function isDuplicateRawEvent(session: Session, raw: string) {
+  const now = Date.now();
+  for (const [key, seenAt] of session.recentRaw) if (now - seenAt > 5_000) session.recentRaw.delete(key);
+  const signature = crypto.createHash("sha256").update(raw.trim()).digest("hex");
+  if (session.recentRaw.has(signature)) return true;
+  session.recentRaw.set(signature, now);
+  return false;
+}
+
 async function storeSignal(event: LinuxLiveLogEvent) {
-  if (!event.suspicious) return;
-  await prisma.securityEvent.create({ data: {
+  if (!event.suspicious) return null;
+  return prisma.securityEvent.create({ data: {
     deviceId: event.deviceId, timestamp: new Date(event.timestamp), sourceType: `linux_live_${event.source}`, vendor: "linux", eventType: "live_telemetry_signal",
     action: event.tags[1] ?? "suspicious_activity", severity: event.severity, srcIp: typeof event.parsed.sourceIp === "string" ? event.parsed.sourceIp : undefined,
     rawMessage: event.raw, rawSnippet: event.raw, normalizedJson: event as unknown as Prisma.InputJsonValue,
     evidenceJson: { streamId: event.streamId, source: event.source } as Prisma.InputJsonValue,
     dedupeKey: crypto.createHash("sha256").update(`${event.streamId}|${event.source}|${event.timestamp}|${event.raw}`).digest("hex"),
     firstSeen: new Date(event.timestamp), lastSeen: new Date(event.timestamp), tags: { telemetry: true, suspicious: true } as Prisma.InputJsonValue
-  } }).catch(() => undefined);
+  } }).catch(() => null);
 }
 
 export async function startLinuxLogStream(deviceId: string, requestedSources: string[]) {
@@ -111,24 +121,26 @@ export async function startLinuxLogStream(deviceId: string, requestedSources: st
   const sources = Array.from(new Set(requestedSources)).filter((source): source is LinuxStreamSource => allowedSources.has(source as LinuxStreamSource));
   if (!sources.length) throw new Error("At least one supported log source is required.");
   const id = crypto.randomUUID();
-  const session: Session = { id, deviceId, sources, startedAt: new Date(), status: "starting", warnings: [], events: [], emitter: new EventEmitter(), handles: [], timer: setTimeout(() => stopLinuxLogStream(id), MAX_RUNTIME_MS), counters: new Map() };
+  const session: Session = { id, deviceId, sources, startedAt: new Date(), status: "starting", warnings: [], events: [], emitter: new EventEmitter(), handles: [], timer: setTimeout(() => stopLinuxLogStream(id), MAX_RUNTIME_MS), counters: new Map(), recentRaw: new Map() };
   sessions.set(id, session);
   for (const source of sources) {
     try {
       const handle = await openLinuxTelemetryStream(device, source, (line) => {
+        if (isDuplicateRawEvent(session, line)) return;
         const key = `${source}|${ip(line) ?? "none"}|${/\s(?:401|403|404|5\d\d)\s/.exec(line)?.[0] ?? "event"}`;
         const parsed = parseLinuxLiveLogLine(source, line, { repeated: recentCount(session, key) });
         const event: LinuxLiveLogEvent = { streamId: id, deviceId, ...parsed };
         session.events.push(event);
         if (session.events.length > MAX_BUFFER) session.events.shift();
         session.emitter.emit("event", event);
-        void boundedTelemetryStore.append(toStoredEvent(event)).catch((error) => {
+        const storedEvent = toStoredEvent(event);
+        void boundedTelemetryStore.append(storedEvent).catch((error) => {
           const safe = telemetryStorageWarning(error, { deviceId, streamId: id, source });
           session.warnings.push(safe);
           session.emitter.emit("warning", { streamId: id, deviceId, source, warning: safe, timestamp: new Date().toISOString() });
         });
-        void storeSignal(event);
-        void processVendorTelemetry({ device, events: [{ id: crypto.randomUUID(), timestamp: event.timestamp, source: event.source, raw: event.raw, summary: event.summary, srcIp: typeof event.parsed.sourceIp === "string" ? event.parsed.sourceIp : undefined, dstPort: typeof event.parsed.port === "number" ? event.parsed.port : undefined }] }).then(result => result.findings.forEach(finding => session.emitter.emit("finding", finding))).catch(() => undefined);
+        void storeSignal(event).then((stored) => stored ? scheduleSecurityDetection({ deviceId: event.deviceId }) : undefined).catch(() => undefined);
+        void processVendorTelemetry({ device, events: [{ id: storedEvent.id, timestamp: event.timestamp, source: event.source, raw: event.raw, summary: event.summary, srcIp: typeof event.parsed.sourceIp === "string" ? event.parsed.sourceIp : undefined, dstPort: typeof event.parsed.port === "number" ? event.parsed.port : undefined }] }).then(result => result.findings.forEach(finding => session.emitter.emit("finding", finding))).catch(() => undefined);
       }, (warning) => { if (warning) { const safe = redactLinuxTelemetry(warning).slice(0, 300); session.warnings.push(safe); session.emitter.emit("warning", { streamId: id, deviceId, source, warning: safe, timestamp: new Date().toISOString() }); } });
       session.handles.push(handle);
     } catch (error) {

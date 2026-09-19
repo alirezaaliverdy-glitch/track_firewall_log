@@ -1,9 +1,14 @@
+import { Capacitor } from "@capacitor/core";
+
 export function registerPwaServiceWorker() {
+  if (Capacitor.isNativePlatform()) return;
   if (!("serviceWorker" in navigator)) return;
   if (!import.meta.env.PROD && import.meta.env.VITE_ENABLE_PWA !== "true") return;
 
+  const baseUrl = import.meta.env.BASE_URL;
+
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" })
+    void navigator.serviceWorker.register(`${baseUrl}sw.js`, { scope: baseUrl })
       .then((registration) => {
         registration.addEventListener("updatefound", () => {
           const installingWorker = registration.installing;

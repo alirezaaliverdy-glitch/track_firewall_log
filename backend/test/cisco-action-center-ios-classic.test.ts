@@ -40,12 +40,14 @@ test("IOS Classic Action Center exposes read-only and safe-write Cisco operation
     "cisco_update_interface_description", "cisco_enable_interface", "cisco_disable_interface",
     "cisco_configure_interface_ipv4", "cisco_remove_interface_ipv4", "cisco_create_vlan", "cisco_rename_vlan",
     "cisco_assign_access_vlan", "cisco_configure_trunk_allowed_vlans", "cisco_add_static_route",
-    "cisco_remove_static_route", "cisco_configure_ntp_server", "cisco_configure_syslog_server"
+    "cisco_remove_static_route", "cisco_configure_ntp_server", "cisco_configure_syslog_server", "cisco_reload_device"
   ]) {
     assert.ok(executableRefs.has(ref), `${ref} should be executable through the existing Cisco registry`);
     assert.equal(getExecutionTemplate(ref)?.connectorType, "cisco-ios-xe-ssh");
   }
-  assert.equal(findCiscoOperation("cisco.reload-device")?.state, "planned");
+  const reload = findCiscoOperation("cisco.reload-device");
+  assert.equal(reload?.state, "implemented");
+  assert.equal(reload?.buildCommandSpecs?.({})[0]?.command, "reload in 1 reason Firewall-SOAR-approved-action");
   assert.equal(findCiscoOperation("cisco.erase-configuration")?.executionTemplateRef, null);
   const planned = ciscoIosXePlanner.plan({ actionType: ActionType.generic_security_action, riskLevel: AiRiskLevel.medium, device, parameters: plan("cisco_update_interface_description", { interfaceName: "GigabitEthernet0/1", description: "uplink core" }).parametersJson as Record<string, unknown> });
   assert.equal(planned.status, "planned");

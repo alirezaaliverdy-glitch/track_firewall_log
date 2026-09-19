@@ -150,5 +150,34 @@ export function verifyFortiGateGuidedVpn(parameters: Record<string, unknown>, co
 export function verifyFortiGateExecution(actionType: ActionType, parameters: Record<string, unknown>, commands: CommandOutput[]) {
   for (const command of commands) assertNoFortiGateCliFailure(command);
   if (actionType === ActionType.fortigate_guided_vpn_setup) return verifyFortiGateGuidedVpn(parameters, commands);
+  const interfaceActions = new Set<ActionType>([
+    ActionType.fortigate_set_interface_alias,
+    ActionType.fortigate_enable_interface,
+    ActionType.fortigate_disable_interface,
+    ActionType.fortigate_update_interface_ip,
+  ]);
+  if (interfaceActions.has(actionType)) {
+    const verification = findCommand(commands, (command) => command.template === "verify interface full configuration");
+    const evidence = verification ? commandText(verification) : "";
+    const name = asText(parameters.name ?? parameters.interfaceName);
+    const checks: FortiGateVerificationCheck[] = [{ id: "interface", label: "Target interface is present", ok: Boolean(name) && includesAll(evidence, [`edit \"${name}\"`]), evidence: evidence.slice(0, 1400), expected: name }];
+    if (actionType === ActionType.fortigate_enable_interface) checks.push({ id: "status", label: "Interface is administratively enabled", ok: /\bset\s+status\s+up\b/i.test(evidence), evidence: evidence.slice(0, 1400), expected: "set status up" });
+    if (actionType === ActionType.fortigate_disable_interface) checks.push({ id: "status", label: "Interface is administratively disabled", ok: /\bset\s+status\s+down\b/i.test(evidence), evidence: evidence.slice(0, 1400), expected: "set status down" });
+    if (actionType === ActionType.fortigate_set_interface_alias) {
+      const alias = asText(parameters.alias);
+      checks.push({ id: "alias", label: "Interface alias matches", ok: Boolean(alias) && evidence.toLowerCase().includes(`set alias \"${alias.toLowerCase()}\"`), evidence: evidence.slice(0, 1400), expected: alias });
+    }
+    if (actionType === ActionType.fortigate_update_interface_ip) {
+      const requested = asText(parameters.requestedIp ?? parameters.cidr ?? parameters.ip);
+      const [ip, prefixText] = requested.split("/");
+      const prefix = prefixText === undefined ? 32 : Number(prefixText);
+      const maskNumber = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+      const subnetMask = [24, 16, 8, 0].map((shift) => String((maskNumber >>> shift) & 255)).join(".");
+      const expected = `${ip} ${subnetMask}`;
+      checks.push({ id: "ip", label: "Interface IPv4 address matches", ok: Boolean(ip) && includesAll(evidence, [`set ip ${expected}`]), evidence: evidence.slice(0, 1400), expected });
+    }
+    const ok = checks.every((check) => check.ok);
+    return { ok, actionType: String(actionType), summary: ok ? "FortiGate interface post-execution verification passed." : "FortiGate interface post-execution verification failed.", checks } satisfies FortiGateVerificationResult;
+  }
   return { ok: true, actionType: String(actionType), summary: "No write-action semantic verifier was required.", checks: [] } satisfies FortiGateVerificationResult;
 }

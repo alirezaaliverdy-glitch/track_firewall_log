@@ -52,3 +52,20 @@ android/signing.properties
 .playwright-mcp_*.png
 backups/
 LOCAL_MOBILE_APP_CODEX_BUNDLE/
+
+# Local diagnostics, exports, backups, and environment-specific operator helpers
+artifacts/
+*.zip
+*.dump
+*.bak
+*.backup
+*.backup-*
+*.ai-backup
+PROJECT_AUDIT_REPORT.txt
+codex-test.txt
+openrouter-test.js
+openrouter-test.json
+openrouter-docker-test.js
+scripts/__pycache__/
+scripts/cdp_esxi_control.py
+scripts/temp_sophos_license_proxy.py

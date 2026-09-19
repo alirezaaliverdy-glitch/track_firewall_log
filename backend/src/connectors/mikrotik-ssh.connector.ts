@@ -67,6 +67,7 @@ const READONLY_DISCOVERY_COMMANDS = [
 
 const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...READONLY_DISCOVERY_COMMANDS]);
 const FORBIDDEN_COMMAND_PATTERN = /\b(add|set|remove|disable|enable|reset|reboot|password|user)\b|export\s+show-sensitive|certificate\s+private-key\s+export/i;
+const MIKROTIK_SSH_RECOVERY_PORTS = [22, 2222, 22022] as const;
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -266,6 +267,31 @@ function lines(value: string, limit?: number) {
   return typeof limit === "number" ? result.slice(0, limit) : result;
 }
 
+async function recoverMikroTikManagementPort(device: Device) {
+  const candidates = MIKROTIK_SSH_RECOVERY_PORTS.filter((port) => port !== device.managementPort);
+  for (const port of candidates) {
+    try {
+      await tcpConnect(device.host, port);
+      return port;
+    } catch {
+      // Continue through the small, fixed recovery list only after the configured port failed.
+    }
+  }
+  return null;
+}
+
+export async function collectMikroTikRecentLogs(device: Device) {
+  const credential = await getCredential(device);
+  await tcpConnect(device.host, device.managementPort);
+  return withSshWithCredential(device, credential, async (client) => {
+    const result = await exec(client, "/log print without-paging");
+    if (result.exitCode !== 0) {
+      throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || "RouterOS log collection failed.", 502);
+    }
+    return lines(result.stdout, 500);
+  });
+}
+
 function parseKeyValueOutput(value: string) {
   const result: Record<string, string> = {};
   for (const line of lines(value)) {
@@ -361,25 +387,33 @@ async function collectMikroTikStatus(device: Device): Promise<DeviceConnectionTe
     };
   }
 
+  let connectionDevice = device;
+  let recoveredManagementPort: number | null = null;
   try {
     await tcpConnect(device.host, device.managementPort);
     stages.push({ name: "tcp_connect", status: "ok" });
   } catch (error) {
     const connectorError = error instanceof MikroTikConnectorError ? error : new MikroTikConnectorError("MIKROTIK_TCP_CONNECT_FAILED", "MikroTik TCP connection failed.");
-    stages.push({ name: "tcp_connect", status: "failed", code: connectorError.code, message: connectorError.message });
-    return {
-      ...base,
-      connected: false,
-      credentialResolved: true,
-      credentialName: credential.name ?? credentialRef(device),
-      username: credential.username,
-      capabilities: { canConnect: false, canReadSystem: false, canReadInterfaces: false, canReadFirewall: false, canReadLogs: false, canExecuteWriteActions: true },
-      errorCode: connectorError.code,
-      message: connectorError.message
-    };
+    recoveredManagementPort = await recoverMikroTikManagementPort(device);
+    if (!recoveredManagementPort) {
+      stages.push({ name: "tcp_connect", status: "failed", code: connectorError.code, message: connectorError.message });
+      return {
+        ...base,
+        connected: false,
+        credentialResolved: true,
+        credentialName: credential.name ?? credentialRef(device),
+        username: credential.username,
+        capabilities: { canConnect: false, canReadSystem: false, canReadInterfaces: false, canReadFirewall: false, canReadLogs: false, canExecuteWriteActions: true },
+        errorCode: connectorError.code,
+        message: connectorError.message
+      };
+    }
+    connectionDevice = { ...device, managementPort: recoveredManagementPort };
+    stages.push({ name: "tcp_connect", status: "warning", code: "MIKROTIK_MANAGEMENT_PORT_RECOVERED", message: `Configured SSH port was unavailable; authenticated discovery continued on port ${recoveredManagementPort}.` });
+    warnings.push({ code: "MIKROTIK_MANAGEMENT_PORT_RECOVERED", message: `MikroTik SSH was recovered on port ${recoveredManagementPort}.` });
   }
 
-  return withSshWithCredential(device, credential, async (client) => {
+  return withSshWithCredential(connectionDevice, credential, async (client) => {
     stages.push({ name: "ssh_handshake", status: "ok" }, { name: "ssh_auth", status: "ok" });
     const basicResults = await runCommands(client, BASIC_COMMANDS, warnings);
     const basicFailed = BASIC_COMMANDS.some((command) => basicResults[command]?.exitCode !== 0);
@@ -416,6 +450,9 @@ async function collectMikroTikStatus(device: Device): Promise<DeviceConnectionTe
 
     return {
       ...base,
+      port: connectionDevice.managementPort,
+      detectedManagementPort: recoveredManagementPort ?? undefined,
+      managementPortRecovered: recoveredManagementPort !== null,
       connected: true,
       credentialResolved: true,
       credentialName: credential.name ?? credentialRef(device),
@@ -608,7 +645,8 @@ export const mikrotikSshConnector: DeviceConnector = {
       executionParameters.deviceNameConfirmation === device.name &&
       typeof executionParameters.reason === "string" &&
       executionParameters.reason.trim().length > 0;
-    if (policy.requiresBreakGlass && !breakGlassReady) {
+    const protectedLabSingleConfirmation = env.actionExecutionMode === "quick_controlled" && env.actionAllowLabUnrestrictedManagement;
+    if (policy.requiresBreakGlass && !breakGlassReady && !protectedLabSingleConfirmation) {
       throw new MikroTikConnectorError("MIKROTIK_BREAK_GLASS_REQUIRED", "Critical MikroTik action requires breakGlass=true, matching deviceNameConfirmation, and a reason.", 409);
     }
 
@@ -753,6 +791,7 @@ export const mikrotikSshConnector: DeviceConnector = {
 
       for (const spec of validation.commandSpecs) {
         const result = await exec(client, spec.command, env.sshCommandTimeoutMs, allowedCommands);
+        const powerDispatch = actionPlan.actionType === ActionType.mikrotik_reboot || actionPlan.actionType === ActionType.mikrotik_shutdown;
         commands.push({
           template: spec.template,
           stdout: result.stdout,
@@ -768,9 +807,10 @@ export const mikrotikSshConnector: DeviceConnector = {
           stderr: result.stderr.slice(0, 2000)
         });
 
-        if (result.exitCode !== 0) {
+        if (result.exitCode !== 0 && !(powerDispatch && result.exitCode === null && !result.stderr)) {
           throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || result.stdout || `RouterOS command failed: ${spec.template}`, 502);
         }
+        if (powerDispatch) warnings.push("DEVICE_POWER_COMMAND_DISPATCHED; SSH disconnect is expected.");
       }
 
       await audit?.("rollback_available", "Rollback metadata is available for this MikroTik action.", validation.rollbackJson);

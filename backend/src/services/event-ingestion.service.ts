@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { EventBatchStatus, EventSourceStatus, EventSourceType, type Prisma } from "@prisma/client";
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
+import { scheduleSecurityDetection } from "./security-detection-dispatcher.service.js";
 import type { CollectedLogLine, CollectorRunResult } from "../collectors/types.js";
 
 export type NormalizedCollectedEvent = {
@@ -18,6 +19,9 @@ export type NormalizedCollectedEvent = {
   dstPort?: number;
   protocol?: string;
   username?: string;
+  ruleName?: string;
+  interfaceIn?: string;
+  interfaceOut?: string;
   message: string;
   rawSnippet: string;
   evidenceJson: Record<string, unknown>;
@@ -43,14 +47,146 @@ function port(value: string) {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : undefined;
 }
 
+function numberedField(value: string, key: string) {
+  const match = value.match(new RegExp(`\\b${key}=([0-9]{1,5})\\b`, "i"));
+  if (!match) return undefined;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : undefined;
+}
+
+function parseFortiGateFields(raw: string) {
+  const fields: Record<string, string> = {};
+  const pattern = /(?:^|\s)([a-zA-Z][\w-]*)=("(?:\\.|[^"])*"|[^\s]*)/g;
+  for (const match of raw.matchAll(pattern)) {
+    const value = match[2].startsWith('"')
+      ? match[2].slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\")
+      : match[2];
+    fields[match[1].toLowerCase()] = value;
+  }
+  return fields;
+}
+
+function validPort(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : undefined;
+}
+
+function fortiSeverity(level: string | undefined): NormalizedCollectedEvent["severity"] {
+  const value = String(level ?? "").toLowerCase();
+  if (/emergency|alert|critical/.test(value)) return "critical";
+  if (/error|warning/.test(value)) return "high";
+  if (/notice/.test(value)) return "medium";
+  return "low";
+}
+
+function fortiProtocol(value: string | undefined) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "6") return "tcp";
+  if (normalized === "17") return "udp";
+  if (normalized === "1" || normalized === "58") return "icmp";
+  return normalized || undefined;
+}
+
+function normalizeFortiGateLine(deviceId: string, line: CollectedLogLine): NormalizedCollectedEvent {
+  const raw = line.raw;
+  const fields = parseFortiGateFields(raw);
+  const searchable = [fields.type, fields.subtype, fields.eventtype, fields.logdesc, fields.msg, fields.reason, fields.attack, fields.virus, fields.botnetdomain, fields.action, fields.status]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const rawAction = String(fields.action ?? fields.status ?? "unknown").toLowerCase();
+  let action = rawAction;
+  let eventType = `fortigate_${fields.subtype || fields.type || "log"}`.replace(/[^a-z0-9_]+/g, "_");
+  let severity = fortiSeverity(fields.level ?? fields.severity);
+
+  const authFailure = /login fail|login failed|authentication fail|invalid credential|status=fail/.test(`${searchable} ${raw.toLowerCase()}`);
+  const vpnFailure = /ssl.?vpn|ipsec|vpn/.test(searchable) && /fail|error|denied|invalid/.test(searchable);
+  const ipsAttack = fields.subtype === "ips" || fields.type === "ips" || Boolean(fields.attack) || /ips signature|intrusion/.test(searchable);
+  const dosAttack = fields.subtype === "anomaly" || fields.eventtype === "anomaly" || /dos attack|flood|anomaly/.test(searchable);
+  const malware = /virus|malware|trojan|ransomware/.test(searchable) && /detected|blocked|infected|quarantine/.test(searchable);
+  const botnet = /botnet|command.?and.?control|\bc2\b/.test(searchable);
+  const webAttack = fields.subtype === "waf" || /web application attack|sql injection|cross.?site scripting|path traversal/.test(searchable);
+
+  if (vpnFailure) {
+    eventType = "fortigate_vpn_auth_failure";
+    action = "vpn_auth_failed";
+    severity = severity === "low" ? "high" : severity;
+  } else if (authFailure && /admin|administrator|ui|ssh|https|api/.test(searchable)) {
+    eventType = "fortigate_admin_auth_failure";
+    action = "admin_auth_failed";
+    severity = severity === "low" ? "high" : severity;
+  } else if (dosAttack) {
+    eventType = "fortigate_dos_attack";
+    action = /block|deny|drop|reset/.test(rawAction) ? "blocked" : "threat_detected";
+    severity = severity === "low" || severity === "medium" ? "high" : severity;
+  } else if (malware) {
+    eventType = "fortigate_malware_detected";
+    action = /block|deny|drop|quarantine/.test(rawAction) ? "blocked" : "threat_detected";
+    severity = "critical";
+  } else if (botnet) {
+    eventType = "fortigate_botnet_detected";
+    action = /block|deny|drop/.test(rawAction) ? "blocked" : "threat_detected";
+    severity = "critical";
+  } else if (webAttack) {
+    eventType = "fortigate_web_attack";
+    action = /block|deny|drop|reset/.test(rawAction) ? "blocked" : "threat_detected";
+    severity = severity === "low" || severity === "medium" ? "high" : severity;
+  } else if (ipsAttack) {
+    eventType = "fortigate_ips_attack";
+    action = /block|deny|drop|reset/.test(rawAction) ? "blocked" : "threat_detected";
+    severity = severity === "low" || severity === "medium" ? "high" : severity;
+  } else if (/deny|blocked|drop|reset/.test(rawAction)) {
+    eventType = fields.subtype === "local" || fields.eventtype === "local" ? "fortigate_local_in_denied" : "fortigate_traffic_denied";
+    action = "denied";
+    severity = severity === "low" ? "medium" : severity;
+  }
+
+  const srcIp = fields.srcip ?? fields.remip ?? fields.clientip ?? fields.src_ip;
+  const dstIp = fields.dstip ?? fields.dst_ip;
+  const username = fields.user ?? fields.unauthuser ?? fields.xauthuser;
+  const event: NormalizedCollectedEvent = {
+    deviceId,
+    sourceType: line.sourceType,
+    vendor: "fortigate",
+    eventType,
+    action,
+    severity,
+    timestamp: line.timestamp,
+    srcIp,
+    dstIp,
+    srcPort: validPort(fields.srcport),
+    dstPort: validPort(fields.dstport),
+    protocol: fortiProtocol(fields.proto ?? fields.protocol),
+    username,
+    ruleName: fields.attack ?? fields.logdesc ?? fields.policyname,
+    interfaceIn: fields.srcintf,
+    interfaceOut: fields.dstintf,
+    message: fields.msg ?? fields.logdesc ?? raw,
+    rawSnippet: snippet(raw),
+    evidenceJson: {
+      command: line.command,
+      parser: "fortios-kv-v1",
+      logId: fields.logid,
+      type: fields.type,
+      subtype: fields.subtype,
+      eventType: fields.eventtype,
+      action: rawAction,
+      attack: fields.attack,
+      attackId: fields.attackid,
+      policyId: fields.policyid,
+      sourceCountry: fields.srccountry,
+      destinationCountry: fields.dstcountry,
+      virtualDomain: fields.vd
+    },
+    dedupeKey: ""
+  };
+  event.dedupeKey = dedupe({ deviceId, sourceType: event.sourceType, action, srcIp, username, dstPort: event.dstPort, timestamp: line.timestamp, raw });
+  return event;
+}
+
 function userFromAuth(line: string) {
   return line.match(/invalid user\s+([^\s]+)/i)?.[1] ??
     line.match(/for\s+([^\s]+)\s+from/i)?.[1];
-}
-
-function minuteBucket(date: Date) {
-  const bucketMs = env.eventDedupWindowMinutes * 60 * 1000;
-  return new Date(Math.floor(date.getTime() / bucketMs) * bucketMs).toISOString();
 }
 
 function dedupe(input: {
@@ -60,35 +196,39 @@ function dedupe(input: {
   srcIp?: string;
   username?: string;
   dstPort?: number;
-  timestamp: Date;
+  timestamp?: Date;
   raw: string;
 }) {
   const stable = [
     input.deviceId,
     input.sourceType,
-    input.action,
-    input.srcIp ?? "",
-    input.username ?? "",
-    input.dstPort ?? "",
-    minuteBucket(input.timestamp),
-    input.action === "unknown" ? input.raw.slice(0, 160) : ""
+    input.timestamp?.toISOString() ?? "timestamp-unavailable",
+    input.raw.trim()
   ].join("|");
   return crypto.createHash("sha256").update(stable).digest("hex");
 }
 
-export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine): NormalizedCollectedEvent {
+export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine, vendor = "linux"): NormalizedCollectedEvent {
+  if (/fortigate|fortinet/i.test(vendor) || line.sourceType === "fortigate_log") return normalizeFortiGateLine(deviceId, line);
   const raw = line.raw;
   const lower = raw.toLowerCase();
-  const timestamp = line.timestamp ?? new Date();
   let action = "unknown";
   let severity: NormalizedCollectedEvent["severity"] = "low";
   let srcIp = ip(raw);
-  let username = userFromAuth(raw);
+  const username = userFromAuth(raw);
   let srcPort: number | undefined;
   let dstPort: number | undefined;
+  let eventDestination: string | undefined;
   let protocol: string | undefined;
 
-  if (lower.includes("failed password") || lower.includes("authentication failure")) {
+  if (/timeout, client not responding|disconnected from|session (?:opened|closed)/i.test(raw)) {
+    action = "session_lifecycle";
+    severity = "low";
+  } else if (/(?:\.env|\.git\/config|wp-login\.php|\/etc\/passwd|\.\.\/|cmd\.php|shell\.php|phpmyadmin)/i.test(raw)) {
+    action = "web_probe";
+    severity = "medium";
+    dstPort = numberedField(raw, "DPT") ?? port(raw);
+  } else if (lower.includes("failed password") || lower.includes("authentication failure")) {
     action = "auth_failed";
     severity = lower.includes("invalid user root") || lower.includes("for root") ? "high" : "medium";
     srcPort = port(raw);
@@ -103,7 +243,10 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine)
     action = "port_blocked";
     severity = "medium";
     srcIp = raw.match(/\bSRC=((?:\d{1,3}\.){3}\d{1,3})\b/)?.[1] ?? srcIp;
-    dstPort = port(raw);
+    srcPort = numberedField(raw, "SPT");
+    dstPort = numberedField(raw, "DPT") ?? port(raw);
+    const parsedDestination = raw.match(/\bDST=((?:\d{1,3}\.){3}\d{1,3})\b/)?.[1];
+    if (parsedDestination) eventDestination = parsedDestination;
     protocol = raw.match(/\bPROTO=([A-Z0-9]+)\b/i)?.[1]?.toLowerCase();
   } else if (line.sourceType === "linux_ufw" && lower.includes("status")) {
     action = "ufw_status";
@@ -114,18 +257,31 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine)
   } else if (lower.includes("invalid user root")) {
     action = "suspicious_activity";
     severity = "high";
+  } else if (/login failure|login failed|authentication failed|aaa.*fail|webgui.*fail/.test(lower)) {
+    action = "auth_failed";
+    severity = "high";
+  } else if (/configured from|configuration.*changed|policy.*changed|firewall.*changed|nat.*changed|admin.*(?:added|deleted|changed)/.test(lower)) {
+    action = "configuration_change";
+    severity = "high";
+  } else if (/(ips|utm|antivirus|virus|botnet|malware).*(critical|high|blocked|detected)/.test(lower)) {
+    action = "threat_detected";
+    severity = "critical";
+  } else if (/(openvpn|ssl.?vpn|ipsec|ike|l2tp|wireguard|anyconnect).*(auth|handshake|negotiat).*(fail|error|denied)/.test(lower)) {
+    action = "vpn_auth_failed";
+    severity = "high";
   }
 
-  const event = {
+  const event: NormalizedCollectedEvent = {
     deviceId,
     sourceType: line.sourceType,
-    vendor: "linux",
-    eventType: line.sourceType,
+    vendor,
+    eventType: action === "web_probe" ? `${vendor}_web_probe` : action === "port_blocked" ? `${vendor}_firewall_denied` : `${vendor}_log`,
     action,
     severity,
-    timestamp,
+    timestamp: line.timestamp,
     srcIp,
     srcPort,
+    dstIp: eventDestination,
     dstPort,
     protocol,
     username,
@@ -134,7 +290,7 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine)
     evidenceJson: {
       command: line.command,
       hostname: line.hostname,
-      parser: "linux-ssh-log-v1"
+      parser: "collector-normalizer-v2"
     },
     dedupeKey: ""
   };
@@ -146,7 +302,7 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine)
     srcIp,
     username,
     dstPort,
-    timestamp,
+    timestamp: line.timestamp,
     raw
   });
   return event;
@@ -160,7 +316,7 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
     },
     update: { status: EventSourceStatus.active, lastSeenAt: new Date() },
     create: {
-      name: `Linux collector ${result.deviceId}`,
+      name: `${result.collectorName} ${result.deviceId}`,
       type: EventSourceType.agent,
       deviceId: result.deviceId,
       status: EventSourceStatus.active,
@@ -182,19 +338,33 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
   let inserted = 0;
   let updated = 0;
   for (const line of result.lines) {
-    const event = normalizeCollectedLine(result.deviceId, line);
+    const event = normalizeCollectedLine(result.deviceId, line, result.vendor);
     const existing = await prisma.securityEvent.findUnique({ where: { dedupeKey: event.dedupeKey } });
     if (existing) {
-      await prisma.securityEvent.update({
-        where: { id: existing.id },
-        data: {
-          count: { increment: 1 },
-          lastSeen: event.timestamp,
-          receivedAt: new Date(),
-          severity: existing.severity === "high" || existing.severity === "critical" ? existing.severity : event.severity,
-          batchId: batch.id
-        }
-      });
+      const storedNormalized = existing.normalizedJson && typeof existing.normalizedJson === "object" && !Array.isArray(existing.normalizedJson) ? existing.normalizedJson as Record<string, unknown> : {};
+      const storedEvidence = storedNormalized.evidenceJson && typeof storedNormalized.evidenceJson === "object" && !Array.isArray(storedNormalized.evidenceJson) ? storedNormalized.evidenceJson as Record<string, unknown> : {};
+      const requiresFortiUpgrade = event.vendor === "fortigate" && (storedEvidence.parser !== "fortios-kv-v1" || existing.eventType !== event.eventType || existing.action !== event.action);
+      if (requiresFortiUpgrade) {
+        await prisma.securityEvent.update({
+          where: { id: existing.id },
+          data: {
+            eventType: event.eventType,
+            action: event.action,
+            severity: event.severity,
+            srcIp: event.srcIp,
+            srcPort: event.srcPort,
+            dstIp: event.dstIp,
+            dstPort: event.dstPort,
+            protocol: event.protocol,
+            username: event.username,
+            ruleName: event.ruleName,
+            interfaceIn: event.interfaceIn,
+            interfaceOut: event.interfaceOut,
+            normalizedJson: toJson(event),
+            evidenceJson: toJson(event.evidenceJson)
+          }
+        });
+      }
       updated += 1;
     } else {
       await prisma.securityEvent.create({
@@ -215,6 +385,9 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
           dstPort: event.dstPort,
           protocol: event.protocol,
           username: event.username,
+          ruleName: event.ruleName,
+          interfaceIn: event.interfaceIn,
+          interfaceOut: event.interfaceOut,
           rawMessage: event.rawSnippet,
           rawSnippet: event.rawSnippet,
           normalizedJson: toJson(event),
@@ -240,18 +413,19 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
     }
   });
 
-  return { batchId: batch.id, inserted, updated, warnings: result.warnings };
+  const detection = await scheduleSecurityDetection({ deviceId: result.deviceId });
+  return { batchId: batch.id, inserted, updated, warnings: result.warnings, detection };
 }
 
 async function findOrCreateSourceId(deviceId: string) {
   const existing = await prisma.eventSource.findFirst({
-    where: { deviceId, type: EventSourceType.agent, name: { startsWith: "Linux collector" } },
+    where: { deviceId, type: EventSourceType.agent },
     select: { id: true }
   });
   if (existing) return existing.id;
   const created = await prisma.eventSource.create({
     data: {
-      name: `Linux collector ${deviceId}`,
+      name: `Device log collector ${deviceId}`,
       type: EventSourceType.agent,
       deviceId,
       status: EventSourceStatus.active,

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>گزارش مهاجرت اینترنت و سرویس‌های شبکه</title>
+  <style>
+    @font-face{font-family:Yekan;src:url("../src/assets/fonts/iranyekanwebregularfanum.ttf") format("truetype");font-display:swap}
+    :root{--bg:#071522;--bg2:#0b2132;--panel:#0d2637;--line:#21465a;--text:#f3fbff;--muted:#a7becb;--cyan:#35d8ed;--green:#42d8a0;--blue:#5a91ff;--amber:#ffbd59;--red:#ff7687}
+    *{box-sizing:border-box}html,body{margin:0;background:#020a11;color:var(--text);font-family:Yekan,Tahoma,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-size:18px;line-height:1.8}
+    @page{size:338.667mm 190.5mm;margin:0}.slide{position:relative;width:338.667mm;height:190.5mm;overflow:hidden;padding:14mm 16mm 12mm;background:radial-gradient(circle at 8% 6%,rgba(53,216,237,.12),transparent 27%),radial-gradient(circle at 92% 88%,rgba(90,145,255,.11),transparent 30%),linear-gradient(145deg,var(--bg2),var(--bg) 58%,#040d15);page-break-after:always}.slide:last-child{page-break-after:auto}.slide:before{content:"";position:absolute;inset:0;opacity:.11;background-image:linear-gradient(rgba(53,216,237,.16) 1px,transparent 1px),linear-gradient(90deg,rgba(53,216,237,.16) 1px,transparent 1px);background-size:24mm 24mm;mask-image:linear-gradient(to bottom,black,transparent 70%)}
+    .slide>*{position:relative;z-index:1}h1,h2,h3,p{margin-top:0}h1{font-size:46px;line-height:1.35;margin-bottom:5mm;letter-spacing:-1px}h2{font-size:31px;line-height:1.45;margin-bottom:3mm}h3{font-size:18px;margin-bottom:1.5mm}.lead{color:#c4d7e1;font-size:20px;line-height:1.95}.muted{color:var(--muted)}.cyan{color:var(--cyan)}.green{color:var(--green)}.amber{color:var(--amber)}.ltr{direction:ltr;unicode-bidi:isolate;display:inline-block;font-family:Consolas,monospace}
+    .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7mm}.kicker{color:var(--cyan);font-size:14px;font-weight:800}.counter{direction:ltr;color:#6f91a3;font-size:12px}.counter b{color:var(--cyan);font-size:18px}.brand{display:flex;align-items:center;gap:3mm;font-weight:800}.brand:before{content:"";width:8mm;height:8mm;border:1mm solid var(--cyan);border-radius:50%;box-shadow:0 0 8mm rgba(53,216,237,.28)}
+    .footer{position:absolute;right:16mm;bottom:5mm;color:#648498;font-size:10px}.page-no{position:absolute;left:16mm;bottom:5mm;color:#648498;font-size:10px;direction:ltr}.takeaway{position:absolute;right:16mm;left:16mm;bottom:11mm;display:flex;align-items:center;gap:4mm;border:1px solid rgba(66,216,160,.28);border-radius:4mm;background:rgba(17,69,62,.18);padding:3mm 5mm;color:#d7f8ec;font-size:13px}.takeaway b{color:var(--green)}
+    .grid{display:grid;gap:5mm}.two{grid-template-columns:repeat(2,1fr)}.three{grid-template-columns:repeat(3,1fr)}.four{grid-template-columns:repeat(4,1fr)}.card{border:1px solid var(--line);border-radius:5mm;background:linear-gradient(145deg,rgba(16,48,68,.88),rgba(7,24,36,.9));padding:5mm}.card p{margin:0;color:var(--muted);font-size:14px}.card .icon{display:grid;place-items:center;width:10mm;height:10mm;margin-bottom:3mm;border-radius:3mm;background:rgba(53,216,237,.11);color:var(--cyan);font-weight:900}.card.good{border-color:rgba(66,216,160,.28)}.card.good .icon{background:rgba(66,216,160,.11);color:var(--green)}.card.warn{border-color:rgba(255,189,89,.28)}.card.warn .icon{background:rgba(255,189,89,.1);color:var(--amber)}
+    .hero{display:grid;grid-template-columns:.82fr 1.18fr;gap:8mm;align-items:center;height:145mm}.hero-art{height:147mm;border:1px solid rgba(53,216,237,.2);border-radius:8mm;background:url("network-migration-assets/network-migration-cover.png") center/cover no-repeat;box-shadow:0 12mm 30mm rgba(0,0,0,.32)}.hero-copy{padding:6mm}.tagrow{display:flex;flex-wrap:wrap;gap:2mm;margin-top:7mm}.tag{border:1px solid rgba(53,216,237,.25);border-radius:99px;background:rgba(7,29,43,.72);padding:1.7mm 3.5mm;color:#c9f7fb;font-size:12px}.tag.green{border-color:rgba(66,216,160,.3);color:#b7f4dc}.tag.amber{border-color:rgba(255,189,89,.3);color:#ffe0a3}
+    .network{display:grid;grid-template-columns:1fr 13mm 1fr 13mm 1.2fr;gap:3mm;align-items:center;margin-top:4mm}.node{position:relative;border:1px solid var(--line);border-radius:5mm;background:rgba(8,30,44,.9);padding:5mm;text-align:center;min-height:28mm}.node strong{display:block;font-size:16px}.node small{display:block;color:var(--muted);font-size:11px}.node.primary{border-color:rgba(53,216,237,.48);box-shadow:0 0 10mm rgba(53,216,237,.08)}.node.secure{border-color:rgba(66,216,160,.45)}.arrow{text-align:center;color:var(--cyan);font-size:26px}.dual{display:grid;gap:3mm}.dual .node{min-height:21mm;padding:3mm}.dual .backup{border-color:rgba(255,189,89,.35)}
+    .lan{display:grid;grid-template-columns:1.05fr 13mm .95fr;gap:3mm;align-items:center;margin-top:5mm}.services{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}.mini{border:1px solid var(--line);border-radius:4mm;background:rgba(5,22,33,.78);padding:3mm;text-align:center}.mini strong{display:block;font-size:14px}.mini small{color:var(--muted);font-size:10px}
+    .goal{display:grid;grid-template-columns:.82fr 1.18fr;gap:7mm}.problem{display:grid;gap:3mm}.problem .row{display:grid;grid-template-columns:11mm 1fr;gap:3mm;align-items:center;border:1px solid rgba(255,118,135,.18);border-radius:4mm;background:rgba(101,22,38,.08);padding:3mm}.problem .row b{display:grid;place-items:center;width:9mm;height:9mm;border-radius:50%;background:rgba(255,118,135,.12);color:#ff9aa8}.problem p{margin:0;color:var(--muted);font-size:13px}.targets{border:1px solid rgba(66,216,160,.28);border-radius:6mm;background:linear-gradient(145deg,rgba(17,83,66,.2),rgba(7,24,36,.9));padding:6mm}.checklist{display:grid;grid-template-columns:repeat(2,1fr);gap:3mm;margin-top:4mm}.check{display:flex;gap:3mm;align-items:flex-start;border:1px solid rgba(66,216,160,.14);border-radius:4mm;background:rgba(66,216,160,.04);padding:3mm;color:#d9f5e9;font-size:14px}.check:before{content:"✓";display:grid;flex:0 0 7mm;width:7mm;height:7mm;place-items:center;border-radius:50%;background:rgba(66,216,160,.14);color:var(--green);font-weight:900}
+    .failover{display:grid;grid-template-columns:1fr 22mm 1fr;gap:5mm;align-items:center;margin:6mm 0}.route{border:1px solid var(--line);border-radius:6mm;background:rgba(7,27,40,.88);padding:6mm}.route.active{border-color:rgba(53,216,237,.45)}.route.backup{border-color:rgba(255,189,89,.38)}.route .status{display:inline-block;border-radius:99px;padding:1mm 3mm;font-size:11px;background:rgba(53,216,237,.11);color:var(--cyan)}.route.backup .status{background:rgba(255,189,89,.1);color:var(--amber)}.switch{display:grid;place-items:center;width:20mm;height:20mm;border:1px solid rgba(66,216,160,.35);border-radius:50%;background:rgba(66,216,160,.08);color:var(--green);font-size:28px}.route-lines{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}.route-lines .card{padding:4mm;text-align:center}.route-lines strong{display:block;color:var(--cyan);font-size:17px}.route-lines small{color:var(--muted);font-size:11px}
+    .security{display:grid;grid-template-columns:.95fr 1.05fr;gap:7mm}.layers{display:grid;gap:3mm}.layer{display:grid;grid-template-columns:10mm 1fr auto;gap:3mm;align-items:center;border:1px solid var(--line);border-radius:4mm;background:rgba(8,29,42,.82);padding:3.5mm}.layer span:first-child{display:grid;place-items:center;width:9mm;height:9mm;border-radius:3mm;background:rgba(53,216,237,.1);color:var(--cyan);font-weight:900}.layer small{color:var(--muted);font-size:11px}.layer em{font-style:normal;color:var(--green);font-size:10px}.policy{border:1px solid rgba(66,216,160,.28);border-radius:6mm;background:rgba(9,51,45,.17);padding:6mm}.policy-flow{display:grid;grid-template-columns:1fr 10mm 1fr 10mm 1fr;align-items:center;margin:5mm 0}.policy-box{border:1px solid var(--line);border-radius:4mm;background:rgba(5,22,33,.8);padding:4mm;text-align:center}.policy-box strong{display:block}.policy-box small{color:var(--muted);font-size:11px}.block{margin-top:5mm;border:1px solid rgba(255,118,135,.28);border-radius:4mm;background:rgba(111,24,39,.11);padding:3mm;color:#ffc1c9;font-size:13px}
+    .webflow{display:grid;grid-template-columns:repeat(9,auto);gap:2mm;align-items:center;margin:7mm 0}.webflow .node{min-width:27mm;min-height:25mm;padding:4mm}.webflow .arrow{font-size:20px}.change-list{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm}.change{border-top:1mm solid var(--cyan);border-radius:0 0 4mm 4mm;background:rgba(7,28,42,.82);padding:4mm}.change:nth-child(2){border-color:var(--green)}.change:nth-child(3){border-color:var(--blue)}.change:nth-child(4){border-color:var(--amber)}.change small{display:block;color:var(--muted);font-size:11px}.result{display:flex;align-items:center;justify-content:space-between;margin-top:5mm;border:1px solid rgba(66,216,160,.25);border-radius:5mm;background:rgba(14,74,61,.14);padding:4mm 6mm}.result strong{color:var(--green);font-size:21px}.result span{color:var(--muted);font-size:13px}
+    .ports{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin:6mm 0}.port{border:1px solid var(--line);border-radius:5mm;background:rgba(7,28,41,.84);padding:5mm;text-align:center}.port b{display:block;color:var(--cyan);font:700 25px Consolas,monospace}.port small{display:block;color:var(--muted);font-size:11px}.port span{display:inline-block;margin-top:2mm;border-radius:99px;background:rgba(66,216,160,.1);color:var(--green);padding:1mm 3mm;font-size:10px}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:5mm}.evidence .card{padding:4mm}.metric{display:flex;align-items:end;gap:3mm}.metric strong{font-size:35px;color:var(--green);line-height:1}.metric span{color:var(--muted);font-size:12px}.incident{border:1px solid rgba(255,189,89,.28);border-radius:5mm;background:rgba(112,72,16,.11);padding:4mm}.incident p{margin:1mm 0;color:#ddc9a2;font-size:12px}
+    .summary{display:grid;grid-template-columns:1.08fr .92fr;gap:7mm}.done{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm}.done .card{min-height:36mm}.done strong{display:block;color:var(--green);font-size:17px}.next{border:1px solid rgba(90,145,255,.3);border-radius:6mm;background:rgba(32,58,114,.12);padding:6mm}.next ol{margin:4mm 0 0;padding-right:6mm}.next li{margin-bottom:3mm;color:#dce8ff;font-size:14px}.final-band{position:absolute;right:16mm;left:16mm;bottom:14mm;display:grid;grid-template-columns:1fr auto;align-items:center;border:1px solid rgba(53,216,237,.3);border-radius:6mm;background:linear-gradient(110deg,rgba(13,79,96,.34),rgba(7,28,41,.88));padding:5mm 7mm}.final-band strong{font-size:23px}.final-band span{display:grid;place-items:center;width:15mm;height:15mm;border-radius:50%;border:1px solid rgba(66,216,160,.45);color:var(--green);font-size:25px}
+    .slide:nth-of-type(4) .failover{margin:2mm 0}.slide:nth-of-type(4) .route{padding:4mm}.slide:nth-of-type(4) .route h2{font-size:26px;margin-bottom:1mm}.slide:nth-of-type(4) .route p{font-size:13px;line-height:1.55}.slide:nth-of-type(4) .route-lines .card{padding:3mm}.slide:nth-of-type(4) .route-lines small{line-height:1.5}.slide:nth-of-type(4)>.grid{margin-top:3mm!important}.slide:nth-of-type(4)>.grid .card{padding:3mm}.slide:nth-of-type(4)>.grid .card p{font-size:12px;line-height:1.55}
+    .slide:nth-of-type(6) .done{gap:3mm}.slide:nth-of-type(6) .done .card{min-height:29mm;padding:3mm}.slide:nth-of-type(6) .done .card .icon{float:right;margin:0 0 1mm 3mm;width:8mm;height:8mm}.slide:nth-of-type(6) .done .card p{font-size:12px;line-height:1.5}.slide:nth-of-type(6) .next{padding:4mm}.slide:nth-of-type(6) .next h2{font-size:26px}.slide:nth-of-type(6) .next ol{margin-top:2mm}.slide:nth-of-type(6) .next li{margin-bottom:2mm;font-size:13px;line-height:1.65}.slide:nth-of-type(6) .final-band{padding:4mm 6mm}.slide:nth-of-type(6) .final-band strong{font-size:20px}
+    @media print{html,body{width:338.667mm;background:#071522!important}.slide{display:block!important;break-after:page;page-break-after:always;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-shadow:inset 0 0 0 200mm #071522}.slide:last-child{break-after:auto;page-break-after:auto}}
+  </style>
+</head>
+<body>
+  <section class="slide">
+    <div class="top"><div class="brand">گزارش اجرایی شبکه</div><div class="counter"><b>01</b> / 06</div></div>
+    <div class="hero">
+      <div class="hero-copy">
+        <div class="kicker">جمع‌بندی پروژه</div>
+        <h1>مهاجرت اینترنت، سرویس وب و VPN</h1>
+        <p class="lead">انتقال مسیر اصلی شبکه به فیبر نوری، حفظ اینترنت پشتیبان و آماده‌سازی سرویس‌های بیرونی روی IP عمومی جدید</p>
+        <div class="tagrow"><span class="tag green">فیبر به‌عنوان لینک اصلی</span><span class="tag amber">Failover خودکار</span><span class="tag">انتقال وب</span><span class="tag">انتقال VPN</span><span class="tag green">تست از اینترنت</span></div>
+      </div>
+      <div class="hero-art" aria-label="تصویر مفهومی معماری شبکه"></div>
+    </div>
+    <div class="footer">گزارش مهاجرت زیرساخت شبکه</div><div class="page-no">2026</div>
+  </section>
+
+  <section class="slide">
+    <div class="top"><div><div class="kicker">معماری نهایی</div><h2>مسیر ارتباط از اینترنت تا کاربران داخلی</h2></div><div class="counter"><b>02</b> / 06</div></div>
+    <div class="network">
+      <div class="dual">
+        <div class="node primary"><strong>فیبر نوری — مسیر اصلی</strong><small>Public IP: <span class="ltr">86.104.81.251</span></small></div>
+        <div class="node backup"><strong>اینترنت قبلی — پشتیبان</strong><small>آماده برای Failover</small></div>
+      </div>
+      <div class="arrow">←</div>
+      <div class="dual">
+        <div class="node primary"><strong>مودم فیبر</strong><small><span class="ltr">192.168.100.1</span></small></div>
+        <div class="node backup"><strong>مودم قدیمی</strong><small><span class="ltr">192.168.1.1</span></small></div>
+      </div>
+      <div class="arrow">←</div>
+      <div class="node primary"><strong>روتر MikroTik</strong><small>ether6: <span class="ltr">192.168.100.13</span><br>ether1: <span class="ltr">192.168.1.2</span></small></div>
+    </div>
+    <div class="lan">
+      <div class="node secure"><strong>لینک ترانزیت و فایروال</strong><small>MikroTik: <span class="ltr">192.168.10.1</span> ← Firewall: <span class="ltr">192.168.10.2</span><br>دروازه شبکه داخلی: <span class="ltr">192.168.7.4</span></small></div>
+      <div class="arrow">←</div>
+      <div class="services">
+        <div class="mini"><strong>کاربران</strong><small><span class="ltr">192.168.7.0/24</span><br>Gateway: <span class="ltr">.7.4</span></small></div>
+        <div class="mini"><strong>DNS / Domain</strong><small><span class="ltr">192.168.7.2</span></small></div>
+        <div class="mini"><strong>سرور سرویس‌ها</strong><small><span class="ltr">192.168.7.13</span></small></div>
+      </div>
+    </div>
+    <div class="takeaway"><b>پیام اصلی:</b> کاربران برای دسترسی به اینترنت از فایروال عبور می‌کنند و MikroTik نقش مدیریت لینک‌ها و سرویس‌های ورودی را دارد.</div>
+    <div class="footer">شناخت ساختار شبکه</div><div class="page-no">02</div>
+  </section>
+
+  <section class="slide">
+    <div class="top"><div><div class="kicker">هدف و مسئله</div><h2>چرا این مهاجرت انجام شد؟</h2></div><div class="counter"><b>03</b> / 06</div></div>
+    <div class="goal">
+      <div class="problem">
+        <div class="row"><b>۱</b><div><h3>مسیر اصلی قدیمی بود</h3><p>بخش مهمی از Route و NAT فقط به ether1 وابسته بود.</p></div></div>
+        <div class="row"><b>۲</b><div><h3>سرویس‌ها روی IP قبلی بودند</h3><p>وب و VPN باید بدون تغییر شبکه داخلی به فیبر منتقل می‌شدند.</p></div></div>
+        <div class="row"><b>۳</b><div><h3>قطعی لینک نباید شبکه را متوقف کند</h3><p>لینک قبلی باید به‌عنوان اینترنت جایگزین باقی می‌ماند.</p></div></div>
+        <div class="row"><b>۴</b><div><h3>چند ایراد اجرایی وجود داشت</h3><p>Port Forward ناقص، Gateway تکراری سرور و سرویس تست غیرضروری.</p></div></div>
+      </div>
+      <div class="targets">
+        <div class="kicker green">هدف نهایی</div>
+        <h2>تغییر مسیر، بدون تغییر منطق شبکه داخلی</h2>
+        <div class="checklist">
+          <div class="check">فیبر به‌عنوان مسیر اول اینترنت</div>
+          <div class="check">بازگشت خودکار به لینک قبلی هنگام قطعی</div>
+          <div class="check">برگشت خودکار به فیبر پس از وصل‌شدن</div>
+          <div class="check">عبور کاربران داخلی از فایروال</div>
+          <div class="check">فعال‌شدن وب روی IP عمومی جدید</div>
+          <div class="check">فعال‌شدن WireGuard و L2TP/IPsec روی فیبر</div>
+        </div>
+      </div>
+    </div>
+    <div class="takeaway"><b>رویکرد اجرا:</b> ابتدا مسیر جایگزین آماده شد، سپس سرویس‌ها منتقل و در پایان از چند نقطه اینترنت آزمایش شدند.</div>
+    <div class="footer">اهداف پروژه</div><div class="page-no">03</div>
+  </section>
+
+  <section class="slide">
+    <div class="top"><div><div class="kicker">پایداری اینترنت</div><h2>فیبر اصلی؛ لینک قبلی آمادهٔ جایگزینی</h2></div><div class="counter"><b>04</b> / 06</div></div>
+    <div class="failover">
+      <div class="route active"><span class="status">اولویت ۱ — فعال</span><h2>ether6 / Fiber</h2><p class="muted">Gateway: <span class="ltr">192.168.100.1</span><br>پایش دسترسی اینترنت با مقصد مستقل</p></div>
+      <div class="switch">⇄</div>
+      <div class="route backup"><span class="status">اولویت ۲ — آماده</span><h2>ether1 / Backup</h2><p class="muted">Gateway: <span class="ltr">192.168.1.1</span><br>فعال‌شدن پس از خارج‌شدن مسیر فیبر</p></div>
+    </div>
+    <div class="route-lines">
+      <div class="card"><strong>۱. پایش</strong><small>سلامت مسیر اینترنت، نه فقط روشن‌بودن کابل، بررسی می‌شود.</small></div>
+      <div class="card good"><strong>۲. جابه‌جایی</strong><small>در قطع فیبر، Default Route به لینک پشتیبان منتقل می‌شود.</small></div>
+      <div class="card"><strong>۳. بازگشت</strong><small>با بازیابی اینترنت فیبر، اولویت دوباره به ether6 برمی‌گردد.</small></div>
+    </div>
+    <div class="grid three" style="margin-top:5mm">
+      <div class="card"><span class="icon">R</span><h3>Routeهای قدیمی</h3><p>مسیر مستقیم قدیمی غیرفعال و Routeهای اصلی/پشتیبان با توضیح مشخص شدند.</p></div>
+      <div class="card good"><span class="icon">✓</span><h3>NAT هر دو WAN</h3><p>برای خروجی فیبر و لینک پشتیبان Masquerade جداگانه نگه داشته شد.</p></div>
+      <div class="card warn"><span class="icon">!</span><h3>نکته مهم</h3><p>Failover خروجی خودکار است؛ سرویس ورودی هر لینک همچنان به IP عمومی همان لینک وابسته است.</p></div>
+    </div>
+    <div class="takeaway"><b>نتیجه:</b> اینترنت روزمره از فیبر عبور می‌کند و قطعی فیبر، مسیر پشتیبان را وارد مدار می‌کند.</div>
+    <div class="footer">Failover و Route</div><div class="page-no">04</div>
+  </section>
+
+  <section class="slide">
+    <div class="top"><div><div class="kicker">انتقال VPN</div><h2>پورت‌های VPN به‌صورت محدود روی فیبر منتشر شدند</h2></div><div class="counter"><b>05</b> / 06</div></div>
+    <div class="ports">
+      <div class="port"><b>51820</b><small>WireGuard / UDP</small><span>به 192.168.100.13</span></div>
+      <div class="port"><b>500</b><small>IKE / UDP</small><span>به 192.168.100.13</span></div>
+      <div class="port"><b>4500</b><small>IPsec NAT-T / UDP</small><span>به 192.168.100.13</span></div>
+      <div class="port"><b>1701</b><small>L2TP / UDP</small><span>به 192.168.100.13</span></div>
+    </div>
+    <div class="evidence">
+      <div class="card good"><h3>تأیید مسیر از اینترنت</h3><div class="metric"><strong>۲۰</strong><span>بسته آزمایشی؛ ۵ مبدأ برای هر چهار پورت</span></div><p>بسته‌ها روی ether6 دیده شدند و شمارنده Ruleهای Allow افزایش یافت.</p></div>
+      <div class="incident"><h3 class="amber">تحلیل خطای L2TP/IPsec</h3><p>تلاش نشان‌داده‌شده در لاگ به <span class="ltr">192.168.1.2</span> رسیده بود؛ یعنی کلاینت هنوز IP یا مسیر قدیمی را استفاده می‌کرد.</p><p>در همان بازه، IKEv2 روی مسیر جدید <span class="ltr">192.168.100.13</span> مجاز شد و IP داخلی دریافت کرد.</p><p><b>راه‌حل:</b> Server/Endpoint کلاینت‌ها روی <span class="ltr">86.104.81.251</span> تنظیم و DNS Cache بررسی شود.</p></div>
+    </div>
+    <div class="grid three" style="margin-top:4mm">
+      <div class="card"><h3>WireGuard</h3><p>سرویس فعال و Listener روی UDP/51820 آماده است.</p></div>
+      <div class="card"><h3>L2TP/IPsec</h3><p>سرویس فعال، IPsec اجباری و NAT-T آماده است.</p></div>
+      <div class="card warn"><h3>تأیید نهایی</h3><p>یک اتصال واقعی از اینترنت سیم‌کارت برای بررسی رمز/PSK یا کلید لازم است.</p></div>
+    </div>
+    <div class="takeaway"><b>جمع‌بندی VPN:</b> مسیر و فایروال تأیید شده‌اند؛ کلاینت‌ها باید از IP عمومی جدید استفاده کنند.</div>
+    <div class="footer">VPN Migration & Validation</div><div class="page-no">05</div>
+  </section>
+
+  <section class="slide">
+    <div class="top"><div><div class="kicker">نتیجه نهایی</div><h2>زیرساخت آمادهٔ بهره‌برداری روی فیبر است</h2></div><div class="counter"><b>06</b> / 06</div></div>
+    <div class="summary">
+      <div class="done">
+        <div class="card good"><span class="icon">✓</span><strong>فیبر مسیر اصلی است</strong><p>Default Route فعال روی ether6 قرار دارد.</p></div>
+        <div class="card good"><span class="icon">✓</span><strong>لینک پشتیبان حفظ شد</strong><p>ether1 در اولویت دوم آمادهٔ Failover است.</p></div>
+        <div class="card good"><span class="icon">✓</span><strong>سرویس وب منتقل شد</strong><p>مسیر کامل روی IP عمومی فیبر آزمایش شد.</p></div>
+        <div class="card good"><span class="icon">✓</span><strong>پورت‌های VPN در دسترس‌اند</strong><p>چهار پورت ضروری از بیرون به MikroTik رسیدند.</p></div>
+        <div class="card good"><span class="icon">✓</span><strong>امنیت داخلی حفظ شد</strong><p>کاربران همچنان از فایروال عبور می‌کنند.</p></div>
+        <div class="card good"><span class="icon">✓</span><strong>سطح دسترسی محدود شد</strong><p>DMZ استفاده نشد و Bandwidth Test بسته شد.</p></div>
+      </div>
+      <div class="next">
+        <div class="kicker">اقدامات تکمیلی بهره‌برداری</div>
+        <h2>چهار بررسی ساده</h2>
+        <ol>
+          <li>در صورت باقی‌ماندن رکورد قدیمی، A Recordهای اروان به <span class="ltr">86.104.81.251</span> تغییر کنند.</li>
+          <li>Endpoint همه کلاینت‌های VPN به IP جدید اصلاح شود.</li>
+          <li>یک اتصال WireGuard و یک اتصال L2TP از اینترنت موبایل انجام شود.</li>
+          <li>پس از تأیید کاربران، از تنظیمات نهایی تجهیزات نسخه پشتیبان نگهداری شود.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="final-band"><div><strong>پایداری بیشتر، مسیر روشن‌تر و انتشار کنترل‌شدهٔ سرویس‌ها</strong><div class="muted">مهاجرت با حفظ ساختار شبکه داخلی و امکان بازگشت خودکار اینترنت انجام شد.</div></div><span>✓</span></div>
+    <div class="footer">جمع‌بندی و تحویل</div><div class="page-no">06</div>
+  </section>
+  <script>
+    const reviewSlide = Number(new URLSearchParams(location.search).get('slide'));
+    if (reviewSlide > 0) {
+      document.querySelectorAll('.slide').forEach((slide, index) => {
+        slide.style.display = index === reviewSlide - 1 ? 'block' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import type { NormalizedLog } from "@/types/log";
 import type { Finding, Severity } from "@/types/finding";
 import { getRiskyPort, isRiskyPort } from "@/lib/riskyPorts";
+import { logRuntimeError } from "@/lib/runtimeLogging";
 
 const ALLOWED_ACTIONS = new Set(["allow", "accept", "pass", "permit"]);
 const BLOCKED_ACTIONS = new Set(["deny", "drop", "block"]);
@@ -260,7 +261,7 @@ export function runDetections(logs: NormalizedLog[]): Finding[] {
     try {
       all.push(...detector(logs));
     } catch (err) {
-      console.error(`Detection failed in ${detector.name}:`, err);
+      logRuntimeError(`Detection failed in ${detector.name}`, err);
     }
   }
 

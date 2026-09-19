@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Link, useNavigate } from "react-router-dom";
@@ -8,8 +8,12 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DeviceVerificationPanel } from "@/features/assets/components/DeviceVerificationPanel";
-import { deleteDevice, updateDevice, type DeviceInput } from "@/lib/devices";
+import { CiscoAssetDashboard } from "@/features/assets/components/CiscoAssetDashboard";
+import { deleteDevice, testDeviceConnection, updateDevice, type DeviceInput } from "@/lib/devices";
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
+import { refreshDeviceVendorCapabilities } from "@/lib/vendors";
+import "./AssetDetailPage.css";
+import "../components/CiscoAssetDashboard.css";
 
 const sections = [
   { key: "overview", labelKey: "workspace.tabs.overview" },
@@ -82,6 +86,8 @@ function summarizeCapabilities(items: Record<string, unknown>[], t: TFunction, f
 
 function summarizeHealth(health: Record<string, unknown>, fallback: string) {
   const parts = [
+    health.cpuLoad ? `CPU ${String(health.cpuLoad)}` : "",
+    health.memoryFree ? `Memory ${String(health.memoryFree)}` : "",
     health.cpu && typeof health.cpu === "object" ? `CPU ${String(asRecord(health.cpu).fiveSeconds ?? asRecord(health.cpu).oneMinute ?? fallback)}` : "",
     health.memory && typeof health.memory === "object" ? `Memory ${String(asRecord(health.memory).usedPercent ?? asRecord(health.memory).used ?? fallback)}` : "",
     health.flash && typeof health.flash === "object" ? `Flash ${String(asRecord(health.flash).free ?? asRecord(health.flash).freeBytes ?? fallback)}` : ""
@@ -106,6 +112,15 @@ function statusLabel(status: unknown, t: TFunction) {
     preview_ready: t("workspace.status.previewReady")
   };
   return known[valueText] ?? valueText;
+}
+
+function interfaceState(row: Record<string, unknown>) {
+  const operational = String(row.operationalStatus ?? row.protocolStatus ?? row.status ?? row.state ?? "unknown").toLowerCase();
+  const administrative = String(row.administrativeStatus ?? row.adminStatus ?? "unknown").toLowerCase();
+  return {
+    operational: operational === "up" || operational === "connected" ? "up" : operational === "down" || operational === "notconnect" ? "down" : "unknown",
+    administrative: administrative === "up" ? "up" : administrative.includes("down") || administrative === "disabled" ? "down" : "unknown"
+  } as const;
 }
 
 function TrendChart({ title, points, empty, binary = false, locale }: { title: string; points: WorkspaceChartPoint[]; empty: string; binary?: boolean; locale: string }) {
@@ -134,11 +149,12 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [collecting, setCollecting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteName, setDeleteName] = useState("");
   const [form, setForm] = useState({ name: "", host: "", managementPort: "22", protocol: "ssh", environment: "lab", tags: "" });
-  const load = () => getDeviceWorkspace(reference).then(setWorkspace).catch((failure: Error) => setError(failure.message));
-  useEffect(() => { void load(); }, [reference]);
+  const load = useCallback(() => getDeviceWorkspace(reference).then((nextWorkspace) => { setWorkspace(nextWorkspace); setError(""); }).catch((failure: Error) => setError(failure.message)), [reference]);
+  useEffect(() => { void load(); }, [load]);
   if (!workspace && !error) return <LoadingState />;
   if (error || !workspace) return <ErrorState message={error || t("workspace.notFound")} onRetry={load} />;
 
@@ -158,6 +174,9 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const capabilitySummary = summarizeCapabilities(capabilityList, t, fallback);
   const healthSummary = summarizeHealth(healthFacts, fallback);
   const interfaceSummary = interfaces.length ? t("workspace.values.interfaces", { count: interfaces.length }) : fallback;
+  const interfaceStates = interfaces.map((item) => interfaceState(asRecord(item)));
+  const interfaceUpCount = interfaceStates.filter((item) => item.operational === "up").length;
+  const interfaceDownCount = interfaceStates.filter((item) => item.operational === "down").length;
   const verifiedDevice = overview.verificationStatus === "verified" || overview.availability === "online";
   const since = Date.now() - rangeHours[timeRange] * 60 * 60 * 1000;
   const chart = (points: WorkspaceChartPoint[]) => points.filter((item) => new Date(item.timestamp).getTime() >= since);
@@ -178,6 +197,24 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     finally { setSaving(false); }
   };
 
+  const collectLiveData = async () => {
+    if (!workspace.device) return;
+    setCollecting(true); setError("");
+    try {
+      if (currentWorkspace.vendor.key === "cisco") {
+        await refreshDeviceVendorCapabilities(workspace.device.id);
+      } else {
+        const result = await testDeviceConnection(workspace.device.id);
+        if (result.connected !== true) throw new Error(result.message || t("onboarding.errors.connectionFailed"));
+      }
+      await load();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t("onboarding.errors.connectionFailed"));
+    } finally {
+      setCollecting(false);
+    }
+  };
+
   const removeDevice = async () => {
     if (!workspace.device || deleteName.trim() !== workspace.device.name) return;
     setSaving(true); setError("");
@@ -186,13 +223,32 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   };
 
   function AdvancedWorkspaceDetails() {
-    return <details className="content-panel overview-advanced"><summary>{t("workspace.advanced.title")}</summary><dl className="detail-list"><dt>{t("workspace.labels.connector")}</dt><dd dir="ltr">{value(overview.connectorType, fallback)}</dd><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd><dt>{t("workspace.labels.collectionHistory")}</dt><dd>{currentWorkspace.collections.length ? String(currentWorkspace.collections.length) : fallback}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt, locale, fallback)}</dd></dl><div className="button-row"><Link className="secondary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.actions.testConnection")}</Link><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshCapabilities")}</Link><Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link></div>{currentWorkspace.vendor.sections.length ? <section><h3>{t("workspace.advanced.vendorSections")}</h3>{currentWorkspace.vendor.sections.map((item) => { const state = item.capabilityState ?? item.state; return <div className="list-row" key={item.key}><span>{isFa ? item.titleFa : item.titleEn}</span><StatusBadge value={capabilityLabel(state, t)} tone={stateTone(state)} /></div>; })}</section> : null}<details><summary>{t("workspace.advanced.rawDiagnostics")}</summary><pre dir="ltr">{JSON.stringify({ platform: overview.platform, inventoryStatus, capabilityStatus, warnings: currentWorkspace.capabilities?.warnings ?? [], capabilities: capabilityList }, null, 2)}</pre></details></details>;
+    const warnings = asArray(currentWorkspace.capabilities?.warnings);
+    const hasDiagnostics = warnings.length > 0 || capabilityList.length > 0;
+    return <details className="content-panel overview-advanced"><summary>{t("workspace.advanced.title")}</summary><dl className="detail-list"><dt>{t("workspace.labels.connector")}</dt><dd dir="ltr">{value(overview.connectorType, fallback)}</dd>{capabilityList.length ? <><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd></> : null}{currentWorkspace.collections.length ? <><dt>{t("workspace.labels.collectionHistory")}</dt><dd>{String(currentWorkspace.collections.length)}</dd></> : null}{overview.lastSuccessfulCollection || currentWorkspace.capabilities?.refreshedAt ? <><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt, locale, fallback)}</dd></> : null}</dl><div className="button-row"><button className="secondary-button" type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? t("common.loading") : t("workspace.actions.collectData")}</button><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></div>{currentWorkspace.vendor.sections.length ? <section><h3>{t("workspace.advanced.vendorSections")}</h3>{currentWorkspace.vendor.sections.map((item) => { const state = item.capabilityState ?? item.state; return <div className="list-row" key={item.key}><span>{isFa ? item.titleFa : item.titleEn}</span><StatusBadge value={capabilityLabel(state, t)} tone={stateTone(state)} /></div>; })}</section> : null}{hasDiagnostics ? <details><summary>{t("workspace.advanced.rawDiagnostics")}</summary><pre dir="ltr">{JSON.stringify({ platform: overview.platform, warnings, capabilities: capabilityList }, null, 2)}</pre></details> : null}</details>;
   }
 
   function OverviewFirstViewport() {
     const setupPath = `/assets/devices/${deviceId}/setup`;
     const nextPath = verifiedDevice ? `/actions?deviceId=${encodeURIComponent(deviceId)}` : setupPath;
-    return <section className="device-overview-first"><article><h2>{t("workspace.cards.connection")}</h2><dl className="detail-list"><dt>{t("workspace.labels.connectionStatus")}</dt><dd>{statusLabel(overview.availability, t)}</dd><dt>{t("workspace.labels.verificationStatus")}</dt><dd>{statusLabel(overview.verificationStatus, t)}</dd><dt>{t("workspace.labels.inventoryStatus")}</dt><dd>{capabilityLabel(inventoryStatus, t)}</dd><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? overview.lastContact, locale, fallback)}</dd></dl></article><article><h2>{t("workspace.cards.identity")}</h2><dl className="detail-list"><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd><dt>{t("workspace.labels.hostname")}</dt><dd dir="ltr">{value(detection.hostname ?? facts.hostname ?? currentWorkspace.asset?.hostname, fallback)}</dd><dt>{t("workspace.labels.model")}</dt><dd dir="ltr">{value(detection.model ?? facts.model, fallback)}</dd><dt>{t("workspace.labels.serialNumber")}</dt><dd dir="ltr">{value(facts.serialNumber ?? facts.serial ?? detection.serialNumber, fallback)}</dd><dt>{t("workspace.labels.softwareVersion")}</dt><dd dir="ltr">{value(overview.version ?? facts.iosVersion ?? facts.version, fallback)}</dd><dt>{t("workspace.labels.uptime")}</dt><dd dir="ltr">{value(facts.uptime, fallback)}</dd></dl></article><article><h2>{t("workspace.cards.interfaces")}</h2><p>{interfaceSummary}</p><div className="button-row"><Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{t("workspace.actions.refreshInterfaces")}</Link><Link className="secondary-link" to={setupPath}>{t("workspace.actions.collectData")}</Link></div></article><article><h2>{t("workspace.labels.healthSummary")}</h2><p dir="ltr">{healthSummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></article><article><h2>{t("workspace.labels.capabilitySummary")}</h2><p>{capabilitySummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshCapabilities")}</Link></article><article><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p><div className="button-row"><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link><Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link></div></article><AdvancedWorkspaceDetails /></section>;
+    const optionalIdentity = ([
+      [t("workspace.labels.hostname"), detection.hostname ?? facts.hostname ?? currentWorkspace.asset?.hostname],
+      [t("workspace.labels.model"), detection.model ?? facts.model],
+      [t("workspace.labels.serialNumber"), facts.serialNumber ?? facts.serial ?? detection.serialNumber],
+      [t("workspace.labels.softwareVersion"), overview.version ?? facts.iosVersion ?? facts.version],
+      [t("workspace.labels.uptime"), facts.uptime]
+    ] as Array<[string, unknown]>).filter(([, item]) => item !== null && item !== undefined && item !== "");
+    const isCisco = currentWorkspace.vendor.key === "cisco";
+    return <section className="device-overview-first">
+      {isCisco ? <CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /> : null}
+      <article><h2>{t("workspace.cards.connection")}</h2><dl className="detail-list"><dt>{t("workspace.labels.connectionStatus")}</dt><dd>{statusLabel(overview.availability, t)}</dd><dt>{t("workspace.labels.verificationStatus")}</dt><dd>{statusLabel(overview.verificationStatus, t)}</dd>{currentWorkspace.capabilities ? <><dt>{t("workspace.labels.inventoryStatus")}</dt><dd>{capabilityLabel(inventoryStatus, t)}</dd></> : null}<dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? overview.lastContact, locale, fallback)}</dd></dl></article>
+      <article><h2>{t("workspace.cards.identity")}</h2><dl className="detail-list"><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd>{optionalIdentity.map(([label, item]) => <div style={{ display: "contents" }} key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>
+      {!isCisco && interfaces.length ? <article><h2>{t("workspace.cards.interfaces")}</h2><p>{interfaceSummary}</p><p>{isFa ? `${interfaceUpCount} فعال · ${interfaceDownCount} قطع` : `${interfaceUpCount} up · ${interfaceDownCount} down`}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{t("workspace.actions.refreshInterfaces")}</Link></article> : null}
+      {!isCisco && healthSummary !== fallback ? <article><h2>{t("workspace.labels.healthSummary")}</h2><p dir="ltr">{healthSummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></article> : null}
+      {!isCisco && capabilityList.length ? <article><h2>{t("workspace.labels.capabilitySummary")}</h2><p>{capabilitySummary}</p></article> : null}
+      <article><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p><div className="button-row"><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link>{isCisco ? <Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link> : null}</div></article>
+      <AdvancedWorkspaceDetails />
+    </section>;
   }
 
   function WorkspaceCharts() {
@@ -202,7 +258,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
   const content = (() => {
     if (section === "overview") return <OverviewFirstViewport />;
-    if (section === "interfaces") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.interfaces.title")}</h2>{interfaces.length ? interfaces.slice(0, 20).map((item, index) => { const row = asRecord(item); return <div className="list-row" key={String(row.name ?? row.interface ?? index)}><span>{value(row.name ?? row.interface ?? row.id, fallback)}</span><span>{value(row.status ?? row.state ?? row.adminStatus, fallback)}</span></div>; }) : <p>{t("workspace.empty.interfaces")}</p>}</section><AdvancedWorkspaceDetails /></div>;
+    if (section === "interfaces") return <div className="content-grid"><section className="content-panel cisco-interface-panel"><header><div><h2>{t("workspace.interfaces.title")}</h2><p>{isFa ? `${interfaces.length} اینترفیس؛ ${interfaceUpCount} لینک فعال و ${interfaceDownCount} لینک قطع` : `${interfaces.length} interfaces; ${interfaceUpCount} links up and ${interfaceDownCount} links down`}</p></div><Link className="secondary-link" to={`/assets/topology?deviceId=${encodeURIComponent(deviceId)}`}>{isFa ? "نمای گرافیکی پورت‌ها" : "Graphical port view"}</Link></header>{interfaces.length ? <div className="cisco-interface-list">{interfaces.slice(0, 128).map((item, index) => { const row = asRecord(item); const state = interfaceState(row); const address = row.ipAddress ?? asArray(row.ipAddresses)[0]; const portMeta = [row.vlan ? `VLAN ${row.vlan}` : "", row.speed ? `${row.speed} Mbps` : "", row.duplex ? String(row.duplex) : ""].filter(Boolean).join(" · "); return <article className={`cisco-interface-row is-${state.operational}`} key={String(row.name ?? row.interface ?? index)}><i aria-hidden="true" /><div><strong dir="ltr">{value(row.name ?? row.interface ?? row.id, fallback)}</strong><small>{value(row.description, isFa ? "بدون توضیح" : "No description")}</small><small dir="ltr">{value(address, isFa ? "بدون IP" : "No IP")}</small>{portMeta ? <small dir="ltr">{portMeta}</small> : null}</div><span><small>{isFa ? "لینک" : "Link"}</small><b>{state.operational === "up" ? (isFa ? "فعال" : "Up") : state.operational === "down" ? (isFa ? "قطع" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span><span><small>{isFa ? "مدیریتی" : "Admin"}</small><b>{state.administrative === "up" ? (isFa ? "روشن" : "Up") : state.administrative === "down" ? (isFa ? "خاموش" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span></article>; })}</div> : <p>{t("workspace.empty.interfaces")}</p>}</section><AdvancedWorkspaceDetails /></div>;
     if (section === "configuration") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.configuration.title")}</h2><dl className="detail-list"><dt>{t("workspace.labels.configState")}</dt><dd>{value(overview.configBackup.state, fallback)}</dd><dt>{t("workspace.labels.lastBackup")}</dt><dd>{date(overview.configBackup.collectedAt, locale, fallback)}</dd></dl></section><section className="content-panel"><h2>{t("workspace.configuration.connectionTitle")}</h2><p>{t("workspace.values.credentialReference")}</p><dl className="detail-list"><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(currentWorkspace.device?.host ?? overview.managementIp, fallback)}</dd><dt>{t("workspace.labels.protocol")}</dt><dd>{value(currentWorkspace.device?.protocol, fallback)}</dd><dt>{t("workspace.labels.environment")}</dt><dd>{value(currentWorkspace.device?.environment, fallback)}</dd></dl><Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.actions.openSetup")}</Link></section></div>;
     if (section === "actions") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.actions.title")}</h2>{currentWorkspace.actions.length ? currentWorkspace.actions.map((item) => <Link className="list-row" key={String(item.id)} to={`/actions/${item.id}`}>{value(item.actionType, fallback)}<span>{value(item.status, fallback)}</span></Link>) : <p>{t("workspace.empty.actions")}</p>}<Link className="primary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}`}>{t("workspace.actions.reviewOrCreate")}</Link></section><section className="content-panel"><h2>{t("workspace.chart.findings")}</h2>{currentWorkspace.findings.length ? currentWorkspace.findings.map((item) => <div className="list-row" key={String(item.id)}>{value(item.title, fallback)}<span>{value(item.severity, fallback)}</span></div>) : <p>{t("workspace.empty.findings")}</p>}</section></div>;
     if (section === "monitoring") return <><div className="content-grid"><section className="content-panel"><h2>{t("workspace.monitoring.title")}</h2><dl className="detail-list"><dt>{t("workspace.labels.healthScore")}</dt><dd>{value(overview.healthScore, fallback)}</dd><dt>{t("workspace.labels.healthState")}</dt><dd>{value(overview.healthState, fallback)}</dd><dt>{t("workspace.labels.lastContact")}</dt><dd>{date(overview.lastContact, locale, fallback)}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection, locale, fallback)}</dd></dl></section><section className="content-panel"><h2>{t("workspace.cards.connection")}</h2>{currentWorkspace.statusChecks.length ? currentWorkspace.statusChecks.slice(0, 10).map((item) => <div className="list-row" key={String(item.id)}>{value(item.status, fallback)}<span>{date(item.checkedAt, locale, fallback)}</span></div>) : <p>{t("workspace.empty.statusChecks")}</p>}</section></div>{workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}<WorkspaceCharts /></>;

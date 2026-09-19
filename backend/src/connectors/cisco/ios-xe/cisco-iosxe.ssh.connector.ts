@@ -16,7 +16,7 @@ export type CiscoIosXeCommandResult = {
   durationMs: number;
 };
 
-export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean };
+export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean; confirmationPattern?: RegExp; confirmationResponse?: string };
 
 export function redactCiscoCliOutput(output: string) {
   return output
@@ -279,6 +279,26 @@ export class CiscoInteractiveSession {
     return { stdout, stderr: "", exitCode: 0, durationMs: Date.now() - started };
   }
 
+  async runCommandWithConfirmation(command: string, confirmationPattern: RegExp, response = "\n", rejectCliErrors = true) {
+    const started = Date.now();
+    let confirmed = false;
+    this.stream.write(`${command}\n`);
+    const output = await this.collectUntil((value) => {
+      if (!confirmed && confirmationPattern.test(normalizeCiscoTerminalOutput(value))) {
+        confirmed = true;
+        this.stream.write(response);
+        return false;
+      }
+      return this.hasPrompt(value);
+    }, this.commandTimeoutMs, "command");
+    if (!confirmed) throw connectorError("CISCO_CONFIRMATION_NOT_RECEIVED", "command", "Cisco did not present the registered confirmation prompt.", this.state, 502, false);
+    const stdout = stripCiscoEchoAndPrompt(output, command);
+    if (rejectCliErrors && /%\s*(Invalid input|Incomplete command|Ambiguous command|Authorization failed)/i.test(stdout)) {
+      throw connectorError("CISCO_COMMAND_REJECTED", "command", "The Cisco device rejected a registered command.", this.state, 502, false);
+    }
+    return { stdout, stderr: "", exitCode: 0, durationMs: Date.now() - started };
+  }
+
   close() { try { this.stream.end(); } catch { try { this.stream.close(); } catch { /* already closed */ } } }
 }
 
@@ -404,7 +424,9 @@ export class CiscoIosXeSshConnector {
         const initialized = await session.initialize("enableSecret" in credential && typeof credential.enableSecret === "string" ? credential.enableSecret : undefined);
         const results: CiscoIosXeCommandResult[] = [];
         for (const spec of specs) {
-          const commandResult = await session.runCommand(spec.command, spec.strict === true);
+          const commandResult = spec.confirmationPattern
+            ? await session.runCommandWithConfirmation(spec.command, spec.confirmationPattern, spec.confirmationResponse, spec.strict === true)
+            : await session.runCommand(spec.command, spec.strict === true);
           results.push({ commandId: spec.commandId, command: spec.command, ...commandResult, stdout: spec.redactOutput ? redactCiscoCliOutput(commandResult.stdout) : commandResult.stdout, stderr: spec.redactOutput ? redactCiscoCliOutput(commandResult.stderr) : commandResult.stderr });
         }
         const platformOutput = results.find((item) => item.commandId === "platform")?.stdout;

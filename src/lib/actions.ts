@@ -230,6 +230,13 @@ export type ActionParameterField = {
   secure?: boolean;
   defaultValue?: unknown;
   dependsOn?: string[];
+  configured?: boolean;
+  descriptionFa?: string;
+  descriptionEn?: string;
+  placeholderFa?: string;
+  placeholderEn?: string;
+  minLength?: number;
+  confirmFor?: string;
 };
 
 export type ActionParameterSchema = {

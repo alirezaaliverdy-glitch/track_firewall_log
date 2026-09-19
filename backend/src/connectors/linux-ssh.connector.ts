@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
-import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
+import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { env } from "../config/env.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
+import { ACTION_PLAN_SECRET_KEYS, resolveActionPlanSecret } from "../services/action-plan-secret.service.js";
 import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import type {
   ConnectorAudit,
@@ -78,8 +79,10 @@ const SUPPORTED_ACTIONS: ActionType[] = [
   ActionType.custom_vendor_action,
   "linux_list_running_services" as ActionType,
   "linux_list_failed_services" as ActionType,
-  "linux_check_important_services" as ActionType
-  ,ActionType.linux_daily_check
+  "linux_check_important_services" as ActionType,
+  ActionType.linux_daily_check,
+  ActionType.linux_reboot,
+  ActionType.linux_shutdown
 ];
 
 const LINUX_READ_ACTIONS = new Set<ActionType>([
@@ -346,6 +349,32 @@ function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeout
   });
 }
 
+function execWithStdin(client: Client, command: string, stdin: string, timeoutMs = env.sshCommandTimeoutMs): Promise<ExecResult> {
+  return new Promise((resolve, reject) => {
+    client.exec(command, (error, stream) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        stream.close();
+        reject(new ConnectorError("SSH_COMMAND_TIMEOUT", "SSH command timed out.", 504));
+      }, timeoutMs);
+
+      stream.on("close", (code: number | null) => {
+        clearTimeout(timer);
+        resolve({ stdout: stdout.trim(), stderr: stderr.trim(), exitCode: code });
+      });
+      stream.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
+      stream.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+      stream.end(stdin);
+    });
+  });
+}
+
 function sudoPrefix(credential: SshCredential) {
   return credential.username === "root" ? "" : "sudo -n ";
 }
@@ -445,6 +474,14 @@ export async function openLinuxTelemetryStream(
 
 async function execChecked(client: Client, command: string) {
   const result = await exec(client, command);
+  if (result.exitCode !== 0) {
+    throw new ConnectorError("SSH_COMMAND_FAILED", result.stderr || `Command failed: ${command}`, 502);
+  }
+  return result;
+}
+
+async function execCheckedWithStdin(client: Client, command: string, stdin: string) {
+  const result = await execWithStdin(client, command, stdin);
   if (result.exitCode !== 0) {
     throw new ConnectorError("SSH_COMMAND_FAILED", result.stderr || `Command failed: ${command}`, 502);
   }
@@ -591,7 +628,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
   });
 }
 
-function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
+function dryRunFor(plan: ActionPlan, _device: Device): ConnectorDryRun {
   if (plan.actionType === ActionType.custom_vendor_action) {
     const customPlan = customPlanFromParameters(plan.parametersJson);
     if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
@@ -643,6 +680,11 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   } else if (plan.actionType === ActionType.linux_daily_check) {
     plannedCommands = ["controlled Linux daily-check bundle (read-only)"];
     rollbackSteps = [];
+  } else if (plan.actionType === ActionType.linux_reboot || plan.actionType === ActionType.linux_shutdown) {
+    const verb = plan.actionType === ActionType.linux_reboot ? "reboot" : "poweroff";
+    plannedCommands = [`sudo -n systemd-run --quiet --no-block --on-active=3s systemctl ${verb}`];
+    affectedServices.push("systemd", "ssh");
+    validationWarnings.push(`The ${verb} request is dispatched with a short delay; SSH disconnection after dispatch is expected.`);
   } else if (plan.actionType === ActionType.linux_check_service_status) {
     const service = serviceParam(parameters.serviceName ?? parameters.service);
     affectedServices.push(service);
@@ -722,8 +764,21 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
     if (plan.actionType === ActionType.custom_vendor_action) {
       const customPlan = customPlanFromParameters(plan.parametersJson);
       if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
+      const createUser = customPlan.typedParameters.operation === "create_user";
+      const initialPassword = createUser
+        ? await resolveActionPlanSecret(plan.id, ACTION_PLAN_SECRET_KEYS.linuxInitialPassword)
+        : undefined;
+      if (createUser && !initialPassword) throw new ConnectorError("ACTION_SECRET_REQUIRED", "The encrypted initial account password is missing. Complete the ActionPlan parameters before execution.", 422);
       for (const [index, command] of customPlan.orderedCommands.entries()) {
-        await pushCommand(`custom step ${index + 1}`, command);
+        if (createUser && command === "sudo -n chpasswd") {
+          const username = usernameParam(customPlan.typedParameters.username);
+          await audit?.("command_planned", "Command template planned: apply protected initial account password", { template: "apply protected initial account password" });
+          const result = await execCheckedWithStdin(client, command, `${username}:${initialPassword}\n`);
+          commands.push({ template: "apply protected initial account password", stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode });
+          await audit?.("command_executed", "Command template executed: apply protected initial account password", { template: "apply protected initial account password", exitCode: result.exitCode });
+        } else {
+          await pushCommand(`custom step ${index + 1}`, command);
+        }
       }
       for (const [index, command] of customPlan.verificationCommands.entries()) {
         await pushCommand(`custom verification ${index + 1}`, command);
@@ -736,12 +791,19 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
         "printf '===SYSTEM===\\n'; uptime; free -m; swapon --show 2>/dev/null || true; df -h; df -i",
         "printf '===SERVICES===\\n'; systemctl --failed --no-pager 2>/dev/null || true; systemctl is-active ssh sshd nginx apache2 httpd docker fail2ban 2>/dev/null || true",
         "printf '===NETWORK===\\n'; ip -brief address; ip route; ss -lntup 2>/dev/null || ss -lntp 2>/dev/null || true",
-        `${sudo}sh -c \"printf '===FIREWALL===\\n'; ufw status verbose 2>/dev/null || nft list ruleset 2>/dev/null || iptables -S 2>/dev/null || true\"`,
-        `${sudo}sh -c \"printf '===LOGS===\\n'; journalctl -p err..alert --since '24 hours ago' -n 150 --no-pager 2>/dev/null || true; journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null | grep -Ei 'failed|invalid user|authentication failure' | tail -n 100 || true\"`,
+        `${sudo}sh -c "printf '===FIREWALL===\\n'; ufw status verbose 2>/dev/null || nft list ruleset 2>/dev/null || iptables -S 2>/dev/null || true"`,
+        `${sudo}sh -c "printf '===LOGS===\\n'; journalctl -p err..alert --since '24 hours ago' -n 150 --no-pager 2>/dev/null || true; journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null | grep -Ei 'failed|invalid user|authentication failure' | tail -n 100 || true"`,
         "printf '===UPDATES===\\n'; (apt list --upgradable 2>/dev/null || dnf check-update 2>/dev/null || yum check-update 2>/dev/null || true) | head -n 100"
       ];
       for (const command of daily) await pushCommand("linux daily check", command);
       rollbackJson.readOnly = true;
+    } else if (plan.actionType === ActionType.linux_reboot || plan.actionType === ActionType.linux_shutdown) {
+      const verb = plan.actionType === ActionType.linux_reboot ? "reboot" : "poweroff";
+      await pushCommand(`schedule Linux ${verb}`, `${sudo}systemd-run --quiet --no-block --on-active=3s systemctl ${verb}`);
+      warnings.push("DEVICE_POWER_COMMAND_DISPATCHED");
+      rollbackJson.outcome = "dispatch_accepted";
+      rollbackJson.expectedDisconnect = true;
+      rollbackJson.rollbackAvailable = false;
     } else if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
       const port = portParam(parameters.port);
       const template = `ufw allow ${port}/${protocol}`;
@@ -882,6 +944,51 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson
     };
   });
+}
+
+export type LinuxListeningPortProbeResult = {
+  connected: boolean;
+  listeningPorts: string;
+  firewallPorts: string;
+  firewallPortsCollected: boolean;
+  checkedAt: string;
+  errorCode?: string;
+  message?: string;
+};
+
+export async function probeLinuxListeningPorts(device: Device): Promise<LinuxListeningPortProbeResult> {
+  const checkedAt = new Date().toISOString();
+  try {
+    const credential = await getCredential(device);
+    return await withSshWithCredential(device, credential, async (client) => {
+      const sudo = sudoPrefix(credential);
+      const [listeners, firewall] = await Promise.all([
+        exec(client, "ss -H -lntup 2>/dev/null || ss -H -lntp 2>/dev/null"),
+        exec(client, `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then printf "__UFW__\\n"; ufw status 2>/dev/null; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then printf "__FIREWALLD__\\n"; firewall-cmd --list-ports 2>/dev/null; elif command -v nft >/dev/null 2>&1; then printf "__NFT__\\n"; nft list ruleset 2>/dev/null; elif command -v iptables >/dev/null 2>&1; then printf "__IPTABLES__\\n"; iptables -S 2>/dev/null; else printf "__NONE__\\n"; fi'`)
+      ]);
+      if (listeners.exitCode !== 0) {
+        throw new ConnectorError("SSH_COMMAND_FAILED", listeners.stderr || "Could not read listening ports.");
+      }
+      return {
+        connected: true,
+        listeningPorts: listeners.stdout,
+        firewallPorts: firewall.exitCode === 0 ? firewall.stdout : "",
+        firewallPortsCollected: firewall.exitCode === 0,
+        checkedAt
+      };
+    });
+  } catch (error) {
+    const connectorError = error instanceof ConnectorError ? error : mapSshError(error);
+    return {
+      connected: false,
+      listeningPorts: "",
+      firewallPorts: "",
+      firewallPortsCollected: false,
+      checkedAt,
+      errorCode: connectorError.code,
+      message: connectorError.message
+    };
+  }
 }
 
 export const linuxSshConnector: DeviceConnector = {

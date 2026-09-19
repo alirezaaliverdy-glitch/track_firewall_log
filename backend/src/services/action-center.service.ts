@@ -1,6 +1,7 @@
 import { ActionPlanStatus, Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan, rejectActionPlan } from "./action-plan.service.js";
+import { copyActionPlanSecrets } from "./action-plan-secret.service.js";
 
 const TERMINAL = new Set<ActionPlanStatus>([ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back]);
 const PREVIEWABLE = new Set<ActionPlanStatus>([ActionPlanStatus.proposed, ActionPlanStatus.validation_failed, ActionPlanStatus.awaiting_approval]);
@@ -26,17 +27,16 @@ function sanitize(value: unknown, key = ""): unknown {
   return typeof value === "string" ? value.replace(/(?:password|passphrase|private.?key|token|api.?key|secret)\s*[:=]\s*\S+/gi, "[redacted]").slice(0, 20_000) : value;
 }
 
-export type ActionCenterLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "skipped" | "cancelled";
+export type ActionCenterLifecycle = "queued" | "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "skipped" | "cancelled";
 
 export async function clearActionCenterHistory() {
-  const terminalStatuses = [ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back];
-  const terminalPlans = await prisma.actionPlan.findMany({
-    where: { status: { in: terminalStatuses } },
+  const clearablePlans = await prisma.actionPlan.findMany({
+    where: { status: { not: ActionPlanStatus.executing } },
     select: { id: true, deviceId: true, parametersJson: true }
   });
   const now = new Date().toISOString();
-  const plansToArchive = terminalPlans.filter((plan) => !isArchived(plan));
-  const retainedActive = await prisma.actionPlan.count({ where: { status: { notIn: terminalStatuses } } });
+  const plansToArchive = clearablePlans.filter((plan) => !isArchived(plan));
+  const retainedActive = await prisma.actionPlan.count({ where: { status: ActionPlanStatus.executing } });
   if (plansToArchive.length === 0) return { archived: 0, deleted: 0, retainedActive };
 
   await prisma.$transaction(plansToArchive.flatMap((plan) => {
@@ -60,7 +60,7 @@ export async function clearActionCenterHistory() {
           actionPlanId: plan.id,
           deviceId: plan.deviceId,
           eventType: "action_center_history_archived",
-          message: "Terminal ActionPlan was archived from Action Center history without deleting audit evidence.",
+          message: "ActionPlan was cleared from Action Center without deleting audit evidence.",
           metadataJson: { archivedAt: now, archiveReason: "action_center_history_clear" }
         }
       })
@@ -88,6 +88,74 @@ const include = {
 } satisfies Prisma.ActionPlanInclude;
 
 type CenterPlan = Prisma.ActionPlanGetPayload<{ include: typeof include }>;
+
+const scheduledInclude = {
+  device: { select: { id: true, name: true, vendor: true, type: true, host: true, protocol: true, credentialId: true } },
+  createdBy: { select: { id: true, username: true, displayName: true } }
+} satisfies Prisma.ScheduledTaskInclude;
+
+type CenterScheduledTask = Prisma.ScheduledTaskGetPayload<{ include: typeof scheduledInclude }>;
+const scheduledCenterId = (id: string) => `scheduled:${id}`;
+
+function projectScheduledTask(task: CenterScheduledTask) {
+  const parameters = object(task.parametersJson);
+  const lifecycleState: ActionCenterLifecycle = task.status === "running" ? "executing" : "queued";
+  return {
+    id: scheduledCenterId(task.id),
+    source: "system",
+    requestedBy: task.createdBy?.displayName ?? task.createdBy?.username ?? null,
+    deviceId: task.deviceId,
+    actionType: task.actionType,
+    status: task.status,
+    lifecycleState,
+    riskLevel: task.riskLevel,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    device: { ...task.device, credentialConfigured: Boolean(task.device.credentialId), credentialId: undefined },
+    support: {
+      state: "verified",
+      execution: "connector",
+      executable: true,
+      reason: "scheduled_execution_waiting"
+    },
+    controls: {
+      canReview: false,
+      canEditParameters: false,
+      canSelectDevice: false,
+      canSelectCredential: false,
+      canPreview: false,
+      canConfirm: false,
+      canExecute: false,
+      canRetry: false,
+      canCancel: false,
+      canViewEvidence: true,
+      canViewConnectorResult: false,
+      relatedDevicePath: `/assets/devices/${task.deviceId}`
+    },
+    parametersJson: sanitize({
+      ...parameters,
+      metadata: {
+        ...object(parameters.metadata),
+        source: "scheduled_task",
+        schedulerTaskId: task.id,
+        schedulerTaskName: task.name,
+        catalogCommandId: task.catalogCommandId,
+        catalogTitleFa: task.name,
+        scheduledRunAt: task.runAt.toISOString(),
+        scheduledLocalDate: task.localDate,
+        scheduledLocalTime: task.localTime,
+        scheduledTimeZone: task.timeZone,
+        scheduledStatus: task.status
+      }
+    }),
+    validationJson: { valid: true, scheduled: true },
+    commandPreview: {},
+    approval: { status: "confirmed_by_schedule_submission", scheduledAt: task.createdAt },
+    connectorResult: {},
+    rollback: {},
+    evidence: { connectorInvoked: false, integrityError: null, approvals: [] }
+  };
+}
 
 function project(plan: CenterPlan) {
   const parameters = object(plan.parametersJson);
@@ -150,10 +218,21 @@ function integer(value: unknown, fallback: number, max: number) {
 }
 
 export async function listActionCenter(input: Record<string, unknown> = {}) {
-  const rows = await prisma.actionPlan.findMany({ orderBy: { createdAt: "desc" }, take: 500, include });
-  const all = rows.filter((plan) => !isArchived(plan)).map(project);
+  const [rows, scheduledRows] = await Promise.all([
+    prisma.actionPlan.findMany({ orderBy: { createdAt: "desc" }, take: 500, include }),
+    prisma.scheduledTask.findMany({
+      where: { enabled: true, status: { in: ["scheduled", "paused"] } },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: scheduledInclude
+    })
+  ]);
+  const all = [
+    ...rows.filter((plan) => !isArchived(plan)).map(project),
+    ...scheduledRows.map(projectScheduledTask)
+  ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
   const summary = all.reduce((counts, item) => ({ ...counts, [item.lifecycleState]: counts[item.lifecycleState] + 1 }), {
-    draft: 0, needs_input: 0, ready_for_confirmation: 0, confirmed: 0, executing: 0, succeeded: 0, failed: 0, skipped: 0, cancelled: 0
+    queued: 0, draft: 0, needs_input: 0, ready_for_confirmation: 0, confirmed: 0, executing: 0, succeeded: 0, failed: 0, skipped: 0, cancelled: 0
   } as Record<ActionCenterLifecycle, number>);
   const view = String(input.view ?? "all");
   const query = String(input.q ?? "").trim().toLowerCase();
@@ -161,7 +240,7 @@ export async function listActionCenter(input: Record<string, unknown> = {}) {
   const deviceId = String(input.deviceId ?? "").trim();
   const filtered = all.filter((item) => {
     if (view === "pending" && ["succeeded", "failed", "skipped", "cancelled"].includes(item.lifecycleState)) return false;
-    if (view === "history" && !["succeeded", "failed", "skipped", "cancelled"].includes(item.lifecycleState)) return false;
+    if (view === "history" && !["queued", "succeeded", "failed", "skipped", "cancelled"].includes(item.lifecycleState)) return false;
     if (status && item.lifecycleState !== status && item.status !== status) return false;
     if (deviceId && item.deviceId !== deviceId) return false;
     if (query && !`${item.id} ${item.actionType} ${item.device?.name ?? ""} ${item.device?.vendor ?? ""}`.toLowerCase().includes(query)) return false;
@@ -173,6 +252,12 @@ export async function listActionCenter(input: Record<string, unknown> = {}) {
 }
 
 export async function getActionCenterItem(id: string) {
+  if (id.startsWith("scheduled:")) {
+    const task = await prisma.scheduledTask.findUnique({ where: { id: id.slice("scheduled:".length) }, include: scheduledInclude });
+    return task && task.status !== "completed" && task.status !== "cancelled"
+      ? { ...projectScheduledTask(task), audit: [] }
+      : null;
+  }
   const plan = await prisma.actionPlan.findUnique({ where: { id }, include });
   if (!plan) return null;
   const audit = await prisma.actionAuditLog.findMany({ where: { actionPlanId: id }, orderBy: { createdAt: "asc" } });
@@ -202,6 +287,7 @@ export async function retryActionCenterItem(id: string, actor?: string) {
     riskLevel: plan.riskLevel,
     parametersJson: { ...parameters, metadata: { ...object(parameters.metadata), retryOf: plan.id } }
   });
+  await copyActionPlanSecrets(plan.id, retry.id);
   await prisma.actionAuditLog.create({ data: { actionPlanId: plan.id, deviceId: plan.deviceId, eventType: "action.retry_created", message: "A new retry ActionPlan was created without changing the historical plan.", metadataJson: { retryActionPlanId: retry.id } } });
   return getActionCenterItem(retry.id);
 }

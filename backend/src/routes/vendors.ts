@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { prisma } from "../db/prisma.js";
 import { getCapabilitiesForVendor } from "../vendors/capability.registry.js";
 import { getPlatformsForVendor } from "../vendors/platform.registry.js";
-import { listVendors, refreshDeviceVendorCapabilities, vendorDetail } from "../vendors/capability-discovery.service.js";
+import { listVendors, refreshDeviceVendorCapabilities, VendorCapabilityRefreshError, vendorDetail } from "../vendors/capability-discovery.service.js";
+import { getConnectionProfile, listConnectionProfiles } from "../vendors/connection-method.registry.js";
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -15,10 +16,24 @@ function isArchived(capabilities: unknown) {
 
 export const vendorRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/vendors", async () => ({ vendors: listVendors() }));
+  app.get("/api/vendors/connection-methods", async () => ({ profiles: listConnectionProfiles() }));
+  app.get<{ Params: { vendorKey: string } }>("/api/vendors/:vendorKey/connection-methods", async (request, reply) => {
+    const profile = getConnectionProfile(request.params.vendorKey);
+    return profile ? { profile } : reply.code(404).send({ error: { code: "VENDOR_CONNECTION_PROFILE_NOT_FOUND", message: "Vendor connection profile not found." } });
+  });
   app.get<{ Params: { vendorKey: string } }>("/api/vendors/:vendorKey", async (request, reply) => vendorDetail(request.params.vendorKey) ?? reply.code(404).send({ error: "Vendor not found" }));
   app.get<{ Params: { vendorKey: string } }>("/api/vendors/:vendorKey/platforms", async (request) => ({ platforms: getPlatformsForVendor(request.params.vendorKey) }));
   app.get<{ Params: { vendorKey: string } }>("/api/vendors/:vendorKey/capabilities", async (request) => ({ capabilities: getCapabilitiesForVendor(request.params.vendorKey) }));
-  app.post<{ Params: { deviceId: string } }>("/api/devices/:deviceId/capabilities/refresh", async (request, reply) => (await refreshDeviceVendorCapabilities(request.params.deviceId, true)) ?? reply.code(404).send({ error: "Device not found" }));
+  app.post<{ Params: { deviceId: string } }>("/api/devices/:deviceId/capabilities/refresh", async (request, reply) => {
+    try {
+      return (await refreshDeviceVendorCapabilities(request.params.deviceId, true)) ?? reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found" } });
+    } catch (error) {
+      if (error instanceof VendorCapabilityRefreshError) {
+        return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } });
+      }
+      throw error;
+    }
+  });
 
   app.get("/api/vendors/cisco/devices", async () => {
     const devices = await prisma.device.findMany({

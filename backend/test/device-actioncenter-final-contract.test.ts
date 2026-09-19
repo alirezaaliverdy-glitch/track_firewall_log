@@ -9,6 +9,7 @@ import { ActionType } from "@prisma/client";
 
 const verificationPanel = readFileSync(new URL("../../src/features/assets/components/DeviceVerificationPanel.tsx", import.meta.url), "utf8");
 const actionWorkspace = readFileSync(new URL("../../src/components/actions/ActionCenterWorkspace.tsx", import.meta.url), "utf8");
+const actionReviewSheet = readFileSync(new URL("../../src/features/actions/components/ActionReviewSheet.tsx", import.meta.url), "utf8");
 const actionWorkspaceModel = readFileSync(new URL("../../src/features/actions/actionCenterWorkspaceModel.tsx", import.meta.url), "utf8");
 const actionResultView = readFileSync(new URL("../../src/components/actions/ActionResultView.tsx", import.meta.url), "utf8");
 const actionCenterClient = readFileSync(new URL("../../src/lib/actionCenter.ts", import.meta.url), "utf8");
@@ -20,6 +21,7 @@ const actionPlanService = [
 const deviceVerificationService = readFileSync(new URL("../src/services/device-verification.service.ts", import.meta.url), "utf8");
 const routes = readFileSync(new URL("../../src/routes/appRoutes.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../../src/App.css", import.meta.url), "utf8");
+const operationsCss = readFileSync(new URL("../../src/features/actions/pages/ActionsPage.css", import.meta.url), "utf8");
 
 test("Device Workspace exposes every verification control over credential references", () => {
   for (const contract of [
@@ -36,12 +38,12 @@ test("Action Center exposes an operator-first preview and real execution contrac
     "Select device", "Select credential", "Select action", "Generate Preview", "Execute immediately", "Confirm and Execute", "Run again", "Test Connection",
     "Refresh Status", "Last Success", "Last Failure", "Connector state", "SSH reachability", "Authentication status",
     "Advanced Details"
-  ]) assert.match(actionWorkspace, new RegExp(contract));
+  ]) assert.match(`${actionWorkspace}\n${actionReviewSheet}`, new RegExp(contract));
   assert.match(actionWorkspace, /quickExecuteAction\(plan\.id, \{ intent: "preview"/);
   assert.match(actionWorkspace, /quickExecuteAction\(selected\.id, \{ intent: "preview"/);
   assert.match(actionWorkspace, /quickExecuteAction\(actionPlanId, \{ intent: "execute"/);
   assert.match(actionWorkspace, /navigate\(`\/actions\/\$\{encodeURIComponent\(actionPlanId\)\}\/result`\)/);
-  assert.match(actionWorkspace, /selected\.controls\.canPreview/);
+  assert.match(`${actionWorkspace}\n${actionReviewSheet}`, /(?:selected|item)\.controls\.canPreview/);
   assert.match(actionWorkspace, /operator-handoff/);
   assert.match(actionWorkspace, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
   assert.match(actionWorkspace, /Review and execute/);
@@ -49,11 +51,13 @@ test("Action Center exposes an operator-first preview and real execution contrac
   assert.match(actionResultView, /row\.label\}-\$\{rowIndex\}/);
   assert.match(actionWorkspace, /testDeviceVerification/);
   assert.match(actionWorkspace, /setDeviceId\(selected\.deviceId\)/);
-  assert.match(actionWorkspace, /operator-advanced/);
+  assert.match(actionWorkspace, /operations-summary/);
+  assert.match(actionWorkspace, /operations-compose-grid/);
+  assert.match(actionWorkspace, /InlineActionReviewPanel/);
   for (const path of ["/actions", "/actions/pending", "/actions/history", "/actions/:actionId", "/assets/devices/:deviceId"]) {
     assert.match(routes, new RegExp(path.replace(/[/:]/g, (character) => character === "/" ? "\\/" : ":")));
   }
-  assert.match(actionWorkspace, /selected\.evidence\.connectorInvoked/);
+  assert.match(`${actionWorkspace}\n${actionReviewSheet}`, /(?:selected|item)\.evidence\.connectorInvoked/);
   assert.match(actionWorkspaceModel, /connectorResult\.message/);
   assert.match(actionPlanService, /executed:\s*false,\s*connectorInvoked:\s*true,\s*backupEnabled:\s*false/);
   assert.match(actionPlanService, /verification:\s*\{\s*status:\s*"failed",\s*error:\s*connectorError\.code\s*\}/);
@@ -62,6 +66,9 @@ test("Action Center exposes an operator-first preview and real execution contrac
   assert.match(css, /\.operator-connection--connected/);
   assert.match(css, /\.operator-run-card__selectors/);
   assert.match(css, /@media\(max-width:650px\)/);
+  assert.match(operationsCss, /\.operations-compose-grid/);
+  assert.match(operationsCss, /\.operator-history__header/);
+  assert.match(operationsCss, /@media \(max-width: 760px\)/);
 });
 
 test("Action Center normalizes nullable historical payloads before rendering", () => {

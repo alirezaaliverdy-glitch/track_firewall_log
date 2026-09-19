@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { logRuntimeError } from "@/lib/runtimeLogging";
 
 type ErrorBoundaryProps = {
   children: ReactNode;
@@ -17,7 +18,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Panel render failed", error, info);
+    logRuntimeError("Panel render failed", error, info);
   }
 
   render() {

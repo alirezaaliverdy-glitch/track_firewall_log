@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type ProductFeatureState = "implemented" | "partial" | "not_configured" | "unverified" | "planned" | "unsupported" | "disabled";
 export type ProductNavigationItem = { key: string; titleFa: string; titleEn: string; route: string; state: ProductFeatureState };

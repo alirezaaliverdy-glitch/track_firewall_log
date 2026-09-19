@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>گزارش ارزش اقتصادی و مدل درآمد Firewall SOAR</title>
+  <style>
+    @font-face{font-family:Yekan;src:url("../src/assets/fonts/iranyekanwebregularfanum.ttf") format("truetype");font-display:swap}
+    :root{--paper:#041019;--paper2:#071924;--panel:#0a202d;--line:#183b4b;--ink:#eefbff;--muted:#9bb3bf;--cyan:#34d5e7;--mint:#42d9a4;--blue:#5c91ff;--violet:#a97bff;--amber:#ffba5f;--red:#ff6f82}
+    *{box-sizing:border-box}html,body{margin:0;background:#020910;color:var(--ink);font-family:Yekan,Tahoma,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-size:11px;line-height:1.8}
+    @page{size:A4;margin:0}.page{position:relative;width:210mm;height:297mm;overflow:hidden;padding:15mm 16mm 14mm;background:radial-gradient(circle at 92% 9%,rgba(52,213,231,.11),transparent 27%),radial-gradient(circle at 5% 93%,rgba(92,145,255,.10),transparent 30%),linear-gradient(145deg,#071a25,#020910 75%);page-break-after:always}.page:last-child{page-break-after:auto}
+    .page:before{content:"";position:absolute;inset:0;opacity:.11;pointer-events:none;background-image:linear-gradient(rgba(52,213,231,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(52,213,231,.14) 1px,transparent 1px);background-size:22mm 22mm;mask-image:linear-gradient(to bottom,black,transparent 72%)}.page>*{position:relative;z-index:1}
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:9mm}.brand{display:flex;align-items:center;gap:3mm;font-weight:900;direction:ltr}.mark{display:grid;width:10mm;height:10mm;place-items:center;border:1px solid rgba(52,213,231,.38);border-radius:3mm;background:linear-gradient(145deg,rgba(66,217,164,.22),rgba(52,213,231,.13));box-shadow:0 0 12mm rgba(52,213,231,.10)}.mark:before{content:"";width:4.3mm;height:5mm;border:1mm solid var(--cyan);clip-path:polygon(50% 0,100% 18%,90% 78%,50% 100%,10% 78%,0 18%)}.label{font-size:8.5px;color:#6f8d9b}.page-no{position:absolute;bottom:6mm;right:16mm;color:#6c8794;font-size:8px;direction:ltr}.footer{position:absolute;bottom:6mm;left:16mm;color:#6c8794;font-size:8px;direction:ltr}
+    h1,h2,h3,p{margin-top:0}h1{font-size:32px;line-height:1.35;letter-spacing:-.5px;margin-bottom:4mm}h2{font-size:23px;line-height:1.45;margin-bottom:2mm}h3{font-size:13px;margin-bottom:1mm}.eyebrow{color:var(--cyan);font-size:9px;font-weight:900;margin-bottom:1mm}.lead{font-size:13px;line-height:2;color:#b8ccd6;max-width:148mm}.muted{color:var(--muted)}.cyan{color:var(--cyan)}.mint{color:var(--mint)}.amber{color:var(--amber)}.red{color:var(--red)}.ltr{direction:ltr;text-align:left}.small{font-size:8.5px}.tiny{font-size:7.5px}
+    .section-title{display:flex;justify-content:space-between;gap:8mm;align-items:flex-start;margin-bottom:6mm}.chapter{display:grid;width:12mm;height:12mm;place-items:center;border:1px solid rgba(52,213,231,.28);border-radius:3.5mm;background:rgba(52,213,231,.07);color:var(--cyan);font-weight:900;direction:ltr}
+    .grid{display:grid;gap:4mm}.two{grid-template-columns:repeat(2,1fr)}.three{grid-template-columns:repeat(3,1fr)}.card{border:1px solid var(--line);border-radius:5mm;padding:4.5mm;background:linear-gradient(145deg,rgba(10,32,45,.85),rgba(4,15,23,.82));break-inside:avoid}.card p{margin:0;color:var(--muted);font-size:9.2px}.card.mint{border-color:rgba(66,217,164,.30)}.card.blue{border-color:rgba(92,145,255,.30)}.card.violet{border-color:rgba(169,123,255,.30)}.card.amber{border-color:rgba(255,186,95,.30)}.card.red{border-color:rgba(255,111,130,.30)}.icon{display:grid;width:9mm;height:9mm;place-items:center;border-radius:2.6mm;background:rgba(52,213,231,.09);color:var(--cyan);font-size:15px;font-weight:900;margin-bottom:2.5mm}.mint .icon{color:var(--mint);background:rgba(66,217,164,.09)}.violet .icon{color:var(--violet);background:rgba(169,123,255,.09)}.amber .icon{color:var(--amber);background:rgba(255,186,95,.09)}.red .icon{color:var(--red);background:rgba(255,111,130,.09)}
+    .cover{display:grid;grid-template-columns:1.05fr .95fr;gap:11mm;align-items:center;min-height:232mm}.cover h1{font-size:38px}.cover .lead{font-size:14px}.pill-row{display:flex;gap:2mm;flex-wrap:wrap;margin-top:7mm}.pill{padding:1.5mm 3mm;border:1px solid rgba(52,213,231,.25);border-radius:99px;background:rgba(6,23,33,.76);color:#c2eef3;font-size:8.5px}.pill.m{border-color:rgba(66,217,164,.3);color:#aaf2d4}.pill.a{border-color:rgba(255,186,95,.3);color:#ffdaa6}
+    .cover-art{position:relative;height:158mm;border:1px solid rgba(52,213,231,.23);border-radius:9mm;background:radial-gradient(circle at 50% 46%,rgba(52,213,231,.13),transparent 30%),rgba(2,11,17,.72);box-shadow:inset 0 0 36mm rgba(21,83,108,.08),0 10mm 24mm rgba(0,0,0,.3)}.orbit{position:absolute;inset:23mm;border:1px dashed rgba(52,213,231,.18);border-radius:50%}.shield{position:absolute;top:54mm;right:50%;transform:translateX(50%);display:grid;width:37mm;height:37mm;place-items:center;border:1px solid rgba(66,217,164,.5);border-radius:11mm;background:linear-gradient(145deg,#0d3940,#071a25);box-shadow:0 0 22mm rgba(66,217,164,.16)}.shield:before{content:"";width:14mm;height:17mm;border:1.5mm solid var(--mint);clip-path:polygon(50% 0,100% 18%,90% 78%,50% 100%,10% 78%,0 18%)}.node{position:absolute;display:grid;width:20mm;height:20mm;place-items:center;border:1px solid rgba(92,145,255,.35);border-radius:6mm;background:#0a2130;color:var(--cyan);font-size:10px;font-weight:900;direction:ltr}.n1{top:17mm;right:11mm}.n2{bottom:19mm;left:11mm}.n3{bottom:18mm;right:12mm}.route{position:absolute;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.65;transform-origin:right}.r1{width:51mm;top:49mm;right:26mm;transform:rotate(37deg)}.r2{width:48mm;bottom:48mm;left:27mm;transform:rotate(36deg)}.r3{width:48mm;bottom:48mm;right:27mm;transform:rotate(-36deg)}.dot{position:absolute;width:3mm;height:3mm;border-radius:50%;background:var(--cyan);box-shadow:0 0 4mm var(--cyan)}.d1{top:47mm;right:40mm}.d2{bottom:44mm;left:41mm;background:var(--mint);box-shadow:0 0 4mm var(--mint)}.d3{bottom:43mm;right:42mm;background:var(--violet);box-shadow:0 0 4mm var(--violet)}.art-note{position:absolute;right:9mm;bottom:7mm;color:#718d9a;font-size:8px}
+    .hero-metric{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;margin:7mm 0}.metric{border:1px solid var(--line);border-radius:5mm;background:rgba(4,18,27,.78);padding:4.5mm}.metric strong{display:block;font-size:21px;color:var(--cyan);direction:ltr;text-align:right}.metric span{color:var(--muted);font-size:8.5px}.metric.green strong{color:var(--mint)}.metric.purple strong{color:var(--violet)}
+    .notice{border:1px solid rgba(255,186,95,.28);border-radius:4mm;background:rgba(112,69,14,.08);padding:4mm;color:#d8c7a9}.notice strong{color:var(--amber)}.notice p{margin:1mm 0 0;font-size:8.5px}.good{border-color:rgba(66,217,164,.30);background:rgba(19,93,70,.08);color:#bddfd2}.good strong{color:var(--mint)}
+    .value-map{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}.value-card{min-height:51mm}.value-card .tag{display:inline-block;margin-top:3mm;color:var(--cyan);font-size:8px;border-top:1px solid rgba(52,213,231,.18);padding-top:2mm}.value-card p{min-height:20mm}
+    table{width:100%;border-collapse:separate;border-spacing:0 2mm;font-size:8.5px}th{color:#7fa0ae;font-weight:700;text-align:right;padding:1mm 2.5mm}td{background:rgba(7,27,39,.78);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:2.2mm 2.5mm;vertical-align:middle}td:first-child{border-right:1px solid var(--line);border-radius:0 3mm 3mm 0}td:last-child{border-left:1px solid var(--line);border-radius:3mm 0 0 3mm}.price{direction:ltr;text-align:left;color:#d9f8ff;font-weight:900;white-space:nowrap}.source{color:#6f909e;font-size:7px;line-height:1.45}.source a{color:#75c9d7;text-decoration:none}.compact td{padding:1.5mm 2mm}.market-name{font-weight:900;color:#eefaff;direction:ltr;text-align:right}.fit{display:inline-block;padding:.5mm 1.7mm;border-radius:99px;background:rgba(52,213,231,.08);color:#9be7ee;font-size:7px}
+    .formula{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:3mm;align-items:center;margin:7mm 0}.fbox{border:1px solid var(--line);border-radius:5mm;padding:5mm;background:rgba(5,22,33,.8);text-align:center}.fbox strong{display:block;color:var(--cyan);font-size:19px;direction:ltr}.op{color:var(--muted);font-size:18px;direction:ltr}.bar-list{display:grid;gap:3mm;margin-top:5mm}.bar-row{display:grid;grid-template-columns:34mm 1fr 28mm;gap:3mm;align-items:center}.bar-row span{font-size:8.5px}.bar{height:4mm;border-radius:99px;background:#0b2635;overflow:hidden}.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--cyan))}.bar-row b{direction:ltr;text-align:left;color:#c8eef4;font-size:8px}
+    .module-grid{display:grid;grid-template-columns:1fr 1fr;gap:3.2mm}.module{display:grid;grid-template-columns:9mm 1fr auto;gap:3mm;align-items:center;border:1px solid var(--line);border-radius:4mm;background:rgba(6,24,35,.76);padding:3.3mm}.module .mi{display:grid;width:8mm;height:8mm;place-items:center;border-radius:2.5mm;background:rgba(52,213,231,.09);color:var(--cyan);font-weight:900}.module small{display:block;color:var(--muted);font-size:7.5px}.module .money{direction:ltr;text-align:left;color:#c5f5e3;font-weight:900;font-size:9px}.module .money em{display:block;color:#6f909e;font-style:normal;font-weight:400;font-size:7px}
+    .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm;align-items:stretch}.plan{position:relative;border:1px solid var(--line);border-radius:6mm;padding:5mm;background:linear-gradient(160deg,rgba(10,34,47,.88),rgba(3,13,20,.85))}.plan.featured{border-color:rgba(66,217,164,.48);box-shadow:0 0 16mm rgba(66,217,164,.07)}.plan .flag{position:absolute;top:3mm;left:3mm;color:var(--mint);font-size:7px}.plan h3{font-size:17px;direction:ltr}.plan .monthly{font-size:24px;color:var(--cyan);font-weight:900;direction:ltr;text-align:right;line-height:1.2}.plan .monthly small{font-size:8px;color:var(--muted);font-weight:400}.plan ul{list-style:none;padding:0;margin:5mm 0}.plan li{padding:1.3mm 0;border-bottom:1px solid rgba(24,59,75,.55);font-size:8.5px}.plan li:before{content:"✓";color:var(--mint);margin-left:2mm}.setup{color:var(--amber);font-size:8px;direction:ltr;text-align:right}
+    .roi-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}.roi{border:1px solid var(--line);border-radius:6mm;padding:5mm;background:rgba(5,22,33,.82)}.roi h3{direction:ltr;font-size:15px}.roi .big{font-size:23px;color:var(--mint);font-weight:900;direction:ltr}.roi dl{margin:4mm 0 0}.roi dl div{display:flex;justify-content:space-between;border-top:1px solid rgba(24,59,75,.6);padding:1.5mm 0}.roi dt{color:var(--muted);font-size:8px}.roi dd{margin:0;direction:ltr;font-size:8px;font-weight:900}.sensitivity{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;margin-top:6mm}.sens{border:1px solid var(--line);border-radius:4mm;padding:4mm;background:rgba(5,20,30,.7)}.sens strong{display:block;color:var(--cyan);font-size:16px;direction:ltr}.sens span{font-size:7.5px;color:var(--muted)}
+    .revenue{display:grid;grid-template-columns:.85fr 1.15fr;gap:6mm}.stack{display:flex;height:82mm;align-items:flex-end;justify-content:space-around;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4mm 5mm 0}.col{width:20mm;text-align:center}.col .fill{display:flex;align-items:flex-start;justify-content:center;width:100%;border-radius:4mm 4mm 0 0;padding-top:2mm;background:linear-gradient(180deg,var(--cyan),rgba(92,145,255,.38));color:#021018;font-weight:900;direction:ltr}.col:nth-child(2) .fill{background:linear-gradient(180deg,var(--mint),rgba(52,213,231,.38))}.col:nth-child(3) .fill{background:linear-gradient(180deg,var(--violet),rgba(92,145,255,.38))}.col small{display:block;margin-top:2mm;color:var(--muted);direction:ltr}.assumptions{display:grid;gap:3mm}.assumption{border:1px solid var(--line);border-radius:4mm;padding:3mm;background:rgba(6,24,35,.72)}.assumption b{display:block;color:#dff9ff}.assumption span{color:var(--muted);font-size:8px}
+    .valuation-band{display:grid;grid-template-columns:30mm 1fr 30mm;gap:4mm;align-items:center;margin:6mm 0}.band{position:relative;height:11mm;border-radius:99px;background:linear-gradient(90deg,rgba(92,145,255,.38),rgba(52,213,231,.58),rgba(66,217,164,.65))}.band:after{content:"4.8×";position:absolute;right:66%;top:50%;transform:translate(50%,-50%);display:grid;width:12mm;height:12mm;place-items:center;border-radius:50%;background:#0a2631;border:1px solid var(--mint);color:var(--mint);font-size:8px;direction:ltr}.valuation-band strong{direction:ltr;font-size:11px}.ladder{display:grid;gap:3mm}.ladder-row{display:grid;grid-template-columns:32mm repeat(3,1fr);gap:2mm}.ladder-row>div{border:1px solid var(--line);border-radius:3mm;padding:2.5mm;background:rgba(5,20,30,.7);direction:ltr;text-align:center}.ladder-row.head>div{color:#7896a3;background:transparent;border-color:transparent;font-size:7.5px}.ladder-row .name{text-align:right;direction:rtl;color:#dff9ff;font-weight:900}
+    .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:2.5mm;margin:7mm 0}.step{position:relative;border-top:1mm solid var(--cyan);border-radius:0 0 4mm 4mm;background:rgba(6,24,35,.75);padding:3.5mm}.step:nth-child(2){border-color:var(--mint)}.step:nth-child(3){border-color:var(--blue)}.step:nth-child(4){border-color:var(--violet)}.step:nth-child(5){border-color:var(--amber)}.step b{display:block;font-size:9px}.step span{display:block;color:var(--muted);font-size:7.4px}.checklist{display:grid;gap:2.5mm}.check{display:grid;grid-template-columns:7mm 1fr;gap:3mm;align-items:start;border:1px solid var(--line);border-radius:4mm;padding:3mm;background:rgba(6,24,35,.68)}.check i{display:grid;width:6mm;height:6mm;place-items:center;border-radius:50%;background:rgba(66,217,164,.1);color:var(--mint);font-style:normal}.check small{display:block;color:var(--muted);font-size:7.5px}
+    .sources{columns:2;column-gap:6mm}.source-item{break-inside:avoid;border-bottom:1px solid rgba(24,59,75,.55);padding:2mm 0;font-size:7.5px}.source-item b{display:block;color:#cbeff4}.source-item a{display:block;color:#73c4d2;text-decoration:none;direction:ltr;text-align:left;word-break:break-all;font-size:6.5px}.stamp{display:flex;align-items:center;justify-content:space-between;margin-top:6mm;border:1px solid rgba(52,213,231,.26);border-radius:5mm;background:linear-gradient(120deg,rgba(10,69,88,.28),rgba(4,18,27,.8));padding:5mm}.stamp strong{font-size:14px}.seal{display:grid;width:18mm;height:18mm;place-items:center;border:1px solid rgba(66,217,164,.45);border-radius:50%;color:var(--mint);font-weight:900;direction:ltr}
+  </style>
+</head>
+<body>
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="label">گزارش محرمانه پیشنهادی برای مذاکره تجاری</span></div>
+    <div class="cover">
+      <div>
+        <div class="eyebrow">ارزش اقتصادی، مدل درآمد و سناریوی فروش</div>
+        <h1>این محصول چقدر می‌تواند برای مشتری ارزش و برای فروشنده درآمد بسازد؟</h1>
+        <p class="lead">یک مدل شفاف برای تبدیل قابلیت‌های فنی Firewall SOAR به <span class="cyan">صرفه‌جویی قابل‌اندازه‌گیری</span>، قیمت اشتراک، درآمد سالانه و سناریوی ارزش فروش کسب‌وکار.</p>
+        <div class="pill-row"><span class="pill m">هزینه نیروی SOC</span><span class="pill">مقایسه قیمت بازار</span><span class="pill a">درآمد تکرارشونده</span><span class="pill">ارزش‌گذاری سناریویی</span></div>
+        <div class="notice" style="margin-top:8mm"><strong>تاریخ مبنا: ۶ سپتامبر ۲۰۲۶</strong><p>تمام قیمت‌های بازار به دلار آمریکا و بر پایه صفحات رسمی عمومی‌اند. اعداد این گزارش تضمین فروش یا سود نیستند؛ نقطه شروع یک مذاکره و پایلوت اندازه‌گیری‌شده‌اند.</p></div>
+      </div>
+      <div class="cover-art" aria-label="نمای مفهومی ارزش عملیاتی امنیت">
+        <span class="orbit"></span><span class="route r1"></span><span class="route r2"></span><span class="route r3"></span><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+        <span class="node n1">LOG</span><span class="node n2">SOC</span><span class="node n3">ACT</span><span class="shield"></span>
+        <span class="art-note">داده ← تشخیص ← تصمیم ← اقدام کنترل‌شده</span>
+      </div>
+    </div>
+    <span class="page-no">01 / 11</span><span class="footer">Business Value Report • 2026</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">02</span></div>
+    <div class="section-title"><div><div class="eyebrow">پاسخ مدیریتی</div><h2>سه عددی که مذاکره فروش را شروع می‌کنند</h2><p class="lead">ارزش واقعی از «فروش قابلیت» نمی‌آید؛ از زمانی می‌آید که تیم دیگر صرف بررسی تکراری، جابه‌جایی بین پنل‌ها و اجرای دستی نمی‌کند.</p></div></div>
+    <div class="hero-metric">
+      <div class="metric green"><strong>$191,095</strong><span>هزینه سالانه بارگذاری‌شده یک تحلیلگر امنیت با معیار آمریکا</span></div>
+      <div class="metric"><strong>$95,547</strong><span>ارزش سناریویی 0.5 نفر-سال ظرفیت آزادشده برای مشتری متوسط</span></div>
+      <div class="metric purple"><strong>$17,880</strong><span>ARR پیشنهادی هر مشتری Growth؛ حدود 18.7٪ ارزش نیروی آزادشده</span></div>
+    </div>
+    <div class="grid two">
+      <div class="card mint"><span class="icon">1</span><h3>برای مشتری</h3><p>پیام اقتصادی درست این نیست که «یک نیرو حذف می‌شود». پیام قابل دفاع این است: سامانه می‌تواند بخشی از ظرفیت تیم را آزاد کند، اضافه‌کاری را کم کند یا نیاز به استخدام بعدی را به تعویق بیندازد.</p></div>
+      <div class="card blue"><span class="icon">2</span><h3>برای فروشنده</h3><p>درآمد از اشتراک سالانه، راه‌اندازی، Connector سفارشی، نگهداری طولانی داده، پشتیبانی ویژه و مصرف مازاد AI ساخته می‌شود. ARR با سود خالص برابر نیست.</p></div>
+      <div class="card violet"><span class="icon">3</span><h3>برای خریدار پروژه</h3><p>مضرب ARR فقط وقتی معتبر است که مشتری واقعی، قرارداد تکرارشونده و شواهد retention وجود داشته باشد. کد بدون درآمد را باید با هزینه بازسازی، IP و ریسک انتقال سنجید.</p></div>
+      <div class="card amber"><span class="icon">!</span><h3>مرز صداقت</h3><p>Firewall SOAR یک Mini‑SOAR چندوندوری با تمرکز عملیاتی است؛ جایگزین کامل همه قابلیت‌های SIEM/XDR/SOAR سازمانی نیست. همین تمرکز می‌تواند قیمت ساده‌تر و استقرار سبک‌تری بسازد.</p></div>
+    </div>
+    <div class="notice good" style="margin-top:6mm"><strong>پیشنهاد پایه قیمت</strong><p>Starter ماهانه 499 دلار، Growth ماهانه 1,490 دلار و Enterprise ماهانه 3,900 دلار؛ قرارداد سالانه، راه‌اندازی جدا و AI مازاد مصرفی.</p></div>
+    <span class="page-no">02 / 11</span><span class="footer">Executive Snapshot</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">03</span></div>
+    <div class="section-title"><div><div class="eyebrow">نقشه محصول</div><h2>شش بخش قابل‌فروش؛ یک تجربه یکپارچه</h2><p class="lead">هر ماژول ارزش مستقل دارد، اما مزیت تجاری اصلی در اتصال آن‌هاست: از مشاهده رخداد تا اقدام ثبت‌شده و قابل بازبینی.</p></div></div>
+    <div class="value-map">
+      <div class="card value-card red"><span class="icon">◎</span><h3>تشخیص، یافته و شواهد</h3><p>قوانین چندوندوری، شدت، علت تشخیص، شواهد مرتبط و بررسی مبدأهای مشکوک با کنترل IP مجاز.</p><span class="tag">ارزش: کاهش زمان triage و false positive</span></div>
+      <div class="card value-card"><span class="icon">↻</span><h3>پایش چندوندوری</h3><p>نمای یکپارچه Linux، MikroTik، FortiGate، Cisco و pfSense با جمع‌آوری تطبیقی و کم‌بار.</p><span class="tag">ارزش: حذف رفت‌وآمد میان چند پنل</span></div>
+      <div class="card value-card mint"><span class="icon">✓</span><h3>عملیات کنترل‌شده</h3><p>Catalog/AI → ActionPlan → Preview → Confirm → PolicyGuard → Connector → Audit.</p><span class="tag">ارزش: سرعت پاسخ همراه با کنترل</span></div>
+      <div class="card value-card violet"><span class="icon">AI</span><h3>تحلیل و پیشنهاد هوشمند</h3><p>گفت‌وگوی زمینه‌دار با دستگاه، تحلیل کامل، شکاف داده و پیشنهاد ایمن‌سازی بدون اجرای خام متن AI.</p><span class="tag">ارزش: خلاصه‌سازی و تصمیم سریع‌تر</span></div>
+      <div class="card value-card blue"><span class="icon">⌘</span><h3>توپولوژی، پورت و دارایی</h3><p>اینترفیس‌ها، همسایه‌ها و سرویس‌های باز قابل کلیک، اصلاح و یادداشت؛ ادغام bindهای تکراری.</p><span class="tag">ارزش: مستندسازی زنده و عیب‌یابی</span></div>
+      <div class="card value-card amber"><span class="icon">@</span><h3>اعلان و حاکمیت</h3><p>صف ایمیل پایدار، تاریخچه تحویل، RBAC، نشست‌ها، Audit، رابط فارسی و دسترسی وب/اندروید.</p><span class="tag">ارزش: پاسخ‌گویی و دسترسی عملیاتی</span></div>
+    </div>
+    <div class="notice" style="margin-top:6mm"><strong>چرا جدا فروختن همه بخش‌ها توصیه نمی‌شود؟</strong><p>تفکیک بیش از حد، تجربه کاربر و حاشیه فروش را خراب می‌کند. بهتر است این شش سهم برای ارزش‌گذاری داخلی استفاده شوند و مشتری سه بسته روشن ببیند.</p></div>
+    <span class="page-no">03 / 11</span><span class="footer">Product Monetization Map</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">04</span></div>
+    <div class="section-title"><div><div class="eyebrow">قیمت‌های واقعی بازار</div><h2>مشتری امروز برای قابلیت‌های نزدیک چقدر می‌پردازد؟</h2><p class="lead">این‌ها مرجع قیمت‌اند، نه اثبات هم‌ارزی ویژگی. دامنه، نگهداری داده، تعداد کاربر، حجم لاگ و سطح پشتیبانی در هر محصول متفاوت است.</p></div></div>
+    <table class="compact">
+      <thead><tr><th>محصول</th><th>قابلیت نزدیک</th><th>قیمت عمومی</th><th>برداشت برای قیمت‌گذاری</th></tr></thead>
+      <tbody>
+        <tr><td class="market-name">Wazuh Cloud</td><td>SIEM/XDR مدیریت‌شده</td><td class="price">$571 / mo ≤100 agents</td><td>لنگر مستقیم برای پایش و تشخیص کوچک</td></tr>
+        <tr><td class="market-name">Datadog Cloud SIEM</td><td>تحلیل بلادرنگ لاگ</td><td class="price">$5 / GB / mo annual</td><td>100GB تحلیل ماهانه ≈ 500 دلار؛ Workflow جدا</td></tr>
+        <tr><td class="market-name">Elastic Cloud</td><td>Security + AI + Workflow</td><td class="price">$99–$184 / mo minimum</td><td>کف زیرساخت؛ هزینه با مصرف و سطح قابلیت رشد می‌کند</td></tr>
+        <tr><td class="market-name">PRTG</td><td>پایش شبکه و دستگاه</td><td class="price">$200 / mo ≈50 devices</td><td>لنگر مناسب برای ماژول health/monitoring</td></tr>
+        <tr><td class="market-name">Domotz</td><td>Discovery، topology، mobile</td><td class="price">$35 / collector / mo</td><td>کف بازار برای topology سبک؛ یا 1.50 دلار/دستگاه</td></tr>
+        <tr><td class="market-name">PagerDuty</td><td>Incident alerting</td><td class="price">$21–$41 / user / mo</td><td>5 کاربر Professional ≈ 105 دلار در ماه</td></tr>
+        <tr><td class="market-name">PagerDuty AIOps</td><td>Noise reduction + automation</td><td class="price">from $699 / mo</td><td>لنگر بازار برای automation و triage پیشرفته</td></tr>
+        <tr><td class="market-name">PagerDuty Advance</td><td>AI incident assistant</td><td class="price">from $415 / mo</td><td>لنگر مستقل برای ارزش دستیار هوشمند</td></tr>
+        <tr><td class="market-name">Tines</td><td>Workflow automation</td><td class="price">3 workflows free; paid quote</td><td>بازار SOAR سازمانی غالباً قیمت عمومی ندارد</td></tr>
+      </tbody>
+    </table>
+    <div class="grid two" style="margin-top:4mm">
+      <div class="notice good"><strong>جایگاه پیشنهادی</strong><p>قیمت Growth برابر 1,490 دلار در ماه، پایین‌تر از جمع ساده چند ابزار تخصصی است و در عوض دامنه محدودتر و متمرکزتری ارائه می‌کند.</p></div>
+      <div class="notice"><strong>جمع‌زدن ممنوع</strong><p>Wazuh، PRTG، PagerDuty و AI هم‌پوشانی دارند. مجموع قیمت آن‌ها «ارزش قطعی» محصول نیست؛ فقط سقف و کف مذاکره را نشان می‌دهد.</p></div>
+    </div>
+    <p class="source" style="margin-top:4mm">منابع رسمی: wazuh.com/cloud · datadoghq.com/pricing · elastic.co/pricing · paessler.com/pricing · domotz.com/pricing.php · pagerduty.com/pricing/incident-management · tines.com/pricing — دسترسی 2026-09-06.</p>
+    <span class="page-no">04 / 11</span><span class="footer">Public Market Benchmarks</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">05</span></div>
+    <div class="section-title"><div><div class="eyebrow">صرفه‌جویی نیروی انسانی</div><h2>هزینه سالانه یک ظرفیت SOC چگونه محاسبه شده است؟</h2><p class="lead">از میانه حقوق رسمی تحلیلگر امنیت و سهم مزایای مشاغل حرفه‌ای استفاده شده؛ نه از یک عدد تبلیغاتی یا هزینه فرضی رخداد امنیتی.</p></div></div>
+    <div class="formula">
+      <div class="fbox"><span class="muted">میانه حقوق</span><strong>$129,180</strong><small>BLS، May 2025</small></div><span class="op">×</span>
+      <div class="fbox"><span class="muted">ضریب مزایا</span><strong>1.4793</strong><small>حقوق = 67.6٪ کل جبران</small></div><span class="op">=</span>
+      <div class="fbox"><span class="muted">هزینه بارگذاری‌شده</span><strong>$191,095</strong><small>برای یک FTE در سال</small></div>
+    </div>
+    <div class="grid two">
+      <div class="card mint"><h3>سناریوی مشتری متوسط</h3><div class="hero-metric" style="grid-template-columns:1fr 1fr;margin:3mm 0"><div class="metric"><strong>0.50</strong><span>نفر-سال ظرفیت</span></div><div class="metric green"><strong>$95,547</strong><span>ارزش سالانه</span></div></div><p>فرض می‌شود اتوماسیون و یکپارچه‌سازی معادل نیمی از زمان سالانه یک تحلیلگر را آزاد کند. این فرض باید در پایلوت با timesheet تأیید شود.</p></div>
+      <div class="card"><h3>فرمول برای هر کشور یا سازمان</h3><p class="ltr" style="font-size:13px;color:#dff8ff;margin:4mm 0;text-align:center">Loaded SOC cost = local salary ÷ 0.676</p><p>برای ایران یا هر بازار دیگر، حقوق واقعی همان مشتری را جایگزین کنید. نرخ ارز در گزارش ثابت نشده تا مدل با نوسان ارزی بی‌اعتبار نشود.</p></div>
+    </div>
+    <div class="bar-list">
+      <div class="bar-row"><span>0.15 FTE — کوچک</span><div class="bar"><i style="width:12%"></i></div><b>$28,664 / yr</b></div>
+      <div class="bar-row"><span>0.50 FTE — متوسط</span><div class="bar"><i style="width:40%"></i></div><b>$95,547 / yr</b></div>
+      <div class="bar-row"><span>1.25 FTE — بزرگ</span><div class="bar"><i style="width:100%"></i></div><b>$238,868 / yr</b></div>
+    </div>
+    <div class="notice" style="margin-top:6mm"><strong>برداشت صحیح</strong><p>این سامانه جایگزین مسئولیت امنیتی انسان نیست. ارزش آن می‌تواند به شکل «اجتناب از استخدام بعدی»، «کاهش اضافه‌کاری» یا «پوشش دستگاه بیشتر با همان تیم» ظاهر شود؛ نه الزاماً اخراج نیرو.</p></div>
+    <p class="source" style="margin-top:4mm">منابع: U.S. BLS, Information Security Analysts؛ U.S. BLS ECEC December 2025، گروه Management, professional, and related.</p>
+    <span class="page-no">05 / 11</span><span class="footer">SOC Capacity Economics</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">06</span></div>
+    <div class="section-title"><div><div class="eyebrow">ارزش هر بخش</div><h2>سهم اقتصادی ماژول‌ها در یک مشتری Growth</h2><p class="lead">در سناریوی 0.5 FTE، ارزش 95,547 دلاری بر اساس سهم تقریبی هر جریان کاری تخصیص یافته است. قیمت زیر، سهم هر ماژول از بسته 1,490 دلاری است.</p></div></div>
+    <div class="module-grid">
+      <div class="module"><span class="mi">◎</span><div><b>تشخیص، یافته و شواهد</b><small>30٪ زمان آزادشده · ارزش مشتری $28,664/yr</small></div><span class="money">$528/mo<em>$6,336 ARR</em></span></div>
+      <div class="module"><span class="mi">↻</span><div><b>پایش چندوندوری</b><small>15٪ زمان آزادشده · ارزش مشتری $14,332/yr</small></div><span class="money">$188/mo<em>$2,256 ARR</em></span></div>
+      <div class="module"><span class="mi">✓</span><div><b>عملیات کنترل‌شده</b><small>25٪ زمان آزادشده · ارزش مشتری $23,887/yr</small></div><span class="money">$377/mo<em>$4,524 ARR</em></span></div>
+      <div class="module"><span class="mi">AI</span><div><b>تحلیل و پیشنهاد هوشمند</b><small>15٪ زمان آزادشده · ارزش مشتری $14,332/yr</small></div><span class="money">$188/mo<em>$2,256 ARR</em></span></div>
+      <div class="module"><span class="mi">⌘</span><div><b>توپولوژی و پورت</b><small>10٪ زمان آزادشده · ارزش مشتری $9,555/yr</small></div><span class="money">$112/mo<em>$1,344 ARR</em></span></div>
+      <div class="module"><span class="mi">@</span><div><b>اعلان، RBAC، Audit و Mobile</b><small>5٪ زمان آزادشده · ارزش مشتری $4,777/yr</small></div><span class="money">$97/mo<em>$1,164 ARR</em></span></div>
+    </div>
+    <div class="hero-metric">
+      <div class="metric"><strong>$95,547</strong><span>ارزش سالانه مشتری در سناریو</span></div>
+      <div class="metric purple"><strong>$17,880</strong><span>درآمد اشتراک سالانه فروشنده</span></div>
+      <div class="metric green"><strong>18.7%</strong><span>سهم قیمت از ارزش نیروی آزادشده</span></div>
+    </div>
+    <div class="grid two">
+      <div class="notice good"><strong>حاشیه مذاکره سالم</strong><p>مشتری بخش بزرگی از ارزش سناریویی را نگه می‌دارد و فروشنده برای پشتیبانی و توسعه فضای قیمت دارد.</p></div>
+      <div class="notice"><strong>شرط اعتبار</strong><p>اگر پایلوت صرفه‌جویی کمتری نشان داد، سهم ماژول و قیمت باید پایین بیاید؛ اگر پوشش و اتوماسیون اثبات شد، قیمت قابل افزایش است.</p></div>
+    </div>
+    <span class="page-no">06 / 11</span><span class="footer">Module Economics</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">07</span></div>
+    <div class="section-title"><div><div class="eyebrow">بسته‌بندی پیشنهادی</div><h2>سه انتخاب ساده به‌جای فهرست بلند افزونه‌ها</h2><p class="lead">قیمت‌ها برای قرارداد سالانه‌اند. هدف، ورود آسان مشتری کوچک و حفظ ظرفیت upsell در مشتری بزرگ است.</p></div></div>
+    <div class="plans">
+      <div class="plan"><h3>Starter</h3><div class="monthly">$499 <small>/ month</small></div><ul><li>تا 10 دستگاه</li><li>پایش و تشخیص پایه</li><li>یافته و هشدار ایمیلی</li><li>توپولوژی و پورت</li><li>کاربر و Audit پایه</li></ul><div class="setup">Setup: $750 • ARR: $5,988</div></div>
+      <div class="plan featured"><span class="flag">پیشنهاد اصلی</span><h3>Growth</h3><div class="monthly">$1,490 <small>/ month</small></div><ul><li>تا 50 دستگاه</li><li>همه ماژول‌های عملیاتی</li><li>Action Center کنترل‌شده</li><li>تحلیل و پیشنهاد AI</li><li>RBAC و گزارش مدیریتی</li></ul><div class="setup">Setup: $2,500 • ARR: $17,880</div></div>
+      <div class="plan"><h3>Enterprise</h3><div class="monthly">$3,900 <small>/ month</small></div><ul><li>تا 200 دستگاه</li><li>چند سایت و retention بیشتر</li><li>Connector و نقش‌های گسترده</li><li>گزارش و onboarding ویژه</li><li>SLA قراردادی قابل انتخاب</li></ul><div class="setup">Setup: $7,500 • ARR: $46,800</div></div>
+    </div>
+    <div class="grid two" style="margin-top:6mm">
+      <div class="card violet"><h3>افزونه‌های قابل درآمد</h3><p>Connector سفارشی، مهاجرت داده، نگهداری طولانی، HA/DR، پشتیبانی 24/7، آموزش و مصرف AI فراتر از سهمیه.</p></div>
+      <div class="card amber"><h3>مواردی که نباید رایگان پنهان شوند</h3><p>استقرار پیچیده، تحلیل اختصاصی لاگ، سفارشی‌سازی rule، نگهداری on‑prem و تعهد SLA هزینه عملیاتی واقعی دارند.</p></div>
+    </div>
+    <div class="notice" style="margin-top:5mm"><strong>هزینه AI</strong><p>قیمت API وابسته به مدل و token است. در 2026 نرخ رسمی نمونه از 0.20/1.20 دلار به‌ازای یک میلیون token ورودی/خروجی در Luna تا 4/20 دلار در Sol است؛ سهمیه و overage باید در قرارداد روشن باشد.</p></div>
+    <span class="page-no">07 / 11</span><span class="footer">Packaging & Pricing</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">08</span></div>
+    <div class="section-title"><div><div class="eyebrow">ROI مشتری</div><h2>اگر سناریوی ظرفیت محقق شود، بازگشت سرمایه چگونه دیده می‌شود؟</h2><p class="lead">فقط ارزش نیروی آزادشده لحاظ شده؛ هیچ «هزینه رخداد جلوگیری‌شده» یا جمع قیمت ابزارهای جایگزین به آن اضافه نشده است.</p></div></div>
+    <div class="roi-cards">
+      <div class="roi"><h3>Starter</h3><div class="big">325%</div><span class="muted">ROI سناریویی سال اول</span><dl><div><dt>ارزش ظرفیت</dt><dd>$28,664</dd></div><div><dt>هزینه سال اول</dt><dd>$6,738</dd></div><div><dt>منفعت خالص</dt><dd>$21,926</dd></div><div><dt>بازگشت</dt><dd>2.82 mo</dd></div></dl></div>
+      <div class="roi"><h3>Growth</h3><div class="big">369%</div><span class="muted">ROI سناریویی سال اول</span><dl><div><dt>ارزش ظرفیت</dt><dd>$95,547</dd></div><div><dt>هزینه سال اول</dt><dd>$20,380</dd></div><div><dt>منفعت خالص</dt><dd>$75,167</dd></div><div><dt>بازگشت</dt><dd>2.56 mo</dd></div></dl></div>
+      <div class="roi"><h3>Enterprise</h3><div class="big">340%</div><span class="muted">ROI سناریویی سال اول</span><dl><div><dt>ارزش ظرفیت</dt><dd>$238,868</dd></div><div><dt>هزینه سال اول</dt><dd>$54,300</dd></div><div><dt>منفعت خالص</dt><dd>$184,568</dd></div><div><dt>بازگشت</dt><dd>2.73 mo</dd></div></dl></div>
+    </div>
+    <h3 style="margin-top:7mm">حساسیت ارزش به ظرفیت آزادشده</h3>
+    <div class="sensitivity"><div class="sens"><strong>0.10 FTE</strong><span>$19,109 در سال</span></div><div class="sens"><strong>0.25 FTE</strong><span>$47,774 در سال</span></div><div class="sens"><strong>0.50 FTE</strong><span>$95,547 در سال</span></div><div class="sens"><strong>1.00 FTE</strong><span>$191,095 در سال</span></div></div>
+    <div class="notice" style="margin-top:7mm"><strong>این ROI هنوز اثبات‌شده نیست</strong><p>برای استفاده در پیشنهاد رسمی مشتری، ابتدا baseline و پایلوت لازم است. اگر مشتری تنها 0.10 FTE صرفه‌جویی کند، قیمت Growth با 20,380 دلار هزینه سال اول دیگر بازگشت سال اول مثبت ندارد؛ بنابراین qualification مشتری حیاتی است.</p></div>
+    <span class="page-no">08 / 11</span><span class="footer">Customer ROI Scenarios</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">09</span></div>
+    <div class="section-title"><div><div class="eyebrow">درآمد فروشنده</div><h2>سه سناریوی جذب مشتری و ARR</h2><p class="lead">درآمد سال اول شامل اشتراک و راه‌اندازی است. COGS، مالیات، فروش، پشتیبانی و هزینه زیرساخت کم نشده؛ پس این اعداد سود نیستند.</p></div></div>
+    <div class="revenue">
+      <div class="stack">
+        <div class="col"><div class="fill" style="height:11mm">$65.7k</div><small>Entry</small></div>
+        <div class="col"><div class="fill" style="height:41mm">$242.9k</div><small>Base</small></div>
+        <div class="col"><div class="fill" style="height:76mm">$568.3k</div><small>Scale</small></div>
+      </div>
+      <div class="assumptions">
+        <div class="assumption"><b>ورود به بازار</b><span>5 Starter + 2 Growth → ARR: $65,700 · راه‌اندازی: $8,750 · سال اول: $74,450</span></div>
+        <div class="assumption"><b>سناریوی مبنا</b><span>10 Starter + 5 Growth + 2 Enterprise → ARR: $242,880 · راه‌اندازی: $35,000 · سال اول: $277,880</span></div>
+        <div class="assumption"><b>سناریوی رشد</b><span>20 Starter + 12 Growth + 5 Enterprise → ARR: $568,320 · راه‌اندازی: $82,500 · سال اول: $650,820</span></div>
+      </div>
+    </div>
+    <div class="grid two" style="margin-top:7mm">
+      <div class="card mint"><h3>شاخص‌های لازم برای اثبات</h3><p>تعداد lead، نرخ تبدیل، طول چرخه فروش، churn، NRR، هزینه جذب مشتری، هزینه پشتیبانی هر مشتری و gross margin.</p></div>
+      <div class="card amber"><h3>ریسک اصلی مدل</h3><p>اگر هر مشتری نیازمند توسعه Connector یا پشتیبانی دستی زیاد باشد، درآمد رشد می‌کند اما حاشیه سود و قابلیت مقیاس کاهش می‌یابد.</p></div>
+    </div>
+    <div class="notice good" style="margin-top:6mm"><strong>هدف واقع‌بینانه مرحله بعد</strong><p>ابتدا 3 تا 5 مشتری طراحی (design partner) با قرارداد سالانه و دامنه مشخص؛ سپس قیمت و هزینه پشتیبانی از داده واقعی اصلاح شود.</p></div>
+    <span class="page-no">09 / 11</span><span class="footer">ARR Scenarios</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">10</span></div>
+    <div class="section-title"><div><div class="eyebrow">فروش پروژه یا کسب‌وکار</div><h2>ارزش معامله به وجود ARR واقعی وابسته است</h2><p class="lead">SaaS Capital در چارچوب 2025 برای SaaS خصوصی bootstrapped حدود 4.8× ARR و برای equity‑backed حدود 5.3× گزارش کرده است. این معیار برای پروژه بدون مشتری معتبر نیست.</p></div></div>
+    <div class="valuation-band"><strong>3.0×</strong><div class="band"></div><strong>5.0×</strong></div>
+    <div class="ladder">
+      <div class="ladder-row head"><div></div><div>3× ARR</div><div>4.8× مرجع</div><div>5× ARR</div></div>
+      <div class="ladder-row"><div class="name">ورود به بازار</div><div>$197,100</div><div>$315,360</div><div>$328,500</div></div>
+      <div class="ladder-row"><div class="name">سناریوی مبنا</div><div>$728,640</div><div>$1,165,824</div><div>$1,214,400</div></div>
+      <div class="ladder-row"><div class="name">سناریوی رشد</div><div>$1,704,960</div><div>$2,727,936</div><div>$2,841,600</div></div>
+    </div>
+    <div class="grid two" style="margin-top:7mm">
+      <div class="card red"><h3>اگر هنوز ARR ندارید</h3><p>از این جدول برای اعلام قیمت قطعی استفاده نکنید. خریدار به هزینه بازسازی، امنیت کد، IP، مستندات، تست، استقرار، پوشش واقعی Connector و ریسک نگهداری نگاه می‌کند.</p></div>
+      <div class="card mint"><h3>چه چیزی مضرب را بالا می‌برد؟</h3><p>قرارداد سالانه قابل انتقال، churn پایین، رشد، gross margin مثبت، onboarding تکرارپذیر، وابستگی کم به مؤسس و شواهد ROI مشتری.</p></div>
+    </div>
+    <div class="notice" style="margin-top:6mm"><strong>پیشنهاد مذاکره</strong><p>پروژه را با «قیمت کد» شروع نکنید. ابتدا revenue proof بسازید؛ سپس قیمت معامله را به ARR، retention و کیفیت انتقال گره بزنید. بازه 3× تا 5× فقط تحلیل حساسیت است.</p></div>
+    <p class="source" style="margin-top:4mm">مرجع: SaaS Capital, 2025 Private SaaS Company Valuations. مضرب‌های واقعی با رشد، NRR، سودآوری، تمرکز مشتری و شرایط بازار تغییر می‌کنند.</p>
+    <span class="page-no">10 / 11</span><span class="footer">Sale Valuation Lens</span>
+  </section>
+
+  <section class="page">
+    <div class="header"><div class="brand"><span class="mark"></span><span>Firewall SOAR</span></div><span class="chapter">11</span></div>
+    <div class="section-title"><div><div class="eyebrow">از مدل تا قرارداد</div><h2>برنامه 30روزه برای تبدیل «پتانسیل» به عدد قابل فروش</h2><p class="lead">بهترین دفاع از قیمت، یک case study واقعی است؛ نه بزرگ‌ترکردن اعداد بازار.</p></div></div>
+    <div class="steps">
+      <div class="step"><b>Baseline</b><span>زمان triage، گزارش، health check و پاسخ دستی را ثبت کنید.</span></div>
+      <div class="step"><b>Pilot</b><span>10 تا 50 دستگاه و یک دامنه روشن را برای 30 روز اجرا کنید.</span></div>
+      <div class="step"><b>Measure</b><span>ساعت ذخیره‌شده، false positive، MTTD و MTTR را بسنجید.</span></div>
+      <div class="step"><b>Cost</b><span>AI، hosting، support و onboarding واقعی را اندازه بگیرید.</span></div>
+      <div class="step"><b>Contract</b><span>نتیجه را به قرارداد سالانه و case study تبدیل کنید.</span></div>
+    </div>
+    <div class="grid two">
+      <div>
+        <h3>چک‌لیست آماده‌سازی فروش</h3>
+        <div class="checklist"><div class="check"><i>✓</i><div>محدوده Vendor و Connector دقیق<small>قابلیت پیاده‌شده را از roadmap جدا کنید.</small></div></div><div class="check"><i>✓</i><div>SLA و مسئولیت پشتیبانی<small>ساعت پاسخ، backup، retention و recovery روشن باشد.</small></div></div><div class="check"><i>✓</i><div>قیمت و سقف مصرف<small>دستگاه، حجم داده، کاربر، AI و custom work تعریف شود.</small></div></div><div class="check"><i>✓</i><div>امنیت و انتقال<small>مالکیت IP، secrets، audit، مستندات و deployment بررسی شود.</small></div></div></div>
+      </div>
+      <div>
+        <h3>منابع اصلی تحقیق</h3>
+        <div class="sources">
+          <div class="source-item"><b>U.S. BLS — Analyst pay</b><a href="https://www.bls.gov/ooh/computer-and-information-technology/information-security-analysts.htm">bls.gov/ooh/.../information-security-analysts.htm</a></div>
+          <div class="source-item"><b>U.S. BLS — Employer costs</b><a href="https://www.bls.gov/news.release/pdf/ecec.pdf">bls.gov/news.release/pdf/ecec.pdf</a></div>
+          <div class="source-item"><b>Wazuh Cloud</b><a href="https://wazuh.com/cloud/">wazuh.com/cloud/</a></div>
+          <div class="source-item"><b>Datadog Pricing</b><a href="https://www.datadoghq.com/pricing/">datadoghq.com/pricing/</a></div>
+          <div class="source-item"><b>Elastic Security</b><a href="https://www.elastic.co/pricing/serverless-security/">elastic.co/pricing/serverless-security/</a></div>
+          <div class="source-item"><b>PRTG Pricing</b><a href="https://www.paessler.com/pricing">paessler.com/pricing</a></div>
+          <div class="source-item"><b>Domotz Pricing</b><a href="https://www.domotz.com/pricing.php">domotz.com/pricing.php</a></div>
+          <div class="source-item"><b>PagerDuty Pricing</b><a href="https://www.pagerduty.com/pricing/incident-management/">pagerduty.com/pricing/incident-management/</a></div>
+          <div class="source-item"><b>Tines Pricing</b><a href="https://www.tines.com/pricing/">tines.com/pricing/</a></div>
+          <div class="source-item"><b>OpenAI API Pricing</b><a href="https://openai.com/api/">openai.com/api/</a></div>
+          <div class="source-item"><b>SaaS Capital Valuation</b><a href="https://www.saas-capital.com/blog-posts/private-saas-company-valuations-multiples/">saas-capital.com/.../private-saas-company-valuations-multiples/</a></div>
+        </div>
+      </div>
+    </div>
+    <div class="stamp"><div><strong>نتیجه پیشنهادی</strong><p class="muted" style="margin:1mm 0 0">Growth را با 1,490 دلار در ماه تست کنید؛ قیمت نهایی را بعد از پایلوت، هزینه خدمت‌رسانی و شواهد ROI تثبیت کنید.</p></div><span class="seal">ROI</span></div>
+    <p class="tiny muted" style="margin-top:4mm">یادداشت: این گزارش مشاوره حقوقی، مالیاتی یا سرمایه‌گذاری نیست. فایل CSV همراه، فرض‌ها و محاسبات اصلی را برای بازبینی نگه می‌دارد.</p>
+    <span class="page-no">11 / 11</span><span class="footer">Evidence → Pricing → Contract</span>
+  </section>
+  <script>
+    const previewPage = Number(new URLSearchParams(window.location.search).get("page"));
+    if (previewPage > 0) {
+      document.querySelectorAll(".page").forEach((page, index) => {
+        page.style.display = index + 1 === previewPage ? "block" : "none";
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,6 +1,13 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@600;700;800&family=Vazirmatn:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
+
+@font-face {
+  font-family: "IRANYekan";
+  src: url("./assets/fonts/iranyekanwebregularfanum.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -43,6 +50,7 @@
 }
 
 :root {
+  --font-ui: "IRANYekan", "Segoe UI", Tahoma, ui-sans-serif, system-ui, sans-serif;
   --radius: 0.625rem;
   --soc-bg: #07111a;
   --soc-surface: #0c1722;
@@ -130,12 +138,68 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body,
+  #root,
+  .App {
+    font-family: var(--font-ui);
+  }
   body {
     @apply bg-background text-foreground;
+    font-kerning: normal;
+    font-synthesis: weight style;
+  }
+  button,
+  input,
+  select,
+  textarea,
+  option,
+  optgroup {
+    font-family: var(--font-ui);
+  }
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: "Cascadia Code", Consolas, ui-monospace, monospace;
   }
   input,
   select,
   textarea {
     @apply border-border bg-card text-foreground;
+  }
+}
+
+/* The first product impression must remain visible even when an embedded or
+   headless browser delays IntersectionObserver delivery. Later sections keep
+   their scroll-driven reveal behavior. */
+.landing .landing-hero > [data-reveal] {
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+@media (max-width: 700px) {
+  .landing .landing-header .landing-brand {
+    direction: rtl;
+  }
+
+  .landing .landing-hero,
+  .landing .landing-hero > *,
+  .landing .landing-hero__copy {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .landing .landing-hero__copy {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .landing .landing-hero h1 {
+    font-size: clamp(2.15rem, 10.8vw, 3rem);
+    line-height: 1.18;
+    letter-spacing: -0.035em;
+    overflow-wrap: anywhere;
   }
 }

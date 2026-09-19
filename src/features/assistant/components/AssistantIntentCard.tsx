@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { ChevronDown, TriangleAlert } from "lucide-react";
 import {
   completeAiActionRequest,
   normalizeArray,
@@ -7,7 +7,7 @@ import {
   type AiActionDebug,
   type AiActionIntent,
 } from "@/lib/ai";
-import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
+import { configureInActionCenter, publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { listDevices, type Device } from "@/lib/devices";
 import { normalizedVendor, riskClass } from "../assistantUiHelpers";
 
@@ -97,55 +97,58 @@ export function IntentCard({
   };
 
   return (
-    <div className="mt-3 rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-3 text-left">
-      <div className="flex flex-wrap items-center gap-2">
-        <TriangleAlert className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-        <span className="text-sm font-semibold text-yellow-100">{createdPlanId ? "ActionPlan proposed" : "Action request reviewed"}</span>
-        <span className={`rounded border px-2 py-0.5 text-xs ${riskClass(riskLevel)}`}>{riskLevel}</span>
-        <span className="rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">{intent?.status ?? "not_supported_yet"}</span>
+    <div className="rounded-xl border border-amber-400/15 bg-amber-400/5 p-3 text-start" dir={isFa ? "rtl" : "ltr"}>
+      <div className="flex items-start gap-2.5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/10 text-amber-300"><TriangleAlert className="h-4 w-4" aria-hidden="true" /></span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-amber-100">{createdPlanId ? (isFa ? "برنامه عملیات آماده است" : "ActionPlan is ready") : (isFa ? "درخواست عملیات بررسی شد" : "Action request reviewed")}</span>
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] ${riskClass(riskLevel)}`}>{isFa ? `ریسک ${riskLevel}` : `${riskLevel} risk`}</span>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-5 text-slate-400">{intent?.explanation || (isFa ? "درخواست برای ساخت یک برنامه قابل بازبینی تحلیل شد." : "The request was analyzed for a reviewable plan.")}</p>
+        </div>
       </div>
-      <div className="mt-3 grid gap-2 text-xs text-zinc-300">
-        <p><span className="text-zinc-500">intentType:</span> {debug?.intentType ?? intent?.intentType ?? "none"}</p>
-        <p><span className="text-zinc-500">vendor:</span> {vendor ?? "not selected"}</p>
-        <p><span className="text-zinc-500">deviceId:</span> {debug?.deviceId ?? intent?.deviceId ?? "missing"}</p>
-        <p><span className="text-zinc-500">canCreateActionPlan:</span> {String(canCreatePlan)}</p>
-        {createdPlanId && <p><span className="text-zinc-500">actionPlanId:</span> {createdPlanId}</p>}
-      </div>
-      <div className="mt-3 rounded border border-zinc-800 bg-black/20 p-2 text-xs text-zinc-300">
-        <p className="font-semibold text-zinc-200">Planned action summary</p>
-        <p className="mt-1">actionType: {sshPortChange ? "Change MikroTik SSH port" : intent?.intentType ?? debug?.intentType ?? "unknown"}</p>
-        <p>risk: {riskLevel}</p>
-        {sshPortChange && <p>target device: {targetDevice?.name ?? intent?.deviceId ?? "select a MikroTik device"}</p>}
-        {sshPortChange && <p>new port: {String(params.newPort ?? "missing")}</p>}
-        {sshPortChange && <p>trusted source: {String(params.trustedSourceIp ?? params.trustedSourceCidr ?? params.trustedSource ?? "required")}</p>}
-        <pre className="mt-2 max-h-32 overflow-auto rounded bg-black/30 p-2">{JSON.stringify(params, null, 2)}</pre>
-      </div>
+
+      <details className="group mt-3 rounded-lg border border-white/5 bg-black/15">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-semibold text-slate-500 marker:hidden">
+          <span>{isFa ? "جزئیات فنی برنامه" : "Technical plan details"}</span>
+          <ChevronDown className="h-3.5 w-3.5 transition group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="grid gap-1 border-t border-white/5 p-3 text-[10px] leading-5 text-slate-500" dir="ltr">
+          <p>intent: {debug?.intentType ?? intent?.intentType ?? "none"}</p>
+          <p>vendor: {vendor ?? "not selected"}</p>
+          <p>device: {debug?.deviceId ?? intent?.deviceId ?? "missing"}</p>
+          <p>plan allowed: {String(canCreatePlan)}</p>
+          {createdPlanId && <p>actionPlan: {createdPlanId}</p>}
+          {sshPortChange && <p>target: {targetDevice?.name ?? intent?.deviceId ?? "select device"} · port: {String(params.newPort ?? "missing")}</p>}
+          <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-black/30 p-2 text-[10px]">{JSON.stringify(params, null, 2)}</pre>
+        </div>
+      </details>
       {sshPortChange && (
         <p className="mt-2 rounded border border-red-900/70 bg-red-950/20 p-2 text-xs font-medium text-red-200">
           Lockout warning: the trusted-source firewall rule must be reviewed before the SSH service port changes.
         </p>
       )}
       {!canCreatePlan && (
-        <p className="mt-2 text-xs text-yellow-200">blockedReason: {debug?.blockedReason ?? debug?.reason ?? "blocked"}</p>
+        <p className="mt-2 rounded-lg bg-amber-400/5 p-2 text-[11px] leading-5 text-amber-200">{debug?.blockedReason ?? debug?.reason ?? (isFa ? "این عملیات هنوز قابل اجرا نیست." : "This operation is not executable yet.")}</p>
       )}
-      <p className="mt-2 text-xs text-zinc-400">{intent?.explanation || "No explanation provided."}</p>
       {(needsDevice || missingFields.length > 0) && (
-        <div className="mt-3 rounded border border-yellow-800/70 bg-yellow-950/20 p-2">
-          <p className="text-xs font-semibold text-yellow-100">Missing fields</p>
-          <p className="mt-1 text-xs text-yellow-100/80">{[...(needsDevice ? ["device"] : []), ...missingFields].join(", ")}</p>
+        <div className="mt-3 rounded-xl border border-amber-400/15 bg-black/15 p-3">
+          <p className="text-xs font-bold text-amber-100">{isFa ? "اطلاعات لازم برای ادامه" : "Information required"}</p>
+          <p className="mt-1 text-[11px] leading-5 text-amber-100/60">{isFa ? "موارد زیر را تکمیل کنید تا برنامه عملیات ساخته شود:" : "Complete these fields to create the ActionPlan:"} {[...(needsDevice ? [isFa ? "دستگاه" : "device"] : []), ...missingFields].join("، ")}</p>
           <div className="mt-2 grid gap-2">
             {needsDevice && (
               compatibleDevices.length === 0 ? (
-                <p className="rounded border border-red-900/60 bg-red-950/20 p-2 text-xs text-red-200">
-                  No device found. Add one in Device Registry.
+                <p className="rounded-lg border border-red-400/15 bg-red-400/5 p-2 text-xs text-red-200">
+                  {isFa ? "دستگاه سازگاری ثبت نشده است. ابتدا دستگاه را در بخش ثبت دستگاه اضافه کنید." : "No compatible device found. Add one in Device Registry."}
                 </p>
               ) : (
                 <select
                   value={selectedDeviceId}
                   onChange={(event) => setSelectedDeviceId(event.target.value)}
-                  className="h-9 rounded border border-yellow-900/60 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"
+                  className="h-10 rounded-lg border border-white/10 bg-slate-950 px-2 text-xs text-slate-100 outline-none focus:border-amber-400/40"
                 >
-                  <option value="">Select device</option>
+                  <option value="">{isFa ? "انتخاب دستگاه" : "Select device"}</option>
                   {(["mikrotik", "fortigate", "linux_edge"] as const).map((type) => {
                     const group = compatibleDevices.filter((device) => device.type === type);
                     if (group.length === 0) return null;
@@ -168,13 +171,13 @@ export function IntentCard({
                 value={missingValues[field] ?? ""}
                 onChange={(event) => setMissingValues((current) => ({ ...current, [field]: event.target.value }))}
                 placeholder={field === "trustedSourceIp" ? "trustedSourceIp or trustedSourceCidr" : field}
-                className="h-8 rounded border border-yellow-900/60 bg-zinc-950 px-2 text-xs text-zinc-100 outline-none"
+                className="h-10 rounded-lg border border-white/10 bg-slate-950 px-3 text-xs text-slate-100 outline-none focus:border-amber-400/40"
               />
             ))}
             <button
               type="button"
               onClick={completeRequest}
-              className="h-8 rounded border border-yellow-700 bg-yellow-950/40 px-2 text-xs font-semibold text-yellow-100 disabled:opacity-50"
+              className="h-10 rounded-lg bg-amber-500/15 px-3 text-xs font-bold text-amber-100 ring-1 ring-inset ring-amber-400/25 transition hover:bg-amber-500/20 disabled:opacity-50"
               disabled={submitting || (needsDevice && compatibleDevices.length === 0)}
             >
               {submitting ? (isFa ? "در حال ساخت..." : "Creating...") : (isFa ? "ساخت برنامه اقدام" : "Create ActionPlan")}
@@ -195,10 +198,12 @@ export function IntentCard({
           <p className="text-xs font-medium text-green-200">{isFa ? "برنامه اقدام ساخته شد؛ آن را در مرکز اقدام بازبینی کنید." : "ActionPlan created. Review in Action Center."}</p>
           <button
             type="button"
-            onClick={() => reviewInActionCenter(createdPlanId)}
+            onClick={() => missingFields.length > 0 ? configureInActionCenter(createdPlanId) : reviewInActionCenter(createdPlanId)}
             className="mt-2 inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
           >
-            {isFa ? "بازبینی در مرکز اقدام" : "Review in Action Center"}
+            {missingFields.length > 0
+              ? (isFa ? "تکمیل پارامترها در مرکز عملیات" : "Complete parameters in Action Center")
+              : (isFa ? "بازبینی در مرکز عملیات" : "Review in Action Center")}
           </button>
         </div>
       )}

@@ -20,6 +20,7 @@ import { cancelActionCenterItem, clearActionCenterHistory, getActionCenterItem, 
 import { requiredExecutionPermissionForRisk } from "../security/authorization.js";
 import { hasPermission } from "../security/permissions.js";
 import { getActionParameterSchema } from "../actions/parameter-schema-registry.js";
+import { ACTION_PLAN_SECRET_KEYS, hasActionPlanSecret } from "../services/action-plan-secret.service.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   const actor = (request: { authUser?: { id: string } }) => request.authUser?.id;
@@ -40,7 +41,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete<{ Body: { confirmation?: string } }>("/api/action-center/history", async (request, reply) => {
     if (request.authUser?.role !== "admin") return reply.code(403).send({ error: { code: "ADMIN_REQUIRED", message: "Only an administrator can clear ActionPlan history." } });
-    if (request.body?.confirmation !== "DELETE ACTION HISTORY") return reply.code(400).send({ error: { code: "CONFIRMATION_REQUIRED", message: "Confirm clearing completed ActionPlan history." } });
+    if (request.body?.confirmation !== "DELETE ACTION HISTORY") return reply.code(400).send({ error: { code: "CONFIRMATION_REQUIRED", message: "Confirm clearing all ActionPlan history." } });
     return clearActionCenterHistory();
   });
 
@@ -84,7 +85,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     actions: commandCatalogForVendor(request.params.vendor)
   }));
 
-  app.post<{ Body: { prompt?: string; vendor?: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" } }>("/api/actions/match", async (request, reply) => {
+  app.post<{ Body: { prompt?: string; vendor?: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "sophos" } }>("/api/actions/match", async (request, reply) => {
     const prompt = request.body?.prompt?.trim();
     if (!prompt) return reply.code(400).send({ error: "prompt is required" });
     return routeCatalogIntent(prompt, request.body.vendor ?? null);
@@ -101,6 +102,11 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
     const parametersJson = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson) ? plan.parametersJson as Record<string, unknown> : {};
     const metadata = parametersJson.metadata && typeof parametersJson.metadata === "object" && !Array.isArray(parametersJson.metadata) ? parametersJson.metadata as Record<string, unknown> : {};
+    const customCommandPlan = parametersJson.customCommandPlan && typeof parametersJson.customCommandPlan === "object" && !Array.isArray(parametersJson.customCommandPlan) ? parametersJson.customCommandPlan as Record<string, unknown> : {};
+    const typedParameters = customCommandPlan.typedParameters && typeof customCommandPlan.typedParameters === "object" && !Array.isArray(customCommandPlan.typedParameters) ? customCommandPlan.typedParameters as Record<string, unknown> : {};
+    const configuredSecretFields = typedParameters.operation === "create_user" && await hasActionPlanSecret(plan.id, ACTION_PLAN_SECRET_KEYS.linuxInitialPassword)
+      ? ["initialPassword", "confirmPassword"]
+      : [];
     return {
       actionPlanId: plan.id,
       schema: getActionParameterSchema({
@@ -108,6 +114,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
         vendor: plan.device?.vendor ?? undefined,
         platform: typeof metadata.platform === "string" ? metadata.platform : null,
         parametersJson,
+        configuredSecretFields,
       }),
     };
   });

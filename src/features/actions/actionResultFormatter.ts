@@ -51,9 +51,10 @@ function executionStateFa(action: ActionPlan) {
 
 function genericFormatted(action: ActionPlan): FormattedActionResult {
   const result = normalizeObject(action.resultJson);
+  const succeeded = executionStateFa(action) === "موفق";
   return {
-    summaryFa: String(result.message ?? (executionStateFa(action) === "موفق" ? "اجرای واقعی با موفقیت ثبت شد." : "اجرای واقعی کامل نشد.")),
-    nextActionsFa: ["وضعیت دستگاه و خروجی خام را برای تصمیم بعدی بررسی کنید."],
+    summaryFa: String(result.message ?? (succeeded ? "اجرای واقعی با موفقیت ثبت شد." : "اجرای واقعی کامل نشد.")),
+    nextActionsFa: succeeded ? [] : ["پیام خطا و وضعیت اتصال دستگاه را بررسی کنید و سپس دوباره تلاش کنید."],
     structuredSections: [],
     rawOutput: actionRawOutput(action),
   };

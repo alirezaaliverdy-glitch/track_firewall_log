@@ -89,11 +89,27 @@ export function parseCiscoIpInterfaceBrief(output: string) {
 }
 
 export function parseCiscoInterfacesStatus(output: string) {
+  const states = "connected|notconnect|disabled|err-disabled|inactive|monitoring|sfpAbsent|suspended";
+  const rowPattern = new RegExp(`^(\\S+)\\s+(.*?)\\s+(${states})\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)(?:\\s+(.*))?$`, "i");
   return normalizedText(output).split(/\r?\n/).map((line) => line.trim()).filter((line) => /^[A-Za-z]+[\w/.-]+\s+/.test(line) && !/^Port\s+/i.test(line)).map((line) => {
+    const match = line.match(rowPattern);
+    if (match) {
+      return {
+        name: match[1],
+        description: clean(match[2]),
+        status: match[3].toLowerCase(),
+        operationalStatus: match[3].toLowerCase() === "connected" ? "up" : "down",
+        vlan: match[4],
+        duplex: match[5],
+        speed: match[6],
+        mediaType: clean(match[7]),
+        raw: line
+      };
+    }
     const parts = line.split(/\s{2,}|\t+/).filter(Boolean);
     const [name = "unknown", nameOrStatus = "", statusMaybe = ""] = parts;
-    const status = /connected|notconnect|disabled|err-disabled|inactive/i.test(nameOrStatus) ? nameOrStatus : statusMaybe;
-    return { name, status: status || "unknown", raw: line };
+    const parsedStatus = /connected|notconnect|disabled|err-disabled|inactive|monitoring|sfpAbsent|suspended/i.test(nameOrStatus) ? nameOrStatus : statusMaybe;
+    return { name, description: null, status: parsedStatus.toLowerCase() || "unknown", operationalStatus: parsedStatus.toLowerCase() === "connected" ? "up" : parsedStatus ? "down" : "unknown", vlan: null, duplex: null, speed: null, mediaType: null, raw: line };
   });
 }
 

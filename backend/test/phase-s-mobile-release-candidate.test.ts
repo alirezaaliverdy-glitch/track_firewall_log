@@ -9,7 +9,10 @@ test("Phase S Android build keeps local SSH plus secure vault wired", () => {
   const rootGradle = read("android/build.gradle");
   const settings = read("android/capacitor.settings.gradle");
   const capacitorBuild = read("android/app/capacitor.build.gradle");
-  assert.match(rootGradle, /com\.android\.tools\.build:gradle:8\./);
+  assert.match(rootGradle, /com\.android\.tools\.build:gradle:8\.13\.0/);
+  assert.match(rootGradle, /apply from: "variables\.gradle"/);
+  assert.doesNotMatch(rootGradle, /apply plugin: 'com\.android\.library'/);
+  assert.doesNotMatch(rootGradle, /namespace = "capacitor\.cordova\.android\.plugins"/);
   assert.match(settings, /:firewallsoar-local-ssh/);
   assert.match(settings, /:capacitor-secure-storage-plugin/);
   assert.match(capacitorBuild, /project\(':firewallsoar-local-ssh'\)/);

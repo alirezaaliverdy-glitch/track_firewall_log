@@ -1,9 +1,11 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type DashboardDeviceRef = { id: string; name: string; vendor: string; host: string } | null;
 export type DashboardActionItem = {
   id: string;
   title: string;
+  titleFa: string;
+  titleEn: string;
   actionType: string;
   status: string;
   outcome: string;

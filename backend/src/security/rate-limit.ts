@@ -42,6 +42,7 @@ export class InMemoryRateLimitStore implements RateLimitStore {
 const store = new InMemoryRateLimitStore();
 
 const LOGIN_POLICY: RateLimitPolicy = { id: "login", limit: 5, windowMs: 15 * 60_000 };
+const LOGIN_IP_POLICY: RateLimitPolicy = { id: "login_ip", limit: 25, windowMs: 15 * 60_000 };
 const ROUTE_POLICIES: RateLimitPolicy[] = [
   { id: "ai_chat", limit: 30, windowMs: 60_000 },
   { id: "action_proposal", limit: 20, windowMs: 60_000 },
@@ -51,7 +52,7 @@ const ROUTE_POLICIES: RateLimitPolicy[] = [
 ];
 
 function normalizePart(value: unknown) {
-  return String(value ?? "unknown").trim().toLowerCase();
+  return String(value ?? "unknown").trim().toLowerCase().slice(0, 256);
 }
 
 function resultForEntry(entry: Entry, policy: RateLimitPolicy, now: number): RateLimitResult {
@@ -64,10 +65,13 @@ function resultForEntry(entry: Entry, policy: RateLimitPolicy, now: number): Rat
 }
 
 export function assertLoginRateLimit(ip: string, username: string): RateLimitResult {
-  const key = `${LOGIN_POLICY.id}:${normalizePart(ip)}:${normalizePart(username)}`;
   const now = Date.now();
-  const current = store.increment(key, LOGIN_POLICY.windowMs, now);
-  return resultForEntry(current, LOGIN_POLICY, now);
+  const normalizedIp = normalizePart(ip);
+  const ipEntry = store.increment(`${LOGIN_IP_POLICY.id}:${normalizedIp}`, LOGIN_IP_POLICY.windowMs, now);
+  const ipResult = resultForEntry(ipEntry, LOGIN_IP_POLICY, now);
+  if (!ipResult.allowed) return ipResult;
+  const identityEntry = store.increment(`${LOGIN_POLICY.id}:${normalizedIp}:${normalizePart(username)}`, LOGIN_POLICY.windowMs, now);
+  return resultForEntry(identityEntry, LOGIN_POLICY, now);
 }
 
 export function resetLoginRateLimit(ip: string, username: string) {

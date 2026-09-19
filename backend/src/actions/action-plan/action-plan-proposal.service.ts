@@ -85,7 +85,7 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
     );
   }
 
-  if (actionType === ActionType.close_port && deviceId) {
+  if (actionType === ActionType.close_port && deviceId && input.forceNew !== true) {
     const desiredParameters = canonicalParameterValues(parameters);
     const candidates = await prisma.actionPlan.findMany({
       where: { deviceId, actionType, status: ActionPlanStatus.succeeded },

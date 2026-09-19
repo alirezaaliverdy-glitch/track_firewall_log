@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { lookup } from "node:dns/promises";
 import { existsSync } from "node:fs";
 import { isIP } from "node:net";
 import type { Prisma } from "@prisma/client";
@@ -35,6 +36,22 @@ function classifyNmapTarget(target: string) {
   if (!classified.publicAllowed) return { allowed: false, reason: classified.reason ?? "TARGET_NOT_ALLOWED", normalizedTarget: classified.normalizedTarget, host: classified.host };
   if (classified.targetKind === "url" || classified.targetKind === "host_port" || classified.targetKind === "cidr") return { allowed: false, reason: "NMAP_TARGET_MUST_BE_PUBLIC_HOST_OR_IP", normalizedTarget: classified.normalizedTarget, host: classified.host };
   return { allowed: true, normalizedTarget: classified.normalizedTarget, host: classified.host };
+}
+
+type DnsLookup = (hostname: string, options: { all: true; verbatim: true }) => Promise<Array<{ address: string; family: number }>>;
+
+async function resolveNmapScanAddress(policy: ReturnType<typeof classifyNmapTarget>, resolver: DnsLookup = lookup) {
+  if (!policy.allowed) return { ...policy, scanHost: null, resolvedAddresses: [] as string[] };
+  if (isIP(policy.host)) return { ...policy, scanHost: policy.host, resolvedAddresses: [policy.host] };
+  try {
+    const resolvedAddresses = [...new Set((await resolver(policy.host, { all: true, verbatim: true })).map(({ address }) => address))];
+    if (!resolvedAddresses.length) return { ...policy, allowed: false, reason: "DNS_NO_ADDRESS", scanHost: null, resolvedAddresses };
+    const unsafe = resolvedAddresses.find((address) => !diagnosticInternalsForTest.classifyHost(address).publicAllowed);
+    if (unsafe) return { ...policy, allowed: false, reason: "DNS_PRIVATE_OR_RESERVED_TARGET_BLOCKED", scanHost: null, resolvedAddresses: [] as string[] };
+    return { ...policy, scanHost: resolvedAddresses[0], resolvedAddresses };
+  } catch {
+    return { ...policy, allowed: false, reason: "DNS_RESOLUTION_FAILED", scanHost: null, resolvedAddresses: [] as string[] };
+  }
 }
 
 function parseXml(xml: string) {
@@ -84,7 +101,7 @@ async function persistNmap(metadata: Record<string, unknown>, targetId: string) 
 }
 
 export async function runNmapScan(input: { target: string; profile: NmapProfile }): Promise<NmapScanResult> {
-  const policy = classifyNmapTarget(input.target);
+  const policy = await resolveNmapScanAddress(classifyNmapTarget(input.target));
   if (!policy.allowed) {
     const record = await persistNmap({
       state: "rejected",
@@ -99,7 +116,7 @@ export async function runNmapScan(input: { target: string; profile: NmapProfile 
   }
   const nmapPath = resolveNmapPath();
   if (!nmapPath) throw new Error("NMAP_BINARY_NOT_FOUND");
-  const args = profileArgs(input.profile, policy.host);
+  const args = profileArgs(input.profile, policy.scanHost!);
   const startedAt = Date.now();
   const result = await new Promise<{ stdout: string; stderr: string; exitCode: number | null; timedOut: boolean }>((resolve, reject) => {
     const child = spawn(nmapPath, args, { shell: false, windowsHide: true });
@@ -122,6 +139,7 @@ export async function runNmapScan(input: { target: string; profile: NmapProfile 
     state: result.exitCode === 0 && !result.timedOut ? "completed" : "failed",
     target: input.target,
     normalizedTarget: policy.normalizedTarget,
+    resolvedAddress: policy.scanHost,
     profile: input.profile,
     worker: "isolated-nmap-worker",
     workerInvoked: true,
@@ -143,4 +161,4 @@ export async function listNmapScans(limit = 20) {
   return records.map((record) => ({ id: record.id, createdAt: record.createdAt.toISOString(), ...(record.metadata as Record<string, unknown>) }));
 }
 
-export const nmapInternalsForTest = { classifyNmapTarget, profileArgs, parseXml, resolveNmapPath, isIp: isIP };
+export const nmapInternalsForTest = { classifyNmapTarget, resolveNmapScanAddress, profileArgs, parseXml, resolveNmapPath, isIp: isIP };

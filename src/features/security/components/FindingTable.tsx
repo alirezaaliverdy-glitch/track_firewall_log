@@ -1,45 +1,36 @@
-import type { SecurityFinding } from "@/lib/platform";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { ChevronLeft, Clock3, Crosshair, FileSearch2, ShieldAlert } from "lucide-react";
+import type { SecurityFinding, VendorFindingProfile } from "@/lib/platform";
+import { securityDisplayText } from "../securityPresentation";
+import { categoryLabel, findingVendor, sourceLabel, vendorLabel } from "../vendorSecurityPresentation";
 
-function severityTone(value: string): "danger" | "warning" | "info" | "neutral" {
-  if (["critical", "high"].includes(value)) return "danger";
-  if (value === "medium") return "warning";
-  if (value === "low") return "info";
-  return "neutral";
+function displayClass(value: string, values: string[]) {
+  return values.includes(value) ? value : "unknown";
 }
 
-export function FindingTable({ findings }: { findings: SecurityFinding[] }) {
+export function FindingTable({ findings, profiles = [] }: { findings: SecurityFinding[]; profiles?: VendorFindingProfile[] }) {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language;
+  const locale = language.startsWith("fa") ? "fa-IR" : "en-US";
   return (
-    <div className="table-shell">
-      <table>
-        <thead>
-          <tr>
-            <th>عنوان</th>
-            <th>Severity</th>
-            <th>Asset</th>
-            <th>Rule</th>
-            <th>Count</th>
-            <th>Last Seen</th>
-            <th>Status</th>
-            <th>Suggested Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {findings.map((finding) => (
-            <tr key={finding.id}>
-              <td><Link to={`/security/findings/${finding.id}`}>{finding.title}</Link></td>
-              <td><StatusBadge value={finding.severity} tone={severityTone(finding.severity)} /></td>
-              <td>{finding.asset?.name ?? finding.device?.name ?? "-"}</td>
-              <td>{finding.summary}</td>
-              <td>{finding.count}</td>
-              <td>{finding.lastSeen ? new Date(finding.lastSeen).toLocaleString() : "-"}</td>
-              <td><StatusBadge value={finding.status} tone={finding.status === "active" ? "warning" : "neutral"} /></td>
-              <td><Link className="text-cyan-200" to={`/security/findings/${finding.id}`}>ساخت ActionPlan</Link></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="security-findings-list">
+      {findings.map((finding) => {
+        const severity = displayClass(finding.severity, ["critical", "high", "medium", "low"]);
+        const status = displayClass(finding.status, ["active", "acknowledged", "investigating", "resolved", "false_positive", "accepted_risk", "suppressed"]);
+        return (
+          <article key={finding.id} className={`security-finding-card security-finding-card--${severity}`}>
+            <span className="security-finding-card__icon"><ShieldAlert size={22} /></span>
+            <div className="security-finding-card__body">
+              <div className="security-finding-card__title"><Link to={`/security/findings/${finding.id}`}>{securityDisplayText(finding.title, language)}</Link><span className={`security-severity security-severity--${severity}`}>{t(`security.severity.${severity}`, { defaultValue: finding.severity })}</span></div>
+              <p>{securityDisplayText(finding.summary, language)}</p>
+              <div className="security-finding-card__taxonomy"><span>{vendorLabel(findingVendor(finding), profiles)}</span><span>{categoryLabel(finding.category, language)}</span><span>{sourceLabel(finding.source, language)}</span></div>
+              <div className="security-finding-card__meta"><span><Crosshair size={14} />{finding.asset?.name ?? finding.device?.name ?? t("security.queue.unknownAsset")}</span><span><FileSearch2 size={14} />{finding.count.toLocaleString(locale)} {t("security.findings.matches")}</span><span><Clock3 size={14} />{finding.lastSeen ? new Date(finding.lastSeen).toLocaleString(locale) : "—"}</span></div>
+            </div>
+            <div className="security-finding-card__action"><span className={`security-finding-status security-finding-status--${status}`}><i />{t(`security.findingStatus.${status}`, { defaultValue: finding.status })}</span><Link to={`/security/findings/${finding.id}`}>{t("security.findings.review")}<ChevronLeft size={16} /></Link></div>
+          </article>
+        );
+      })}
     </div>
   );
 }

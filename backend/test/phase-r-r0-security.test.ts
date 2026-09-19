@@ -46,7 +46,6 @@ test("Phase R0 production profile treats APP_PROFILE=production as production an
     authSessionSecret: "development-only-change-this-secret",
     credentialEncryptionKey: "short",
     databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5432/firewall",
-    adminPassword: "admin",
     actionExecutionMode: "quick_controlled",
     actionAllowLabUnrestrictedManagement: true,
     corsOrigins: []
@@ -55,7 +54,6 @@ test("Phase R0 production profile treats APP_PROFILE=production as production an
   assert.ok(failures.some((failure) => failure.includes("AUTH_SESSION_SECRET")));
   assert.ok(failures.some((failure) => failure.includes("CREDENTIAL_ENCRYPTION_KEY")));
   assert.ok(failures.some((failure) => failure.includes("default postgres:postgres")));
-  assert.ok(failures.some((failure) => failure.includes("ADMIN_PASSWORD")));
   assert.ok(failures.some((failure) => failure.includes("quick controlled")));
   assert.ok(failures.some((failure) => failure.includes("CORS")));
 });

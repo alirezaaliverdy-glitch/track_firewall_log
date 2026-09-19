@@ -1,9 +1,12 @@
-import { ActionPlanStatus, Prisma } from "@prisma/client";
+import { ActionPlanStatus, ActionType, Prisma, type ActionPlan } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { resolveCatalogAction } from "../../commands/catalog/catalog-action-resolver.js";
 import { buildDryRun } from "../../services/dry-run.service.js";
 import { preflightActionPlan } from "../../services/action-preflight.service.js";
 import { validateActionPlan } from "../../services/policy-guard.service.js";
+import { buildCustomCommandPlan, customPlanFromParameters } from "../../ai/custom-action-plan.js";
+import { getActionParameterSchema } from "../parameter-schema-registry.js";
+import { ACTION_PLAN_SECRET_KEYS, hasActionPlanSecret, storeActionPlanSecret } from "../../services/action-plan-secret.service.js";
 import {
   ActionExecutionError,
   asObject,
@@ -22,6 +25,123 @@ import {
   withExecutionMetadata,
   canonicalParameterValues
 } from "./action-plan.shared.js";
+
+async function mergeOperatorCorrections(existing: ActionPlan, current: Record<string, unknown>, corrections: Record<string, unknown>) {
+  const currentCustomPlan = customPlanFromParameters(current);
+  if (existing.actionType !== ActionType.custom_vendor_action || !currentCustomPlan) {
+    const device = existing.deviceId ? await prisma.device.findUnique({ where: { id: existing.deviceId } }) : null;
+    const parameterSchema = getActionParameterSchema({
+      actionType: existing.actionType,
+      vendor: device?.vendor,
+      parametersJson: current,
+    });
+    const declared = new Set(parameterSchema.fields.map((item) => item.key));
+    if (Object.keys(corrections).length > 0 && Object.keys(corrections).every((key) => declared.has(key))) {
+      return { ...current, ...corrections };
+    }
+    return mergeCorrectedParameters(existing.actionType, current, corrections);
+  }
+
+  const device = existing.deviceId ? await prisma.device.findUnique({ where: { id: existing.deviceId } }) : null;
+  if (!device) throw new ActionExecutionError("ACTION_DEVICE_REQUIRED", "A registered target device is required before custom parameters can be completed.", 400);
+  const createUserPlan = currentCustomPlan.vendor === "linux" && currentCustomPlan.typedParameters.operation === "create_user";
+  const existingAccountAccess = createUserPlan
+    ? await hasActionPlanSecret(existing.id, ACTION_PLAN_SECRET_KEYS.linuxInitialPassword)
+    : false;
+  const parameterSchema = getActionParameterSchema({
+    actionType: existing.actionType,
+    vendor: device.vendor,
+    parametersJson: current,
+    configuredSecretFields: existingAccountAccess ? ["initialPassword", "confirmPassword"] : [],
+  });
+  const allowed = new Set(parameterSchema.fields.map((item) => item.key));
+  const unsafe = Object.keys(corrections).filter((key) => !allowed.has(key));
+  if (unsafe.length > 0) throw new ActionExecutionError("INVALID_CORRECTION_FIELD", `Only declared ActionPlan fields can be corrected: ${unsafe.join(", ")}.`, 400);
+
+  const sanitizedCorrections = { ...corrections };
+  let accountAccessConfigured = existingAccountAccess;
+  if (createUserPlan && ("initialPassword" in corrections || "confirmPassword" in corrections)) {
+    const initialPassword = typeof corrections.initialPassword === "string" ? corrections.initialPassword : "";
+    const confirmPassword = typeof corrections.confirmPassword === "string" ? corrections.confirmPassword : "";
+    if (!initialPassword || !confirmPassword) {
+      throw new ActionExecutionError("ACCOUNT_PASSWORD_CONFIRMATION_REQUIRED", "Initial password and password confirmation are both required.", 422);
+    }
+    if (initialPassword !== confirmPassword) {
+      throw new ActionExecutionError("ACCOUNT_PASSWORD_MISMATCH", "Initial password and password confirmation do not match.", 422);
+    }
+    if (initialPassword.length < 12 || initialPassword.length > 128 || /[\r\n:\0]/.test(initialPassword)) {
+      throw new ActionExecutionError("ACCOUNT_PASSWORD_INVALID", "Initial password must be 12 to 128 characters and cannot contain control characters or a colon.", 422);
+    }
+    const strengthClasses = [/[a-z]/.test(initialPassword), /[A-Z]/.test(initialPassword), /\d/.test(initialPassword), /[^A-Za-z0-9]/.test(initialPassword)].filter(Boolean).length;
+    if (strengthClasses < 3) {
+      throw new ActionExecutionError("ACCOUNT_PASSWORD_WEAK", "Initial password must use at least three of lowercase, uppercase, number, and symbol.", 422);
+    }
+    await storeActionPlanSecret(existing.id, ACTION_PLAN_SECRET_KEYS.linuxInitialPassword, initialPassword);
+    accountAccessConfigured = true;
+  }
+  delete sanitizedCorrections.initialPassword;
+  delete sanitizedCorrections.confirmPassword;
+
+  const rebuilt = buildCustomCommandPlan({
+    message: currentCustomPlan.intent,
+    device,
+    parameters: { ...currentCustomPlan.typedParameters, ...sanitizedCorrections, ...(createUserPlan ? { accountAccessConfigured } : {}) },
+  });
+  if (!rebuilt) throw new ActionExecutionError("CUSTOM_PLAN_REBUILD_FAILED", "The custom ActionPlan could not be rebuilt from the supplied parameters.", 400);
+  const metadata = asObject(current.metadata);
+  return {
+    ...current,
+    ...sanitizedCorrections,
+    source: "ai_custom_connector_plan",
+    implementationState: "implemented",
+    executionSupport: "connector",
+    supportState: "verified",
+    supportReasonKey: "support.reason.customConnectorValidated",
+    executable: rebuilt.missingFields.length === 0,
+    connectorType: rebuilt.connectorType,
+    executionTemplateRef: rebuilt.executionTemplateRef,
+    missingFields: rebuilt.missingFields,
+    customCommandPlan: rebuilt,
+    orderedCommands: rebuilt.orderedCommands,
+    typedParameters: rebuilt.typedParameters,
+    normalizedParams: rebuilt.typedParameters,
+    requiredParamsSatisfied: rebuilt.missingFields.length === 0,
+    expectedImpact: rebuilt.expectedImpact,
+    suggestedVerification: rebuilt.verificationCommands,
+    suggestedRollback: rebuilt.rollbackGuidance,
+    rollbackGuidance: rebuilt.rollbackGuidance,
+    backendExecutionRequired: true,
+    rawCommandExecution: false,
+    metadata: {
+      ...metadata,
+      source: "ai_custom_connector_plan",
+      implementationState: "implemented",
+      executionSupport: "connector",
+      supportState: "verified",
+      supportReasonKey: "support.reason.customConnectorValidated",
+      executable: rebuilt.missingFields.length === 0,
+      connectorType: rebuilt.connectorType,
+      executionTemplateRef: rebuilt.executionTemplateRef,
+      customCommandPlan: rebuilt,
+      orderedCommands: rebuilt.orderedCommands,
+      typedParameters: rebuilt.typedParameters,
+      normalizedParams: rebuilt.typedParameters,
+      requiredParamsSatisfied: rebuilt.missingFields.length === 0,
+      missingFields: rebuilt.missingFields,
+      structuredStepCount: rebuilt.orderedCommands.length,
+      executableStepCount: rebuilt.missingFields.length === 0 ? rebuilt.orderedCommands.length : 0,
+      executionEligibility: rebuilt.missingFields.length === 0 ? "ready_for_action_center" : "needs_parameters",
+      expectedImpact: rebuilt.expectedImpact,
+      suggestedVerification: rebuilt.verificationCommands,
+      suggestedRollback: rebuilt.rollbackGuidance,
+      rollbackGuidance: rebuilt.rollbackGuidance,
+      backendExecutionRequired: true,
+      rawCommandExecution: false,
+      reviewOnly: false,
+    },
+  };
+}
+
 export async function validateAndStoreActionPlan(id: string) {
   let plan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!plan) return null;
@@ -54,21 +174,25 @@ export async function correctAndRevalidateActionPlan(id: string, input: Record<s
   }
   const corrections = asObject(input.parametersJson ?? input.fields ?? input);
   const currentParameters = asObject(existing.parametersJson);
-  const correctedParameters = mergeCorrectedParameters(existing.actionType, currentParameters, corrections);
+  const correctedParameters = await mergeOperatorCorrections(existing, currentParameters, corrections);
   const currentMetadata = asObject(currentParameters.metadata);
-  const changedFields = Object.keys(corrections).filter((field) => stableJson(currentParameters[field]) !== stableJson(correctedParameters[field]));
+  const changedFields = Object.keys(corrections).filter((field) =>
+    field === "initialPassword" || field === "confirmPassword" || stableJson(currentParameters[field]) !== stableJson(correctedParameters[field])
+  );
   if (changedFields.length === 0) return dryRunActionPlan(id);
   const currentRevision = planRevision(currentMetadata);
   const revisionHistory = Array.isArray(currentMetadata.revisionHistory) ? currentMetadata.revisionHistory : [];
-  const {
-    canonicalParameters: _canonicalParameters,
-    canonicalParametersHash: _canonicalParametersHash,
-    canonicalPayload: _canonicalPayload,
-    canonicalPayloadHash: _canonicalPayloadHash,
-    previewHash: _previewHash,
-    previewFingerprint: _previewFingerprint,
-    ...preservedMetadata
-  } = currentMetadata;
+  const previewBindingFields = new Set([
+    "canonicalParameters",
+    "canonicalParametersHash",
+    "canonicalPayload",
+    "canonicalPayloadHash",
+    "previewHash",
+    "previewFingerprint",
+  ]);
+  const preservedMetadata = Object.fromEntries(
+    Object.entries(currentMetadata).filter(([key]) => !previewBindingFields.has(key))
+  );
   const parametersJson = {
     ...correctedParameters,
     metadata: {

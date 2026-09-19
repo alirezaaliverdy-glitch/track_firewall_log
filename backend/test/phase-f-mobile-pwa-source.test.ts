@@ -15,14 +15,20 @@ test("Phase F adds installable PWA shell without offline API execution or approv
   const registration = read("src/lib/pwa.ts");
   const main = read("src/main.tsx");
 
-  assert.match(html, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(html, /rel="manifest" href="%BASE_URL%manifest\.webmanifest"/);
   assert.match(html, /name="theme-color"/);
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(html, /interactive-widget=resizes-content/);
   assert.equal(manifest.display, "standalone");
-  assert.equal(manifest.start_url, "/dashboard");
-  assert.ok(manifest.icons?.some((icon) => icon.src === "/pwa-icon.svg"));
+  assert.equal(manifest.id, "./");
+  assert.equal(manifest.start_url, "./dashboard");
+  assert.equal(manifest.scope, "./");
+  assert.ok(manifest.icons?.some((icon) => icon.src === "pwa-icon.svg"));
   assert.ok(manifest.icons?.some((icon) => icon.purpose === "maskable"));
-  assert.match(registration, /navigator\.serviceWorker\.register\("\/sw\.js", \{ scope: "\/" \}\)/);
+  assert.match(registration, /navigator\.serviceWorker\.register\(`\$\{baseUrl\}sw\.js`, \{ scope: baseUrl \}\)/);
+  assert.match(registration, /Capacitor\.isNativePlatform\(\)/);
   assert.match(main, /registerPwaServiceWorker\(\)/);
+  assert.match(main, /BrowserRouter basename=\{import\.meta\.env\.BASE_URL\}/);
 
   assert.match(worker, /const API_PREFIX = "\/firewall-api"/);
   assert.match(worker, /if \(isApi\)/);
@@ -38,7 +44,7 @@ test("Phase F adds installable PWA shell without offline API execution or approv
 
 test("Phase F keeps phone and tablet routes usable through drawer, bottom nav, offline status, and Action Center sheet", () => {
   const shell = read("src/components/layout/AppShell.tsx");
-  const css = read("src/App.css");
+  const css = `${read("src/App.css")}\n${read("src/components/layout/MobileShell.css")}`;
   const onlineHook = read("src/lib/useOnlineStatus.ts");
 
   assert.match(shell, /useOnlineStatus/);
@@ -48,11 +54,17 @@ test("Phase F keeps phone and tablet routes usable through drawer, bottom nav, o
   assert.match(shell, /is-mobile-open/);
   assert.match(shell, /platform-offline-banner/);
   assert.match(shell, /shell\.offlineBanner/);
+  assert.match(shell, /MoreHorizontal/);
+  assert.match(shell, /\["dashboard", "assets", "monitoring", "actions"\]/);
+  assert.match(shell, /event\.key === "Escape"/);
   assert.match(onlineHook, /window\.addEventListener\("online"/);
   assert.match(onlineHook, /window\.addEventListener\("offline"/);
 
   assert.match(css, /@media \(max-width: 900px\)[\s\S]*platform-sidebar[\s\S]*position: fixed/);
   assert.match(css, /platform-bottom-nav[\s\S]*env\(safe-area-inset-bottom\)/);
+  assert.match(css, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
+  assert.match(css, /font-size: 16px !important/);
+  assert.match(css, /data-table-wrap[\s\S]*overflow-x: auto/);
   assert.match(css, /min-height: 44px/);
   assert.match(css, /action-review-dialog[\s\S]*align-items:end/);
   assert.match(css, /action-review-dialog__card[\s\S]*border-radius:18px 18px 0 0/);

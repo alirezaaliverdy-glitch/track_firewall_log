@@ -1,7 +1,7 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type AiRole = "user" | "assistant" | "system" | "tool";
-export type AiIntentModeOverride = "Auto" | "Chat" | "Action";
+export type AiIntentModeOverride = "Chat" | "Action";
 
 export type AiMessage = {
   id: string;
@@ -139,6 +139,7 @@ export type AiProviderStatus = {
   model: string;
   fallbackModels: string[];
   keyConfigured: boolean;
+  liveVerified: boolean;
   baseUrlConfigured: boolean;
   timeoutMs: number;
   appProfile: string;
@@ -435,6 +436,7 @@ function normalizeProviderStatus(value: unknown): AiProviderStatus {
     model: String(source.model ?? "mock-deterministic"),
     fallbackModels: normalizeArray<unknown>(source.fallbackModels).map(String),
     keyConfigured: Boolean(source.keyConfigured),
+    liveVerified: Boolean(source.liveVerified),
     baseUrlConfigured: Boolean(source.baseUrlConfigured),
     timeoutMs: safeNumber(source.timeoutMs),
     appProfile: String(source.appProfile ?? "unknown"),
@@ -580,10 +582,12 @@ export async function completeAiActionRequest(id: string, fields: Record<string,
   } satisfies CompleteActionRequestResponse;
 }
 
-export async function runFullSecurityAnalysis() {
+export async function runFullSecurityAnalysis(deviceId?: string) {
   return requestJson<unknown>("/assessments/full-analysis", {
     method: "POST",
-    body: JSON.stringify({ scopeType: "all", collectConnectorData: true }),
+    body: JSON.stringify(deviceId
+      ? { scopeType: "device", scopeId: deviceId, collectConnectorData: true }
+      : { scopeType: "all", collectConnectorData: true }),
   }).then((payload) => {
     const source = normalizeObject(payload);
     if (source.ok === false) throw new Error(String(source.message ?? "تحلیل کامل انجام نشد."));
@@ -595,7 +599,11 @@ export async function getSecurityAssessment(id: string) {
   return requestJson<unknown>(`/assessments/${id}`).then(normalizeSecurityAssessment);
 }
 
-export async function generateHardeningSuggestions(_id?: string) {
+export async function generateHardeningSuggestions(id?: string) {
+  if (id) {
+    return requestJson<unknown>(`/assessments/${encodeURIComponent(id)}/hardening-suggestions`, { method: "POST" })
+      .then(normalizeSecurityAssessment);
+  }
   return requestJson<unknown>("/assessments/hardening-suggestions", { method: "POST" }).then((payload) => {
     const source = normalizeObject(payload);
     if (source.ok === false) throw new Error(String(source.message ?? "پیشنهادهای ایمن‌سازی تولید نشد."));

@@ -41,8 +41,9 @@ test("vendor findings and hardening suggestions are vendor-specific", () => {
   const context = { generatedAt: "", recentWindowMinutes: 1440, safety: {}, incidents: { recent: [], countBySeverity: [], countByStatus: [] }, events: { recentCount: 0, topSourceIps: [], sensitivePorts: [] }, detections: { recentRules: [] }, devices: analyses.map((item) => device(item.vendor)), eventBatches: [], actionPlans: { recent: [], pendingApprovalCount: 0 }, linuxTelemetry: [] };
   const assessment = buildAssessmentDraft(context as never, 3, analyses.map((item) => ({ deviceId: item.deviceId, snapshotType: "test", dataJson: {} })));
   const suggestions = buildHardeningRecommendationDrafts({ findingsJson: assessment }, context.devices);
-  assert.ok(suggestions.some((item) => item.vendor === "pfsense" && item.actionType === "custom_vendor_action"));
-  assert.ok(suggestions.some((item) => item.vendor === "cisco" && item.actionType === "custom_vendor_action"));
+  assert.ok(suggestions.some((item) => item.vendor === "pfsense" && item.actionType === null && !item.executable));
+  assert.ok(suggestions.some((item) => item.vendor === "cisco" && item.actionType === null && !item.executable));
+  assert.ok(!suggestions.some((item) => item.actionType === "custom_vendor_action" && item.executable));
 });
 
 test("compact AI context omits snapshots and raw logs", () => {

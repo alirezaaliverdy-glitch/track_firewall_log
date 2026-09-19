@@ -18,6 +18,13 @@ test("Phase H parameter schema registry covers initial vendor workflow families"
   assert.equal(ciscoVlan.actionType, "create_vlan");
   assert.deepEqual(ciscoVlan.fields.map((field) => field.key), ["vlanId", "name"]);
 
+  const inferred = getActionParameterSchema({
+    vendor: "MikroTik",
+    actionType: "custom_vendor_action",
+    parametersJson: { missingFields: ["identity"] },
+  });
+  assert.deepEqual(inferred.fields.map((field) => field.key), ["identity"]);
+
   const fortigateVpn = schemas.find((schema) => schema.vendor === "fortigate" && schema.actionType === "ipsec_vpn");
   assert.ok(fortigateVpn);
   assert.ok(fortigateVpn.secretFields.includes("pskRef"));
@@ -36,6 +43,7 @@ test("Phase H parameter workspace has backend route and dedicated frontend route
   assert.match(page, /getActionParameterSchema/);
   assert.match(page, /correctActionFields/);
   assert.match(page, /dryRunAction/);
-  assert.match(page, /autoComplete=\{field\.secure/);
+  assert.match(page, /autoComplete=\{activeField\.secure/);
+  assert.match(page, /مرحله \$\{step \+ 1\} از \$\{schema\.fields\.length\}/);
   assert.doesNotMatch(page, /localStorage|IndexedDB/);
 });

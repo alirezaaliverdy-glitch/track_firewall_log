@@ -6,6 +6,7 @@ import { buildSecurityContext } from "./ai-context.service.js";
 import { proposeActionPlan } from "./action-plan.service.js";
 import { analyzeVendorDevice, buildCompactVendorAiContext, normalizeAnalysisVendor } from "../assessments/vendor-analysis-profiles.js";
 import { buildEvidencePack } from "../ai/context/evidence-pack.service.js";
+import { redactForPersistence } from "../security/redaction.js";
 
 type SecurityContext = Awaited<ReturnType<typeof buildSecurityContext>>;
 type AssessmentFinding = {
@@ -37,7 +38,7 @@ type RecommendationDraft = {
 };
 
 function toJson(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+  return JSON.parse(JSON.stringify(redactForPersistence(value ?? {}))) as Prisma.InputJsonValue;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -50,6 +51,7 @@ function normalizeVendor(value: unknown) {
   if (text.includes("forti")) return "fortigate";
   if (text.includes("linux") || text.includes("ubuntu") || text.includes("debian")) return "linux";
   if (text.includes("pfsense")) return "pfsense";
+  if (text.includes("cisco") || text.includes("ios-xe") || text === "ios") return "cisco";
   return text || "unknown";
 }
 
@@ -79,17 +81,18 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
       recommendedNextStep: "شواهد رخدادها بررسی و منبع مخرب تأییدشده فقط با اکشن کنترل‌شده مهار شود."
     });
   }
-  if (sensitiveHits > 0) {
+  const correlatedSensitiveTraffic = sensitiveHits > 0 && criticalIncidents + highIncidents + mediumIncidents > 0;
+  if (correlatedSensitiveTraffic) {
     findings.push({
       id: "sensitive-management-port-activity",
-      title: "ترافیک به سرویس‌های حساس مشاهده شده است",
-      severity: sensitiveHits > 25 ? "high" : "medium",
+      title: "هم‌زمان با رخدادهای باز، ترافیک سرویس حساس مشاهده شده است",
+      severity: criticalIncidents + highIncidents > 0 ? "high" : "medium",
       category: "exposed_services",
       affectedDevices: context.devices.map((device) => device.id),
       vendor: "همه", device: "دستگاه‌های ثبت‌شده",
       evidence: { sensitivePorts: context.events.sensitivePorts, recentEventCount: context.events.recentCount },
-      explanation: "ترافیک پورت‌های مدیریتی و داده، سطح حمله را افزایش می‌دهد و باید به مبدأهای مورد اعتماد محدود شود.",
-      recommendedNextStep: "سرویس‌های در حال گوش‌دادن بررسی و دسترسی مدیریتی با اکشن کاتالوگ محدود شود."
+      explanation: "صرف مشاهده ترافیک به معنی آسیب‌پذیری نیست؛ هم‌بستگی آن با رخداد باز، بررسی مبدأ، مقصد و سرویس را ضروری می‌کند.",
+      recommendedNextStep: "ابتدا شواهد رخداد و listener مقصد بررسی شود؛ محدودسازی فقط پس از تأیید ناخواسته‌بودن دسترسی انجام شود."
     });
   }
   if (unhealthyDevices.length > 0) {
@@ -136,11 +139,16 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
     const entries = VENDOR_COMMAND_CATALOG.filter((entry) => entry.vendor === vendor);
     return [vendor, { total: entries.length, executable: entries.filter((entry) => entry.supportsExecution).length, readOnly: entries.filter((entry) => entry.readOnly).length }];
   }));
-  const score = Math.min(100,
-    criticalIncidents * 18 + highIncidents * 10 + mediumIncidents * 4 +
-    Math.min(20, sensitiveHits) + unhealthyDevices.length * 5 + failedActions.length * 4 +
-    (context.events.recentCount === 0 ? 10 : 0)
-  );
+  const scoreBreakdown = {
+    criticalIncidents: Math.min(36, criticalIncidents * 18),
+    highIncidents: Math.min(30, highIncidents * 10),
+    mediumIncidents: Math.min(12, mediumIncidents * 4),
+    correlatedSensitiveTraffic: correlatedSensitiveTraffic ? Math.min(8, Math.max(2, Math.ceil(Math.log2(sensitiveHits + 1)))) : 0,
+    unhealthyDevices: Math.min(15, unhealthyDevices.length * 5),
+    failedActions: Math.min(8, failedActions.length * 4),
+    visibilityGap: context.events.recentCount === 0 ? 10 : 0
+  };
+  const score = Math.min(100, Object.values(scoreBreakdown).reduce((sum, value) => sum + value, 0));
   const topRisks = [...findings].sort((a, b) => ["low", "medium", "high", "critical"].indexOf(b.severity) - ["low", "medium", "high", "critical"].indexOf(a.severity)).slice(0, 5);
   const affectedDevices = Array.from(new Set(findings.flatMap((finding) => finding.affectedDevices)));
   const summary = score >= 70
@@ -153,6 +161,12 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
   const vendorAnalyses = context.devices.map((device) => analyzeVendorDevice(device, snapshotRecords.filter((snapshot) => snapshot.deviceId === device.id)));
   const connected = context.devices.filter((d) => ["online", "connected"].includes(String(d.status).toLowerCase())).length;
   const noDeviceData = snapshotCount === 0;
+  const snapshotCoveredDevices = new Set(snapshotRecords.map((snapshot) => snapshot.deviceId)).size;
+  const coveragePercent = context.devices.length > 0 ? Math.round((snapshotCoveredDevices / context.devices.length) * 100) : 0;
+  const confidence = context.devices.length === 0
+    ? "insufficient"
+    : coveragePercent >= 80 && context.events.recentCount > 0 ? "high"
+      : coveragePercent >= 40 || context.events.recentCount > 0 ? "medium" : "low";
   const riskLabel = score >= 70 ? "بحرانی" : score >= 40 ? "بالا" : score >= 20 ? "متوسط" : "پایین";
 
   return {
@@ -167,13 +181,28 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
       recentIncidents: context.incidents.recent.length,
       recentActions: context.actionPlans.recent.length,
       connectorSnapshots: snapshotCount,
+      snapshotCoveredDevices,
+      coveragePercent,
+      confidence,
+      scoreBreakdown,
       sensitivePorts: context.events.sensitivePorts,
       topSourceIps: context.events.topSourceIps
     },
     language: "fa",
     dataNotice: context.devices.length === 0 && context.events.recentCount === 0 && context.incidents.recent.length === 0
       ? "داده کافی از دستگاه‌ها یا لاگ‌ها موجود نیست؛ تحلیل بر اساس اطلاعات ثبت‌شده فعلی انجام شد."
-      : noDeviceData ? "داده خوانده‌شده از دستگاه موجود نیست؛ تحلیل بر اساس داده‌های ثبت‌شده در برنامه انجام شده است." : "تحلیل از داده خواندنی دستگاه و داده‌های ثبت‌شده در برنامه استفاده کرده است.",
+      : noDeviceData ? "داده خواندنی تازه از دستگاه موجود نیست؛ نتیجه فقط بر رخدادها و اطلاعات ثبت‌شده تکیه دارد و برای تصمیم اجرایی باید راستی‌آزمایی شود." : `تحلیل از داده خواندنی تازه ${snapshotCoveredDevices} دستگاه و رخدادهای ${context.recentWindowMinutes} دقیقه اخیر استفاده کرده است.`,
+    coverage: {
+      registeredDevices: context.devices.length,
+      connectedDevices: connected,
+      snapshotCoveredDevices,
+      missingSnapshotDevices: Math.max(0, context.devices.length - snapshotCoveredDevices),
+      coveragePercent,
+      confidence,
+      recentWindowMinutes: context.recentWindowMinutes,
+      recentEvents: context.events.recentCount,
+      activeIncidents: criticalIncidents + highIncidents + mediumIncidents
+    },
     sections: {
       executiveSummary: { title: "خلاصه مدیریتی", securityStatus: summary, overallRisk: riskLabel, mainProblems: topRisks.map((item) => item.title) },
       assetsAndVendors: { title: "دارایی‌ها و Vendorها", mikrotik: vendorCounts.mikrotik, fortigate: vendorCounts.fortigate, linux: vendorCounts.linux, registeredDevices: context.devices.length, connected, readOnlySnapshots: snapshotCount },
@@ -191,9 +220,9 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
       },
       findings: { title: "یافته‌ها", items: findings },
       nextActions: { title: "اقدامات پیشنهادی بعدی", prioritized: findings.map((f) => f.recommendedNextStep), quickWins: ["بررسی پوشش لاگ", "محدودسازی مبدأ دسترسی مدیریتی"], highImpact: ["رسیدگی به رخدادهای شدید", "بازبینی سرویس‌های حساس"] },
-      riskScore: { title: "امتیاز ریسک", score, label: riskLabel, explanation: "امتیاز به‌صورت قطعی از شدت رخدادها، ترافیک پورت حساس، سلامت دستگاه، شکست اکشن و پوشش داده محاسبه شده است." }
+      riskScore: { title: "امتیاز ریسک", score, label: riskLabel, breakdown: scoreBreakdown, explanation: "امتیاز فقط از رخدادهای باز در بازه اخیر، هم‌بستگی ترافیک حساس، سلامت دستگاه، شکست اکشن و شکاف مشاهده‌پذیری محاسبه می‌شود؛ ترافیک عادی به‌تنهایی آسیب‌پذیری محسوب نمی‌شود." }
     },
-    explanation: "امتیاز به‌صورت قطعی از شدت رخدادها، ترافیک پورت حساس، سلامت دستگاه، شکست اکشن و پوشش داده محاسبه شده است.",
+    explanation: "امتیاز از رخدادهای باز و تازه، شواهد هم‌بسته، سلامت دستگاه، نتیجه اکشن‌ها و کیفیت پوشش داده محاسبه شده است؛ نبود داده با ناامن‌بودن یکسان تلقی نمی‌شود.",
     recommendedNextSteps: findings.map((finding) => finding.recommendedNextStep),
     catalogCoverage,
     vendorAnalyses,
@@ -201,9 +230,22 @@ export function buildAssessmentDraft(context: SecurityContext, snapshotCount = 0
   };
 }
 
+async function mapBounded<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 async function collectReadOnlySnapshots(scopeId?: string) {
-  const devices = await prisma.device.findMany({ where: scopeId ? { id: scopeId } : undefined });
-  const snapshots = await Promise.all(devices.map(async (device) => {
+  const devices = await prisma.device.findMany({ where: scopeId ? { id: scopeId } : undefined, orderBy: { updatedAt: "desc" }, take: 25 });
+  const snapshots = await mapBounded(devices, 3, async (device) => {
     const connector = selectDeviceConnector(device);
     if (!connector || (!device.credentialId && !device.credentialRef)) return null;
     try {
@@ -216,26 +258,34 @@ async function collectReadOnlySnapshots(scopeId?: string) {
         data: { deviceId: device.id, vendor: normalizeVendor(device.vendor || device.type), snapshotType: "connector_status_error", dataJson: toJson({ message: error instanceof Error ? error.message : "Status collection failed" }) }
       });
     }
-  }));
+  });
   return snapshots.filter((snapshot): snapshot is NonNullable<typeof snapshot> => Boolean(snapshot));
 }
 
 export async function runFullAnalysis(input: { scopeType?: string; scopeId?: string; collectConnectorData?: boolean } = {}) {
+  const selectedDeviceId = input.scopeType === "device" && input.scopeId ? input.scopeId : undefined;
   const [context, snapshots] = await Promise.all([
-    buildSecurityContext({ recentMinutes: 1440 }),
-    input.collectConnectorData === false ? Promise.resolve([]) : collectReadOnlySnapshots(input.scopeType === "device" ? input.scopeId : undefined)
+    buildSecurityContext({ recentMinutes: 1440, deviceId: selectedDeviceId }),
+    input.collectConnectorData === false ? Promise.resolve([]) : collectReadOnlySnapshots(selectedDeviceId)
   ]);
+  const scopedDeviceIds = context.devices.map((device) => device.id);
+  const snapshotFreshnessCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [credentialLinks, capabilityRecords, storedSnapshots, auditLogs, latestSnapshots, evidencePack] = await Promise.all([
-    prisma.device.count({ where: { OR: [{ credentialId: { not: null } }, { credentialRef: { not: null } }] } }),
-    prisma.deviceCapability.count(),
-    prisma.deviceSnapshot.count(),
-    prisma.actionAuditLog.count(),
-    prisma.deviceSnapshot.findMany({ orderBy: { collectedAt: "desc" }, take: 100, select: { deviceId: true, snapshotType: true, dataJson: true } }),
-    buildEvidencePack({ selectedDeviceId: input.scopeType === "device" ? input.scopeId : undefined })
+    prisma.device.count({ where: { ...(selectedDeviceId ? { id: selectedDeviceId } : {}), OR: [{ credentialId: { not: null } }, { credentialRef: { not: null } }] } }),
+    prisma.deviceCapability.count({ where: selectedDeviceId ? { deviceId: selectedDeviceId } : undefined }),
+    prisma.deviceSnapshot.count({ where: scopedDeviceIds.length ? { deviceId: { in: scopedDeviceIds } } : { deviceId: "__none__" } }),
+    prisma.actionAuditLog.count({ where: selectedDeviceId ? { actionPlan: { deviceId: selectedDeviceId } } : undefined }),
+    prisma.deviceSnapshot.findMany({
+      where: scopedDeviceIds.length ? { deviceId: { in: scopedDeviceIds }, collectedAt: { gte: snapshotFreshnessCutoff } } : { deviceId: "__none__" },
+      orderBy: { collectedAt: "desc" },
+      take: 250,
+      select: { deviceId: true, snapshotType: true, dataJson: true }
+    }),
+    buildEvidencePack({ selectedDeviceId })
   ]);
-  const scopedContext = input.scopeType === "device" && input.scopeId ? { ...context, devices: context.devices.filter((device) => device.id === input.scopeId) } : context;
-  const relevantSnapshots = latestSnapshots.filter((snapshot) => scopedContext.devices.some((device) => device.id === snapshot.deviceId));
-  const draft = buildAssessmentDraft(scopedContext as SecurityContext, relevantSnapshots.length, relevantSnapshots);
+  const latestSuccessfulSnapshots = latestSnapshots.filter((snapshot) => !snapshot.snapshotType.endsWith("_error"));
+  const uniqueSnapshots = latestSuccessfulSnapshots.filter((snapshot, index, all) => all.findIndex((candidate) => candidate.deviceId === snapshot.deviceId && candidate.snapshotType === snapshot.snapshotType) === index);
+  const draft = buildAssessmentDraft(context as SecurityContext, uniqueSnapshots.length, uniqueSnapshots);
   return prisma.securityAssessment.create({
     data: {
       scopeType: input.scopeType?.trim() || "all",
@@ -244,7 +294,7 @@ export async function runFullAnalysis(input: { scopeType?: string; scopeId?: str
       riskScore: draft.riskScore,
       summary: draft.summary,
       findingsJson: toJson(draft),
-      dataSourcesJson: toJson({ device: scopedContext.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, rawLogsSentToAi: false, compactVendorAiContext: draft.aiContext, evidencePackMetadata: evidencePack.metadata, availableActionHints: evidencePack.availableActionHints, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
+      dataSourcesJson: toJson({ device: context.devices.length, deviceCredentialStatusOnly: credentialLinks, secretValuesRead: false, rawLogsSentToAi: false, compactVendorAiContext: draft.aiContext, evidencePackMetadata: evidencePack.metadata, availableActionHints: evidencePack.availableActionHints, deviceCapability: capabilityRecords, deviceSnapshot: storedSnapshots, freshSuccessfulSnapshots: uniqueSnapshots.length, newlyCollectedSnapshots: snapshots.length, securityEvent: context.events.recentCount, incident: context.incidents.recent.length, actionPlan: context.actionPlans.recent.length, actionAuditLog: auditLogs, securityAssessment: true, hardeningRecommendation: true, vendorCatalogActions: VENDOR_COMMAND_CATALOG.length }),
       language: "fa"
     },
     include: { recommendations: { include: { device: { select: { id: true, name: true, vendor: true, type: true } } } } }
@@ -267,7 +317,13 @@ function publicFinding(finding: AssessmentFinding) {
   };
 }
 
-function stableAssessment(draft: ReturnType<typeof buildAssessmentDraft>, createdAt = new Date().toISOString(), id: string | null = null) {
+function stableAssessment(
+  draft: ReturnType<typeof buildAssessmentDraft>,
+  createdAt = new Date().toISOString(),
+  id: string | null = null,
+  scopeType = "all",
+  scopeId: string | null = null
+) {
   return {
     id,
     riskScore: draft.riskScore,
@@ -278,7 +334,7 @@ function stableAssessment(draft: ReturnType<typeof buildAssessmentDraft>, create
     dataNoticeFa: draft.dataNotice,
     createdAt,
     // Compatibility fields for existing clients while the public API uses the fields above.
-    status: "completed", scopeType: "all", scopeId: null, summary: draft.summary, language: "fa",
+    status: "completed", scopeType, scopeId, summary: draft.summary, language: "fa",
     findingsJson: draft, dataSourcesJson: draft.evidence, recommendations: []
   };
 }
@@ -287,11 +343,12 @@ export async function runStableFullAnalysis(input: { scopeType?: string; scopeId
   try {
     const stored = await runFullAnalysis(input);
     const draft = object(stored.findingsJson) as ReturnType<typeof buildAssessmentDraft>;
-    return { ok: true as const, source: "deterministic" as const, assessment: stableAssessment(draft, stored.createdAt.toISOString(), stored.id), technicalError: null };
+    return { ok: true as const, source: "deterministic" as const, assessment: stableAssessment(draft, stored.createdAt.toISOString(), stored.id, stored.scopeType, stored.scopeId), technicalError: null };
   } catch (error) {
-    const context = await buildSecurityContext({ recentMinutes: 1440 });
+    const selectedDeviceId = input.scopeType === "device" && input.scopeId ? input.scopeId : undefined;
+    const context = await buildSecurityContext({ recentMinutes: 1440, deviceId: selectedDeviceId });
     const draft = buildAssessmentDraft(context, 0);
-    return { ok: true as const, source: "deterministic" as const, assessment: stableAssessment(draft), technicalError: error instanceof Error ? error.message : "Unknown assessment error" };
+    return { ok: true as const, source: "deterministic" as const, assessment: stableAssessment(draft, new Date().toISOString(), null, selectedDeviceId ? "device" : "all", selectedDeviceId ?? null), technicalError: error instanceof Error ? error.message : "Unknown assessment error" };
   }
 }
 
@@ -354,8 +411,6 @@ export function buildHardeningRecommendationDrafts(
 ) {
   const details = object(assessment.findingsJson);
   const evidence = object(details.evidence);
-  const topSources = Array.isArray(evidence.topSourceIps) ? evidence.topSourceIps.map(object) : [];
-  const leadingSource = typeof topSources[0]?.srcIp === "string" ? topSources[0].srcIp : null;
   const recommendations: RecommendationDraft[] = [];
 
   for (const device of devices) {
@@ -366,7 +421,7 @@ export function buildHardeningRecommendationDrafts(
         reason: "نسخه به‌روز، بازگشت کنترل‌شده و بازیابی پس از رخداد را قابل اتکاتر می‌کند.", evidence: { device: device.name, status: "وضعیت پشتیبان در داده موجود تأیید نشده است" },
         recommendation: "یک export بدون اطلاعات حساس تهیه و در محل امن نگهداری شود.", catalogActionId: "mikrotik.export_config", parameters: {}
       }));
-      recommendations.push({ deviceId: device.id, vendor, title: "بازبینی زنجیره input و سرویس‌های WAN در MikroTik", severity: "high", category: "Vendor Hardening", reason: "نبود drop invalid، established/related یا محدودیت DNS و Winbox/API می‌تواند سطح حمله را افزایش دهد.", evidence: { checks: ["SSH/Winbox/API", "DNS از WAN", "drop invalid", "established/related", "NAT حساس"], status: "نیازمند snapshot خواندنی" }, recommendation: "قواعد input، سرویس‌های مدیریتی، DNS و port-forwardها به‌صورت دستی بازبینی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
+      recommendations.push({ deviceId: device.id, vendor, title: "راستی‌آزمایی زنجیره input و سرویس‌های WAN در MikroTik", severity: "medium", category: "کنترل پوشش", reason: "این کنترل‌ها در داده خواندنی فعلی تأیید نشده‌اند؛ نبود شواهد به معنی پیکربندی ناامن نیست.", evidence: { checks: ["SSH/Winbox/API", "DNS از WAN", "drop invalid", "established/related", "NAT حساس"], status: "تأیید نشده" }, recommendation: "ابتدا snapshot خواندنی جمع‌آوری و سپس فقط موارد واقعاً ناامن اصلاح شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
       recommendations.push(catalogRecommendation({
         deviceId: device.id, vendor, title: "محدودسازی دسترسی مدیریتی SSH", severity: "high", category: "دسترسی مدیریتی",
         reason: "سرویس مدیریتی باید فقط از شبکه‌های صریحاً مورد اعتماد در دسترس باشد.", evidence: { managementPort: device.managementPort, trustedSource: "نامشخص" },
@@ -378,7 +433,7 @@ export function buildHardeningRecommendationDrafts(
         reason: "پشتیبان به‌روز، بازیابی پیش از تغییر Policy و NAT را ممکن می‌کند.", evidence: { device: device.name, backupStatus: "تأیید نشده" },
         recommendation: "نسخه پشتیبان کنترل‌شده از تنظیمات تهیه شود.", catalogActionId: "fortigate.backup_config", parameters: {}
       }));
-      recommendations.push({ deviceId: device.id, vendor, title: "بازبینی Policy، VIP و دسترسی مدیریتی FortiGate", severity: "high", category: "Firewall Policy", reason: "Policy گسترده، VIP در معرض، local-in باز و نبود security profile ریسک نفوذ را بالا می‌برد.", evidence: { checks: ["broad allow", "VIP", "local-in/admin", "policy logging", "security profiles"], status: "نیازمند snapshot خواندنی" }, recommendation: "Policyها، VIPها، local-in و پروفایل‌های امنیتی با اصل حداقل دسترسی بازبینی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
+      recommendations.push({ deviceId: device.id, vendor, title: "راستی‌آزمایی Policy، VIP و دسترسی مدیریتی FortiGate", severity: "medium", category: "کنترل پوشش", reason: "وضعیت Policy گسترده، VIP، local-in و security profile هنوز با snapshot معتبر تأیید نشده است.", evidence: { checks: ["broad allow", "VIP", "local-in/admin", "policy logging", "security profiles"], status: "تأیید نشده" }, recommendation: "snapshot خواندنی تهیه و Policyها، VIPها و local-in بر اساس شواهد با اصل حداقل دسترسی بازبینی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
       recommendations.push(catalogRecommendation({
         deviceId: device.id, vendor, title: "فعال‌سازی لاگ برای Policyهای مهم فایروال", severity: "medium", category: "لاگ و مانیتورینگ",
         reason: "لاگ Policy شواهد رخداد و دید روند ترافیک را بهبود می‌دهد.", evidence: { device: device.name, policyId: "مشخص نشده" },
@@ -390,12 +445,7 @@ export function buildHardeningRecommendationDrafts(
         reason: "listenerهای غیرمنتظره می‌توانند سرویس مدیریتی یا برنامه را در معرض قرار دهند.", evidence: { device: device.name, listeningPorts: "هنوز خوانده نشده" },
         recommendation: "فهرست پورت‌ها با اکشن خواندنی کنترل‌شده جمع‌آوری و سرویس غیرضروری بسته شود.", catalogActionId: "linux.read_listening_ports", parameters: {}
       }));
-      recommendations.push({ deviceId: device.id, vendor, title: "بازبینی SSH، فایروال و سرویس‌های حفاظتی Linux", severity: "high", category: "Authentication", reason: "ورود root، وضعیت نامشخص فایروال/fail2ban، sudo و Docker می‌تواند مسیر دسترسی ناامن ایجاد کند.", evidence: { checks: ["PermitRootLogin", "sudo users", "UFW/iptables/nftables", "fail2ban", "Docker ports", "auth logs"], status: "نیازمند snapshot خواندنی" }, recommendation: "تنظیمات SSH، کاربران sudo، فایروال، fail2ban، پورت‌های Docker و پوشش auth log بررسی شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
-      if (leadingSource) recommendations.push(catalogRecommendation({
-        deviceId: device.id, vendor, title: `مسدودسازی موقت مبدأ مشکوک ${leadingSource}`, severity: "high", category: "سرویس‌های در معرض",
-        reason: "این مبدأ بیشترین حجم رویداد اخیر را ایجاد کرده است.", evidence: { sourceIp: leadingSource, source: topSources[0] },
-        recommendation: "پس از تأیید مخرب بودن مبدأ، مسدودسازی مدیریت‌شده و زمان‌دار UFW اعمال شود.", catalogActionId: "linux.temporary_block_ip", parameters: { srcIp: leadingSource, durationMinutes: 30 }
-      }));
+      recommendations.push({ deviceId: device.id, vendor, title: "راستی‌آزمایی SSH، فایروال و سرویس‌های حفاظتی Linux", severity: "medium", category: "کنترل پوشش", reason: "وضعیت SSH، فایروال، fail2ban، sudo و Docker در داده فعلی کامل تأیید نشده است.", evidence: { checks: ["PermitRootLogin", "sudo users", "UFW/iptables/nftables", "fail2ban", "Docker ports", "auth logs"], status: "تأیید نشده" }, recommendation: "ابتدا داده خواندنی جمع‌آوری و سپس فقط ضعف‌های تأییدشده اصلاح شوند.", catalogActionId: null, actionType: null, parameters: {}, executable: false });
     } else {
       const templates: Record<string, { title: string; reason: string; fix: string }> = {
         pfsense: { title: "محدودسازی دسترسی مدیریتی pfSense از WAN", reason: "قاعده WAN با دسترسی مدیریتی می‌تواند سطح حمله را افزایش دهد.", fix: "مبدأ دسترسی WAN به شبکه‌های مورد اعتماد محدود شود." },
@@ -403,7 +453,7 @@ export function buildHardeningRecommendationDrafts(
         generic: { title: "بازبینی سطح سرویس و تلمتری دستگاه ناشناخته", reason: "Vendor یا قابلیت‌های دستگاه هنوز تأیید نشده است.", fix: "اتصال، سرویس‌های باز، لاگ احراز هویت و قابلیت‌ها جمع‌آوری شوند." }
       };
       const copy = templates[vendor] ?? templates.generic;
-      recommendations.push({ deviceId: device.id, vendor, title: copy.title, severity: "high", category: "Vendor Hardening", reason: copy.reason, evidence: { device: device.name, status: "داده کافی جمع‌آوری نشده است" }, recommendation: copy.fix, catalogActionId: null, actionType: "custom_vendor_action", parameters: { vendor, requestedOperation: copy.fix, operationCategory: "hardening", executionSupport: "manual_or_not_implemented", requiresExplicitReview: true }, executable: true });
+      recommendations.push({ deviceId: device.id, vendor, title: copy.title, severity: "medium", category: "کنترل پوشش", reason: `${copy.reason} این وضعیت هنوز با داده خواندنی تأیید نشده است.`, evidence: { device: device.name, status: "داده کافی جمع‌آوری نشده است" }, recommendation: copy.fix, catalogActionId: null, actionType: null, parameters: {}, executable: false });
     }
   }
 
@@ -414,11 +464,19 @@ export function buildHardeningRecommendationDrafts(
       const deviceId = typeof analysis.deviceId === "string" ? analysis.deviceId : null;
       const vendor = normalizeAnalysisVendor(analysis.vendor);
       const recommendedFix = String(finding.recommendedFix ?? "Review the finding and apply a controlled hardening change.");
-      recommendations.push({
-        deviceId, vendor, title: `${String(finding.title)} — پیشنهاد ایمن‌سازی`, severity: String(finding.severity ?? "medium"), category: "Vendor Finding", reason: `اثر امنیتی: ${String(finding.impact ?? "نیازمند بررسی")}`,
-        evidence: { evidence: finding.evidence ?? "data not collected", findingId: finding.id }, recommendation: `${recommendedFix} (پس از بازبینی)`, catalogActionId: null, actionType: "custom_vendor_action",
-        parameters: { vendor, requestedOperation: recommendedFix, operationCategory: "hardening", executionSupport: "manual_or_not_implemented", requiresExplicitReview: true, findingId: finding.id }, executable: Boolean(deviceId)
-      });
+      const hintedCatalogId = typeof finding.actionHint === "string" && getCommandCatalogEntry(finding.actionHint) ? finding.actionHint : null;
+      recommendations.push(catalogRecommendation({
+        deviceId,
+        vendor,
+        title: `${String(finding.title)} — پیشنهاد ایمن‌سازی`,
+        severity: String(finding.severity ?? "medium"),
+        category: "یافته تأییدشده Vendor",
+        reason: `اثر امنیتی: ${String(finding.impact ?? "نیازمند بررسی")}`,
+        evidence: { evidence: finding.evidence ?? "داده‌ای ثبت نشده", findingId: finding.id },
+        recommendation: `${recommendedFix} (پس از بازبینی شواهد)`,
+        catalogActionId: hintedCatalogId,
+        parameters: {}
+      }));
     }
   }
 
@@ -427,7 +485,16 @@ export function buildHardeningRecommendationDrafts(
     reason: "اعتبار ارزیابی به داده کامل و به‌موقع همه دستگاه‌های مدیریت‌شده وابسته است.", evidence: { recentEvents: evidence.recentEvents ?? 0 },
     recommendation: "دستگاه‌های ثبت‌شده با collectorهای فعال مقایسه و شکاف‌ها رفع شود.", catalogActionId: null, actionType: null, parameters: {}, executable: false
   });
-  return recommendations;
+  const severityRank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  const unique = new Map<string, RecommendationDraft>();
+  for (const recommendation of recommendations) {
+    const key = `${recommendation.deviceId ?? "all"}|${recommendation.catalogActionId ?? recommendation.title.trim().toLowerCase()}`;
+    const current = unique.get(key);
+    if (!current || severityRank[recommendation.severity] > severityRank[current.severity]) unique.set(key, recommendation);
+  }
+  return [...unique.values()]
+    .sort((left, right) => (severityRank[right.severity] ?? 0) - (severityRank[left.severity] ?? 0) || Number(right.executable) - Number(left.executable) || left.title.localeCompare(right.title, "fa"))
+    .slice(0, 60);
 }
 
 export async function generateHardeningSuggestions(assessmentId: string) {

@@ -54,6 +54,46 @@ test("valid custom commands not in the static catalog pass vendor policy validat
   }
 });
 
+test("read-only Linux service status compiles to a connector-backed plan", () => {
+  const plan = buildCustomCommandPlan({ message: "Show nginx service status", device: linuxDevice });
+  assert.ok(plan);
+  assert.deepEqual(plan.orderedCommands, ["systemctl status nginx --no-pager"]);
+  assert.deepEqual(plan.verificationCommands, ["systemctl is-active nginx"]);
+  const validation = validateCustomCommandPlan({ plan, device: linuxDevice, actionType: ActionType.custom_vendor_action });
+  assert.equal(validation.valid, true, validation.errors.join("; "));
+});
+
+test("unknown text never becomes a guessed executable vendor operation", () => {
+  const cases = [
+    { device: linuxDevice, message: "configure something for me" },
+    { device: mikrotikDevice, message: "configure something for me" },
+    { device: fortigateDevice, message: "configure something for me" },
+    { device: ciscoDevice, message: "configure something for me" },
+  ];
+  for (const item of cases) {
+    assert.equal(buildCustomCommandPlan({ message: item.message, device: item.device }), null);
+  }
+});
+
+test("Linux user creation collects username and protected password before compiling a controlled connector plan", () => {
+  const incomplete = buildCustomCommandPlan({ message: "یک کاربر جدید بساز", device: linuxDevice });
+  assert.ok(incomplete);
+  assert.deepEqual(incomplete.missingFields, ["username", "initialPassword", "confirmPassword"]);
+  assert.equal(incomplete.typedParameters.operation, "create_user");
+
+  const named = buildCustomCommandPlan({ message: "یک کاربر جدید بساز", device: linuxDevice, parameters: { operation: "create_user", username: "ops_user" } });
+  assert.ok(named);
+  assert.deepEqual(named.missingFields, ["initialPassword", "confirmPassword"]);
+
+  const complete = buildCustomCommandPlan({ message: "یک کاربر جدید بساز", device: linuxDevice, parameters: { operation: "create_user", username: "ops_user", accountAccessConfigured: true } });
+  assert.ok(complete);
+  assert.deepEqual(complete.missingFields, []);
+  assert.deepEqual(complete.orderedCommands, ["sudo -n useradd -m ops_user", "sudo -n chpasswd"]);
+  assert.deepEqual(complete.verificationCommands, ["id ops_user"]);
+  const validation = validateCustomCommandPlan({ plan: complete, device: linuxDevice, actionType: ActionType.custom_vendor_action });
+  assert.equal(validation.valid, true, validation.errors.join("; "));
+});
+
 test("policy engine exposes typed v2 operations, ordering dependencies, limits, and role metadata", () => {
   const plan = buildCustomCommandPlan({ message: "Restart nginx on this server", device: linuxDevice });
   assert.ok(plan);

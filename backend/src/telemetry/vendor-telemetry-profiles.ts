@@ -11,9 +11,9 @@ const p = (vendorId: TelemetryVendor, vendorName: string, liveSources: string[],
 
 export const VENDOR_TELEMETRY_PROFILES: Record<TelemetryVendor, VendorTelemetryProfile> = {
   linux: p("linux", "Linux", ["auth", "system", "kernel", "firewall", "nginx", "docker"], ["ssh_config", "listeners", "firewall", "security_tools", "containers"], [
-    rule("ssh-failure-burst", "Repeated SSH authentication failures", "auth", "high", /failed password|invalid user|authentication failure/i, "block_source_ip_temporary", 5, ["T1110"]),
+    rule("ssh-failure-burst", "Repeated SSH authentication failures", "auth", "high", /(?:sshd|pam_unix\(sshd:auth\)).*(?:failed password|invalid user|authentication failure)|failed password for|invalid user .* from/i, "block_source_ip_temporary", 5, ["T1110"]),
     rule("ssh-success-after-failures", "SSH success after authentication failures", "auth", "critical", /accepted (?:password|publickey).*after.*fail|success_after_failures/i, "linux_investigate_login", 1, ["T1078"]),
-    rule("sudo-denied-burst", "Repeated denied sudo attempts", "privilege", "high", /sudo:.*(?:not in the sudoers|permission denied|authentication failure)/i, "linux_review_privilege", 3, ["T1548"]),
+    rule("sudo-denied-burst", "Repeated denied sudo attempts", "privilege", "high", /sudo(?:\[\d+\])?:.*(?:not in the sudoers|permission denied|authentication failure|incorrect password)/i, "linux_review_privilege", 3, ["T1548"]),
     rule("nginx-5xx-burst", "Nginx 5xx response burst", "web_app", "high", /(?:nginx|http).*(?: 5\d\d |status[=:]5\d\d)/i, "linux_investigate_web_service", 10),
     rule("docker-restart-oom", "Docker container restart or OOM", "container_runtime", "high", /docker.*(?:oom|out of memory|restarting|restart loop|killed)/i, "docker_investigate_container", 2, ["T1496"]),
     { id: "ssh-password-auth", title: "SSH password authentication is enabled", category: "posture", severity: "high", confidence: .98, snapshotPath: "ssh.passwordAuthentication", snapshotTest: "enabled", whyItMatters: "Password SSH expands credential-attack risk.", recommendedIntent: "linux_harden_ssh", mitreTags: ["T1110"] },

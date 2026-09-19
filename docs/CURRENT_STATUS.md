@@ -1,3 +1,295 @@
+## 2026-09-16 - Real-data security command dashboard
+
+- Rebuilt the authenticated dashboard in the landing showcase visual language while keeping every operational value connected to the existing backend APIs.
+- Added live daily-service health, asset/vendor availability, open finding severity, a 24-hour stacked finding trend, real destination-port event counts, prioritized device status, latest findings, controlled-action priorities/history, and real Linux health/resource rings.
+- Added explicit empty/error states, manual refresh, 60-second background refresh for non-mutating operational reads, responsive layouts, and reduced-motion behavior. Stale Linux health continues to use the established bounded collection path.
+- Preserved controlled execution semantics: the dashboard only links to Action Center and reports existing backend activity; it does not execute AI text or bypass preview, confirmation, PolicyGuard, connectors, or audit.
+- Validation passed: Docker production build, targeted dashboard ESLint, UTF-8 scan across 387 files, locale parity across 860 keys, Persian primary-route copy checks, deployed dashboard HTTP 200, API health HTTP 200, and healthy web/API/database/main-Nginx containers.
+## 2026-09-16 - Three-dimensional product landing showcase
+
+- Reworked the public Persian landing page around three privacy-safe product views derived from the real application: the unified operations dashboard, controlled Action Center, and monitoring/AI assistant workspace.
+- Added responsive perspective, pointer-reactive tilt, layered depth, restrained light reflection, scroll blur-to-clear reveals, and reduced-motion/mobile fallbacks.
+- Expanded product copy to accurately describe multi-vendor assets, continuous monitoring, explainable detections, the Persian command catalog, reviewable AI proposals, PolicyGuard, real connector invocation, and audit results.
+- The frontend production build passed inside Docker. `firewall-web`, `main-nginx`, `firewall-api`, and `firewall-db` are healthy; `/firewall/landing`, `/firewall/dashboard`, and all three landing image assets return HTTP 200.
+## 2026-09-16 - Repair the device-onboarding Continue step
+
+- Fixed a UI/state mismatch on generic device registration: Linux was displayed as the active platform but remained internally unconfirmed, so valid name, address, and port values could not advance to credentials.
+- The default Linux vendor is now the real selected radio option from initial load, remains visibly checked, and can still be replaced with Cisco, FortiGate, MikroTik, or Sophos before continuing.
+- The frontend production build passed and the updated web container is healthy; both the onboarding route and API readiness endpoint return HTTP 200.
+
+## 2026-09-13 - Sophos per-user reporting verification
+
+- Generated the live Sophos `User app risks & usage` report for 2026-09-12 through 2026-09-13 and expanded it to all available user rows. Confirmed that this view contains materially more traffic than the session-accounting-oriented `User data transfer report`.
+- Verified that identified usernames, Active Directory identities, local captive-portal users, and an `Unidentified` bucket are present. The unidentified historical traffic cannot be reassigned to users retroactively.
+- Confirmed the complete operator workflow: Applications & web, User app risks & usage, date range, Generate, 200 records, sort by Bytes, then CSV/PDF/HTML. Use User data transfer separately when upload/download split and session duration are required.
+- No firewall, authentication, logging, retention, DNS, gateway, account, or policy setting was changed. No report export or raw user-activity log was persisted in the repository.
+
+## 2026-09-12 - Sophos domain certificate trust policy deployed
+
+- Connected to the authorized Windows domain controller through the existing private SSH tunnel and WinRM; no ESXi console or public Windows management exposure was needed.
+- Created and linked a separate `IT - Sophos Captive Portal Trust` computer GPO. Apply permission is restricted to the ten discovered Windows workstations; Authenticated Users retains read-only permission, excluding servers and domain controllers from application.
+- Distributed public-only Default and SecurityAppliance SSL CA certificate policy blobs; both were read back successfully. A live LAN TLS probe confirmed that HTTPS interception uses the latter CA, not just the Default CA.
+- Enabled Firefox Windows enterprise-root integration in the same GPO. Preserved domain DNS, browser certificate validation, default domain policies, firewall identity enforcement and MikroTik bypass prevention.
+- Endpoint acceptance remains pending: none of the ten workstation WinRM or RPC endpoints was reachable from the DC. Policy publication and scope are verified, but no workstation application or domain-browser search/login result is claimed. Connected clients can refresh computer policy with `gpupdate /target:computer /force` and reopen their browser.
+
+## 2026-09-12 - Requested Sophos internet accounts and usage-report handoff
+
+- Created all 11 explicitly requested local accounts through Sophos user forms; each creation was verified in the actual user table with User type and Open Group membership.
+- Applied the user-supplied shared email and credential instructions without persisting passwords. A representative saved account confirmed the email and disabled IPsec/L2TP/PPTP access; no administrator accounts were created.
+- Verified the live reporting path: Reports > Applications & web > Show > User data transfer report, with FROM/TO and Generate, per-user data transfer, uploaded/downloaded data and used time, and CSV/PDF export.
+- Removed the credential-free temporary form automation and restored the pre-existing browser helper after use. No application runtime or firewall enforcement policy changed.
+
+## 2026-09-12 - Captive portal sign-out and automatic-discovery follow-up
+
+- Persisted captive-portal behavior that retains its sign-out screen after login, with a 15-minute inactivity logout fallback. HTTPS remains enabled.
+- Tested a temporary non-admin account from a representative LAN server: redirect before login, authenticated access after login, successful logout, and redirect again after logout. Removed the temporary account and its in-memory/browser test credential.
+- Verified Windows and Firefox HTTP captive-detection requests are redirected. Google HTTPS also receives the portal response when certificate validation is bypassed for diagnosis, but normal validation fails with an untrusted-root error.
+- Remaining deployment requirement: distribute the actual Sophos signing CA to domain clients, and verify the affected workstation's browser/network-detection policy. No domain-client trust changes were made or claimed.
+
+## 2026-09-12 - Live Sophos LAN/transit connectivity repair
+
+- Added a narrowly scoped Sophos DNS exception for the domain DNS server; workstation internet authentication remains enforced.
+- Added a separate LAN-to-transit-router ICMP echo rule. The existing MikroTik direct-LAN-to-WAN bypass block remains enabled.
+- Verified from a representative LAN server: transit-router ping 3/3, internal and external DNS responses, HTTP captive-portal redirect, and the local application login response.
+- No workstation domain-user login was performed; that end-to-end acceptance step still requires a domain workstation/user.
+- No application code or deployment changed. The pre-existing deleted `CODEX_HANDOFF.md` was not recreated.
+
+## 2026-09-11 - Scheduler form persistence and Action Center queue
+
+- Corrected the Persian 24-hour time field's visual order while retaining RTL labels and summaries.
+- Stopped periodic device-list refreshes and time edits from resetting already-entered operation parameters.
+- Made the final schedule button the single explicit confirmation: it submits `confirmed=true` directly without a second browser dialog.
+- Projected active scheduled tasks into both the Action Center queue and history with the Persian lifecycle state `در انتظار اجرا`, without creating a premature ActionPlan or enabling early execution.
+- Validation: backend build, targeted frontend ESLint, and the isolated scheduler lifecycle suite passed 7/7.
+
+## 2026-09-11 - Graphical Cisco asset intelligence workspace
+
+- Replaced the Cisco capability-label-heavy overview with a responsive operational dashboard backed by the latest verified connector collection.
+- Added graphical port-state distribution, live device resource meters, identity and hardware inventory, VLANs, routes, ARP/MAC totals, CDP/LLDP neighbors, and security/service coverage.
+- Canonicalized abbreviated and expanded Cisco interface names so IP, link, VLAN, speed, duplex, and description evidence appears on one interface row instead of being split.
+- Added an explicit live refresh action and an honest empty state when no verified Cisco collection exists.
+- Added a bounded backend projection that removes raw CLI, command evidence, and credential-like fields before returning rich vendor details to the browser.
+- Validation: backend/frontend production builds, targeted ESLint, diff checks, and 3 focused Cisco asset tests passed; API/web images were health-gated and the deployed asset page plus API health returned HTTP 200.
+
+## Calm, load-bounded motion cadence (2026-09-01)
+
+- Slowed the contextual top rail to 10-18 second primary cycles, halved its moving packet/signal count, moved the scanner to transform/opacity-only animation, and isolated painting with CSS containment.
+- Mobile now disables mesh drift, floating signals, and spark effects while preserving the core route animation; `prefers-reduced-motion` still provides the fully static fallback.
+- Reduced the dashboard defense scene to two incoming packets, one outgoing packet, one curved packet, and two threats. Scanner, packet, halo, telemetry, and orbit cycles now run roughly two times slower and avoid animated blur, width, and height changes.
+
+## Contextual motion system across product tabs (2026-08-31)
+
+- Added a compact, code-native motion rail to every shell-backed product route. Dashboard, assets, security, monitoring, actions, Assistant, attackers, settings, and tools each use their own color, icon set, and motion language; email alerts, detection rules, findings, onboarding, Linux monitoring, and action details receive more specific scenes.
+- Kept the motion purely visual with no captions below its elements, responsive sizing for phone/tablet, and a static `prefers-reduced-motion` fallback.
+- Enriched the dashboard network-defense scene with curved packet routes, an ambient scanner, moving path dashes, defense-gate pulses, blocked-threat impacts, and node telemetry while removing the labels/footer beneath the animated nodes.
+- Validation passed: TypeScript, targeted ESLint, frontend production build, UTF-8 and i18n checks, 6/6 focused motion tests, six-route frontend smoke, healthy Docker deployment, and HTTP 200 for dashboard, Assistant, and API health.
+
+## Multi-recipient email alerts and explainable delivery history (2026-08-29)
+
+- Email alert settings now support up to ten validated, deduplicated recipients. Existing single-recipient data is migrated automatically, Gmail connection defaults its sender as the first recipient only when the list is empty, and every real detection is delivered and tracked independently per recipient.
+- The email workspace now provides an add/remove recipient manager, recipient count, save/test controls for the complete list, and a responsive delivery history with status filters.
+- Each history entry exposes the real rule/Finding reason, destination email, vendor, device, event count, attempt count, send time, next retry, and a localized failure explanation. The API returns the stored delivery recipient and enriches recent ledger rows from their Finding and DetectionRule records.
+- Transient-failure guarantees remain intact: each recipient gets its own durable fingerprint and queue row, and retries use the originally recorded recipient after connectivity returns.
+
+## Email alerts workspace and complete sidebar collapse (2026-08-29)
+
+- Moved Gmail registration, recipient/severity settings, simple/five-vendor tests, and the persistent delivery ledger out of Detection Rules into the dedicated implemented `/security/email-alerts` route and **Email alerts** security navigation item.
+- Simplified the connected state: the App Password form and disabled duplicate fields disappear after verification, leaving a compact sender identity, explicit disconnect, three status summaries, alert settings, test actions, and delivery history.
+- Fixed desktop sidebar collapse at its layout root. The shell column now changes from 280px to 76px, labels/children are fully hidden, icons stay centered with titles, the toggle uses directional panel icons, and the preference persists safely in local storage. Mobile drawer behavior remains full-width.
+- Validation passed: frontend TypeScript/lint/production build, backend build, command catalog validation (191 items), UTF-8 and locale checks, focused navigation/email/detection tests 13/13, healthy API/web deployments, HTTP 200 for both security routes, and deployed product-navigation verification.
+
+## Durable detection-email queue and five-vendor live delivery (2026-08-29)
+
+- Temporary loss of internet, DNS, SMTP connectivity, timeouts, and SMTP 4xx rejections now persist each detection delivery as `pending` in PostgreSQL. Retry has no attempt-count cutoff, uses bounded exponential backoff up to 30 minutes, survives container restarts, and executes independently even when another monitoring-cycle step fails.
+- Authentication and invalid App Password errors are classified as permanent `blocked` deliveries so the UI asks for connection repair instead of retrying invalid credentials forever. Pending, blocked, and sent states, attempt count, and next retry are visible in Detection Rules and refresh automatically.
+- Added an admin-only five-vendor test action and UI button. The deployed Gmail connection sent five real messages successfully: Linux, MikroTik, FortiGate, Cisco, and pfSense all returned `sent` with zero failures; the earlier generic real test also succeeded and automatic delivery is enabled.
+- Validation passed: focused detection/SMTP/retry/RBAC tests 9/9, backend build and targeted lint, command catalog validation (191 items), frontend TypeScript/lint/production build, healthy API/web Docker deployment, and sanitized real Gmail delivery verification. No credential or recipient secret was printed.
+
+## In-app Gmail sender registration (2026-08-29)
+
+- Detection Rules now contains a complete Gmail connection workflow: sender address, Google App Password entry, real SMTP authentication verification, connection health, removal, recipient/severity settings, and test delivery.
+- Fixed the previous `forbidden` response by declaring all email mutations in the central RBAC policy. Only administrators with a valid session and CSRF token can create, test, change, or remove an email sender.
+- Gmail App Passwords are normalized from Google's spaced 16-character format, encrypted with the server credential encryption key, stored only in PostgreSQL, redacted from request logs, and never returned to the browser. Removing a connection clears the encrypted secret and disables automatic mail.
+- Each alert channel now resolves its own Gmail sender first and retains server SMTP as an optional fallback. Continuous rule delivery and the durable retry queue use the same per-channel credential.
+- Validation passed: Prisma schema/generation, backend build, command catalog, frontend typecheck/lint/production build, focused SMTP/RBAC tests 8/8, Docker API/web health-gated rebuild, deployed migration status, HTTP 200 page/health, authenticated CSRF smoke, expected Gmail validation 400 instead of `forbidden`, and zero temporary test accounts after cleanup. A real external Gmail login still requires the operator's own App Password and was intentionally not attempted with fabricated credentials.
+
+## Continuous five-vendor detection and immediate email delivery (2026-08-29)
+
+- The deployed API now owns a continuous security-monitor worker. It reconciles supported devices, runs due read-only collectors, evaluates all enabled rules every five seconds, and retries transient SMTP failures with a bounded five-attempt backoff; page visits are no longer part of the runtime trigger.
+- Added registered SSH log collectors for Linux, MikroTik RouterOS, FortiGate, Cisco IOS/IOS-XE, and pfSense. Collector states are enabled by default, preserve an operator disable after migration, honor per-device intervals, and expose last success/sanitized failure through `/api/security/monitoring/status` and the Detection Rules page.
+- Collector ingestion now preserves the real canonical vendor, parses common ISO/FortiGate/RouterOS/syslog timestamps, uses exact timestamp-plus-line fingerprints, and does not refresh/count a previously read line. Old backlog is excluded by event time, preventing false first-poll alerts and repeated mail.
+- Every enabled detection rule at or above the saved email severity now sends immediately; the former 15-rule mail allowlist no longer suppresses valid high-severity detections. Delivery remains cooldown- and event-fingerprint-deduplicated across overlapping runs and API restarts. Failed sends remain visible, update channel health, and are retried without blocking Finding persistence.
+- The Persian-first UI now reports whether the worker is actually running, monitored/supported device coverage, last detection, collector failures, enabled email channels, and the real all-rules email behavior.
+- Validation passed: Prisma generation/schema, backend build, command catalog, frontend typecheck/lint/i18n/UTF-8/production build, focused tests 7/7, Docker API/web rebuild and health checks, deployed route/health HTTP 200, worker startup without cycle failure, isolated PostgreSQL five-event detection, two Persian SMTP messages for two high-severity rules, restart-safe zero duplicates, and exact isolated-database cleanup.
+- Current deployed configuration check is intentionally sanitized and reports `smtpHostConfigured=false` and `senderConfigured=false`. The runtime path is working, but real external mail cannot leave this installation until an operator supplies server-side SMTP settings and uses **Send test**; no credentials were read or printed during validation.
+
+## Real vendor detection rules and restart-safe Persian email alerts (2026-08-28)
+
+- `/security/rules` now adds 25 event-backed rules: five each for Linux, MikroTik, FortiGate, Cisco, and pfSense. Every vendor rule has a predicate, time window, threshold/grouping, severity, standards mapping, and official reference. Existing general rules remain available and executable in a separate General tab.
+- Rule enable/disable state is persistent. Seeding updates metadata without forcing `enabled=true`, fixing the previous behavior that silently re-enabled rules whenever the page loaded.
+- Detection now uses exact event IDs and bounded windows. Re-running detection no longer inflates Finding counts; only new evidence updates a Finding.
+- Detection is invoked immediately after API event ingestion, collector batches, and persisted suspicious Linux live-stream signals; email delivery is not dependent on opening the Detection Rules page.
+- Added a PostgreSQL-backed email channel and delivery ledger, native SMTP/STARTTLS client, admin-only recipient/severity settings, test delivery, fully Persian alert subject/body, sanitized failures, and a unique event-set fingerprint that prevents duplicate email both across overlapping rules and API restarts. Email is limited to 15 explicit high-confidence rules; non-priority and medium/low rules remain Finding-only. A persisted rule-window cooldown prevents repeated mail for new events in the same alert episode.
+- The page is now a compact vendor-tab workspace with five focused rows per vendor, real thresholds, standards badges, a manual detection run, and responsive email configuration.
+- Validation passed: Prisma schema, backend/frontend builds, targeted lint, focused unit/socket tests, real Docker migration/health checks, a real PostgreSQL five-event threshold test, and a two-phase SMTP test around an actual API restart. One Persian email was delivered before restart and zero after restart; delivery count stayed `1`, and all test data/settings were cleaned/restored.
+
+## Resilient AI assistant provider runtime (2026-08-23)
+
+- Fixed the deployed assistant's 502 failure. The API container still referenced a stale Hyper-V adapter address after Windows changed it from `172.20.x.x` to `172.25.x.x`; Docker now resolves the stable `host.docker.internal:host-gateway` mapping instead of storing a volatile host IP.
+- Hardened the restricted OpenRouter host proxy: it binds for Docker access, preserves its ignored random credential across restarts, rejects foreign port owners, starts the real Node executable, permits private clients only, and tunnels only `openrouter.ai:443`. No Windows Scheduled Task or firewall rule was installed.
+- OpenAI-compatible defaults now consistently pair `openrouter/free` with `https://openrouter.ai/api/v1`. A 403 from one model no longer prevents trying configured fallback models; only authentication failure 401 stops the external attempt sequence.
+- Added an honest deterministic offline fallback. If every external model is unavailable, the assistant still returns a Persian evidence summary or controlled structured proposal, marks `provider=mock`, `fallbackUsed=true`, retains the provider error in status, and never bypasses ActionPlan, PolicyGuard, Connector, confirmation, or audit controls.
+- Validation passed: backend TypeScript build, three focused proxy/provider/fallback contracts, locale and UTF-8 guards, real external `openrouter/free` response with an assistant message, forced-offline fallback response, healthy API container, HTTP 200 on `/firewall/assistant`, and no dangling API image after safe deployment.
+
+## User-friendly execution review and bounded web images (2026-08-23)
+
+- Replaced the dense raw ActionPlan confirmation table with a compact decision surface: operation title, target device, localized impact level, backup requirement, expected outcome, and only genuine operator-editable parameters.
+- Generated commands and implementation details remain available in collapsed disclosures without overwhelming the primary decision. The modal has Escape/backdrop close behavior, an independently scrollable body, a fixed decision footer, and a phone/tablet bottom-sheet layout.
+- Internal identity and capability fields such as `deviceId`, `vendor`, `actionType`, support metadata, and execution flags are no longer editable. The controlled `Preview -> explicit confirmation -> PolicyGuard -> registered Connector -> Audit/Result` path and protected-lab behavior are unchanged.
+- Added `scripts/deploy/rebuild-firewall-web.ps1` as the required local web deployment path. It records the running image, builds and health-checks the replacement, and removes only the exact superseded `firewall-web` image when it still exists and no container uses it; global image/system/builder pruning is intentionally forbidden.
+- Validation passed: TypeScript, targeted ESLint, execution-review/Docker cleanup contracts, locale parity, Persian-copy and UTF-8 guards, production frontend build, healthy Docker web/nginx configuration, and HTTP 200 on `/firewall/actions`.
+
+## Cross-device web, PWA, and native mobile readiness (2026-08-23)
+
+- Added one responsive shell layer for desktop, tablet, and phone: compact sticky top bar, safe-area-aware Drawer, a five-item icon bottom navigation (`Dashboard`, `Assets`, `Monitoring`, `Actions`, `More`), touch-safe controls, mobile keyboard sizing, single-column forms/dialogs, and independent horizontal table scrolling.
+- Made the full `/firewall/` deployment path PWA-safe. Router, manifest, icons, service-worker registration, offline navigation fallback, and cache keys now resolve from the configured base path; native Capacitor WebViews do not register the browser service worker.
+- Added stable relative PWA identity/scope and corrected nginx manifest MIME plus service-worker cache headers. The Docker image was rebuilt and `firewall-web` recreated; web, nested SPA routes, manifest, service worker, and API health all return HTTP 200.
+- Repaired the Android root Gradle file, which had incorrectly become a Cordova library module. Capacitor sync detects SQLite, secure storage, and local SSH. Source/mobile security tests pass, but this Windows host could not download AGP 8.13.0 because the configured official Google Maven endpoint returned 404, so a fresh APK binary was not produced locally. iOS packaging still requires macOS/Xcode.
+- Validation passed: root and `/firewall/` production builds, TypeScript, targeted ESLint, 12 focused PWA/mobile/release contracts, locale parity, Persian-copy, UTF-8, and real Chrome device emulation at 360×800, 390×844, and 768×1024 with viewport/body/page widths equal and no global overflow. Deployment and operator instructions are in `docs/MOBILE_READINESS.md`.
+
+## Operator-friendly Action Center (2026-08-23)
+
+- Rebuilt `/actions` as a compact operations console with a truthful controlled-execution flow, live lifecycle summary, focused operation composer, device connection-readiness panel, one consolidated review surface, and an always-visible searchable operations queue.
+- Removed the three duplicated selected-action/result surfaces and the oversized empty connection presentation. Device identity and verification facts now appear only after target selection; parameters, connection tests, retry, preview, explicit confirmation, execution, result links, device workspace links, filtering, paging, and history clearing remain available.
+- Preserved the existing `Catalog -> ActionPlan -> Preview -> explicit user confirmation -> PolicyGuard -> registered Connector -> Audit/Result` contract. Preview still uses `intent=preview`; real execution still uses `intent=execute`, role checks, connector evidence, polling, and the existing protected-lab behavior.
+- Added a dedicated responsive RTL/LTR stylesheet for desktop, tablet, and phone layouts. Frontend typecheck, targeted ESLint, locale/UTF-8 guards, focused Action Center contracts, and the production frontend build pass.
+- Rebuilt and recreated only `firewall-web` and `main-nginx`; both containers are healthy, `/firewall/actions` returns HTTP 200, and the deployed assets contain the new operations layout.
+
+## Actionable Linux fleet monitoring (2026-08-23)
+
+- Replaced the unusable RTL Linux table with responsive device cards showing identity, management host, connection/health state, score, CPU, memory, disk, and collection freshness without overlapping columns.
+- Added fleet search, status filters, attention-first ordering, per-device refresh, refresh-all with partial-failure disclosure, and honest observability-schema messaging.
+- Device detail now projects real HealthSnapshot metrics, operational service/port/firewall signals, stored warnings, and 24-hour CPU/RAM/Disk trends from persisted MetricSample rows. Missing evidence remains unknown rather than healthy.
+- The five-vendor overview remains the entry point for Linux, MikroTik, FortiGate, Cisco, and pfSense; the advanced route is explicitly Linux-only because those persisted telemetry contracts currently exist only for Linux.
+- Validation passed: frontend typecheck/build, targeted ESLint, monitoring contracts 3/3, locale/UTF-8 guards, Docker production build, healthy web/nginx/API/db containers, route HTTP 200, and deployed bundle/CSS verification.
+
+## Simple standards-aligned vendor monitoring workspace (2026-08-20)
+
+- Replaced the stacked Linux telemetry and Daily Check surfaces on `/monitoring` with one compact vendor/device workflow. The overview now contains only two selectors, one action, a four-segment health ring, four essential cards, and the latest result link; advanced Linux detail remains on its dedicated route.
+- Linux, MikroTik, FortiGate, Cisco, and pfSense project their detailed profiles into four vendor-specific essentials: device health, performance, network, and security. The underlying profiles retain their standards-aligned detailed sections.
+- Device connection readiness, profile coverage, ActionPlan lifecycle, and connector-backed health results are displayed as separate facts. A checklist definition, missing evidence, or a pre-connector failure can no longer appear as a healthy result.
+- Linux, MikroTik, and FortiGate retain real catalog/connector execution. Cisco and pfSense are explicitly manual guidance until executable connectors exist. The protected Preview/Confirm/PolicyGuard/Connector/Audit workflow is unchanged.
+- Validation passed: TypeScript, targeted ESLint, focused monitoring contracts 2/2, production frontend build, locale/UTF-8 guards, Docker image build, healthy web/nginx containers, deployed route HTTP 200, and deployed bundle/CSS verification.
+
+## Complete self-hosted authentication and account security (2026-08-19)
+
+- Login is Persian-first and bilingual, responsive, autofill-safe, accessible, Caps Lock aware, and reports invalid credentials, database startup, network failure, and retry windows without leaking account existence.
+- Existing opaque PostgreSQL sessions now add browser-token rotation, bounded active sessions, constant-work unknown-user verification, combined credential-stuffing/username-spraying limits, safe proxy IP handling, automatic UI sign-out on expired sessions, and explicit password-field log redaction.
+- Settings is now an account-security workspace with identity details, active-session metadata, current-session detection, individual revocation, global logout, password strength guidance, and an atomic password change that revokes all sessions.
+- Backend build, frontend production build/typecheck, targeted ESLint, 10 focused security contracts, 859-key locale parity/Persian-copy validation, and the 589-file UTF-8 guard pass. No schema migration was required.
+- Deployment remains pending: container recreate was rejected because it can cause brief downtime, Docker image build then failed twice on registry DNS/TLS connectivity, and the local functional smoke could not reach the Docker-only PostgreSQL network. Running containers were not changed.
+
+## Device-scoped findings and exact evidence integrity (2026-08-12)
+
+- Findings now have a second investigation scope below vendor: all devices in the family or one registered device. The selector combines inventory devices with devices represented by stored findings, shows name, management address, and per-device finding count, and scopes cards and severity metrics to the selected server.
+- Raw vendor logs are now returned only when the finding contains an exact event reference that resolves within the same device. The legacy similar-text fallback was removed, duplicate raw records are collapsed, unresolved historical references are disclosed instead of being replaced, and primitive stored evidence is honestly labeled as stored evidence rather than a configuration snapshot.
+- Linux live parsing now keeps SSH authentication and sudo authentication rules mutually exclusive, ignores successful `sudo session opened` records, deduplicates the same raw event received through overlapping streams, and prevents repeated analysis or repeated snapshots from incrementing a finding without a new exact event reference.
+- Evidence presentation exposes resolved/total reference integrity and remains redacted on demand. This supports NIST SP 800-53 Rev. 5.1 AU-3 expectations for event type, time, location/source, outcome, and associated identity, and NIST CSF 2.0 Detect outcomes without claiming certification.
+- Local validation: backend build and full frontend production build; targeted ESLint; focused evidence/device contract tests 7/7; 799-key locale parity and Persian-copy guard; 588-file UTF-8 guard. Database-backed suites remain correctly gated by the repository's required isolated `TEST_DATABASE_URL`. Docker rebuild was requested but the execution environment rejected privileged access because its automatic-approval usage limit was exhausted; deployed-browser validation remains pending that explicit approval.
+
+## Selectable vendor finding views (2026-08-11)
+
+- The findings vendor selector now always exposes the product's five primary device families: Linux, MikroTik RouterOS, FortiGate, pfSense, and Cisco. Vendor visibility no longer depends on already having at least one stored finding.
+- Zero-finding vendors show a real zero count, their own detection profile and evidence sources, and a vendor-specific empty state. Findings remain strictly scoped to the selected vendor, while unknown future vendors with stored findings are appended without hiding their data.
+- Validation: frontend ESLint and production build; locale parity, Persian-copy, and UTF-8 guards; focused vendor/evidence tests 5/5; Docker frontend rebuild and web/nginx recreate; authenticated Chrome/Playwright on deployed localhost selected all five vendors, verified Persian counts `7/0/0/0/0`, checked the vendor-specific empty state, switched FortiGate at 390px width, found no console/API errors, and measured zero global horizontal overflow.
+
+## Vendor-specific findings and traceable raw evidence (2026-08-11)
+
+- Security findings are now reviewed one vendor at a time. The active Linux, MikroTik, FortiGate, pfSense, and scaffolded Cisco profiles expose their own live-log families, snapshot sources, rule categories, and vendor-safe detection applicability instead of presenting a mixed generic queue.
+- Finding detail now shows vendor/category/source, confidence, affected asset, first/last observation, technical context, MITRE tags when stored, and an on-demand evidence workspace. The evidence API resolves only explicitly referenced events, exact legacy evidence matches, or the bounded telemetry record; it redacts secret-like values and distinguishes raw events, stored evidence, configuration snapshots, and unavailable legacy evidence without fabrication.
+- Linux live streaming now gives the finding engine the same deterministic event ID persisted by the bounded telemetry store. Docker persists that store in `firewall_telemetry`, and the API image only changes ownership on writable storage instead of recursively changing the full application tree.
+- Validation: backend and frontend production builds; focused vendor/evidence and security UI tests 9/9; ESLint; 788-key locale parity and Persian copy guard; 588-file UTF-8 guard; Docker API/web/db/nginx healthy; authenticated evidence probes with exact ID/raw-text equality and cleanup; existing data projects 12 traceable raw events across two findings plus three honest snapshots; authenticated Playwright Core on the deployed localhost route with seven finding cards, six visible raw event rows, Persian RTL, raw-log LTR, redaction notice, no console errors, and zero horizontal overflow at desktop and 390px mobile.
+
+## Standards-aligned security operations workspace (2026-08-11)
+
+- The security area now uses the NIST CSF 2.0 lifecycle as an operational capability map across Govern, Identify, Protect, Detect, Respond, and Recover. Implemented capabilities link to real product workflows; recovery is explicitly shown as unmeasured, and the UI states that it is not a certification or compliance score.
+- The overview is backed by stored findings, active assets, detection rules, and incidents. It provides a real severity ring, focused critical/high and affected-asset metrics, enabled-rule coverage, an ordered immediate-action queue, detection readiness, and active response workload. Legacy placeholder distribution and recent-action prose panels were removed.
+- Findings now have Persian search over localized and raw evidence, severity/status filters, affected-asset context, timestamps, and compact review cards. Detection rules now have localized names/descriptions, colored severity/state cards, real enabled coverage, and enable/disable controls connected to the existing security rule API.
+- NIST CSF 2.0 and CIS Controls v8.1 informed the visible lifecycle, asset inventory, audit/detection, and response structure. MITRE ATT&CK technique coverage and CISA KEV prioritization remain explicit evidence gaps instead of fabricated metrics.
+- Validation: frontend ESLint; production TypeScript/Vite build locally and in Docker; 723-key locale parity and Persian primary-copy guard; 586-file UTF-8 guard; security UI source tests 4/4; deployed web/API HTTP 200; both nginx configurations valid; authenticated Playwright over overview/findings/rules with six NIST functions, 16 real rules, Persian evidence search and content, working filters, active motion, no API/console errors, and zero horizontal overflow on desktop and 390px mobile.
+
+## Guided device onboarding and vendor catalog UX (2026-08-11)
+
+- Device registration is now a focused three-step experience with a persistent Persian guide, visual vendor selection, inline required-field guidance, automatic platform preview, secure credential-mode cards, connection-target preview, and explicit verified/unverified review states. The existing session, connector test, discovery, preview, and commit contracts are unchanged.
+- The vendor catalog now explains connector readiness through colored vendor identities, motion-enabled readiness cards, connector badges, capability meters, and clear registration availability. Only Linux, Cisco, FortiGate, and MikroTik expose guided registration; pfSense correctly remains a roadmap-only entry without a misleading registration action.
+- Both pages are responsive at desktop and 390px mobile widths, retain accessible radio/status semantics, respect reduced-motion preferences, and have complete Persian/English locale parity.
+- Validation: frontend ESLint with no errors; production TypeScript/Vite build locally and inside Docker; 605-key locale parity and Persian primary-copy guard; 584-file UTF-8 guard; onboarding contract source tests 3/3; Playwright against the deployed localhost routes with five vendor cards, four valid registration paths, animated card entry, vendor switching, form-state retention, and zero horizontal overflow; web/API HTTP 200; both nginx configurations valid; `firewall-web` healthy.
+
+## Live Linux refresh and focused asset inventory (2026-08-11)
+
+- The dashboard now renders stored Linux health immediately, detects missing resource metrics or snapshots older than 15 minutes, and performs connector-backed read-only collection in the background. Operators can also refresh every Linux server explicitly; partial failures keep the latest usable data visible with an honest warning.
+- The asset overview now keeps only active inventory counts, attention state, search/filter controls, and the essential equipment identity, management address, last verification, health, and workspace link. Decorative/mock sync panels and the non-actionable missing-site summary were removed.
+- Asset and equipment views are localized, responsive, and use colored Linux, network, security, wireless, and generic equipment icons. Direct `/firewall/assets` and `/firewall/assets/devices` requests now resolve through the SPA instead of colliding with Vite's `assets` directory.
+- Validation: frontend production build; 548-key locale parity and Persian primary-copy guard; 584-file UTF-8 guard; healthy Docker stack; direct dashboard/assets/devices HTTP 200; real SSH refresh responses 200 for both Linux servers; two charts with four animated real-data rings each; six active asset rows; working attention/search filters; Persian equipment headers; no legacy English asset labels; and no horizontal overflow at desktop or 390px mobile widths.
+
+## Persian operations dashboard and Linux fleet rings (2026-08-11)
+
+- The dashboard is now Persian-first and focused on four operator needs: key operational state, immediate attention items, per-server Linux health, and recent controlled executions. Repetitive workflow/vendor/history panels and non-essential shortcut clutter were removed.
+- Every registered Linux server is returned by the monitoring summary. Each server receives a real multi-ring SVG chart from its latest stored health score and CPU, memory, and disk metrics; offline and stale states are projected honestly and missing telemetry stays unknown.
+- Dashboard action titles are returned in Persian and English so the UI selects the active locale. Persian dates and digits, RTL layout, responsive behavior, accessible chart labels, animated ring transitions, and reduced-motion behavior are included.
+- Docker deployment rebuilt and recreated the API and web services, then refreshed main nginx to resolve the new upstream container addresses. The web nginx now forces browser revalidation under `/firewall/` so a previously cached HTML shell cannot pin old hashed dashboard chunks after deployment.
+- Validation: backend build; frontend TypeScript and production build; locale parity and Persian primary-copy checks; UTF-8 guard; focused dashboard workflow tests; Docker services healthy; API and web HTTP 200; deployed ring CSS present; Playwright on the exact localhost URL showed the new Persian heading, no legacy workflow heading, two real Linux server charts, animated rings, and no horizontal overflow.
+
+## Login autofill appearance repaired (2026-08-11)
+
+- Browser-filled username and password values now keep the login form's dark surface instead of receiving Chrome/Edge's light autofill background.
+- The override is scoped to login inputs and preserves readable text and caret colors across autofill hover and focus states.
+- Validation: frontend production build passed; the `firewall-web` image was rebuilt, `firewall-web` and `main-nginx` were recreated and became healthy, and the deployed `/firewall/` page returned the autofill override from its CSS asset with HTTP 200.
+
+## Complete ActionPlan history clearing (2026-08-09)
+
+- Action Center history clearing now archives every non-executing ActionPlan regardless of lifecycle, rather than only terminal database statuses. Draft, needs-input, preview-ready, confirmed, succeeded, failed, skipped, and cancelled records all disappear from the Action Center after confirmation.
+- In-flight executions remain visible until they finish, and audit evidence remains stored. The confirmation dialog and completion notice now describe the actual behavior and report the archived count.
+
+## Action Center credential execution repaired (2026-08-09)
+
+- ActionPlans, previews, PolicyGuard, templates, and connector selection were working, but `firewall-api` could not decrypt device credentials at execution time.
+- Compose loaded `backend/.env` and then replaced its valid `CREDENTIAL_ENCRYPTION_KEY` with an empty interpolated value from the higher-precedence `environment` block. The empty override was removed; the environment file and secret were not modified.
+- Validation passed through the real nginx/API workflow: health 200, retry 200, preview 200, SSH connector execution 200 with `succeeded`, `connectorInvoked=true`, `exitCode=0`, non-empty stdout, and a successful Action Center result projection.
+
+## AI chat nginx 504 repaired (2026-08-09)
+
+- Browser AI chat was still failing at the reverse proxy after the OpenRouter transport repair: `main-nginx` used its default 60-second upstream read timeout while the backend can spend up to 30 seconds on each configured fallback model.
+- The firewall API proxy now uses a 10-second connect timeout and 150-second send/read timeouts, keeping the nginx deadline above the backend's bounded provider/fallback window.
+- Validation passed: nginx config test; main-nginx recreate; healthy compose services; authenticated Persian POST through the exact `/firewall-api/ai/chat` route returned JSON HTTP 200 in 26.3 seconds with a non-empty answer; no HTML gateway response; temporary test sessions removed.
+
+## OpenRouter Docker AI chat repaired (2026-08-09)
+
+- The AI endpoint 403 was an OpenRouter edge-policy denial caused by Docker bypassing the host VPN: host traffic exited through Germany and succeeded, while container traffic exited directly through Iran and was denied before API-key or model processing.
+- The backend OpenAI-compatible transport now supports an explicit authenticated HTTP CONNECT proxy, preserves structured JSON mode, sends deterministic request framing, and stops fallback attempts on authorization/security-policy 401/403 responses.
+- The firewall compose stack can load an ignored runtime proxy environment file. The host relay binds only to the internal Hyper-V Default Switch, requires a generated credential, accepts private-source clients, and permits CONNECT only to `openrouter.ai:443`.
+- Validation passed: backend build; no-cache Docker API build plus final rebuild; API container recreate and health 200; independent raw container OpenRouter chat/completions 200; exact provider response success; authenticated `/api/ai/chat` 200 with a real Persian answer and temporary-session cleanup. The focused legacy test remains gated by the repository's required isolated `TEST_DATABASE_URL`.
+
+## AssetPlatform schema drift runtime repaired (2026-07-29)
+
+- Asset-backed UI/API 500s were caused by a database/schema mismatch: `AssetPlatform.assetRoleId` existed in Prisma schema but not in the Docker database.
+- Added and applied additive migration `20260729083000_asset_platform_role_relation`; the current Docker database now matches Prisma schema.
+- Validation passed: Prisma validate, backend build, Docker API rebuild/recreate, healthy compose stack, authenticated login/assets/navigation/devices 200 probes, and empty Prisma migrate diff.
+
+## Production bootstrap seed flow (2026-07-29)
+
+- Initial admin creation is now owned by Prisma seed, not API startup or `ADMIN_PASSWORD`.
+- Fresh Docker databases run `prisma migrate deploy`, `prisma db seed`, then start the API. The seed creates the first admin only when the user table is empty and skips existing users/admins.
+- The generated first-admin credential is stored in the dedicated bootstrap storage volume at `/app/storage/bootstrap/initial-admin.json` with restricted permissions; logs do not include the password.
+- Validation passed: backend build, Prisma validate, focused security test, no-cache firewall-api build, compose up, healthy API/DB/web/nginx, seed idempotency evidence, and bootstrap credential file existence check without printing the secret.
+
+## Docker firewall-api runtime repaired (2026-07-28)
+
+- The Docker backend production image now includes the Prisma CLI in production dependencies, so `prisma migrate deploy` is available after `pnpm install --prod`.
+- The runtime command uses installed binaries directly and loads Prisma 7 datasource configuration from `prisma.config.ts`; no datasource URL was added to `schema.prisma`.
+- Fresh lab compose databases start without hardcoded admin credentials by skipping initial admin bootstrap only in lab/development when `ADMIN_PASSWORD` is unset. Production secret enforcement remains unchanged.
+- Validation passed: Prisma validate, backend build, no-cache firewall-api image build, compose up, final healthy status for API/DB/web/nginx, and API logs showing migrations complete plus health 200.
+
 ## AI Assistant structured ActionPlan architecture (2026-07-19)
 
 - AI Assistant planning now separates plan creation from execution eligibility. Selected Device context is the source of truth for vendor/platform/capabilities, and generated steps are resolved only through that vendor's backend registry/templates.
@@ -729,40 +1021,410 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Custom proposal ActionPlans now carry expected impact, prechecks, verification, rollback, proposed intent, and explicit review-only/backend-execution-required metadata for Action Center review.
 - Validation passed: targeted AI routing/context tests (31/31), backend build, command catalog validation (191 items), frontend build, i18n, UTF-8, and workflow checks.
 - Full backend `npm test` remains blocked by missing `TEST_DATABASE_URL`; a DB-backed chat smoke could not run because `firewall_log_analyzer_test` does not exist, and live `/api/devices` returned unauthorized without a browser session.
-## Persian public landing page (2026-09-16)
 
-- `/` now renders a public, responsive Persian landing experience. `/dashboard`, `/assistant`, `/actions`, and all other operational routes remain protected by the existing session gate.
-- The page includes the requested header, Hero, Features, controlled-execution flow, collaborators/ecosystem presentation, CTA, and footer in the supplied navy/cyan visual direction.
-- Scroll-triggered reveal motion and ambient UI animation respect reduced-motion preferences.
-- Product claims stay aligned with implementation: catalog-first proposals, preview, explicit user confirmation, PolicyGuard, registered connectors, connector evidence, and audit.
-- Frontend production build passed in an ephemeral Node 22 container. UTF-8/mojibake check passed for 551 files. No backend or execution-policy code changed.
-## Transferable frontend Docker image (2026-09-16)
+## Explicit AI Chat/Action modes and Action Center parameter handoff (2026-08-24)
 
-- Frontend Docker builds are reproducible again: the local SSH plugin is copied before frozen dependency installation, pnpm is pinned to 12.4.2, and dependency build scripts are explicitly limited to SWC and esbuild.
-- Image `firewall-log-analyzer-web:2026.09.16-landing` was built for linux/amd64 and smoke-tested at `/firewall/` with HTTP 200.
-- Export archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing.tar`, 20.27 MiB, SHA-256 `FBC6F590760FF639E55E61AF85E3262C566BEE41DC96C05765C64212DA7E36F4`.
-- Scope: frontend/Nginx image only; backend and PostgreSQL are deployed separately.
-## Editorial landing redesign (2026-09-16)
+- Removed the visible Auto mode. Chat and Action now have independent, enforced backend contracts rather than relying on prompt heuristics.
+- Chat uses the selected device/vendor evidence context but cannot create intents or ActionPlans. Action requires a selected target and always enters controlled planning.
+- Parameterized actions create a draft ActionPlan and continue in a sequential, backend-schema-owned Action Center workspace. Parameterless actions remain ready for normal preview/review.
+- Custom connector plans are rebuilt from declared operator fields and revalidated server-side; undeclared fields and raw AI shell are rejected. A controlled Linux local-user creation operation now demonstrates the full `username -> preview -> confirm -> connector -> audit/result` path.
+- Validation passed: 37 focused tests, backend/frontend builds, 191-item catalog validation, targeted ESLint, locale/UTF-8 guards, real Docker runtime smoke, sanitized real OpenRouter response, healthy API/web containers, HTTP 200 application routes, and exact old-image cleanup.
 
-- `/` is now a narrative Persian product introduction inspired by the structural pacing of Vestris: oversized editorial hero, generous space, numbered chapters, product artifact, human-control proof, and a minimal closing section.
-- The public landing has no login, dashboard, Assistant, or Action Center links. All visible navigation stays within the one-page story.
-- Scroll reveals use opacity + blur + translation + scale and replay as chapters enter/leave the viewport; reduced-motion preferences are honored.
-- The running Nginx container `firewall-landing-web` now serves image `firewall-log-analyzer-web:2026.09.16-landing-v2` at `http://localhost:8080/firewall/`.
-- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-v2.tar` (20.26 MiB), SHA-256 `CD9FF7E52B5307FADFF0ACF582E58C2FC47C93DA23C875476C46D2CE5176BE60`.
-- Validation: frontend production build passed, page/bundle HTTP 200, new-copy bundle assertion passed, UTF-8 guard passed (551 files), and diff check passed.
-## Public landing URL under Nginx base path (2026-09-16)
+## AI Assistant visual workspace redesign (2026-08-24)
 
-- Canonical local landing URL is now `http://localhost/firewall/landing`.
-- React Router uses the production Vite base `/firewall/` as its basename. `/firewall/` redirects client-side to `/firewall/landing`.
-- The landing remains public and contains no login UI; application routes remain authenticated.
-- Active frontend image: `firewall-log-analyzer-web:2026.09.16-landing-route`. Main Nginx, frontend, API, and DB health checks are passing.
-- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-landing-route.tar`, SHA-256 `277CC00F3524CB169CD6ACA1D2257108DBDF0255872E5A6A934CFC6C68176132`.
+- Replaced the stacked technical dashboard presentation with a conversation-first workspace: one compact header, explicit Chat/Action switch, readable device selector, focused message canvas, and a contextual side rail.
+- Chat and Action now have mode-specific Persian empty states and examples. Message bubbles have clear user/assistant identity, correct RTL presentation, responsive widths, and a multiline composer with keyboard submission.
+- Security summaries, advanced analysis, provider diagnostics, and plan internals remain available but are collapsed by default. Action state, missing parameters, and the Action Center handoff remain prominent when relevant.
+- Responsive layout supports phone, tablet, and desktop breakpoints without changing the existing Chat/Action execution contracts.
+- Validation passed: targeted ESLint, TypeScript, frontend production build, 859-key locale parity/Persian-copy guard, 599-file UTF-8 guard, healthy Docker deployment, and HTTP 200 for `/firewall/assistant`. The superseded web image was reclaimed through the bounded project deployment script.
 
-## Product-accurate landing content and primary font (2026-09-16)
+## AI ActionPlan connector execution repair (2026-08-25)
 
-- The canonical landing remains `http://localhost/firewall/landing` and is live through the main Nginx with HTTP 200.
-- Copy now describes the real Mini-SOAR product boundary: device context -> catalog/AI proposal -> ActionPlan/preview -> operator confirmation -> PolicyGuard -> registered connector -> evidence/audit.
-- Feature copy reflects inventory and capability discovery, Persian command operations, Daily Check/findings, and Action Center. Platform language is capability-qualified and no longer presents NetBox/Wazuh as executable production integrations.
-- Persian landing typography now inherits the same application `Vazirmatn` stack; the separate serif heading font was removed.
-- Active frontend build: `firewall-log-analyzer-web:2026.09.16-product-copy`; `firewall-web` and `main-nginx` health checks pass.
-- Transfer archive: `C:\Users\my lap store\Desktop\firewall-log-analyzer-web_2026.09.16-product-copy.tar`, 20.26 MiB, SHA-256 `222D957E6DDBA3BAE06F60861423F80292C4FFE652D5957F15307D6111CC709A`.
+- Removed the unsupported-action shortcut that bypassed the configured AI provider and created `manualReview` ActionPlans. Action mode now lets unmatched vendor operations produce a structured custom connector proposal.
+- Custom AI plans are persisted only when the selected vendor/device, SSH connector, registered execution template, verification commands, and vendor Policy all validate. Rejected or ambiguous output creates no misleading non-executable ActionPlan.
+- Parameterized custom operations remain connector-backed drafts. Action Center collects declared missing fields, rebuilds the plan server-side, refreshes executable metadata, and requires preview plus the existing single protected-lab confirmation before connector dispatch.
+- Action Center UI now recognizes verified `ai_custom_connector_plan` records as executable instead of blocking every `custom_vendor_action` by type. Incomplete plans remain blocked until their declared fields are complete.
+- Validation passed: 53 focused cross-vendor tests, backend and frontend builds, 191-item catalog validation, healthy API/web Docker deployment, HTTP 200 web/health checks, and bounded superseded-image cleanup. The full database test runner remains gated by `TEST_DATABASE_URL_REQUIRED`; a real OpenRouter probe was not run because the security reviewer rejected exposing the credential-bearing host proxy on `0.0.0.0`.
+
+## Clear connector execution result presentation (2026-08-25)
+
+- The Action result route now leads with the real connector response instead of a generic success summary. Every recorded command is shown separately with its template, exit code, success/failure state, stdout, stderr, and copy control.
+- Direct legacy `stdout`/`stderr` results remain supported. Successful commands without text output receive an explicit empty-output explanation instead of a misleading missing-structured-data panel.
+- Device, vendor, duration, and command count are condensed into the status header; action identifiers, executor, and stored lifecycle remain behind a collapsed technical-details section.
+- Structured summaries, tables, findings, and genuinely relevant next actions remain available without duplicating the raw connector output. The layout is responsive from phone to desktop.
+- Frontend production build, targeted ESLint, UTF-8 guard, focused result-view contract test, and command-output normalization checks passed. The Docker web container is healthy, and the bounded deployment script reclaimed only the superseded project image.
+
+## Action result interruption recovery and responsive verification (2026-08-25)
+
+- Revalidated the output-first Action result flow after the interrupted session with a database-isolated fake Linux connector execution. The connector ran exactly once and the successful ActionPlan persisted its real stdout.
+- Added defensive width constraints to the result shell, command cards, command labels, and stdout/stderr panes so long connector output cannot widen or clip the phone layout.
+- Browser device emulation confirmed exact, overflow-free layouts at 390x844, 768x1024, and 1440x1000. Frontend build, targeted ESLint, focused result-view contract, Docker build/health, and HTTP checks for the app, result deep-link, and API health all passed.
+- The bounded web deployment left one current `firewall-log-analyzer-web:local` image; Docker had already reclaimed the superseded project image. No global prune was used.
+
+## Unified attacker intelligence workspace (2026-08-26)
+
+- Removed the Integrations navigation tab and its three frontend routes, replacing it with the implemented Persian-first `مهاجمان` workspace at `/attackers`.
+- The backend qualifies source IPs only from open Findings with a valid `srcIp`; ordinary log presence alone never labels an address as an attacker. Qualified addresses are enriched across normalized events from every vendor, device, and asset in the shared telemetry store.
+- The API aggregates deterministic risk, confidence, first/last seen, vendors, affected devices/assets, categories, MITRE tags, target IPs/ports, protocols, actions, usernames, event types, and redacted evidence. External Geo/ASN fields remain explicitly unavailable until a real provider is configured.
+- The final UI is intentionally compact: one short header, three essential counters, one-line filters, readable attacker cards, a focused detail panel, and a small actionable empty state. Phone/tablet/desktop containment is covered at 1100, 650, and 390px breakpoints.
+- Real isolated PostgreSQL/API testing passed across Linux and MikroTik Findings and events, including cross-vendor aggregation, public/private scope, vendor filtering, 404 for an unqualified log-only IP, and secret redaction. Product-state/source tests passed 9/9, backend/frontend builds and UTF-8/i18n/smoke checks passed, and deployed web/API containers reached healthy state. Bounded deployment reclaimed only superseded project images; no global prune was used.
+
+## 2026-08-27 - Global IRANYekan typography deployed
+
+- The bundled `iranyekanwebregularfanum.ttf` asset is now the global UI font for the document, React root, application shell, controls, selects, textareas, options, and modal/portal content.
+- Technical command output (`code`, `pre`, `kbd`, and `samp`) intentionally keeps a monospace stack for operational readability.
+- The production frontend build contains the font asset, and the Docker web container is healthy. Live HTTP checks returned 200 for the application, CSS bundle, and the 60,268-byte font file.
+- The bounded web deployment workflow replaced the project web image without a global Docker prune; Docker had already reclaimed the superseded image.
+
+## 2026-08-30 - User administration and animated navigation
+
+- Settings is now an implemented, visible `Users and settings` center instead of a placeholder/local-mode entry. Admins can create accounts, assign `viewer`/`operator`/`admin` roles, restrict seven product sections, activate/deactivate accounts, and reset another user's password.
+- Section access is enforced centrally on backend requests as a restrictive layer over role permissions. Navigation and direct frontend routes use the same grants; changes revoke the target user's sessions so new access takes effect on the next login.
+- Safety invariants prevent self-demotion, self-deactivation, removal of the last active admin, empty non-admin access, weak initial/reset passwords, and non-admin use of user-management endpoints.
+- The desktop sidebar is now compact, colorful and animated with a stable 76px collapsed state, clear active signals, identity footer, responsive mobile drawer behavior, and `prefers-reduced-motion` support.
+- Migration `20260829213000_user_section_access` is deployed; existing accounts retain all seven sections. API and web containers are healthy, the database reports all 44 migrations applied, the live settings route returns 200, and unauthenticated user-management access returns 401.
+
+## 2026-08-30 - Six-character managed account password
+
+- Admin-created and admin-reset account passwords now accept any value from 6 to 128 characters, and authentication accepts the same minimum so six-character credentials can actually sign in.
+- Personal password changes retain the stronger existing 12-character policy.
+
+## 2026-08-30 - Administrator-only session termination
+
+- Listing sessions, terminating an individual session, and signing out all sessions now require the admin-only `auth.session.terminate` permission.
+- Ordinary logout and personal password change remain available to every authenticated role; non-admin settings no longer request or render session-management controls.
+
+## 2026-08-30 - Vendor-scoped trusted source IPs
+
+- The attacker workspace now includes a compact admin-only trusted-IP manager with exact IPv4/IPv6 validation, an optional label, and independent scopes for Linux, MikroTik, FortiGate, Cisco, pfSense, or every vendor.
+- Adding an address suppresses its still-open matching Findings and excludes matching Findings and evidence events from attacker aggregation. Vendor scope is preserved, so trusting a Linux management IP does not hide activity from another vendor.
+- The allowlist is persisted in `TrustedSourceIp`, protected by `security.policy.manage`, and create/delete actions are audited. Backend/frontend builds, targeted ESLint, and 2 focused regression tests passed.
+
+## 2026-08-30 - Adaptive near-real-time detection monitoring
+
+- New events now enter a 750 ms per-device debounce queue with bounded concurrency, so bursts are combined and at most two detection jobs execute in parallel. Independent devices no longer block behind a single global detection queue.
+- Read-only Findings and Attacker API requests no longer trigger full scans. Detection queries are device-scoped and limited to the longest active rule window, while a cursor-based monitor fallback examines only devices that received events since its last sweep.
+- Collectors retain their configured active interval, back off deterministically after quiet runs or repeated failures, add stable per-device jitter, and cap the effective interval at 15 minutes. This prevents ten devices from reconnecting simultaneously and reduces idle/error load.
+- Collector state now persists idle/failure streaks and monitoring status exposes effective intervals plus dispatcher queue/concurrency. Backend/frontend builds and 2 focused scheduling/architecture tests passed.
+
+## 2026-08-30 - Operational application top bar
+
+- Replaced the disabled global search, disabled notification, duplicate language/user/logout controls, and oversized status cards with one compact operational bar.
+- The bar now identifies the current workspace, shows backend health as a small live signal, links to the selected device, provides a direct New Action shortcut, and groups identity, language, settings, and logout in one account menu.
+- Phone/tablet layouts reduce controls to recognizable icons and expose the account menu as a full-width safe panel. Reduced-motion behavior is preserved; targeted ESLint, frontend production build, and the focused UI contract test passed.
+# Android server-connected v1.0.0 (2026-08-30)
+
+- Added a Capacitor Android first-run server bootstrap with a real readiness probe, Persian mobile UX, and an in-app change-server action.
+- Added native Bearer authentication backed by Android Secure Storage while retaining web Cookie/CSRF authentication and the existing role/section/PolicyGuard enforcement.
+- Added release-deny/debug-only cleartext network security configs, Android version `1.0.0` (`versionCode 10000`), and a reproducible debug APK build script.
+- Added architecture and Persian installation guides. Frontend/backend builds, focused Android transport tests, Gradle Debug/Release unit tests, manifest merge, and `assembleDebug` pass. The verified APK is available at `artifacts/Firewall-SOAR-Android-1.0.0-debug.apk` (SHA-256 `90274E6091843DC8745D3988C04D15E323EC8819E17B017FF59BADDB3746C92D`).
+
+## 2026-08-31 - Android mobile shell and API routing repair (1.0.1)
+
+- Routed every frontend API client through the native-aware configured server URL; navigation, dashboard, assets, findings, monitoring, actions, assistant, diagnostics, and settings no longer fall back to the WebView-local `/firewall-api` origin.
+- Repaired the phone login layout and Android autofill paint, aligned the login minimum with the six-character server policy, disabled native autofocus, and made the drawer ignore stale desktop collapsed state while closing conflicting account overlays.
+- Frontend build, targeted ESLint, 4/4 focused Android routing/layout tests, Gradle Debug/Release tests, and `assembleDebug` pass. APK: `artifacts/Firewall-SOAR-Android-1.0.1-debug.apk`; SHA-256: `369D453FC50F5BFC18D308BBD9781485132ED1315F0423E53CFFA76722803E63`.
+## Stateful vendor-aware assistant conversation mode (2026-08-31)
+
+- The Assistant **Chat** mode now sends a bounded, chronological, redacted window of the latest 12 user/assistant turns to the configured provider. Follow-up prompts therefore continue the same discussion instead of resetting to a one-shot security summary.
+- Chat receives the currently selected device/vendor/name/connector perspective on every turn. The prompt explicitly allows general conversation, comparison, troubleshooting, and advice while separating observed evidence from general vendor knowledge.
+- Chat is a hard non-action boundary: its provider contract always requests `shouldCreateIntent=false` and `intent=null`; the existing **Action** mode and controlled ActionPlan pipeline are unchanged.
+- The deterministic offline fallback is vendor/device aware and remains conversation-only. The chat viewport now follows newly added replies so later responses are not hidden below the visible area.
+- Validation passed: focused conversation/routing contracts (21/21), backend and frontend TypeScript builds, frontend production build, targeted frontend lint, UTF-8 guard, healthy local API/web container rebuilds, and HTTP 200 for the web and API health routes. A real OpenRouter prompt was intentionally not sent because that would transmit selected-device security context to an external provider without explicit operator approval.
+## Calm, motion-led operational dashboard (2026-08-31)
+
+- The dashboard hero now contains a lightweight code-native network-defense scene: packets move slowly from the network edge through a pulsing firewall shield to protected services, while separate threat signals stop at the firewall. The scene reflects real device/finding counts and the current overall health tone.
+- The motion uses only React, Lucide SVG icons, and CSS; it adds no bitmap/video dependency, adapts at tablet/phone widths, and becomes static under the operating system's `prefers-reduced-motion` setting.
+- The page was simplified to four decision-focused indicators, a two-column attention/recent-operations area, and at most three Linux server charts ordered by attention. All Action Center, registration, findings, history, refresh, server-detail, and full-monitoring navigation remains available.
+- Validation passed: focused dashboard UX contracts (3/3), frontend TypeScript, targeted ESLint, UTF-8 guard, and production build.
+- Deployed the rebuilt `firewall-web` image after Docker Desktop became available. Web, API, database, and ingress containers are healthy; the app shell, dashboard route, API health, and deployed dashboard JS/CSS all return HTTP 200.
+- Production smoke covered six frontend routes and confirmed the deployed motion selectors/keyframes. Protected dashboard data endpoints return the expected JSON 401 without a session. Backend build passes; the full database suite remains safely gated by the required isolated `TEST_DATABASE_URL`. The repository-wide Persian-copy guard still reports pre-existing `AppShell` coverage gaps unrelated to this dashboard slice.
+
+## Live-only, resilient Assistant conversation transport (2026-08-31)
+
+- Root cause of the repeated Assistant answer was the configured host OpenRouter proxy being unavailable after Docker restarted. Chat silently accepted `deterministic-offline-fallback`, so a configured key appeared healthy while no model had analyzed the prompt.
+- OpenAI-compatible requests now fall back from an unavailable host proxy to a direct HTTPS provider connection. Chat explicitly requires a live provider response; provider/configuration failures return a visible error and never masquerade a canned response as AI output. Action-mode fallback and the controlled ActionPlan pipeline are unchanged.
+- Chat continues to send the bounded conversation history plus the current selected device/vendor context, uses a natural-prose-only prompt, and keeps `shouldCreateIntent=false`. The UI distinguishes a configured key from a failed live connection.
+- Provider status is tri-state: configured but not yet verified, live response verified, or unavailable. A free-tier `429` now stays visible and asks for a later retry instead of claiming that a fallback answer was generated.
+- Validation passed: focused Assistant/provider/routing contracts 24/24, backend and frontend TypeScript builds, targeted frontend lint, production build, healthy API/web Docker deployments, and a real sanitized two-turn OpenRouter probe. With the proxy deliberately stopped, direct failover returned a non-fallback provider response and the proxy was then restored.
+
+## 2026-09-01 - AI conversation ownership boundary
+
+- Fixed an authenticated IDOR in Assistant chat: supplied session IDs are now accepted only when the session belongs to the current user.
+- Session lists, history reads, message clearing, intent lists/reads/updates, and action-request completion all inherit the same owner boundary. Cross-user identifiers return not found instead of exposing whether the object exists.
+- Existing legacy sessions without an owner fail closed for authenticated users; new sessions persist the authenticated user ID. No database migration was needed because the ownership column and index already existed.
+- Validation passed: the focused ownership regression tests (3/3) and backend TypeScript build.
+
+## 2026-09-01 - Dependency security remediation
+
+- Updated the production frontend toolchain and runtime dependencies to patched releases, including Vite 8.2.2, React Router 7.18.3, Tailwind's Vite integration 4.3.3, and Capacitor CLI 8.5.1.
+- Updated Fastify to 5.12.1 and Prisma packages to 7.10.0, then constrained vulnerable transitive packages to patched compatible versions.
+- Removed the unused SWC React plugin and adjusted the Vite configuration for the Vite 8 ESM contract.
+- Production dependency audits now report no known vulnerabilities in both the root application and backend. Prisma generation, backend build, frontend production build, and the focused centralized-permission/ownership tests passed.
+
+## 2026-09-01 - Nmap DNS-rebinding boundary
+
+- Closed an internal-network scan bypass where a syntactically public hostname could resolve to a private, loopback, link-local, multicast, or reserved address after policy validation.
+- Nmap now resolves a hostname once, rejects empty, mixed public/private, or entirely non-public answers, and pins the approved public IP into the worker argument list so the scanner cannot re-resolve a changed DNS answer.
+- Expanded IPv4/IPv6 reserved-range coverage, including IPv4-mapped IPv6 addresses, while preserving the fixed-profile, argument-array, `shell: false` worker boundary and audit evidence.
+- Validation passed with backend compilation and the isolated Task 20 diagnostics/Nmap suite against a disposable test database.
+
+## 2026-09-01 - Android navigation and keyboard stability (1.0.2)
+
+- Android navigation no longer disappears when the product-navigation request is delayed or temporarily fails. A local, role/section-filtered core navigation renders immediately, including the five-item bottom bar, and the richer server contract replaces it when available.
+- The native login screen is anchored to the top of the visual viewport instead of being re-centered whenever the software keyboard changes WebView height. Native-only motion is reduced around the form, focus transforms are disabled, and the Android activity explicitly uses `adjustResize`.
+- Released debug build `1.0.2` (`versionCode 10002`) at `artifacts/Firewall-SOAR-Android-1.0.2-debug.apk`, SHA-256 `18728497D8A5F4BF1C232C0A32D5A498819D19D81031D06050560C7F9B5A213A`.
+- Validation passed: targeted frontend lint, production web build, 6/6 mobile transport/shell/PWA contracts, Gradle Debug/Release unit tests, Capacitor sync, and `assembleDebug`.
+
+## 2026-09-04 - Vendor port and connection workspace
+
+- Added an implemented `Assets -> Ports & connections` workspace for Cisco, MikroTik, FortiGate, pfSense, Linux, and generic registered devices.
+- The backend persists physical-port inventory in `AssetInterface`, refreshes it through the existing read-only vendor connection check, extracts interface state and available LLDP/CDP/neighbor evidence, and keeps manual corrections authoritative across later discovery runs.
+- Operators and administrators can map a port to a peer device, remote port, peer IP, cable type, VLAN, speed, and note. Every save, clear, and discovery operation is permission-gated and audited; read access remains available to authorized viewers.
+- The UI renders lightweight vendor-toned, CSS-native 3D faceplates with link LEDs, mapped-connection cards, responsive editing, mobile horizontal inspection, explicit live/stored discovery feedback, and reduced-motion support. These are honest chassis archetypes when an exact hardware model is not registered.
+- Validation passed: backend TypeScript build, frontend lint/TypeScript/production build, and 6/6 focused topology inference, authorization, navigation, responsive, and motion-safety tests.
+
+## 2026-09-04 - Clickable service-port visibility
+
+- Extended the same workspace with a separate graphical service rail: Linux `ss` listeners such as `0.0.0.0:8080/TCP`, MikroTik IP services, FortiGate custom service objects, and explicit port inventories from other vendors are presented without confusing policy objects with confirmed host listeners.
+- Clicking a service endpoint opens its bind address, protocol, port, process/service identity, evidence source, exposure classification, and operator note. Admins/operators can correct the displayed record or add a manual endpoint; manual notes and corrections persist without changing the remote device and can be reverted to discovered values.
+- Linux listener details refresh from existing security snapshots every 45 seconds and the selected visible Linux device gets a live refresh every two minutes. No all-device scan is triggered; hidden tabs stop live refreshes, discovery is capped at 256 endpoints, and the feature remains a lazy-loaded route.
+- Validation passed: backend build, frontend ESLint/TypeScript, UTF-8 guard, 9/9 focused tests, and a bounded 1,000-listener parser benchmark (256-item output in under the 250 ms budget).
+- Added an explicit Nginx SPA fallback for `/firewall/assets/topology`, preventing the route from being mistaken for a static Vite asset on direct navigation or browser refresh.
+
+## 2026-09-04 - Deduplicated service listeners
+
+- Service cards now use the stable identity `protocol + port`, so equivalent IPv4/IPv6 or repeated snapshot/live bindings no longer render as duplicate ports. TCP and UDP on the same number remain separate because they are different endpoints.
+- All distinct listen addresses and processes are retained as bounded binding evidence and are visible in the click-through details instead of being discarded during consolidation.
+- Existing address-based manual override keys are normalized transparently on read/save/clear, while new edits use the canonical endpoint identity.
+- Validation passed: backend build, frontend TypeScript and targeted lint, and 10/10 focused topology tests, including IPv4/IPv6 collapse, TCP/UDP separation, evidence retention, and the existing parser performance bound.
+
+## 2026-09-04 - Explainable, lower-noise attacker tracking
+
+- Diagnosed the reported `alireza` case from the live database: the username itself was not classified as an attacker. Source IP `5.115.146.191` was listed because successful logins from a previously unseen source were combined with repeated failed `root` authentication records; several SSH/PAM lines represented the same logical attempts.
+- Authentication burst rules now collapse duplicate timestamp formats and paired SSH/PAM messages into logical attempts before applying thresholds. Successful login from a new source is informational and cannot qualify an IP for the suspicious-source list by itself.
+- The attacker API now returns an explicit assessment with actionable/informational finding counts, unique authentication failures, successful authentications, ordinary session events, and duplicate-collapse notes. The UI labels records as suspicious sources requiring review rather than confirmed attackers.
+- Added one high-signal rule per primary vendor: Linux web exploit probes, MikroTik port scans, FortiGate management-plane probes, Cisco SNMP authentication failures, and pfSense IDS/IPS alerts. The core library now has six event-backed rules per vendor.
+- Detection execution now buckets events once by vendor, appends groups in linear time, and preloads device/asset mappings instead of issuing per-group lookup queries. Attacker aggregation also uses per-IP maps and halves its bounded event sample from 10,000 to 5,000.
+- Validation passed: backend and frontend production builds, targeted backend/frontend ESLint, and all 16 focused tests. The collector scheduling fixture now allows for the existing stable jitter and failure backoff.
+
+## 2026-09-05 - Persian customer overview brochure
+
+- Added an eight-page, customer-ready Persian overview of Firewall SOAR with plain-language explanations of the customer problem, product workflow, monitoring/detection, durable email alerts, graphical ports/services, Assistant modes, controlled execution, access management, Android access, deployment prerequisites, and acceptance criteria.
+- The brochure distinguishes included capabilities from optional/configuration-dependent services and avoids presenting suspicious sources or AI output as guaranteed truth.
+- Delivered both an editable standalone HTML source and a print-ready A4 PDF under `deliverables/`. The PDF uses the bundled Persian font, vector/CSS visuals, and contains no credentials, customer data, or environment values.
+- Validation: visual review of all eight pages, embedded-font check, `%PDF-1.4` signature, eight-page structure, and 2.02 MB output size.
+
+## 2026-09-05 - Minimal Assistant conversation bubbles
+
+- Reworked the Assistant conversation surface to match the supplied quiet alternating-card layout: user messages use a compact deep-blue bubble and assistant replies use a wider violet bubble.
+- Removed repeated visible avatars, sender labels, and timestamps from each bubble while retaining sender/time context through accessible labels and hover titles.
+- Added centered user prompts, start-aligned assistant prose, bounded readable widths, Persian/English logical alignment, long-response expansion, and a dedicated narrow-screen layout.
+- Validation passed: frontend TypeScript, targeted ESLint, UTF-8 guard, production build, diff check, 2/2 focused chat-template tests, healthy Docker web deployment, and HTTP 200 on the Assistant route/API health boundary.
+
+## 2026-09-05 - Evidence-led full analysis and hardening report
+
+- Full Analysis now honors the selected device across incidents, events, snapshots, ActionPlans, audit counts, and connector collection. Switching targets clears the previous report so evidence cannot leak between device scopes.
+- Risk scoring now uses only open/investigating incidents from the last 24 hours, bounded weighted components, and explicit data coverage/confidence. Sensitive-port traffic by itself is no longer treated as a vulnerability.
+- Fresh successful snapshots are deduplicated and error snapshots are excluded from coverage. Read-only connector collection is capped at 25 devices with concurrency 3 to protect response time and device load.
+- Hardening is generated from the exact persisted assessment shown to the operator. High-volume source IPs no longer produce an automatic block recommendation without confirmed attack evidence, and unsupported vendor changes remain manual review items.
+- Replaced the raw report grid with a responsive Persian-first report: risk dial, coverage/confidence, evidence basis, per-device/vendor review, separated missing data, prioritized findings, and explainable ActionPlan suggestions.
+- Assessment evidence and recommendation payloads pass through the central persistence redactor; ActionPlan creation remains separate from execution and still uses the existing preview/confirmation/PolicyGuard/connector/audit pipeline.
+- Validation passed: backend and frontend TypeScript builds, frontend production build, targeted ESLint, UTF-8 guard, and 22/22 focused assessment/vendor/API tests. The wider repository suite still contains unrelated stale contract failures from other uncommitted worktree changes.
+## Business value and revenue model PDF (2026-09-06)
+
+- Produced an 11-page Persian business-value report for a potential product sale, with current public market benchmarks, an explicit SOC capacity-cost model, module-level value attribution, three subscription packages, customer ROI sensitivity, seller ARR scenarios, and an ARR-based sale valuation lens.
+- Kept customer savings, replacement-tool benchmarks, seller revenue, and profit conceptually separate to prevent double counting. The report explicitly treats staffing reduction as measured capacity or avoided hiring, not a guaranteed headcount cut.
+- Added a canonical research source/claim ledger and a CSV companion containing the editable assumptions and outputs. All external prices are date-stamped, sourced from official vendor pages, and presented as comparables rather than feature-parity claims.
+- Rendered the local-font HTML to PDF and visually inspected all 11 A4 pages for Persian text, clipping, tables, charts, and page boundaries.
+
+## 2026-09-06 - Inline controlled port management
+
+- Added direct controls to the graphical port drawer so operators can enable or disable Cisco, FortiGate, and MikroTik interfaces without leaving the topology page. Cisco and FortiGate interfaces also expose verified IPv4 configuration, and all three supported network vendors expose their native interface description, alias, or comment field.
+- Added inline preview and one explicit confirmation while retaining the full controlled path: catalog ActionPlan, PolicyGuard, registered connector, audit evidence, semantic post-check, and topology rediscovery. The UI only reports success when the connector confirms a real execution.
+- Added direct service-port controls for Linux firewall allow/deny and MikroTik management-service enable/disable. Linux copy explicitly distinguishes a firewall rule from stopping the listening process.
+- Linux discovery now retains assigned interface addresses. Manual cable, peer, VLAN, speed, and note data remains separate from live device state so an inventory edit cannot pretend that a port changed remotely.
+- Promoted MikroTik interface/service operations to registered executable catalog templates and added FortiGate interface-alias support plus targeted configuration read-back for interface state, IPv4, and alias changes.
+- Unsupported vendor profiles remain honest inventory-only views rather than simulating a successful device change.
+- Validation passed: 31 focused topology/FortiGate/MikroTik tests, catalog validation for 197 commands, backend TypeScript build, targeted frontend ESLint, UTF-8 guard, and production frontend build. The lazy topology page is 8.80 kB gzip.
+- Rebuilt and deployed the API and web containers with the project-scoped deployment scripts. Database, API, web, and ingress are healthy; the deployed topology page and API health return HTTP 200, while the unauthenticated topology API remains protected with HTTP 401.
+
+## 2026-09-06 - Fresh Linux service and firewall-port synchronization
+
+- Replaced the selected Linux device's expensive periodic full rediscovery with one bounded SSH probe that reads listeners and the active firewall adapter in parallel. It runs when the topology opens, when the tab becomes visible, and every 60 seconds while visible; overlapping probes are suppressed.
+- Live listener inventory is now authoritative by observation time. A newer successful `ss` result replaces, rather than merges with, an older Linux security snapshot, so stopped listeners cannot be resurrected from cached telemetry.
+- Added UFW, firewalld, nftables, and iptables allow-rule parsing and keeps firewall policy distinct from a listening process. Equivalent IPv4/IPv6 rules still collapse to one protocol/port card.
+- A failed probe is not presented as a successful empty scan. The last trustworthy source remains available, while its stale data cannot outrank a later successful collection.
+- Production verification against `server-116` confirmed live source selection. TCP/8080 is still reported by the server as a loopback listener on `127.0.0.1` and also has firewall evidence; removing a firewall rule does not terminate the process bound to that socket.
+- Validation passed: 17/17 focused topology tests, backend TypeScript build, targeted frontend ESLint, production frontend build, and healthy project-scoped API/web Docker deployments.
+
+## 2026-09-08 - Removed the global motion rail
+
+- Removed the decorative router-to-shield-to-server rail from the shared application shell, so it no longer renders above content on any desktop or mobile route.
+- Deleted the unused scene component and its animation stylesheet instead of hiding them, eliminating their layout space, animation work, CSS payload, and icon imports while preserving page-specific visuals.
+- Added a source contract that prevents the global rail, its spacer, or its styling hooks from being reintroduced accidentally.
+- Validation passed: 2/2 focused shell contracts, targeted AppShell ESLint, no remaining motion-rail references under `src`, and a production frontend build.
+
+## 2026-09-08 - MikroTik topology connection recovery and diagnostics
+
+- Diagnosed the selected `m` device from the deployed runtime: its stored SSH port `4432` is unreachable, while an SSH service answers on `2222`; the credential assigned to `m` is currently rejected by RouterOS. No password, IP, or secret material was exposed during diagnosis.
+- Added a bounded fallback over three common SSH management ports only after the configured port fails. A recovered port is persisted only after SSH authentication and required RouterOS read-only commands succeed, preventing a random open socket from being trusted.
+- Topology discovery now returns a sanitized connection error code, and the UI distinguishes missing credentials, rejected MikroTik authentication, unreachable management paths, and generic offline inventory instead of showing one vague message.
+- The existing valid `mikro` device remains healthy with 12 interfaces and 23 RouterOS services. Device `m` will populate automatically after its assigned credential is corrected; the application correctly refuses to report live data while authentication fails.
+- Validation passed: 29/29 focused MikroTik/topology tests, backend TypeScript build, targeted frontend ESLint, and production frontend build.
+
+## 2026-09-08 - Controlled device power actions in topology
+
+- Added compact administrator-only Reboot and Shutdown controls directly to the graphical topology. Every enabled operation follows catalog creation, preview, one explicit confirmation, PolicyGuard, the real vendor connector, and audit/result verification.
+- Implemented delayed Linux reboot/poweroff dispatch, RouterOS reboot/shutdown, and FortiOS reboot/shutdown with native confirmation/disconnect handling. Cisco IOS/IOS-XE exposes a delayed, cancellable reload with interactive `[confirm]` handling.
+- Kept unsupported operations honest: Cisco has no universal software power-off contract, and pfSense/generic profiles have no verified write connector, so unavailable actions stay disabled rather than simulating success.
+- No power command was sent to a registered device during validation. Focused topology/power tests passed 22/22, related connector/execution tests passed 37/37, catalog validation passed for 203 items, and backend/frontend production builds passed.
+
+## 2026-09-08 - Show only collected vendor workspace data
+
+- Preserved successful Linux, MikroTik, and FortiGate discovery results during verified onboarding instead of discarding them after the connection test.
+- Device workspaces now derive identity, version, uptime, interfaces, health, and vendor sections from the last successful connector result; action history is no longer treated as proof that inventory was collected.
+- Empty vendor capability sections and empty raw diagnostics are hidden. Non-Cisco devices can run a bounded live collection directly from the workspace and refresh the displayed facts.
+
+## 2026-09-08 - Repair Cisco onboarding credential collisions
+
+- New credentials receive the next available stable name when the requested label already exists, so a harmless display-name collision no longer blocks Cisco registration.
+- Prisma unique-constraint details are mapped to a sanitized conflict response and are no longer returned to the browser.
+- Generic onboarding now requires an explicit vendor selection instead of silently retaining the Linux default; vendor-specific routes remain preselected.
+
+## 2026-09-08 - Direct asset workspace navigation
+
+- Resolved the Nginx namespace collision between Vite bundles and extensionless `/firewall/assets/...` application routes.
+- Device registration, device workspaces, vendor pages, and topology now support direct links and browser refreshes while fingerprinted JavaScript/CSS files retain static caching.
+
+## 2026-09-08 - Recover legacy Cisco SSH registration
+
+- Confirmed the target Cisco SSH service offers the legacy `diffie-hellman-group14-sha1` and `ssh-rsa` handshake while still accepting password authentication; no credential or device command was used for this diagnosis.
+- Replaced the hidden compatibility setting with a visible per-device control and a one-click recovery action after `CISCO_SSH_NEGOTIATION_FAILED`.
+- Modern SSH remains the default. The compatibility profile is enabled only after the operator explicitly selects it and is persisted only for that Cisco device.
+- Focused Cisco connector/onboarding tests passed 8/8, with frontend TypeScript and targeted ESLint clean.
+## Credential lifecycle management (2026-09-08)
+
+- Administrators can now create, rename, rotate, and delete encrypted device credentials from `Settings -> Device credentials`.
+- Existing secrets are never returned to or rendered by the browser; leaving a replacement secret empty preserves the stored value.
+- Usage counts include both a device's primary credential and Cisco enable-secret references. In-use deletion requires an explicit warning and safely detaches device references.
+- Device onboarding links directly to the credential manager. Focused credential tests, backend build, frontend TypeScript, and targeted ESLint pass.
+
+## 2026-09-08 - Make Cisco workspace refresh live and trustworthy
+
+- Fixed stale status precedence: a newer verified onboarding or inventory collection now supersedes an older SSH failure, while a genuinely newer failure remains visible.
+- Replaced the Cisco workspace's setup redirect with a real bounded read-only SSH refresh. It persists sanitized system, inventory, interface, VLAN, network, and health evidence plus a fresh status check.
+- Cisco onboarding and refresh redact credential-like CLI material before persistence; successful onboarding now records an explicit online status check.
+- The deployed registered Cisco was refreshed successfully in about 8.5 seconds: `cisco-ios-classic`, expected hostname/model, 54 interfaces, 5 VLANs, zero connector warnings. The final workspace projection is `online`, `verified`, `collected`.
+- Backend/frontend builds, targeted lint, four workspace regression tests, Docker API/web health checks, and the real sanitized Cisco smoke passed.
+
+## 2026-09-08 - Stable Cisco port inventory and presentation
+
+- Cisco topology refresh now performs one bounded live IOS collection and reuses the persisted compatibility profile instead of relying on stale generic inventory.
+- `show ip interface brief` and `show interfaces status` are normalized into one canonical interface record; abbreviated and long IOS names no longer create duplicates.
+- Operational link state and administrative shutdown state are stored separately, while stale non-manual phantom interfaces are removed atomically.
+- The Cisco workspace now presents localized capability groups, a live inventory summary, and a complete interface list with link/admin state and assigned IP.
+- Real-device validation returned 54 canonical interfaces: 19 operationally up, 35 down, 53 administratively enabled, one shutdown, and zero unknown states.
+## Device onboarding usability and evidence freshness (2026-09-08)
+
+- Registration and edit mode now have distinct guidance and final actions, with a compact live summary and direct navigation back to completed steps.
+- Empty credential libraries open directly in create mode instead of showing an unusable empty selector.
+- Changing a vendor, management target, credential, or Cisco compatibility option now clears stale verification evidence before the operator saves.
+
+## 2026-09-09 - Scheduled vendor operations
+
+- Added a dedicated `Actions -> Scheduled tasks` workspace for selecting a registered device, choosing only verified connector-backed catalog operations, entering their validated parameters, and scheduling one exact execution.
+- Operators can enter either Jalali or Gregorian dates, select Tehran or UTC time, and see both calendar representations on upcoming items and execution history.
+- Added persistent task and run-history records with pause, resume, cancel, and explicitly confirmed run-now controls. The worker polls in a bounded single-flight cycle and uses a unique execution key so the same scheduled occurrence cannot run twice.
+- Execution rebuilds a fresh ActionPlan, rechecks the task owner's active account and current risk permission, and still passes through PolicyGuard, the registered connector, verification, and audit. A task is successful only when `connectorInvoked=true` and the ActionPlan succeeds.
+- Interrupted or over-24-hour missed jobs fail closed without surprise replay. Errors stored in scheduler history are sanitized, while detailed controlled evidence remains attached to the linked ActionPlan.
+- Validation passed: isolated PostgreSQL lifecycle tests 5/5, Prisma schema validation, 203-item catalog validation, backend TypeScript build, frontend production build, deployed migration, healthy API/web containers, HTTP 200 ingress health/page smoke, and HTTP 401 for unauthenticated scheduler data. The broader repository suite still has pre-existing stale source-contract failures from unrelated uncommitted worktree changes.
+
+## 2026-09-09 - Effectful-only scheduler and Persian 24-hour time
+
+- Scheduled-task selection now excludes every read-only observation/check command and groups the remaining verified write operations into practical Persian categories for Linux, MikroTik, FortiGate, and Cisco.
+- The API independently rejects non-mutating catalog entries, execution revalidates the same invariant, and startup deactivates legacy active read-only schedules while retaining their audit/history records.
+- Replaced the browser-localized time input with an explicit Persian hour/minute selector and forced all calendar summaries to 24-hour output, eliminating AM/PM from the Persian workflow.
+- Validation: isolated scheduler contracts 7/7, backend/frontend builds, and targeted backend/frontend ESLint passed.
+
+## 2026-09-09 - Scheduler time and scroll usability
+
+- Replaced the long native hour/minute dropdowns with compact Persian numeric fields that accept Persian or Latin digits, clamp invalid values, and stay inside the scheduler form.
+- Removed the persistent execution-confirmation checkbox; the required explicit approval is now requested once, at the final schedule action, with the task name and Jalali execution time.
+- Added a bounded internally scrolling task/history board so its tabs remain visible, and removed the duplicate outer sidebar scrollbar.
+- Unified desktop and mobile scrollbar styling with slim, low-contrast controls and contained scroll chaining.
+- Validation passed: frontend/backend builds, targeted frontend ESLint, isolated scheduler contracts 7/7, healthy web deployment, and HTTP 200 page/health smoke checks.
+
+## 2026-09-11 - FortiGate/Linux attacker intelligence and controlled response
+
+- Reverted the experimental soft-3D icon pack and light-theme change at the operator's request; the previous visual system is deployed again.
+- FortiOS key/value events now preserve the authoritative source (`srcip`, then SSL-VPN `remip`), destination, ports, interfaces, user, signature/policy, and vendor action. IPS, DoS/anomaly, malware, botnet/C2, WAF, VPN/admin authentication failures, and repeated denies are classified separately.
+- FortiGate collection clears session-only log filters and requests a bounded 500-line page, keeping polling predictable while including event, traffic, VPN, and UTM evidence.
+- Linux session lifecycle noise such as `Timeout, client not responding` no longer qualifies as an authentication attack. Historical authentication findings must contain enough real failure evidence, and duplicate PAM/SSH attempts remain collapsed.
+- The attacker workspace distinguishes confirmed vendor threats, correlated likely attacks, review-only anomalies, and vendor-confirmed containment. Related findings are grouped into attack families instead of repeated cards.
+- A response preview can be created directly from attacker evidence. Linux/MikroTik use registered managed block actions; FortiGate builds a registered deny-policy ActionPlan with observed interfaces and still follows preview, operator confirmation, PolicyGuard, connector verification, and audit.
+- Validation passed: 6 focused normalization/API tests, backend and frontend production builds, 203-item catalog validation, targeted ESLint, and diff checks.
+
+## 2026-09-13 - Sophos-to-Issabel VoIP registration repair
+
+- Diagnosed LAN phone SIP traffic reaching Sophos but being evaluated by the identity-required internet rule or stale connection state; the dedicated `ISABEL` rule itself used the correct LAN `/24` and PBX host objects.
+- Moved the dedicated `ISABEL` firewall rule to position 3, ahead of the identity-required internet rule, while retaining logging and limiting the destination to the Issabel host.
+- Disabled the experimental `no-nat-voip` rule because it created an asymmetric return path through the directly connected MikroTik LAN; retained the default Port2 masquerade for symmetric SIP/RTP flows.
+- Increased Sophos UDP stream timeout from 60 to 150 seconds and persistently unloaded the Sophos SIP helper, following Sophos VoIP troubleshooting guidance. Existing SIP conntrack entries were cleared after each policy change.
+- Live validation showed new SIP sessions matching firewall rule ID 5 and NAT rule ID 2. Active PJSIP contacts remained available beyond the previous 60-second failure boundary; previously stale/offline contacts require their next phone REGISTER or a phone restart.
+- No Issabel endpoint credentials, phone secrets, application code, or unrelated repository changes were modified.
+
+## 2026-09-15 - Sophos Firewall application integration
+
+- Added first-class Sophos Firewall onboarding over the official SFOS XML API, using stored write-only credentials and a bounded HTTPS client.
+- Added sanitized collection for interfaces, zones, gateways, firewall rules, IP hosts, services, and IPsec connections. Collected interface state feeds the graphical topology without recursively generating duplicate or phantom ports.
+- Added catalog-backed interface enable/disable/IP changes and firewall-rule enable/disable operations. Every mutation reads the current object, follows ActionPlan/PolicyGuard/audit, and performs a post-change readback before reporting success.
+- Added Sophos device/catalog capability routing and a dedicated graphical Sophos faceplate profile. Backend and frontend production builds pass and the 209-item command catalog validates.
+## 2026-09-16 - Linux SSH onboarding diagnostics repair
+
+- Verified the requested Linux target at 185.89.22.116:22022 from both the Windows host and the API container. TCP reachability and the OpenSSH handshake succeed; the stored alireza password credential is rejected by the server with SSH_AUTH_FAILED.
+- Fixed non-Cisco onboarding so connector stages, error code, safe message, warnings, and capabilities survive the failure path instead of being replaced by a generic connection-test message.
+- Updated both onboarding test endpoints to return the safe connector error code and diagnostic stages. The existing Persian UI now maps SSH_AUTH_FAILED to the credential-rejected guidance.
+- Rebuilt and deployed the API image. Backend TypeScript compilation, real connector failure-path smoke, persisted diagnostic verification, and API readiness passed. No password, private key, or decrypted credential was printed or committed.
+
+## 2026-09-16 - Public product landing and latest frontend restoration
+
+- Restored the active `firewall-web` service from the `latest-safe-snapshot` source and returned it to the canonical `track_firewall_log` Compose project/network; `/firewall/dashboard` now serves the current Persian product shell through main Nginx.
+- Added a public, Persian-first `/firewall/landing` route while keeping all operational routes behind the existing authentication boundary.
+- Built a concise landing with the real IRANYekan font and visual treatments derived from the current dashboard, controlled ActionPlan flow, and multi-vendor asset workspace. Product visuals contain only illustrative, non-operational values.
+- Added scroll-triggered blur-to-clear reveals, responsive/reduced-motion behavior, and a final team section using the supplied portrait and the requested network, security, and product-design role.
+- Hardened the frontend deployment script with an explicit Compose project name so folder names cannot silently place a rebuilt frontend on a disconnected Docker network.
+- Frontend Docker production build passed and both `/firewall/landing` and `/firewall/dashboard` were served through Nginx without exporting a Docker image archive.
+
+## 2026-09-16 - Live security command dashboard refinement
+
+- Rebuilt the authenticated dashboard around the approved command-center composition: daily security check, device/vendor state, open-alert trend, device table, destination-port activity, findings, operator priorities, execution history, and Linux resource telemetry.
+- All counters and charts are derived from existing asset, finding, monitoring, event, Action Center, and Linux snapshot APIs; no illustrative dashboard values were introduced.
+- Added the reference-style right-side AI security assistant with live chat, context-aware prompt shortcuts, compact conversation history, and handoff to the full assistant.
+- The embedded assistant is forced to Chat mode and cannot execute changes. Operational requests still require the existing ActionPlan preview, explicit user confirmation, PolicyGuard, registered connector, verification, and audit flow.
+- The full assistant now accepts safe `prompt`, `mode`, and device query handoff from dashboard links without auto-submitting or executing anything.
+- Responsive layouts stack the assistant below the operational workspace on narrower screens and preserve reduced-motion behavior.
+- Frontend production build, targeted ESLint, UTF-8 scan of 388 files, locale parity for 860 keys, Persian primary-copy checks, Nginx route smoke, API health, and all four required container health checks passed. The latest `firewall-web` image is deployed without a Desktop archive.
+## 2026-09-18 - Clone-and-run production deployment
+
+- Promoted the root Docker Compose file to a complete production stack containing PostgreSQL, backend, frontend, a one-shot runtime-secret initializer, and a Caddy HTTPS gateway.
+- Removed mandatory pre-deployment env work from the default path: strong database, session, and credential-encryption secrets are generated once in a private persistent volume.
+- Added automatic Prisma migrations, idempotent administrator bootstrap, persistent uploads/telemetry, health-gated startup, private application networks, HTTP-to-HTTPS redirect, and security headers.
+- Validated the stack from a clean isolated Compose project: production images built, database/API/web/gateway became healthy, UI and API readiness returned HTTP 200 through HTTPS, HTTP redirected, and bootstrap login plus authenticated session both returned HTTP 200.
+
+## 2026-09-19 - Company-scoped asset tenancy and recoverable deletion
+
+- Added first-class companies owned by application users. A user can own multiple companies, while devices, inventory assets, and their IP records are scoped to one company and filtered by the authenticated token owner.
+- Device onboarding now requires a company selection, the asset workspace provides a responsive company switcher and management dialog, and overlapping private IP addresses remain isolated between companies.
+- Company deletion is recoverable by default: the operator must type the exact company name, then the company and its devices/assets are soft-deleted together. Support administrators can restore the complete company tree.
+- Permanent deletion is a separate administrator-only endpoint, is available only after archival, requires the exact `DELETE <company-code>` phrase, and then relies on database `ON DELETE CASCADE` constraints. User management also has an irreversible typed-confirmation dialog; deleting a user cascades through companies, devices, assets, IP records, and onboarding sessions.
+- Existing installations are migrated safely by creating a default company per user and assigning legacy unscoped devices/assets during the idempotent bootstrap seed.
+- Validation passed: backend and frontend production builds, all 209 catalog commands, clean migration deployment on PostgreSQL 16, and an isolated database test covering cross-user isolation, duplicate private IPs, archive/restore, permanent company cascade, and user cascade.
+
+## 2026-09-19 - Vendor connection strategy and guided onboarding
+
+- Added an authenticated vendor connection catalog for Linux, Cisco, MikroTik, FortiGate, and Sophos. It separates management, inventory, telemetry, and event channels and marks every method as ready, setup-required, or planned instead of implying unsupported connectivity.
+- Device onboarding now presents only connector-backed management choices, recommends the safest practical default, applies the correct default port, explains prerequisites, and shows companion monitoring methods.
+- Added a bounded, read-only RouterOS v7 REST-over-HTTPS connector for structured identity, resources, interfaces, addresses, routes, firewall, services, and log discovery. Effectful RouterOS actions remain on the controlled SSH path.
+- Live connector tests passed for the registered MikroTik SSH, Cisco SSH, and Linux SSH devices. Network probes confirmed that RouterOS REST was not enabled on the tested MikroTik and that NETCONF/gNMI were not exposed on the tested Cisco, so those paths were not falsely reported as verified.
+- Backend and frontend production Docker builds passed, the new connection-registry tests passed 3/3, and all four deployed containers remained healthy. The full legacy suite completed with 556/597 passing; the 41 failures are pre-existing contract/environment mismatches outside this feature.

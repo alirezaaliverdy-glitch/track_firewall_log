@@ -34,9 +34,20 @@ export type StructuredAiResponse = {
   confidence: number;
 };
 
+export type AiConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type AiProviderInput = {
   message: string;
   context: Awaited<ReturnType<typeof buildSecurityOrchestratorContext>>;
+  mode?: "chat" | "action";
+  requireLiveResponse?: boolean;
+  conversationHistory?: AiConversationMessage[];
+  selectedVendor?: string | null;
+  selectedConnectorType?: string | null;
+  selectedDeviceName?: string | null;
 };
 
 export type AiProviderResult = StructuredAiResponse & {
@@ -132,13 +143,26 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "AI provider failed";
 }
 
-export function getAiProviderStatus(lastError?: string) {
+async function deterministicProviderFallback(input: AiProviderInput, keyConfigured: boolean, error: string): Promise<AiProviderResult> {
+  const response = normalizeResponse(await runMockAiProvider(input));
+  return {
+    ...response,
+    provider: "mock",
+    model: "deterministic-offline-fallback",
+    keyConfigured,
+    fallbackUsed: true,
+    error
+  };
+}
+
+export function getAiProviderStatus(lastError?: string, liveVerified = false) {
   const provider = providerName();
   return {
     provider,
     model: provider === "mock" ? "mock-deterministic" : env.openaiModel,
     fallbackModels: provider === "mock" ? [] : env.openaiFallbackModels,
     keyConfigured: Boolean(env.openaiApiKey),
+    liveVerified,
     baseUrlConfigured: Boolean(env.openaiBaseUrl),
     timeoutMs: env.aiTimeoutMs,
     appProfile: env.appProfile,
@@ -161,8 +185,17 @@ export function getAiProviderStatus(lastError?: string) {
 export async function runAiProvider(input: AiProviderInput): Promise<AiProviderResult> {
   const provider = providerName();
   const keyConfigured = Boolean(env.openaiApiKey);
+  const requireLiveResponse = input.requireLiveResponse === true;
 
   if (provider === "mock") {
+    if (requireLiveResponse) {
+      throw new AiProviderFailedError({
+        statusCode: 503,
+        provider,
+        attemptedModels: [],
+        message: "Live AI chat requires a configured OpenAI-compatible provider."
+      });
+    }
     const response = normalizeResponse(await runMockAiProvider(input));
     return {
       ...response,
@@ -174,12 +207,15 @@ export async function runAiProvider(input: AiProviderInput): Promise<AiProviderR
   }
 
   if (!keyConfigured) {
-    throw new AiProviderFailedError({
-      statusCode: 500,
-      provider,
-      attemptedModels: [],
-      message: "OPENAI_API_KEY is not configured"
-    });
+    if (requireLiveResponse) {
+      throw new AiProviderFailedError({
+        statusCode: 503,
+        provider,
+        attemptedModels: [],
+        message: "OPENAI_API_KEY is not configured."
+      });
+    }
+    return deterministicProviderFallback(input, false, "OPENAI_API_KEY is not configured; deterministic fallback is active.");
   }
 
   const models = uniqueModels([env.openaiModel, ...env.openaiFallbackModels]);
@@ -202,15 +238,24 @@ export async function runAiProvider(input: AiProviderInput): Promise<AiProviderR
     } catch (error) {
       lastStatusCode = errorStatusCode(error);
       errors.push(errorMessage(error));
+      if (lastStatusCode === 401) break;
     }
   }
 
-  throw new AiProviderFailedError({
-    statusCode: lastStatusCode,
-    provider,
-    attemptedModels: models,
-    message: lastStatusCode === 429
-      ? "سرویس هوش مصنوعی به محدودیت تعداد درخواست خورده است. کمی بعد دوباره تلاش کنید یا مدل/Provider دیگری انتخاب کنید."
-      : errors.at(-1) ?? "ارتباط با سرویس هوش مصنوعی ناموفق بود."
-  });
+  const lastError = lastStatusCode === 429
+    ? requireLiveResponse
+      ? "سرویس هوش مصنوعی به محدودیت تعداد درخواست خورده است؛ کمی بعد دوباره تلاش کنید."
+      : "سرویس هوش مصنوعی به محدودیت تعداد درخواست خورده است؛ پاسخ جایگزین داخلی فعال شد."
+    : errors.at(-1) ?? (requireLiveResponse
+      ? "ارتباط زنده با سرویس هوش مصنوعی ناموفق بود."
+      : "ارتباط با سرویس هوش مصنوعی ناموفق بود؛ پاسخ جایگزین داخلی فعال شد.");
+  if (requireLiveResponse) {
+    throw new AiProviderFailedError({
+      statusCode: lastStatusCode,
+      provider,
+      attemptedModels: models,
+      message: lastError
+    });
+  }
+  return deterministicProviderFallback(input, keyConfigured, lastError);
 }

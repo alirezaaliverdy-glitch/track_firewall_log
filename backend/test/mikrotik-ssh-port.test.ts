@@ -7,6 +7,7 @@ import { parseAiIntent } from "../src/services/ai-intent.service.js";
 import { evaluateMikroTikExpertPolicy } from "../src/services/mikrotik-policy-guard.service.js";
 import { publishActionPlanCreated, subscribeToActionPlanCreated } from "../../src/lib/actionPlanHandoff.js";
 import { normalizeIntentType, normalizeVendor, resolveDeviceIdFromCandidates } from "../src/services/ai-normalization.js";
+import { readFileSync } from "node:fs";
 
 function validate(parametersJson: Record<string, unknown>) {
   return validateMikroTikAction({
@@ -150,4 +151,14 @@ test("AI ActionPlan handoff notifies the Action Center", () => {
   publishActionPlanCreated("plan-from-ai", target as never);
   unsubscribe();
   assert.equal(received, "plan-from-ai");
+});
+
+test("MikroTik discovery has a bounded SSH-port recovery path and persists only authenticated recovery", () => {
+  const connector = readFileSync(new URL("../src/connectors/mikrotik-ssh.connector.ts", import.meta.url), "utf8");
+  const service = readFileSync(new URL("../src/services/device.service.ts", import.meta.url), "utf8");
+  assert.match(connector, /MIKROTIK_SSH_RECOVERY_PORTS = \[22, 2222, 22022\]/);
+  assert.match(connector, /withSshWithCredential\(connectionDevice, credential/);
+  assert.match(connector, /managementPortRecovered: recoveredManagementPort !== null/);
+  assert.match(service, /result\.connected[\s\S]+result\.managementPortRecovered === true/);
+  assert.match(service, /managementPort: recoveredManagementPort/);
 });

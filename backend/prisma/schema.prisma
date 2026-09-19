@@ -13,9 +13,34 @@ model AppUser {
   displayName  String
   role         AppUserRole   @default(viewer)
   isActive     Boolean       @default(true)
+  allowedSections String[]   @default([])
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sessions     AuthSession[]
+  securityAlertChannels SecurityAlertChannel[]
+  scheduledTasks ScheduledTask[]
+  companies     Company[]
+  onboardingSessions DeviceOnboardingSession[]
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  ownerId     String
+  owner       AppUser   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  code        String
+  description String?
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  devices     Device[]
+  assets      Asset[]
+  ipAddresses AssetIpAddress[]
+
+  @@unique([ownerId, code])
+  @@index([ownerId, deletedAt])
+  @@index([deletedAt])
 }
 
 model AuthSession {
@@ -99,6 +124,8 @@ model AnalysisRun {
 
 model Device {
   id                       String                    @id @default(cuid())
+  companyId                String?
+  company                  Company?                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name                     String
   vendor                   String
   type                     DeviceType
@@ -112,6 +139,7 @@ model Device {
   tags                     String[]                  @default([])
   status                   DeviceStatus              @default(unknown)
   capabilities             Json?
+  deletedAt                DateTime?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   authProfiles             DeviceAuthProfile[]
@@ -136,8 +164,10 @@ model Device {
   deviceSnapshots          DeviceSnapshot[]
   findings                 Finding[]
   asset                    Asset?
+  scheduledTasks           ScheduledTask[]
 
   @@index([type])
+  @@index([companyId, deletedAt])
   @@index([host])
   @@index([credentialId])
   @@index([credentialRef])
@@ -146,6 +176,8 @@ model Device {
 
 model DeviceOnboardingSession {
   id                  String   @id
+  ownerId             String?
+  owner               AppUser? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   deviceId            String?
   status              String
   step                String
@@ -161,6 +193,7 @@ model DeviceOnboardingSession {
   expiresAt           DateTime
 
   @@index([deviceId])
+  @@index([ownerId])
   @@index([status])
   @@index([expiresAt])
 }
@@ -228,6 +261,8 @@ model AssetPlatform {
 
 model Asset {
   id                String              @id @default(cuid())
+  companyId         String?
+  company           Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name              String
   hostname          String?
   managementIp      String?
@@ -252,6 +287,7 @@ model Asset {
   source            AssetSource?        @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   tagsJson          Json                @default("[]")
   metadataJson      Json                @default("{}")
+  deletedAt         DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   interfaces        AssetInterface[]
@@ -267,9 +303,10 @@ model Asset {
   monitorIncidents  MonitorIncident[]
   collectionRuns    CollectionRun[]
 
-  @@unique([managementIp])
-  @@unique([serial])
-  @@unique([externalId])
+  @@unique([companyId, managementIp])
+  @@unique([companyId, serial])
+  @@unique([companyId, externalId])
+  @@index([companyId, deletedAt])
   @@index([hostname])
   @@index([managedState])
   @@index([healthState])
@@ -297,7 +334,9 @@ model AssetInterface {
 
 model AssetIpAddress {
   id          String          @id @default(cuid())
-  address     String          @unique
+  companyId   String?
+  company     Company?        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  address     String
   assetId     String?
   asset       Asset?          @relation(fields: [assetId], references: [id], onDelete: Cascade)
   interfaceId String?
@@ -309,6 +348,8 @@ model AssetIpAddress {
   updatedAt   DateTime        @updatedAt
 
   @@index([assetId])
+  @@unique([companyId, address])
+  @@index([companyId])
   @@index([interfaceId])
   @@index([prefixId])
 }
@@ -433,6 +474,21 @@ model Finding {
   @@index([lastSeen])
 }
 
+model TrustedSourceIp {
+  id        String   @id @default(cuid())
+  ip        String
+  vendor    String   @default("all")
+  label     String?
+  enabled   Boolean  @default(true)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ip, vendor])
+  @@index([vendor, enabled])
+  @@index([createdAt])
+}
+
 model DeviceCredential {
   id                  String               @id @default(cuid())
   name                String               @unique
@@ -527,6 +583,8 @@ model ActionPlan {
   updatedAt      DateTime         @updatedAt
   auditLogs      ActionAuditLog[]
   approvals      ActionApproval[]
+  secrets        ActionPlanSecret[]
+  scheduledTaskRuns ScheduledTaskRun[]
 
   @@index([source])
   @@index([deviceId])
@@ -536,6 +594,19 @@ model ActionPlan {
   @@index([status])
   @@index([riskLevel])
   @@index([createdAt])
+}
+
+model ActionPlanSecret {
+  id              String     @id @default(cuid())
+  actionPlanId    String
+  actionPlan      ActionPlan @relation(fields: [actionPlanId], references: [id], onDelete: Cascade)
+  key             String
+  secretEncrypted String
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([actionPlanId, key])
+  @@index([actionPlanId])
 }
 
 model ActionAuditLog {
@@ -743,7 +814,9 @@ model EventCollectorState {
   lastSuccessAt   DateTime?
   lastErrorAt     DateTime?
   lastError       String?
-  enabled         Boolean   @default(false)
+  consecutiveIdleRuns Int  @default(0)
+  consecutiveFailures Int  @default(0)
+  enabled         Boolean   @default(true)
   intervalSeconds Int       @default(60)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -770,6 +843,100 @@ model DetectionRule {
   @@unique([ruleType, name])
   @@index([enabled])
   @@index([ruleType])
+}
+
+model ScheduledTask {
+  id                String                @id @default(cuid())
+  name              String
+  deviceId          String
+  device            Device                @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  catalogCommandId  String
+  actionType        ActionType
+  riskLevel         AiRiskLevel
+  parametersJson    Json
+  calendarType      ScheduledTaskCalendar @default(gregorian)
+  localDate         String
+  localTime         String
+  timeZone          String                @default("Asia/Tehran")
+  runAt             DateTime
+  status            ScheduledTaskStatus   @default(scheduled)
+  enabled           Boolean               @default(true)
+  createdById       String?
+  createdBy         AppUser?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  confirmationJson  Json
+  lastRunAt         DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  runs              ScheduledTaskRun[]
+
+  @@index([deviceId])
+  @@index([createdById])
+  @@index([status, enabled, runAt])
+  @@index([createdAt])
+}
+
+model ScheduledTaskRun {
+  id              String                 @id @default(cuid())
+  scheduledTaskId String
+  scheduledTask   ScheduledTask          @relation(fields: [scheduledTaskId], references: [id], onDelete: Cascade)
+  actionPlanId    String?
+  actionPlan      ActionPlan?            @relation(fields: [actionPlanId], references: [id], onDelete: SetNull)
+  executionKey    String                 @unique
+  trigger         ScheduledTaskTrigger   @default(schedule)
+  status          ScheduledTaskRunStatus @default(running)
+  scheduledFor    DateTime
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  errorCode       String?
+  errorMessage    String?
+  resultJson      Json?
+  createdAt       DateTime               @default(now())
+
+  @@index([scheduledTaskId, createdAt])
+  @@index([actionPlanId])
+  @@index([status, startedAt])
+}
+
+model SecurityAlertChannel {
+  id              String   @id @default("primary-email")
+  userId          String?  @unique
+  user            AppUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled         Boolean  @default(false)
+  recipientEmail  String?
+  recipientEmails String[] @default([])
+  minimumSeverity String   @default("high")
+  senderProvider  String?
+  senderEmail     String?
+  senderSecretEncrypted String? @db.Text
+  senderConnectedAt DateTime?
+  senderTestedAt  DateTime?
+  senderTestStatus String?
+  lastTestedAt    DateTime?
+  lastTestStatus  String?
+  lastErrorCode   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model SecurityAlertDelivery {
+  id              String    @id @default(cuid())
+  channelId       String
+  findingId       String
+  ruleId          String?
+  eventFingerprint String   @unique
+  recipientEmail  String
+  status          String
+  errorCode       String?
+  attemptCount    Int       @default(1)
+  nextAttemptAt   DateTime?
+  attemptedAt     DateTime  @default(now())
+  sentAt          DateTime?
+  metadataJson    Json?
+
+  @@index([channelId, attemptedAt])
+  @@index([findingId])
+  @@index([status])
+  @@index([status, nextAttemptAt])
 }
 
 model Incident {
@@ -1402,8 +1569,34 @@ enum ActionPlanStatus {
   rolled_back
 }
 
+enum ScheduledTaskCalendar {
+  gregorian
+  jalali
+}
+
+enum ScheduledTaskStatus {
+  scheduled
+  paused
+  running
+  completed
+  cancelled
+}
+
+enum ScheduledTaskTrigger {
+  schedule
+  manual
+}
+
+enum ScheduledTaskRunStatus {
+  running
+  succeeded
+  failed
+  skipped
+}
+
 enum ActionType {
   custom_vendor_action
+  mikrotik_shutdown
   generic_security_action
   create_egress_policy
   update_policy_schedule
@@ -1560,8 +1753,12 @@ enum ActionType {
   linux_read_docker
   linux_read_nginx
   linux_daily_check
+  linux_reboot
+  linux_shutdown
   mikrotik_daily_check
   fortigate_daily_check
+  fortigate_reboot
+  fortigate_shutdown
   fortigate_show_interfaces
   fortigate_route_dns_check
   fortigate_license_status

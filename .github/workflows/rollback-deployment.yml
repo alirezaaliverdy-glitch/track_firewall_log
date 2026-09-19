@@ -1,0 +1,145 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment environment to roll back one recorded version
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rollback-${{ inputs.target }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  rollback-staging:
+    name: Roll back staging
+    if: inputs.target == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve image repositories
+        id: images
+        run: |
+          namespace="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "frontend_repository=${namespace}/frontend" >> "$GITHUB_OUTPUT"
+          echo "backend_repository=${namespace}/backend" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          test -n "$SSH_HOST"
+          test -n "$SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copy rollback files
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH/scripts/deploy'"
+          scp -i ~/.ssh/deploy_key docker-compose.staging.yml nginx.firewall-main.conf "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+          scp -i ~/.ssh/deploy_key scripts/deploy/rollback-one-version.sh "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/scripts/deploy/"
+
+      - name: Log in remote host to GHCR
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          GHCR_USER: ${{ secrets.STAGING_GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.STAGING_GHCR_TOKEN }}
+        run: |
+          test -n "$GHCR_USER"
+          test -n "$GHCR_TOKEN"
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+
+      - name: Roll back one version
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          FRONTEND_REPOSITORY: ${{ steps.images.outputs.frontend_repository }}
+          BACKEND_REPOSITORY: ${{ steps.images.outputs.backend_repository }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "cd '$DEPLOY_PATH' && COMPOSE_FILE=docker-compose.staging.yml FRONTEND_IMAGE_REPOSITORY='$FRONTEND_REPOSITORY' BACKEND_IMAGE_REPOSITORY='$BACKEND_REPOSITORY' sh scripts/deploy/rollback-one-version.sh"
+
+  rollback-production:
+    name: Roll back production
+    if: inputs.target == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve image repositories
+        id: images
+        run: |
+          namespace="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "frontend_repository=${namespace}/frontend" >> "$GITHUB_OUTPUT"
+          echo "backend_repository=${namespace}/backend" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          test -n "$SSH_HOST"
+          test -n "$SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copy rollback files
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH/scripts/deploy'"
+          scp -i ~/.ssh/deploy_key docker-compose.production.yml nginx.firewall-main.conf "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+          scp -i ~/.ssh/deploy_key scripts/deploy/rollback-one-version.sh "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/scripts/deploy/"
+
+      - name: Log in remote host to GHCR
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          GHCR_USER: ${{ secrets.PRODUCTION_GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.PRODUCTION_GHCR_TOKEN }}
+        run: |
+          test -n "$GHCR_USER"
+          test -n "$GHCR_TOKEN"
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+
+      - name: Roll back one version
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          FRONTEND_REPOSITORY: ${{ steps.images.outputs.frontend_repository }}
+          BACKEND_REPOSITORY: ${{ steps.images.outputs.backend_repository }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "cd '$DEPLOY_PATH' && COMPOSE_FILE=docker-compose.production.yml FRONTEND_IMAGE_REPOSITORY='$FRONTEND_REPOSITORY' BACKEND_IMAGE_REPOSITORY='$BACKEND_REPOSITORY' sh scripts/deploy/rollback-one-version.sh"

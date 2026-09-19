@@ -2,7 +2,11 @@
 .agents
 .codex
 node_modules
+.pnpm-store
+.runtime
+.playwright-mcp
 dist
 backend
 .env
 *.log
+*.zip

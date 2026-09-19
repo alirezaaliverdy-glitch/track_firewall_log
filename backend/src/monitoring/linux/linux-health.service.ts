@@ -69,7 +69,14 @@ export function metricsFromOverview(overview: ReturnType<typeof parseLinuxServer
 
 async function listLinuxDevicesWithoutHealth() {
   const devices = await prisma.device.findMany({ where: { OR: [{ vendor: { contains: "linux", mode: "insensitive" } }, { type: "linux_edge" }] }, include: { asset: true }, orderBy: { updatedAt: "desc" } });
-  return devices.map((device) => ({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, latestHealth: null }));
+  return devices.map((device) => ({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, healthState: /offline|disconnected|failed/i.test(device.status) ? "offline" : "unknown", latestHealth: null }));
+}
+
+function effectiveLinuxState(deviceStatus: string, latestHealth: { state: string; staleAt: Date | null } | undefined) {
+  if (/offline|disconnected|failed/i.test(deviceStatus)) return "offline";
+  if (!latestHealth) return "unknown";
+  if (latestHealth.staleAt && latestHealth.staleAt.getTime() < Date.now()) return "stale";
+  return latestHealth.state;
 }
 
 export async function listLinuxMonitoringDevices() {
@@ -77,7 +84,7 @@ export async function listLinuxMonitoringDevices() {
   if (!schema.available) return listLinuxDevicesWithoutHealth();
   try {
     const devices = await prisma.device.findMany({ where: { OR: [{ vendor: { contains: "linux", mode: "insensitive" } }, { type: "linux_edge" }] }, include: { asset: true, healthSnapshots: { orderBy: { collectedAt: "desc" }, take: 1 } }, orderBy: { updatedAt: "desc" } });
-    return devices.map((device) => ({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, latestHealth: device.healthSnapshots[0] ?? null }));
+    return devices.map((device) => ({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, healthState: effectiveLinuxState(device.status, device.healthSnapshots[0]), latestHealth: device.healthSnapshots[0] ?? null }));
   } catch (error) {
     if (isMigrationPendingError(error)) return listLinuxDevicesWithoutHealth();
     throw error;
@@ -87,8 +94,8 @@ export async function listLinuxMonitoringDevices() {
 export async function getLinuxMonitoringSummary() {
   const schema = await getObservabilitySchemaState();
   const devices = await listLinuxMonitoringDevices();
-  const counts = devices.reduce<Record<string, number>>((acc, device) => { const key = device.latestHealth?.state ?? "unknown"; acc[key] = (acc[key] ?? 0) + 1; return acc; }, {});
-  return { total: devices.length, healthy: counts.healthy ?? 0, warning: counts.warning ?? 0, critical: counts.critical ?? 0, offline: counts.offline ?? 0, stale: counts.stale ?? 0, unknown: counts.unknown ?? 0, devices: devices.slice(0, 5), observability: schema.available ? { state: "available", checkedAt: schema.checkedAt } : { state: "not_configured", reason: schema.reason, missingTables: schema.missing, checkedAt: schema.checkedAt } };
+  const counts = devices.reduce<Record<string, number>>((acc, device) => { const key = device.healthState ?? "unknown"; acc[key] = (acc[key] ?? 0) + 1; return acc; }, {});
+  return { total: devices.length, healthy: counts.healthy ?? 0, warning: counts.warning ?? 0, critical: counts.critical ?? 0, offline: counts.offline ?? 0, stale: counts.stale ?? 0, unknown: counts.unknown ?? 0, devices, observability: schema.available ? { state: "available", checkedAt: schema.checkedAt } : { state: "not_configured", reason: schema.reason, missingTables: schema.missing, checkedAt: schema.checkedAt } };
 }
 
 export async function getLinuxMonitoringDevice(deviceId: string) {

@@ -57,9 +57,6 @@ const VENDOR_TEMPLATES: Record<CustomConnectorVendor, {
   cisco: { connectorType: "cisco-ios-xe-ssh", executionTemplateRef: "cisco_custom_connector_command" },
 };
 
-const LINUX_SERVICE_PATTERN = /^[a-zA-Z0-9_.@:-]+$/;
-const ROUTEROS_NAME_PATTERN = /^[a-zA-Z0-9_.:-]{1,64}$/;
-
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -109,6 +106,23 @@ function serviceFromPrompt(message: string, parameters: Record<string, unknown>)
   return normalizePrompt(message).match(/\b(nginx|apache2?|httpd|ssh|sshd|docker|fail2ban|postgresql|mysql|mariadb|redis|ufw)\b/)?.[1]?.replace(/^apache$/, "apache2");
 }
 
+function usernameFromPrompt(message: string, parameters: Record<string, unknown>) {
+  const explicit = text(parameters.username);
+  if (explicit) return explicit;
+  return message.match(/(?:user(?:name)?|account|کاربر|یوزر)\s+([a-z_][a-z0-9_.-]{0,31})\b/i)?.[1];
+}
+
+function isCreateUserRequest(message: string, parameters: Record<string, unknown>) {
+  if (String(parameters.operation ?? "").toLowerCase() === "create_user") return true;
+  const normalized = normalizePrompt(message);
+  return /\b(create|add)\b.*\b(user|account)\b|\b(user|account)\b.*\b(create|add)\b/i.test(normalized) ||
+    /(?:کاربر|یوزر).*(?:بساز|ایجاد|اضافه)/.test(message) || /(?:بساز|ایجاد).*(?:کاربر|یوزر)/.test(message);
+}
+
+function accountAccessConfigured(parameters: Record<string, unknown>) {
+  return parameters.accountAccessConfigured === true || parameters.accountAccessConfigured === "true";
+}
+
 function identityFromPrompt(message: string, parameters: Record<string, unknown>) {
   const explicit = text(parameters.identity) ?? text(parameters.name) ?? text(parameters.hostname);
   if (explicit) return explicit;
@@ -123,7 +137,7 @@ function adminTimeoutFromPrompt(message: string, parameters: Record<string, unkn
 }
 
 function ciscoInterfaceFromPrompt(message: string, parameters: Record<string, unknown>) {
-  return text(parameters.interfaceName) ?? text(parameters.interface) ?? message.match(/\b(?:interface)\s+([A-Za-z][A-Za-z0-9\/_.:-]{1,40})\b/i)?.[1];
+  return text(parameters.interfaceName) ?? text(parameters.interface) ?? message.match(/\b(?:interface)\s+([A-Za-z][A-Za-z0-9/_.:-]{1,40})\b/i)?.[1];
 }
 
 function ciscoDescriptionFromPrompt(message: string, parameters: Record<string, unknown>) {
@@ -180,24 +194,80 @@ function providerStructuredFields(parameters: Record<string, unknown>) {
   };
 }
 
+type SynthesizedCustomCommand = {
+  commands: string[];
+  verificationCommands: string[];
+  typedParameters: Record<string, unknown>;
+  missingFields: string[];
+  rollback: string[];
+  expectedImpact: string;
+  riskLevel: AiRiskLevel;
+};
+
 function synthesizeCommands(input: {
   message: string;
   vendor: CustomConnectorVendor;
   parameters: Record<string, unknown>;
-}): { commands: string[]; verificationCommands: string[]; typedParameters: Record<string, unknown>; missingFields: string[]; rollback: string[]; expectedImpact: string; riskLevel: AiRiskLevel } {
+}): SynthesizedCustomCommand | null {
   const text = normalizePrompt(input.message);
   if (input.vendor === "linux") {
-    const service = serviceFromPrompt(input.message, input.parameters);
+    if (isCreateUserRequest(input.message, input.parameters)) {
+      const username = usernameFromPrompt(input.message, input.parameters);
+      const accessConfigured = accountAccessConfigured(input.parameters);
+      const missingFields = [
+        ...(!username ? ["username"] : []),
+        ...(!accessConfigured ? ["initialPassword", "confirmPassword"] : []),
+      ];
+      if (missingFields.length) return {
+        commands: [],
+        verificationCommands: [],
+        typedParameters: { operation: "create_user", ...(username ? { username } : {}) },
+        missingFields,
+        rollback: ["If the account is not needed, remove it only after reviewing ownership and files."],
+        expectedImpact: "Linux user creation requires a valid username and a securely supplied initial password.",
+        riskLevel: AiRiskLevel.medium,
+      };
+      return {
+        commands: [`sudo -n useradd -m ${username}`, "sudo -n chpasswd"],
+        verificationCommands: [`id ${username}`],
+        typedParameters: { operation: "create_user", username, accountAccessConfigured: true },
+        missingFields: [],
+        rollback: [`Review files owned by ${username}, then remove the account with sudo -n userdel ${username} if rollback is approved.`],
+        expectedImpact: `Creates the local Linux account ${username}, its home directory, and applies the operator-supplied initial password through protected connector input.`,
+        riskLevel: AiRiskLevel.medium,
+      };
+    }
+    const explicitOperation = String(input.parameters.operation ?? "").toLowerCase();
     const hasOperation = (operation: string) => new RegExp(`\\b${operation}\\b`).test(text);
-    const operation = hasOperation("restart") ? "restart"
+    const operation = ["restart", "reload", "stop", "disable", "enable", "start", "status"].includes(explicitOperation)
+      ? explicitOperation
+      : hasOperation("restart") ? "restart"
       : hasOperation("reload") ? "reload"
         : hasOperation("stop") ? "stop"
           : hasOperation("disable") ? "disable"
             : hasOperation("enable") ? "enable"
               : hasOperation("start") ? "start"
-                : "restart";
+                : hasOperation("status") || hasOperation("check") || hasOperation("show") ? "status"
+                  : null;
+    const serviceOperationRequested = Boolean(operation) && (
+      Boolean(explicitOperation) ||
+      /\b(service|systemd|daemon|status|restart|reload|start|stop|enable|disable|check|show)\b/.test(text)
+    );
+    if (!serviceOperationRequested || !operation) return null;
+    const service = serviceFromPrompt(input.message, input.parameters);
     if (!service) return { commands: [], verificationCommands: [], typedParameters: { operation }, missingFields: ["serviceName"], rollback: ["Use service-specific rollback after identifying the service."], expectedImpact: "Linux service change requires the target service name.", riskLevel: AiRiskLevel.medium };
     const statusCommand = operation === "enable" || operation === "disable" ? `systemctl is-enabled ${service}` : `systemctl is-active ${service}`;
+    if (operation === "status") {
+      return {
+        commands: [`systemctl status ${service} --no-pager`],
+        verificationCommands: [statusCommand],
+        typedParameters: { operation, serviceName: service },
+        missingFields: [],
+        rollback: ["Read-only status inspection does not change the device."],
+        expectedImpact: `Reads the current systemd status for ${service}.`,
+        riskLevel: AiRiskLevel.low,
+      };
+    }
     return {
       commands: [`sudo -n systemctl ${operation} ${service}`],
       verificationCommands: [statusCommand],
@@ -210,6 +280,8 @@ function synthesizeCommands(input: {
   }
 
   if (input.vendor === "mikrotik") {
+    const operation = String(input.parameters.operation ?? "").toLowerCase();
+    if (operation !== "set_identity" && !/\b(identity|hostname)\b/.test(text)) return null;
     const identity = identityFromPrompt(input.message, input.parameters);
     if (!identity) return { commands: [], verificationCommands: [], typedParameters: { operation: "set_identity" }, missingFields: ["identity"], rollback: ["Restore the previous RouterOS identity from backup or audit evidence."], expectedImpact: "RouterOS identity change requires the new identity value.", riskLevel: AiRiskLevel.low };
     return {
@@ -224,6 +296,8 @@ function synthesizeCommands(input: {
   }
 
   if (input.vendor === "fortigate") {
+    const operation = String(input.parameters.operation ?? "").toLowerCase();
+    if (operation !== "set_admin_timeout" && !/\b(admin(?:istrative)?\s+timeout|admintimeout)\b/.test(text)) return null;
     const timeout = adminTimeoutFromPrompt(input.message, input.parameters);
     if (!timeout) return { commands: [], verificationCommands: [], typedParameters: { operation: "set_admin_timeout" }, missingFields: ["adminTimeout"], rollback: ["Restore the previous admintimeout value from backup or audit evidence."], expectedImpact: "FortiGate admin timeout change requires a timeout in minutes.", riskLevel: AiRiskLevel.medium };
     return {
@@ -267,6 +341,8 @@ function synthesizeCommands(input: {
 
   const interfaceName = ciscoInterfaceFromPrompt(input.message, input.parameters);
   const description = ciscoDescriptionFromPrompt(input.message, input.parameters);
+  const operation = String(input.parameters.operation ?? "").toLowerCase();
+  if (operation !== "set_interface_description" && !/\bdescription\b/.test(text)) return null;
   if (!interfaceName || !description) {
     return { commands: [], verificationCommands: [], typedParameters: { operation: "set_interface_description", interfaceName, description }, missingFields: [!interfaceName ? "interfaceName" : null, !description ? "description" : null].filter(Boolean) as string[], rollback: ["Restore the previous interface description from running configuration."], expectedImpact: "Cisco interface description change requires interfaceName and description.", riskLevel: AiRiskLevel.low };
   }
@@ -302,13 +378,29 @@ function basePlan(input: {
   const params = input.parameters ?? {};
   const provider = providerStructuredFields(params);
   const synthesized = synthesizeCommands({ message: input.message, vendor, parameters: params });
+  if (!provider && !synthesized) return null;
+  const fallback: SynthesizedCustomCommand = synthesized ?? {
+    commands: [],
+    verificationCommands: [],
+    typedParameters: {},
+    missingFields: [],
+    rollback: [],
+    expectedImpact: text(params.expectedImpact) ?? "Executes a backend-validated custom vendor operation.",
+    riskLevel: AiRiskLevel.medium,
+  };
   const template = customTemplateForVendor(vendor);
-  const commands = provider?.commands ?? synthesized.commands;
-  const typedParameters = provider ? provider.typedParameters : { ...synthesized.typedParameters, ...asObject(params.typedParameters) };
-  const verification = provider?.verificationCommands ?? synthesized.verificationCommands;
-  const operations = provider?.orderedOperations.length ? provider.orderedOperations as CustomCommandPlan["orderedOperations"] : orderedOperations({ vendor, commands, typedParameters });
-  const verificationOperations = provider?.verificationOperations.length
-    ? provider.verificationOperations
+  const useControlledCreateUser = vendor === "linux" && isCreateUserRequest(input.message, params);
+  const controlledProvider = useControlledCreateUser ? null : provider;
+  const commands = controlledProvider?.commands ?? fallback.commands;
+  const typedParameters = controlledProvider
+    ? controlledProvider.typedParameters
+    : useControlledCreateUser
+      ? fallback.typedParameters
+      : { ...fallback.typedParameters, ...asObject(params.typedParameters) };
+  const verification = controlledProvider?.verificationCommands ?? fallback.verificationCommands;
+  const operations = controlledProvider?.orderedOperations.length ? controlledProvider.orderedOperations as CustomCommandPlan["orderedOperations"] : orderedOperations({ vendor, commands, typedParameters });
+  const verificationOperations = controlledProvider?.verificationOperations.length
+    ? controlledProvider.verificationOperations
     : verification.map((command, index) => ({
       id: `verify-${index + 1}`,
       operationType: "verification",
@@ -326,12 +418,12 @@ function basePlan(input: {
     orderedCommands: commands,
     orderedOperations: operations,
     typedParameters,
-    missingFields: provider?.missingFields ?? synthesized.missingFields,
-    riskLevel: provider?.riskLevel ?? synthesized.riskLevel,
-    expectedImpact: provider?.expectedImpact ?? text(params.expectedImpact) ?? synthesized.expectedImpact,
+    missingFields: controlledProvider?.missingFields ?? fallback.missingFields,
+    riskLevel: controlledProvider?.riskLevel ?? fallback.riskLevel,
+    expectedImpact: controlledProvider?.expectedImpact ?? text(params.expectedImpact) ?? fallback.expectedImpact,
     verificationCommands: verification,
     verificationOperations,
-    rollbackGuidance: provider?.rollbackGuidance ?? (textArray(params.rollbackGuidance).length ? textArray(params.rollbackGuidance) : synthesized.rollback),
+    rollbackGuidance: controlledProvider?.rollbackGuidance ?? (textArray(params.rollbackGuidance).length ? textArray(params.rollbackGuidance) : fallback.rollback),
     requiresExplicitApproval: true,
     ...template,
     backendValidation: {

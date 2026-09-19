@@ -376,14 +376,16 @@ const CONNECTOR_TYPE_TO_NAME: Record<ExecutionTemplate["connectorType"], DeviceC
   "linux-ssh": "linux_edge",
   "mikrotik-ssh": "mikrotik",
   "fortigate-ssh": "fortigate",
-  "cisco-ios-xe-ssh": "cisco"
+  "cisco-ios-xe-ssh": "cisco",
+  "sophos-api": "sophos"
 };
 
 const CONNECTOR_TYPE_NAME_ALIASES: Record<ExecutionTemplate["connectorType"], string[]> = {
   "linux-ssh": ["linux_edge", "linux", "linux-ssh"],
   "mikrotik-ssh": ["mikrotik", "routeros", "mikrotik-ssh"],
   "fortigate-ssh": ["fortigate", "fortinet", "fortigate-ssh"],
-  "cisco-ios-xe-ssh": ["cisco", "cisco-ios-xe-ssh", "cisco-iosxe-ssh"]
+  "cisco-ios-xe-ssh": ["cisco", "cisco-ios-xe-ssh", "cisco-iosxe-ssh"],
+  "sophos-api": ["sophos", "sfos", "sophos-api"]
 };
 
 export type ExecutionPipelineResolution = {

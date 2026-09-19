@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, Database, RefreshCw, ShieldAlert } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { API_BASE_URL } from "@/config/frontendEnv";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 type SourceKey = "netbox" | "wazuh";
 type PreviewRow = { action?: string; matchName?: string | null; identity?: { hostname?: string; managementIp?: string; externalId?: string } };
 type Preview = { sourceType?: string; total?: number; creates?: number; updates?: number; rows?: PreviewRow[] };

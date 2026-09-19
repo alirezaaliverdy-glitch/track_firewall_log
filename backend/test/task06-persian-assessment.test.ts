@@ -20,7 +20,7 @@ test("full analysis returns all structured Persian sections with evidence and se
   const titles = Object.values(draft.sections).map((section) => section.title);
   for (const title of ["خلاصه مدیریتی", "دارایی‌ها و Vendorها", "وضعیت سطح حمله", "وضعیت فایروال و Policyها", "وضعیت دسترسی مدیریتی", "وضعیت لاگ و مانیتورینگ", "وضعیت Hardening", "یافته‌ها", "اقدامات پیشنهادی بعدی", "امتیاز ریسک"]) assert.ok(titles.includes(title));
   assert.equal(draft.language, "fa");
-  assert.match(draft.dataNotice, /داده خوانده‌شده از دستگاه موجود نیست/);
+  assert.match(draft.dataNotice, /داده خواندنی تازه از دستگاه موجود نیست/);
   assert.ok(draft.findings.every((finding) => finding.severity && finding.evidence && finding.recommendedNextStep));
 });
 
@@ -40,16 +40,43 @@ test("OpenRouter retry-after is bounded and 429 has a friendly Persian message",
 });
 
 test("assessment UI uses cards and does not render findings as raw JSON", () => {
-  const ui = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
+  const report = readFileSync(new URL("../../src/features/assistant/components/AssistantAssessmentReport.tsx", import.meta.url), "utf8");
+  const ui = `${panel}\n${report}`;
   assert.match(ui, /امتیاز ریسک/);
-  assert.match(ui, /پوشش دستگاه/);
-  assert.match(ui, /ساخت اکشن/);
-  assert.match(ui, /نیاز به بررسی دستی/);
+  assert.match(ui, /پوشش داده دستگاه/);
+  assert.match(ui, /ساخت برنامه اقدام/);
+  assert.match(ui, /نیازمند بررسی کارشناس/);
+  assert.match(ui, /مبنای نتیجه/);
+  assert.match(ui, /اطمینان تحلیل/);
   assert.doesNotMatch(ui, /JSON\.stringify\(assessment\.findingsJson/);
   assert.doesNotMatch(ui, /JSON\.stringify\(recommendation\.evidenceJson/);
-  assert.match(ui, /setMessages\(\[\]\)/);
-  assert.match(ui, /setAssessment\(null\)/);
-  assert.match(ui, /clearAiSessionMessages/);
+  assert.match(panel, /setMessages\(\[\]\)/);
+  assert.match(panel, /setAssessment\(null\)/);
+  assert.match(panel, /clearAiSessionMessages/);
+});
+
+test("ordinary sensitive-port traffic alone is not reported as an attack finding", () => {
+  const quietContext = {
+    ...context,
+    incidents: { recent: [], countBySeverity: [], countByStatus: [] },
+    events: { ...context.events, recentCount: 12, sensitivePorts: [{ dstPort: 22, count: 500 }] }
+  };
+  const draft = buildAssessmentDraft(quietContext as never, 0);
+  assert.ok(!draft.findings.some((finding) => finding.id === "sensitive-management-port-activity"));
+  assert.equal(draft.evidence.scoreBreakdown.correlatedSensitiveTraffic, 0);
+});
+
+test("selected-device analysis and hardening remain tied to the same assessment", () => {
+  const contextSource = readFileSync(new URL("../src/services/ai-context.service.ts", import.meta.url), "utf8");
+  const serviceSource = readFileSync(new URL("../src/services/security-assessment.service.ts", import.meta.url), "utf8");
+  const clientSource = readFileSync(new URL("../../src/lib/ai.ts", import.meta.url), "utf8");
+  assert.match(contextSource, /const deviceWhere = input\.deviceId \? \{ deviceId: input\.deviceId \} : \{\}/);
+  assert.match(contextSource, /lastSeenAt: \{ gte: since \}/);
+  assert.match(serviceSource, /buildSecurityContext\(\{ recentMinutes: 1440, deviceId: selectedDeviceId \}\)/);
+  assert.match(serviceSource, /!snapshot\.snapshotType\.endsWith\("_error"\)/);
+  assert.match(clientSource, /scopeType: "device", scopeId: deviceId/);
+  assert.match(clientSource, /assessments\/\$\{encodeURIComponent\(id\)\}\/hardening-suggestions/);
 });
 
 test("full-analysis and standalone hardening keep a stable Persian 200 contract", async () => {
@@ -64,6 +91,11 @@ test("full-analysis and standalone hardening keep a stable Persian 200 contract"
     assert.ok(Array.isArray(fullBody.assessment.sections));
     assert.ok(Array.isArray(fullBody.assessment.findings));
     assert.match(fullBody.assessment.summaryFa, /[\u0600-\u06ff]/);
+    assert.equal(typeof fullBody.assessment.id, "string");
+
+    const scopedHardening = await app.inject({ method: "POST", url: `/api/assessments/${fullBody.assessment.id}/hardening-suggestions` });
+    assert.equal(scopedHardening.statusCode, 200);
+    assert.equal(scopedHardening.json().id, fullBody.assessment.id);
 
     const hardening = await app.inject({ method: "POST", url: "/api/assessments/hardening-suggestions" });
     assert.equal(hardening.statusCode, 200);

@@ -9,9 +9,9 @@ import type { ProductFeature } from "../src/product-state/product-state.types.js
 test("Task 19A product state rejects unsafe navigation mismatches", () => {
   assert.equal(validateProductState(), true);
   const invalid: ProductFeature[] = PRODUCT_FEATURES.map((item) => ({ ...item }));
-  const settings = invalid.find((item) => item.key === "settings");
-  assert.ok(settings);
-  settings.navigationVisible = true;
+  const assetSync = invalid.find((item) => item.key === "assets.sync");
+  assert.ok(assetSync);
+  assetSync.navigationVisible = true;
   assert.throws(() => validateProductState(invalid), /forbidden state planned/);
 
   const incomplete: ProductFeature[] = PRODUCT_FEATURES.map((item) => ({ ...item }));
@@ -26,8 +26,9 @@ test("Task 19A navigation excludes planned, mock-only, not-configured and unveri
   assert.ok(routes.includes("/dashboard"));
   assert.ok(routes.includes("/assets/devices/new"));
   assert.ok(routes.includes("/security/rules"));
+  assert.ok(routes.includes("/security/email-alerts"));
   assert.ok(routes.includes("/monitoring/linux"));
-  assert.ok(!routes.includes("/settings"));
+  assert.ok(routes.includes("/settings"));
   assert.ok(!routes.includes("/assets/sync"));
   assert.ok(!routes.includes("/assets/vendors/cisco"));
   assert.ok(!routes.includes("/integrations/netbox"));
@@ -42,8 +43,8 @@ test("Task 19A backend feature keys and frontend route registry stay aligned", (
   const frontendRoutes = [...source.matchAll(/path:\s*"([^"]+)"\s*,\s*featureKey:\s*"([^"]+)"/g)]
     .map((match) => ({ route: match[1], key: match[2] }));
   const backendKeys = new Set(PRODUCT_FEATURES.map((item) => item.key));
-  assert.equal(frontendKeys.length, 55);
-  assert.equal(PRODUCT_FEATURES.length, 55);
+  assert.equal(frontendKeys.length, 54);
+  assert.equal(PRODUCT_FEATURES.length, 54);
   assert.equal(new Set(frontendKeys).size, frontendKeys.length);
   for (const key of frontendKeys) assert.ok(backendKeys.has(key), `Frontend feature key is missing from product state: ${key}`);
   for (const item of PRODUCT_FEATURES.filter((feature) => feature.route)) assert.ok(frontendKeys.includes(item.key), `Product state feature is missing from frontend routes: ${item.key}`);

@@ -6,6 +6,8 @@ import { findMutationPermission, MUTATION_PERMISSION_POLICIES, requiredExecution
 import { hasPermission } from "../src/security/permissions.js";
 import { csrfTokenForSession, validateCsrfToken } from "../src/security/csrf.js";
 import { assertLoginRateLimit, resetLoginRateLimit } from "../src/security/rate-limit.js";
+import { passwordPolicyViolations } from "../src/security/password-policy.js";
+import { sensitiveLogPaths } from "../src/security/redaction.js";
 
 const routeDir = join(process.cwd(), "src", "routes");
 const routeFiles = [
@@ -84,6 +86,9 @@ test("concrete mutation paths resolve through centralized permission policy", ()
   assert.equal(findMutationPermission("POST", "/api/actions/plan-1/execute"), "actions.execute.write");
   assert.equal(findMutationPermission("POST", "/api/credentials"), "credentials.manage");
   assert.equal(findMutationPermission("POST", "/api/auth/logout"), "auth.session.manage");
+  assert.equal(findMutationPermission("POST", "/api/auth/logout-all"), "auth.session.terminate");
+  assert.equal(findMutationPermission("POST", "/api/auth/change-password"), "auth.session.manage");
+  assert.equal(findMutationPermission("DELETE", "/api/auth/sessions/session-1"), "auth.session.terminate");
   assert.equal(findMutationPermission("POST", "/api/not-declared"), null);
 });
 
@@ -98,6 +103,31 @@ test("central login limiter returns 429-ready retry metadata", () => {
   assert.equal(blocked.reasonCode, "RATE_LIMIT_LOGIN");
   assert.ok(blocked.retryAfterSeconds > 0);
   resetLoginRateLimit(ip, username);
+});
+
+test("login limiter also blocks username spraying from one address", () => {
+  const ip = `198.51.100.${Math.floor(Math.random() * 100) + 1}`;
+  for (let i = 0; i < 25; i += 1) {
+    assert.equal(assertLoginRateLimit(ip, `spray-${Date.now()}-${i}`).allowed, true);
+  }
+  const blocked = assertLoginRateLimit(ip, `spray-${Date.now()}-blocked`);
+  assert.equal(blocked.allowed, false);
+  assert.equal(blocked.reasonCode, "RATE_LIMIT_LOGIN_IP");
+});
+
+test("password policy rejects weak, common, oversized, and username-derived passwords", () => {
+  assert.deepEqual(passwordPolicyViolations("Strong-Passphrase-2026!", "operator"), []);
+  assert.ok(passwordPolicyViolations("short", "operator").includes("PASSWORD_TOO_SHORT"));
+  assert.ok(passwordPolicyViolations("password1234", "operator").includes("PASSWORD_TOO_COMMON"));
+  assert.ok(passwordPolicyViolations("operator-secure-2026", "operator").includes("PASSWORD_CONTAINS_USERNAME"));
+  assert.ok(passwordPolicyViolations("x".repeat(129), "operator").includes("PASSWORD_TOO_LONG"));
+});
+
+test("authentication secrets are explicitly redacted from request logging", () => {
+  assert.ok(sensitiveLogPaths.includes("req.body.password"));
+  assert.ok(sensitiveLogPaths.includes("req.body.currentPassword"));
+  assert.ok(sensitiveLogPaths.includes("req.body.newPassword"));
+  assert.ok(sensitiveLogPaths.includes("req.headers.cookie"));
 });
 
 test("CSRF tokens are session-bound and reject missing or wrong values", () => {

@@ -1,6 +1,13 @@
 import type { Device } from "@prisma/client";
 
-export type CollectorSourceType = "linux_ssh" | "linux_ufw" | "linux_kernel";
+export type CollectorSourceType =
+  | "linux_ssh"
+  | "linux_ufw"
+  | "linux_kernel"
+  | "mikrotik_log"
+  | "fortigate_log"
+  | "cisco_syslog"
+  | "pfsense_log";
 
 export type CollectedLogLine = {
   sourceType: CollectorSourceType;
@@ -12,6 +19,8 @@ export type CollectedLogLine = {
 
 export type CollectorRunResult = {
   deviceId: string;
+  vendor: "linux" | "mikrotik" | "fortigate" | "cisco" | "pfsense";
+  collectorName: string;
   sourceTypes: CollectorSourceType[];
   lines: CollectedLogLine[];
   warnings: string[];
@@ -21,6 +30,7 @@ export type CollectorRunResult = {
 
 export type DeviceCollector = {
   name: string;
+  stateSourceType: CollectorSourceType;
   supports(device: Device | null): boolean;
   sourceTypes: CollectorSourceType[];
   runOnce(device: Device, since: Date): Promise<CollectorRunResult>;

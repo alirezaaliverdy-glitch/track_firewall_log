@@ -2,15 +2,28 @@ import { createHmac, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
+import { passwordPolicyViolations } from "../security/password-policy.js";
 
 export const AUTH_COOKIE_NAME = "firewall_session";
 export const AUTH_COOKIE_PATH = "/";
+const dummyPasswordHash = bcrypt.hash(randomBytes(32).toString("base64url"), 12);
 
 export type PublicUser = {
   id: string;
   username: string;
   displayName: string;
   role: "admin" | "operator" | "viewer";
+  allowedSections: string[];
+};
+
+export type PublicAuthSession = {
+  id: string;
+  current: boolean;
+  createdAt: Date;
+  lastSeenAt: Date;
+  expiresAt: Date;
+  userAgent: string | null;
+  ipAddress: string | null;
 };
 
 export function hashSessionToken(token: string) {
@@ -18,30 +31,14 @@ export function hashSessionToken(token: string) {
 }
 
 export function publicUser(user: PublicUser): PublicUser {
-  return { id: user.id, username: user.username, displayName: user.displayName, role: user.role };
-}
-
-export async function bootstrapAdmin() {
-  if (await prisma.appUser.count()) return false;
-  if (env.adminPassword.length < 8) {
-    throw new Error("ADMIN_PASSWORD must contain at least 8 characters before the first user can be created");
-  }
-  const passwordHash = await bcrypt.hash(env.adminPassword, 12);
-  await prisma.appUser.create({
-    data: {
-      username: env.adminUsername.toLowerCase(),
-      passwordHash,
-      displayName: env.adminDisplayName,
-      role: "admin"
-    }
-  });
-  return true;
+  return { id: user.id, username: user.username, displayName: user.displayName, role: user.role, allowedSections: user.allowedSections };
 }
 
 export async function authenticate(username: string, password: string) {
-  if (!username.trim() || password.length < 8) return null;
+  if (!username.trim() || username.length > 128 || password.length < 6 || password.length > 128) return null;
   const user = await prisma.appUser.findUnique({ where: { username: username.trim().toLowerCase() } });
-  if (!user || !user.isActive || !(await bcrypt.compare(password, user.passwordHash))) return null;
+  const passwordMatches = await bcrypt.compare(password, user?.passwordHash ?? await dummyPasswordHash);
+  if (!user || !user.isActive || !passwordMatches) return null;
   return publicUser(user);
 }
 
@@ -52,6 +49,15 @@ export async function createSession(userId: string, metadata: { userAgent?: stri
   await prisma.authSession.create({
     data: { userId, tokenHash: hashSessionToken(token), expiresAt, ...metadata }
   });
+  const excessSessions = await prisma.authSession.findMany({
+    where: { userId },
+    orderBy: [{ lastSeenAt: "desc" }, { createdAt: "desc" }],
+    skip: env.authMaxActiveSessions,
+    select: { id: true }
+  });
+  if (excessSessions.length > 0) {
+    await prisma.authSession.deleteMany({ where: { id: { in: excessSessions.map(({ id }) => id) } } });
+  }
   return { token, expiresAt };
 }
 
@@ -84,6 +90,61 @@ export async function destroySession(token?: string) {
 
 export async function destroyAllSessionsForUser(userId: string) {
   await prisma.authSession.deleteMany({ where: { userId } });
+}
+
+export async function listSessionsForUser(userId: string, currentToken?: string): Promise<PublicAuthSession[]> {
+  const currentTokenHash = currentToken ? hashSessionToken(currentToken) : null;
+  const idleCutoff = new Date(Date.now() - env.authSessionIdleMinutes * 60 * 1000);
+  const sessions = await prisma.authSession.findMany({
+    where: { userId, expiresAt: { gt: new Date() }, lastSeenAt: { gt: idleCutoff } },
+    orderBy: { lastSeenAt: "desc" },
+    select: {
+      id: true,
+      tokenHash: true,
+      createdAt: true,
+      lastSeenAt: true,
+      expiresAt: true,
+      userAgent: true,
+      ipAddress: true
+    }
+  });
+  return sessions.map(({ tokenHash, ...session }) => ({
+    ...session,
+    current: tokenHash === currentTokenHash
+  }));
+}
+
+export async function revokeSessionForUser(userId: string, sessionId: string, currentToken?: string) {
+  const session = await prisma.authSession.findFirst({
+    where: { id: sessionId, userId },
+    select: { id: true, tokenHash: true }
+  });
+  if (!session) return { revoked: false, current: false };
+  await prisma.authSession.delete({ where: { id: session.id } });
+  return {
+    revoked: true,
+    current: Boolean(currentToken && session.tokenHash === hashSessionToken(currentToken))
+  };
+}
+
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  const user = await prisma.appUser.findUnique({ where: { id: userId } });
+  if (!user || !user.isActive || currentPassword.length > 128 || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    return { ok: false as const, reason: "CURRENT_PASSWORD_INVALID" as const, violations: [] as string[] };
+  }
+  const violations = passwordPolicyViolations(newPassword, user.username);
+  if (violations.length > 0) {
+    return { ok: false as const, reason: "PASSWORD_POLICY_FAILED" as const, violations };
+  }
+  if (await bcrypt.compare(newPassword, user.passwordHash)) {
+    return { ok: false as const, reason: "PASSWORD_REUSED" as const, violations: ["PASSWORD_REUSED"] };
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.$transaction([
+    prisma.appUser.update({ where: { id: userId }, data: { passwordHash } }),
+    prisma.authSession.deleteMany({ where: { userId } })
+  ]);
+  return { ok: true as const };
 }
 
 export async function pruneExpiredSessions(now = new Date()) {

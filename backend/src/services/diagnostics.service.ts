@@ -1,4 +1,4 @@
-import { isIP } from "node:net";
+import { BlockList, isIP } from "node:net";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 
@@ -21,6 +21,18 @@ type DiagnosticSession = {
 
 const CHECK_HOST_BASE = "https://check-host.net";
 const PUBLIC_HOST_RE = /^(?!-)(?:[a-z0-9-]{1,63}\.)+[a-z]{2,63}$/i;
+const blockedAddresses = new BlockList();
+
+for (const [network, prefix, type] of [
+  ["0.0.0.0", 8, "ipv4"], ["10.0.0.0", 8, "ipv4"], ["100.64.0.0", 10, "ipv4"],
+  ["127.0.0.0", 8, "ipv4"], ["169.254.0.0", 16, "ipv4"], ["172.16.0.0", 12, "ipv4"],
+  ["192.0.0.0", 24, "ipv4"], ["192.0.2.0", 24, "ipv4"], ["192.168.0.0", 16, "ipv4"],
+  ["198.18.0.0", 15, "ipv4"], ["198.51.100.0", 24, "ipv4"], ["203.0.113.0", 24, "ipv4"],
+  ["224.0.0.0", 4, "ipv4"], ["240.0.0.0", 4, "ipv4"],
+  ["::", 128, "ipv6"], ["::1", 128, "ipv6"],
+  ["64:ff9b::", 96, "ipv6"], ["100::", 64, "ipv6"], ["2001:db8::", 32, "ipv6"],
+  ["fc00::", 7, "ipv6"], ["fe80::", 10, "ipv6"], ["ff00::", 8, "ipv6"]
+] as const) blockedAddresses.addSubnet(network, prefix, type);
 
 function classifyTarget(raw: string): { target: string; normalizedTarget: string; targetKind: TargetKind; host: string; port?: number; publicAllowed: boolean; reason?: string } {
   const target = raw.trim();
@@ -49,15 +61,30 @@ function classifyTarget(raw: string): { target: string; normalizedTarget: string
 }
 
 function classifyHost(host: string): { targetKind: "domain" | "ipv4" | "ipv6"; publicAllowed: boolean; reason?: string } {
-  const ipVersion = isIP(host);
+  const normalizedHost = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  const ipVersion = isIP(normalizedHost);
   if (ipVersion === 4) {
-    const parts = host.split(".").map(Number);
-    const blocked = parts[0] === 10 || parts[0] === 127 || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || (parts[0] === 192 && parts[1] === 168) || (parts[0] === 169 && parts[1] === 254) || parts[0] === 0 || parts[0] >= 224;
+    const blocked = blockedAddresses.check(normalizedHost, "ipv4");
     return { targetKind: "ipv4", publicAllowed: !blocked, reason: blocked ? "PRIVATE_OR_RESERVED_TARGET_BLOCKED" : undefined };
   }
   if (ipVersion === 6) {
-    const lowered = host.toLowerCase();
-    const blocked = lowered === "::1" || lowered.startsWith("fc") || lowered.startsWith("fd") || lowered.startsWith("fe80");
+    const mappedTail = normalizedHost.toLowerCase().match(/^::ffff:(.+)$/)?.[1];
+    if (mappedTail) {
+      const dotted = isIP(mappedTail) === 4
+        ? mappedTail
+        : mappedTail.split(":").length === 2
+          ? mappedTail.split(":").flatMap((part) => {
+              const value = Number.parseInt(part, 16);
+              return [value >> 8, value & 255];
+            }).join(".")
+          : null;
+      if (dotted && isIP(dotted) === 4) {
+        const blocked = blockedAddresses.check(dotted, "ipv4");
+        return { targetKind: "ipv6", publicAllowed: !blocked, reason: blocked ? "PRIVATE_OR_RESERVED_TARGET_BLOCKED" : undefined };
+      }
+      return { targetKind: "ipv6", publicAllowed: false, reason: "PRIVATE_OR_RESERVED_TARGET_BLOCKED" };
+    }
+    const blocked = blockedAddresses.check(normalizedHost, "ipv6");
     return { targetKind: "ipv6", publicAllowed: !blocked, reason: blocked ? "PRIVATE_OR_RESERVED_TARGET_BLOCKED" : undefined };
   }
   if (!PUBLIC_HOST_RE.test(host)) return { targetKind: "domain", publicAllowed: false, reason: "DOMAIN_INVALID" };
@@ -148,4 +175,4 @@ export async function getDiagnosticSession(id: string) {
   return normalizeSession({ id: record.id, metadata: record.metadata, createdAt: record.createdAt });
 }
 
-export const diagnosticInternalsForTest = { classifyTarget };
+export const diagnosticInternalsForTest = { classifyTarget, classifyHost };

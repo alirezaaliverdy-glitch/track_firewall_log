@@ -158,7 +158,7 @@ async function credentialExists(device: Device | null) {
   return false;
 }
 
-function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge" | "cisco") {
+function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate" | "linux_edge" | "cisco" | "sophos") {
   if (!device) return false;
   const deviceVendor = String(device.vendor ?? "").toLowerCase();
   if (vendor === "mikrotik") {
@@ -169,6 +169,9 @@ function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate"
   }
   if (vendor === "cisco") {
     return device.protocol === "ssh" && deviceVendor.includes("cisco");
+  }
+  if (vendor === "sophos") {
+    return device.protocol === "api" && (deviceVendor.includes("sophos") || deviceVendor.includes("sfos") || deviceVendor.includes("cyberoam"));
   }
   return device.protocol === "ssh" && (device.type === "linux_edge" || deviceVendor.includes("linux"));
 }
@@ -412,6 +415,15 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     if (device && device.protocol !== "ssh") errors.push("Cisco catalog action requires SSH protocol.");
     if (device && !await credentialExists(device)) errors.push("Cisco catalog action requires an existing credential for the target device.");
     if (device && !connectorExists(device, "cisco")) errors.push("Cisco catalog action requires the registered Cisco SSH connector.");
+  }
+  const isSophosCatalogAction = plan.actionType === ActionType.generic_security_action && (metadata.connectorType === "sophos-api" || metadata.vendor === "sophos" || parameters.vendor === "sophos");
+  if (isSophosCatalogAction) {
+    if (!plan.deviceId) errors.push("Sophos catalog action requires deviceId.");
+    if (plan.deviceId && !device) errors.push("Sophos catalog action requires a valid registered device.");
+    if (device && !/sophos|sfos|cyberoam/i.test(String(device.vendor))) errors.push("Sophos catalog action requires a Sophos Firewall device.");
+    if (device && device.protocol !== "api") errors.push("Sophos catalog action requires API protocol.");
+    if (device && !await credentialExists(device)) errors.push("Sophos catalog action requires an existing credential for the target device.");
+    if (device && !connectorExists(device, "sophos")) errors.push("Sophos catalog action requires the registered Sophos XML API connector.");
   }
   if (DEVICE_REQUIRED_ACTIONS.has(plan.actionType)) {
     if (!plan.deviceId) errors.push(`${plan.actionType} requires deviceId.`);

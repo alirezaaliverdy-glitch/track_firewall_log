@@ -1,9 +1,169 @@
 import { prisma } from "../db/prisma.js";
+import { mergeCiscoWorkspaceInterfaces, projectCiscoWorkspaceDetails, safeCiscoDetail } from "./device-workspace-cisco.js";
 
 const PENDING_ACTION_STATES = ["proposed", "validation_failed", "dry_run_ready", "pending_approval", "approved", "executing", "rollback_pending"] as const;
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function collectedRows(value: unknown) {
+  return asArray(value).map((entry) => {
+    if (entry && typeof entry === "object" && !Array.isArray(entry)) return entry;
+    const raw = String(entry ?? "").trim();
+    const name = raw.match(/(?:^|\s)(?:name|default-name)=([^\s]+)/i)?.[1] ?? raw;
+    return { name, raw };
+  });
+}
+
+function timestamp(value: unknown) {
+  const parsed = value ? new Date(String(value)).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function resolveWorkspaceConnectionState(
+  latestStatus: { status: string; checkedAt: Date | string } | null | undefined,
+  persistedStatus: string | null | undefined,
+  successfulEvidence: unknown[]
+) {
+  const latestSuccessAt = successfulEvidence
+    .map(timestamp)
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => right - left)[0] ?? null;
+  const latestCheckAt = timestamp(latestStatus?.checkedAt);
+  if (latestSuccessAt !== null && (latestCheckAt === null || latestSuccessAt >= latestCheckAt)) {
+    return { availability: "online", verificationStatus: "verified", lastContact: new Date(latestSuccessAt) };
+  }
+  const availability = latestStatus?.status ?? persistedStatus ?? "unknown";
+  return {
+    availability,
+    verificationStatus: availability === "online" ? "verified" : latestStatus ? "needs_review" : "not_verified",
+    lastContact: latestStatus?.checkedAt ?? null
+  };
+}
+
+export function liveVendorProjection(vendorKey: string, capabilities: Record<string, unknown>, refreshedAt: Date | string | null) {
+  const statusKey = vendorKey === "mikrotik" ? "mikrotikStatus" : vendorKey === "fortigate" ? "fortigateStatus" : vendorKey === "sophos" ? "sophosStatus" : vendorKey === "linux" ? "linuxStatus" : "";
+  const status = statusKey ? asObject(capabilities[statusKey]) : {};
+  if (status.connected !== true) return null;
+  const connectorCapabilities = asObject(status.capabilities);
+  const capabilityList = Object.entries(connectorCapabilities)
+    .filter(([, enabled]) => enabled === true)
+    .map(([key]) => ({ domain: key, key, state: "read_only", mode: "read" }));
+  const section = (key: string, titleFa: string, titleEn: string, value: unknown) => {
+    const hasData = Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : value !== null && value !== undefined;
+    return hasData ? { key, titleFa, titleEn, state: "available" as const, reason: null, requirement: "", nextAction: "" } : null;
+  };
+
+  if (vendorKey === "mikrotik") {
+    const data = asObject(status.mikrotik);
+    return {
+      connectorType: "mikrotik",
+      facts: {
+        hostname: data.identity ?? null,
+        version: data.routerosVersion ?? null,
+        uptime: data.uptime ?? null,
+        architecture: data.architecture ?? null,
+        interfaces: collectedRows(data.interfaces),
+        health: { cpuLoad: data.cpuLoad ?? null, memoryFree: data.memoryFree ?? null },
+        collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
+      },
+      capabilities: capabilityList,
+      warnings: asArray(status.warnings),
+      refreshedAt: status.collectedAt ?? refreshedAt,
+      sections: [
+        section("system", "سامانه", "System", data.identity ?? data.routerosVersion),
+        section("interfaces", "اینترفیس‌ها", "Interfaces", data.interfaces),
+        section("routing", "مسیریابی", "Routing", data.routes),
+        section("firewall", "فایروال", "Firewall", data.firewallFilterRules),
+        section("nat", "NAT", "NAT", data.natRules),
+        section("services", "سرویس‌ها", "Services", data.services),
+        section("logs", "رویدادها", "Logs", data.recentLogs)
+      ].filter((item): item is NonNullable<typeof item> => item !== null)
+    };
+  }
+
+  if (vendorKey === "fortigate") {
+    const data = asObject(status.fortigate);
+    return {
+      connectorType: "fortigate",
+      facts: {
+        hostname: data.hostname ?? status.hostname ?? null,
+        model: data.model ?? null,
+        serialNumber: data.serial ?? null,
+        version: data.version ?? null,
+        interfaces: collectedRows(data.interfaces),
+        collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
+      },
+      capabilities: capabilityList,
+      warnings: asArray(status.warnings),
+      refreshedAt: status.collectedAt ?? refreshedAt,
+      sections: [
+        section("system", "سامانه", "System", data.hostname ?? data.version),
+        section("interfaces", "اینترفیس‌ها", "Interfaces", data.interfaces),
+        section("routing", "مسیریابی", "Routing", data.routes),
+        section("firewall", "Policy و فایروال", "Firewall and policy", data.policies),
+        section("services", "سرویس‌ها", "Services", data.services),
+        section("ha", "دسترس‌پذیری بالا", "High availability", data.haStatus)
+      ].filter((item): item is NonNullable<typeof item> => item !== null)
+    };
+  }
+
+  if (vendorKey === "sophos") {
+    const data = asObject(status.sophos);
+    return {
+      connectorType: "sophos-api",
+      facts: {
+        product: data.product ?? "Sophos Firewall",
+        apiVersion: data.apiVersion ?? null,
+        interfaces: collectedRows(data.interfaces),
+        zones: data.zones ?? [],
+        gateways: data.gateways ?? [],
+        firewallRules: data.firewallRules ?? [],
+        ipHosts: data.ipHosts ?? [],
+        services: data.services ?? [],
+        vpnConnections: data.vpnConnections ?? [],
+        collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
+      },
+      capabilities: capabilityList,
+      warnings: asArray(status.warnings),
+      refreshedAt: data.collectedAt ?? status.collectedAt ?? refreshedAt,
+      sections: [
+        section("system", "سامانه", "System", data.product ?? data.apiVersion),
+        section("interfaces", "اینترفیس‌ها", "Interfaces", data.interfaces),
+        section("zones", "ناحیه‌ها", "Zones", data.zones),
+        section("routing", "درگاه‌ها و مسیریابی", "Gateways and routing", data.gateways),
+        section("firewall", "قوانین فایروال", "Firewall rules", data.firewallRules),
+        section("objects", "میزبان‌ها و سرویس‌ها", "Hosts and services", [...asArray(data.ipHosts), ...asArray(data.services)]),
+        section("vpn", "اتصال‌های VPN", "VPN connections", data.vpnConnections)
+      ].filter((item): item is NonNullable<typeof item> => item !== null)
+    };
+  }
+
+  return {
+    connectorType: "linux_edge",
+    facts: {
+      hostname: status.hostname ?? null,
+      version: status.os ?? null,
+      listeningPorts: status.listeningPorts ?? null,
+      firewallStatus: status.ufwStatus ?? null,
+      sshServiceStatus: status.sshServiceStatus ?? null,
+      collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
+    },
+    capabilities: capabilityList,
+    warnings: asArray(status.warnings),
+    refreshedAt: status.collectedAt ?? status.listeningPortsCheckedAt ?? refreshedAt,
+    sections: [
+      section("system", "سامانه", "System", status.hostname ?? status.os),
+      section("ports", "پورت‌های شنونده", "Listening ports", status.listeningPorts),
+      section("firewall", "فایروال", "Firewall", status.ufwStatus),
+      section("services", "سرویس‌ها", "Services", status.sshServiceStatus)
+    ].filter((item): item is NonNullable<typeof item> => item !== null)
+  };
 }
 
 let optionalTablesPromise: Promise<Set<string>> | null = null;
@@ -58,7 +218,12 @@ export async function getDeviceWorkspace(reference: string) {
     actions: actions.map((item) => point(item.updatedAt, item.status === "succeeded" ? 1 : item.status === "failed" ? 0 : 0.5, item.status)).reverse(),
     recentChanges: audit.map((item) => ({ timestamp: item.createdAt, label: item.action })).reverse()
   };
-  const vendorKey = device?.vendor === "cisco" ? "cisco" : device?.type === "linux_edge" ? "linux" : String(device?.type ?? directAsset?.vendor?.slug ?? "unknown");
+  const normalizedVendor = String(device?.vendor ?? device?.type ?? directAsset?.vendor?.slug ?? "unknown").toLowerCase();
+  const vendorKey = normalizedVendor.includes("cisco") ? "cisco"
+    : normalizedVendor.includes("mikrotik") ? "mikrotik"
+      : normalizedVendor.includes("forti") ? "fortigate"
+        : device?.type === "linux_edge" || normalizedVendor.includes("linux") ? "linux"
+          : normalizedVendor;
   const cisco = asObject(deviceCapabilities.cisco);
   const ciscoCollection = asObject(cisco.collection);
   const ciscoSystem = asObject(ciscoCollection.system);
@@ -68,48 +233,57 @@ export async function getDeviceWorkspace(reference: string) {
   const ciscoProfile = asObject(cisco.capabilityProfile ?? ciscoCollection.capabilityProfile);
   const ciscoCapabilityGroups = asObject(ciscoProfile.groups);
   const ciscoFacts = Object.keys(ciscoCollection).length > 0
-    ? { ...ciscoSystem, interfaces: asObject(ciscoInterfaces).summary ?? [], switchports: asObject(ciscoInterfaces).switchports ?? [], health: ciscoHealth, network: ciscoNetwork, collection: ciscoCollection }
+    ? {
+      ...ciscoSystem,
+      inventory: safeCiscoDetail(asArray(ciscoSystem.inventory)),
+      interfaces: safeCiscoDetail(mergeCiscoWorkspaceInterfaces(ciscoInterfaces.summary, ciscoInterfaces.switchports)),
+      switchports: safeCiscoDetail(asArray(ciscoInterfaces.switchports)),
+      health: safeCiscoDetail(ciscoHealth),
+      network: safeCiscoDetail(ciscoNetwork),
+      configuration: safeCiscoDetail(asObject(ciscoCollection.configuration)),
+      securityServices: safeCiscoDetail(asObject(ciscoCollection.securityServices)),
+      collection: {
+        collectedAt: ciscoCollection.collectedAt ?? null,
+        inventoryStatus: ciscoCollection.inventoryStatus ?? "unknown",
+        capabilityStatus: ciscoCollection.capabilityStatus ?? "unknown"
+      }
+    }
     : asObject(cisco.facts);
-  const workspaceFacts = capabilityCache?.factsJson ?? (Object.keys(ciscoFacts).length > 0 ? ciscoFacts : null);
+  const liveProjection = liveVendorProjection(vendorKey, deviceCapabilities, latestStatus?.checkedAt ?? null);
+  const latestSuccessfulCollection = collections.find((item) => successfulCollection(item.status))?.completedAt ?? null;
+  const connectionState = resolveWorkspaceConnectionState(latestStatus, device?.status ?? directAsset?.healthState, [
+    latestSuccessfulCollection,
+    ciscoCollection.collectedAt,
+    onboarding.verifiedAt,
+    liveProjection?.refreshedAt
+  ]);
+  const workspaceFacts = liveProjection?.facts ?? capabilityCache?.factsJson ?? (Object.keys(ciscoFacts).length > 0 ? ciscoFacts : null);
   const workspaceDetection = capabilityCache?.detectionJson ?? (Object.keys(ciscoDetection).length > 0 ? ciscoDetection : null);
-  const workspaceCapabilityList = Array.isArray(capabilityCache?.capabilitiesJson)
+  const workspaceCapabilityList = liveProjection?.capabilities ?? (Array.isArray(capabilityCache?.capabilitiesJson)
     ? capabilityCache.capabilitiesJson.map((item) => asObject(item))
-    : Object.entries(ciscoCapabilityGroups).map(([domain, state]) => ({ domain, key: String(domain).toLowerCase(), state, mode: state === "read_only" ? "read" : "capability" }));
+    : Object.entries(ciscoCapabilityGroups).map(([domain, state]) => ({ domain, key: String(domain).toLowerCase(), state, mode: state === "read_only" ? "read" : "capability" })));
   const section = (key: string, titleFa: string, titleEn: string, hasData: boolean, requirement: string, nextAction: string) => ({ key, titleFa, titleEn, state: hasData ? "available" : "no_data", reason: hasData ? null : "No verified collection has been stored for this capability.", requirement, nextAction });
   const ciscoSection = (key: string, group: string, titleFa: string, titleEn: string) => {
     const capabilityState = String(ciscoCapabilityGroups[group] ?? "unknown");
     return { ...section(key, titleFa, titleEn, capabilityState !== "unknown", "Refresh verified Cisco capabilities.", "Run safe read-only Cisco validation."), capabilityState };
   };
-  const vendorSections = vendorKey === "linux" ? [
-    section("cpu", "پردازنده و بار", "CPU and load", metricSamples.some((item) => /cpu|load/i.test(item.metricKey)), "Run a verified Linux health collection.", "Refresh Linux monitoring."),
-    section("memory", "حافظه و Swap", "Memory and swap", metricSamples.some((item) => /memory|mem|swap/i.test(item.metricKey)), "Run a verified Linux health collection.", "Refresh Linux monitoring."),
-    section("disk", "دیسک و inode", "Disk and inode", metricSamples.some((item) => /disk|inode|filesystem/i.test(item.metricKey)), "Collect Linux disk metrics.", "Open Linux monitoring and refresh."),
-    section("services", "سرویس‌ها", "Services", actions.some((item) => /service/i.test(item.actionType)), "Run a registered service-status template.", "Create a service check from the catalog."),
-    section("ports", "پورت‌های شنونده", "Listening ports", actions.some((item) => /port/i.test(item.actionType)), "Run the registered listening-port template.", "Create a listening-port check."),
-    section("firewall", "فایروال", "Firewall", actions.some((item) => /firewall|port|block/i.test(item.actionType)), "Run a registered firewall inspection.", "Open Action Center or the command catalog."),
-    section("authentication", "احراز هویت", "Authentication", findings.some((item) => /auth|login|ssh/i.test(`${item.category} ${item.title}`)), "Collect authentication telemetry.", "Start Linux monitoring."),
-  ] : vendorKey === "cisco" ? [
-    ciscoSection("system", "System", "System", "System"),
-    ciscoSection("inventory", "Inventory", "Inventory", "Inventory"),
-    ciscoSection("interfaces", "Interfaces", "Interfaces", "Interfaces"),
-    ciscoSection("switching", "Switching", "Switching", "Switching"),
+  const vendorSections = liveProjection?.sections ?? (vendorKey === "cisco" ? [
+    ciscoSection("system", "System", "سامانه", "System"),
+    ciscoSection("inventory", "Inventory", "موجودی سخت‌افزار", "Inventory"),
+    ciscoSection("interfaces", "Interfaces", "اینترفیس‌ها", "Interfaces"),
+    ciscoSection("switching", "Switching", "سوئیچینگ", "Switching"),
     ciscoSection("vlan", "VLAN", "VLAN", "VLAN"),
-    ciscoSection("routing", "Routing", "Routing", "Routing"),
-    ciscoSection("acl", "ACL", "ACL", "ACL"),
+    ciscoSection("routing", "Routing", "مسیریابی", "Routing"),
+    ciscoSection("acl", "ACL", "کنترل دسترسی (ACL)", "ACL"),
     ciscoSection("nat", "NAT", "NAT", "NAT"),
     ciscoSection("dhcp", "DHCP", "DHCP", "DHCP"),
-    ciscoSection("aaa", "AAA", "AAA", "AAA"),
-    ciscoSection("monitoring", "Monitoring", "Monitoring", "Monitoring"),
-    ciscoSection("backup", "Backup", "Backup", "Backup"),
-    ciscoSection("diagnostics", "Diagnostics", "Diagnostics", "Diagnostics"),
-    ciscoSection("security", "Security", "Security", "Security"),
-    ciscoSection("services", "Services", "Services", "Services")
-  ] : [
-    section("interfaces", "اینترفیس‌ها", "Interfaces", actions.some((item) => /interface/i.test(item.actionType)), "Run a verified interface read.", "Use the registered vendor catalog."),
-    section("routing", "مسیریابی", "Routing", actions.some((item) => /route/i.test(item.actionType)), "Run a verified routing read.", "Use the registered vendor catalog."),
-    section("firewall", "فایروال و Policy", "Firewall and policy", actions.some((item) => /firewall|policy|nat|address/i.test(item.actionType)), "Run a verified policy inspection.", "Use the registered vendor catalog."),
-    section("vpn", "VPN", "VPN", actions.some((item) => /vpn/i.test(item.actionType)), "Run a verified VPN status check.", "Use the registered vendor catalog.")
-  ];
+    ciscoSection("aaa", "AAA", "احراز هویت (AAA)", "AAA"),
+    ciscoSection("monitoring", "Monitoring", "پایش", "Monitoring"),
+    ciscoSection("backup", "Backup", "پشتیبان تنظیمات", "Backup"),
+    ciscoSection("diagnostics", "Diagnostics", "عیب‌یابی", "Diagnostics"),
+    ciscoSection("security", "Security", "امنیت", "Security"),
+    ciscoSection("services", "Services", "سرویس‌ها", "Services")
+  ].filter((item) => item.capabilityState !== "unknown") : []);
   return {
     reference,
     device: device ? {
@@ -148,25 +322,35 @@ export async function getDeviceWorkspace(reference: string) {
       site: directAsset?.site?.name ?? null,
       location: directAsset?.location?.name ?? null,
       managementIp: directAsset?.managementIp ?? device?.host ?? null,
-      availability: latestStatus?.status ?? device?.status ?? directAsset?.healthState ?? "unknown",
+      availability: connectionState.availability,
       healthScore: health?.score ?? null,
       healthState: health?.state ?? directAsset?.healthState ?? device?.status ?? "unknown",
-      connectorState: onboarding.connectorType ? "verified" : latestStatus?.status ?? "unknown",
-      connectorType: onboarding.connectorType ?? capabilityCache?.connectorType ?? (Object.keys(ciscoCollection).length > 0 ? "cisco-ios-xe-ssh" : null),
-      lastContact: latestStatus?.checkedAt ?? directAsset?.lastSeenAt ?? null,
-      lastSuccessfulCollection: collections.find((item) => item.status === "succeeded" || item.status === "completed")?.completedAt ?? ciscoCollection.collectedAt ?? null,
+      connectorState: onboarding.connectorType && connectionState.verificationStatus === "verified" ? "verified" : connectionState.availability,
+      connectorType: liveProjection?.connectorType ?? onboarding.connectorType ?? capabilityCache?.connectorType ?? (Object.keys(ciscoCollection).length > 0 ? "cisco-ios-xe-ssh" : null),
+      lastContact: connectionState.lastContact ?? directAsset?.lastSeenAt ?? null,
+      lastSuccessfulCollection: latestSuccessfulCollection ?? ciscoCollection.collectedAt ?? null,
       findingsBySeverity: severityCounts,
       pendingActions: actions.filter((item) => PENDING_ACTION_STATES.includes(item.status as typeof PENDING_ACTION_STATES[number])).length,
       recentChanges: audit.slice(0, 5),
       configBackup: configBackup ? { state: "available", collectedAt: configBackup.collectedAt, snapshotType: configBackup.snapshotType } : { state: "not_available", collectedAt: null },
-      verificationStatus: latestStatus?.status === "online" ? "verified" : latestStatus ? "needs_review" : "not_verified"
+      verificationStatus: connectionState.verificationStatus
     },
     statusChecks,
     health,
     findings,
     actions,
     audit,
-    capabilities: capabilityCache ? {
+    capabilities: liveProjection ? {
+      vendorKey,
+      platformKey: String(onboarding.platform ?? directAsset?.platform?.name ?? device?.type ?? vendorKey),
+      connectorType: liveProjection.connectorType,
+      detection: workspaceDetection,
+      capabilities: liveProjection.capabilities,
+      facts: liveProjection.facts,
+      warnings: liveProjection.warnings,
+      refreshedAt: liveProjection.refreshedAt,
+      expiresAt: undefined
+    } : capabilityCache ? {
       vendorKey: capabilityCache.vendorKey,
       platformKey: capabilityCache.platformKey,
       connectorType: capabilityCache.connectorType,
@@ -189,6 +373,7 @@ export async function getDeviceWorkspace(reference: string) {
     } : null,
     collections,
     charts,
-    vendor: { key: vendorKey, sections: vendorSections }
+    vendor: { key: vendorKey, sections: vendorSections },
+    vendorDetails: vendorKey === "cisco" ? projectCiscoWorkspaceDetails(ciscoCollection) : null
   };
 }

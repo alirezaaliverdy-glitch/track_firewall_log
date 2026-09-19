@@ -5,6 +5,7 @@ import { parseDelimitedLog } from "@/lib/parsers/csvParser";
 import { parseJsonLog, parseNdjsonLog } from "@/lib/parsers/jsonParser";
 import { parseLogfmtLog } from "@/lib/parsers/logfmtParser";
 import { parseSyslogLog } from "@/lib/parsers/syslogParser";
+import { logRuntimeWarning } from "@/lib/runtimeLogging";
 
 function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,7 +49,7 @@ export async function importFirewallFile(file: File): Promise<RawLogRow[]> {
     }
 
     if (result.warnings.length > 0) {
-      console.warn("Firewall import warnings:", result.warnings);
+      logRuntimeWarning("Firewall import warnings", result.warnings);
     }
 
     return result.rows;

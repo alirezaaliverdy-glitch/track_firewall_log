@@ -10,6 +10,8 @@ import { nmapInternalsForTest } from "../src/services/nmap-worker.service.js";
 test("Task 20 diagnostics target parser blocks private and unsafe external targets", () => {
   assert.equal(diagnosticInternalsForTest.classifyTarget("192.168.1.10").publicAllowed, false);
   assert.equal(diagnosticInternalsForTest.classifyTarget("http://127.0.0.1:8080").reason, "PRIVATE_OR_RESERVED_TARGET_BLOCKED");
+  assert.equal(diagnosticInternalsForTest.classifyTarget("http://[::ffff:127.0.0.1]").reason, "PRIVATE_OR_RESERVED_TARGET_BLOCKED");
+  assert.equal(diagnosticInternalsForTest.classifyTarget("198.51.100.8").publicAllowed, false);
   assert.equal(diagnosticInternalsForTest.classifyTarget("file:///etc/passwd").reason, "URL_SCHEME_BLOCKED");
   assert.equal(diagnosticInternalsForTest.classifyTarget("example.com").publicAllowed, true);
   assert.equal(diagnosticInternalsForTest.classifyTarget("https://example.com").targetKind, "url");
@@ -43,14 +45,14 @@ test("Task 20 diagnostics rejects unauthorized private targets and persists work
   }
 });
 
-test("Task 20 tools routes and Dashboard controls point to real tool destinations", () => {
+test("Task 20 tools routes and current Dashboard controls point to real destinations", () => {
   const routes = readFileSync(join(process.cwd(), "..", "src", "routes", "appRoutes.tsx"), "utf8");
   for (const path of ["/tools", "/tools/network-check", "/tools/domain-check", "/tools/ip-check", "/tools/nmap", "/tools/dns", "/tools/http", "/tools/ports", "/tools/traceroute", "/tools/ip-info", "/tools/subnet", "/tools/history", "/tools/monitors"]) {
     assert.match(routes, new RegExp(`path: "${path.replace("/", "\\/")}`));
   }
   const dashboard = readFileSync(join(process.cwd(), "..", "src", "features", "dashboard", "pages", "DashboardPage.tsx"), "utf8");
-  for (const path of ["/tools/network-check", "/tools", "/tools/nmap", "/tools/monitors", "/assets/devices/new", "/assets/devices"]) {
-    assert.match(dashboard, new RegExp(`to="${path.replace("/", "\\/")}`));
+  for (const path of ["/actions", "/assets/devices/new", "/security/findings", "/monitoring/linux"]) {
+    assert.match(dashboard, new RegExp(path.replace("/", "\\/")));
   }
 });
 
@@ -64,6 +66,23 @@ test("Task 20 Nmap worker allows only fixed safe profiles and parses XML", () =>
   assert.equal(parsed.hosts[0].addresses[0].address, "45.33.32.156");
   assert.equal(parsed.hosts[0].ports[0].port, 80);
   assert.equal(parsed.hosts[0].ports[0].state, "open");
+});
+
+test("Task 20 Nmap pins a public DNS result and rejects private or mixed DNS answers", async () => {
+  const policy = nmapInternalsForTest.classifyNmapTarget("scan.example.com");
+  const publicResult = await nmapInternalsForTest.resolveNmapScanAddress(policy, async () => [{ address: "8.8.8.8", family: 4 }]);
+  assert.equal(publicResult.allowed, true);
+  assert.equal(publicResult.scanHost, "8.8.8.8");
+
+  const privateResult = await nmapInternalsForTest.resolveNmapScanAddress(policy, async () => [{ address: "127.0.0.1", family: 4 }]);
+  assert.equal(privateResult.allowed, false);
+  assert.equal(privateResult.reason, "DNS_PRIVATE_OR_RESERVED_TARGET_BLOCKED");
+
+  const mixedResult = await nmapInternalsForTest.resolveNmapScanAddress(policy, async () => [
+    { address: "8.8.8.8", family: 4 },
+    { address: "10.0.0.5", family: 4 }
+  ]);
+  assert.equal(mixedResult.allowed, false);
 });
 
 test("Task 20 Nmap rejects unauthorized private targets without worker invocation", async (t) => {

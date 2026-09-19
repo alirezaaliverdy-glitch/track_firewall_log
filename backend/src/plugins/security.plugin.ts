@@ -5,6 +5,8 @@ import { findMutationPermission, isMutationMethod } from "../security/authorizat
 import { hasPermission } from "../security/permissions.js";
 import { CSRF_HEADER_NAME, validateCsrfToken } from "../security/csrf.js";
 import { consumeRouteRateLimit } from "../security/rate-limit.js";
+import { hasSectionAccess, sectionForApiPath } from "../security/section-access.js";
+import { NATIVE_APP_ORIGINS, sessionCredentialsForRequest } from "../security/session-transport.js";
 
 const PUBLIC_PATHS = new Set([
   "/health",
@@ -32,7 +34,7 @@ function headerValue(value: string | string[] | undefined) {
 }
 
 function isAllowedOrigin(origin: string | undefined) {
-  return !origin || env.corsOrigins.includes(origin);
+  return !origin || env.corsOrigins.includes(origin) || NATIVE_APP_ORIGINS.includes(origin as typeof NATIVE_APP_ORIGINS[number]);
 }
 
 export async function registerSecurityPlugin(app: FastifyInstance, options: { authRequired: boolean }) {
@@ -42,7 +44,8 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
     if (!options.authRequired) return;
 
     if (!PUBLIC_PATHS.has(pathname)) {
-      const user = await getSessionUser(request.cookies[AUTH_COOKIE_NAME]);
+      const credentials = sessionCredentialsForRequest(request);
+      const user = await getSessionUser(credentials.token);
       if (!user) {
         return reply.code(401).send({
           ok: false,
@@ -51,6 +54,16 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
         });
       }
       request.authUser = user;
+      request.authSessionToken = credentials.token;
+      request.authTransport = credentials.transport;
+    }
+
+    const requestedSection = sectionForApiPath(pathname);
+    if (request.authUser && requestedSection && !hasSectionAccess(request.authUser, requestedSection)) {
+      return reply.code(403).send(forbidden(
+        "SECTION_ACCESS_DENIED",
+        "دسترسی این حساب به بخش درخواستی توسط مدیر غیرفعال شده است."
+      ));
     }
 
     const rateLimit = consumeRouteRateLimit(request, pathname);
@@ -66,6 +79,23 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
 
     if (!isMutationMethod(request.method) || !pathname.startsWith("/api/")) return;
     if (CSRF_EXEMPT_PATHS.has(pathname)) return;
+
+    if (request.authTransport === "bearer") {
+      const permission = findMutationPermission(request.method, pathname);
+      if (!permission) {
+        return reply.code(403).send(forbidden(
+          "MUTATION_PERMISSION_UNDECLARED",
+          "مجوز این عملیات در سیاست امنیتی تعریف نشده است."
+        ));
+      }
+      if (request.authUser && !hasPermission(request.authUser.role, permission)) {
+        return reply.code(403).send(forbidden(
+          "PERMISSION_DENIED",
+          "نقش کاربری شما اجازه انجام این عملیات را ندارد."
+        ));
+      }
+      return;
+    }
 
     const origin = headerValue(request.headers.origin);
     if (!isAllowedOrigin(origin)) {

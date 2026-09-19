@@ -30,3 +30,30 @@ test("normalized findings carry evidence and proposal-only remediation intent", 
   resetFindingEngineWindows(); const result = evaluateVendorTelemetry({ device: { id: "mt-2", vendor: "mikrotik", type: "mikrotik" }, events: [{ id: "raw-1", source: "system", raw: "telnet service enabled" }] });
   const finding = result.findings[0]; assert.ok(finding.evidence.length); assert.ok(finding.recommendedActions[0].intent); assert.equal(finding.status, "active");
 });
+
+test("Linux sudo events cannot be mislabeled as SSH attacks", () => {
+  resetFindingEngineWindows();
+  const device = { id: "linux-sudo", vendor: "linux", type: "linux_edge" };
+  const result = evaluateVendorTelemetry({ device, events: Array.from({ length: 3 }, (_, index) => ({ id: `sudo-${index}`, source: "system", raw: `sudo[10]: pam_unix(sudo:auth): authentication failure; user=operator attempt=${index}` })) });
+  assert.ok(result.findings.some((finding) => finding.title === "Repeated denied sudo attempts"));
+  assert.equal(result.findings.some((finding) => finding.title === "Repeated SSH authentication failures"), false);
+});
+
+test("successful sudo session records do not create security findings", () => {
+  resetFindingEngineWindows();
+  const result = evaluateVendorTelemetry({ device: { id: "linux-sudo-ok", vendor: "linux", type: "linux_edge" }, events: [{ id: "sudo-ok", source: "system", raw: "sudo[3253083]: pam_unix(sudo:session): session opened for user root by operator" }] });
+  assert.equal(result.findings.length, 0);
+});
+
+test("Linux SSH and sudo rule patterns stay mutually exclusive", () => {
+  const sshRule = VENDOR_TELEMETRY_PROFILES.linux.findingRules.find((rule) => rule.id === "ssh-failure-burst")!;
+  const sudoRule = VENDOR_TELEMETRY_PROFILES.linux.findingRules.find((rule) => rule.id === "sudo-denied-burst")!;
+  const sshFailure = "sshd[90]: Failed password for root from 203.0.113.9 port 5000 ssh2";
+  const sudoFailure = "sudo[10]: pam_unix(sudo:auth): authentication failure; user=operator";
+  const sudoSuccess = "sudo[11]: pam_unix(sudo:session): session opened for user root by operator";
+  assert.equal(sshRule.eventPattern!.test(sshFailure), true);
+  assert.equal(sshRule.eventPattern!.test(sudoFailure), false);
+  assert.equal(sshRule.eventPattern!.test(sudoSuccess), false);
+  assert.equal(sudoRule.eventPattern!.test(sudoFailure), true);
+  assert.equal(sudoRule.eventPattern!.test(sudoSuccess), false);
+});

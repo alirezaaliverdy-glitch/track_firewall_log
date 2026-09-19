@@ -3,7 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { buildSecurityOrchestratorContext } from "../context/security-orchestrator-context.js";
 import { suggestSupportedActionsForAssistantTarget } from "../context/assistant-target-context.js";
 import { createAiActionIntent, parseAiIntent, type ParsedIntent } from "../../services/ai-intent.service.js";
-import { getAiProviderStatus, runAiProvider, type StructuredAiIntent } from "../../services/ai-provider.service.js";
+import { getAiProviderStatus, runAiProvider, type AiConversationMessage, type StructuredAiIntent } from "../../services/ai-provider.service.js";
 import { proposeActionPlan } from "../../services/action-plan.service.js";
 import { normalizeIntentType, normalizeVendor } from "../../services/ai-normalization.js";
 import { routeCatalogIntent } from "../../actions/intent-router.js";
@@ -16,8 +16,11 @@ import { catalogGuidedBlueprintId } from "../../guided-actions/catalog-guided-bl
 import { env } from "../../config/env.js";
 import { classifyAssistantIntent, shouldAskProviderForIntentClassification, stripExplicitActionMarker, type AssistantIntentClassification, type AssistantIntentModeOverride } from "../assistant-intent-classifier.js";
 import { decideAssistantIntent, resolveExecutionStrategy } from "../assistant-intent-decision.js";
-import { buildCustomCommandPlan } from "../custom-action-plan.js";
-import { isReadOnlyResolution, monitoringMetadata } from "../../monitoring/monitoring-action-plan.js";
+import { buildCustomCommandPlan, validateCustomCommandPlan } from "../custom-action-plan.js";
+import { redactText } from "../../security/redaction.js";
+
+const CHAT_HISTORY_LIMIT = 12;
+const CHAT_HISTORY_MESSAGE_LIMIT = 4_000;
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
@@ -32,15 +35,16 @@ function titleFromMessage(message: string) {
   return cleaned.length > 60 ? `${cleaned.slice(0, 57)}...` : cleaned || "Security chat";
 }
 
-async function getOrCreateSession(sessionId: string | undefined, message: string) {
+async function getOrCreateSession(sessionId: string | undefined, message: string, userId: string | null) {
   if (sessionId) {
-    const existing = await prisma.aiChatSession.findUnique({ where: { id: sessionId } });
+    const existing = await prisma.aiChatSession.findFirst({ where: { id: sessionId, userId } });
     if (existing) return existing;
   }
 
   return prisma.aiChatSession.create({
     data: {
-      title: titleFromMessage(message)
+      title: titleFromMessage(message),
+      userId
     }
   });
 }
@@ -121,122 +125,6 @@ function isControlledCatalogAction(actionType: string) {
 
 function isCustomProposal(actionType: string) {
   return actionType === AiIntentType.custom_vendor_action || actionType === AiIntentType.generic_security_action;
-}
-
-function shouldCreateReviewOnlyActionPlan(input: {
-  selectedDevice: { id: string } | null;
-  resolution: ReturnType<typeof resolveAiTemplate>;
-  canCreateSupportedActionPlan: boolean;
-  resolutionMissing: string[];
-  structuredPlan: AiStructuredActionPlan;
-}) {
-  return Boolean(
-    input.selectedDevice &&
-    !input.canCreateSupportedActionPlan &&
-    input.structuredPlan.kind === "action_plan" &&
-    input.resolution.mode === "manual_or_not_supported" &&
-    input.resolutionMissing.length === 0
-  );
-}
-
-function customReviewOnlyActionPlanParameters(input: {
-  message: string;
-  actionVendor: string;
-  actionRiskLevel: string;
-  resolution: ReturnType<typeof resolveAiTemplate>;
-  structuredIntent: StructuredAiIntent | null;
-  resolutionMissing: string[];
-  structuredPlan: AiStructuredActionPlan;
-}) {
-  const aiParameters = asObject(input.structuredIntent?.parameters);
-  const suggestedPrechecks = input.structuredIntent?.suggestedPrechecks ?? [];
-  const suggestedVerification = input.structuredIntent?.suggestedVerification ?? [];
-  const suggestedRollback = input.structuredIntent?.suggestedRollback ?? [];
-  const expectedImpact = input.structuredIntent?.expectedImpact || input.resolution.reasonFa;
-  const proposedIntentType = input.structuredIntent?.intentType ?? input.resolution.canonicalActionType;
-  const proposalSteps = [
-    ...suggestedPrechecks.map((step) => ({ phase: "precheck", text: step })),
-    ...suggestedVerification.map((step) => ({ phase: "verification", text: step })),
-    ...suggestedRollback.map((step) => ({ phase: "rollback", text: step })),
-  ];
-  const customProposal = {
-    requestedOperation: input.message,
-    proposedIntentType,
-    vendor: input.actionVendor,
-    riskLevel: input.actionRiskLevel,
-    expectedImpact,
-    suggestedPrechecks,
-    suggestedVerification,
-    suggestedRollback,
-    proposalSteps,
-    aiExplanation: input.structuredIntent?.explanation ?? null,
-    destructive: Boolean(input.structuredIntent?.destructive),
-    requiresExplicitReview: true,
-    backendExecutionRequired: true,
-    rawCommandExecution: false,
-    structuredPlan: input.structuredPlan,
-    executionNotes: "Review-only custom ActionPlan. Execution requires a registered backend template and connector handler.",
-  };
-
-  return {
-    ...aiParameters,
-    ...input.resolution.normalizedParams,
-    ...customProposal,
-    vendor: input.actionVendor,
-    userRequest: input.message,
-    source: "ai_custom_proposal",
-    implementationState: "manualOnly",
-    executionSupport: "manual",
-    supportState: "manual_only",
-    supportReasonKey: "support.reason.manualReview",
-    executable: false,
-    connectorType: null,
-    executionTemplateRef: null,
-    normalizedParams: input.resolution.normalizedParams,
-    requiredParamsSatisfied: true,
-    missingFields: input.resolutionMissing,
-    aiStructuredPlan: input.structuredPlan,
-    customProposal,
-    metadata: {
-      source: "ai_custom_proposal",
-      catalogCommandId: null,
-      catalogVersion: COMMAND_CATALOG_VERSION,
-      catalogTitleFa: "\u067e\u06cc\u0634\u0646\u0647\u0627\u062f \u0633\u0641\u0627\u0631\u0634\u06cc \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06cc",
-      vendor: input.actionVendor,
-      actionType: "custom_vendor_action",
-      requestedActionType: input.resolution.canonicalActionType,
-      proposedIntentType,
-      implementationState: "manualOnly",
-      executionSupport: "manual",
-      supportState: "manual_only",
-      supportReasonKey: "support.reason.manualReview",
-      executable: false,
-      connectorType: null,
-      executionTemplateRef: null,
-      normalizedParams: input.resolution.normalizedParams,
-      requiredParamsSatisfied: true,
-      missingFields: input.resolutionMissing,
-      aiStructuredPlan: input.structuredPlan,
-      structuredStepCount: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.steps.length : 0,
-      executableStepCount: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.executableStepCount : 0,
-      blockedStepCount: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.blockedStepCount : 0,
-      executionEligibility: input.structuredPlan.kind === "action_plan" ? input.structuredPlan.executionEligibility : "chat_only",
-      expectedImpact,
-      suggestedPrechecks,
-      suggestedVerification,
-      suggestedRollback,
-      proposalSteps,
-      destructive: Boolean(input.structuredIntent?.destructive),
-      requiresExplicitReview: true,
-      backendExecutionRequired: true,
-      rawCommandExecution: false,
-      previewGenerated: false,
-      executed: false,
-      connectorInvoked: false,
-      lastExecutionStatus: "not_started",
-      reviewOnly: true
-    }
-  };
 }
 
 function customConnectorActionPlanParameters(input: {
@@ -414,12 +302,21 @@ function nonActionNextStep(classification: AssistantIntentClassification) {
     : "پاسخ در حالت گفتگو تولید شد و ActionPlan نساخت.";
 }
 
-export async function chatWithAssistant(input: { sessionId?: string; message: string; deviceId?: string; intentModeOverride?: AssistantIntentModeOverride | string | null }) {
+export async function chatWithAssistant(input: {
+  userId: string | null;
+  sessionId?: string;
+  message: string;
+  deviceId?: string;
+  selectedVendor?: string;
+  selectedConnectorType?: string;
+  selectedDeviceName?: string;
+  intentModeOverride?: AssistantIntentModeOverride | string | null;
+}) {
   const message = input.message.trim();
   if (!message) throw new Error("message is required");
   const planningMessage = stripExplicitActionMarker(message);
 
-  const session = await getOrCreateSession(input.sessionId, message);
+  const session = await getOrCreateSession(input.sessionId, message, input.userId);
   const userMessage = await prisma.aiChatMessage.create({
     data: {
       sessionId: session.id,
@@ -444,26 +341,33 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     hasFreshCachedEvidence: false,
   });
   if (classification.mode !== "action_request") {
-    const monitoringResolution = intentDecision.intent === "monitoring_live" && earlySelectedDevice
-      ? resolveAiTemplate({ userText: planningMessage, selectedDevice: earlySelectedDevice, targetDeviceContext: context.targetDeviceContext })
-      : null;
-    const monitoringActionPlan = monitoringResolution && isReadOnlyResolution(monitoringResolution)
-      ? await proposeActionPlan({
-          source: "ai",
-          deviceId: earlySelectedDevice!.id,
-          vendor: monitoringResolution.canonicalVendor,
-          actionType: monitoringResolution.canonicalActionType,
-          riskLevel: monitoringResolution.catalogItem?.riskLevel ?? monitoringResolution.targetSupportedAction?.riskLevel ?? "low",
-          parametersJson: {
-            ...monitoringResolution.normalizedParams,
-            readOnly: true,
-            source: "monitoring_live",
-            metadata: monitoringMetadata({ resolution: monitoringResolution, catalogItem: monitoringResolution.catalogItem }),
-          }
-        })
-      : null;
-    const executionStrategy = resolveExecutionStrategy({ decision: intentDecision, resolution: monitoringResolution, hasFreshCachedEvidence: false });
-    const providerResponse = await runAiProvider({ message, context });
+    // Chat is an explicit hard boundary: even action-shaped or live-monitoring
+    // prompts may use selected-device evidence, but never create an intent or ActionPlan.
+    const executionStrategy = resolveExecutionStrategy({ decision: intentDecision, resolution: null, hasFreshCachedEvidence: false });
+    const recentMessages = await prisma.aiChatMessage.findMany({
+      where: {
+        sessionId: session.id,
+        id: { not: userMessage.id },
+        role: { in: [AiChatRole.user, AiChatRole.assistant] }
+      },
+      orderBy: { createdAt: "desc" },
+      take: CHAT_HISTORY_LIMIT,
+      select: { role: true, content: true }
+    });
+    const conversationHistory: AiConversationMessage[] = recentMessages.reverse().map((item) => ({
+      role: item.role === AiChatRole.assistant ? "assistant" : "user",
+      content: redactText(item.content).slice(0, CHAT_HISTORY_MESSAGE_LIMIT)
+    }));
+    const providerResponse = await runAiProvider({
+      message,
+      context,
+      mode: "chat",
+      requireLiveResponse: true,
+      conversationHistory,
+      selectedVendor: context.targetDeviceContext?.device?.vendor ?? input.selectedVendor ?? null,
+      selectedConnectorType: input.selectedConnectorType ?? null,
+      selectedDeviceName: earlySelectedDevice?.name ?? input.selectedDeviceName ?? null
+    });
     const providerClassificationRequested = shouldAskProviderForIntentClassification(classification);
     const answer = classification.requiresClarification
       ? `${providerResponse.assistantMessage}\n\nIf you want me to plan a real change, state the exact operation, target, and parameters explicitly.`
@@ -501,31 +405,18 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     return {
       mode: classification.mode,
       answer,
-      actionPlan: monitoringActionPlan,
+      actionPlan: null,
       confidence: Math.min(classification.confidence, providerResponse.confidence),
       requiresClarification: classification.requiresClarification,
       sessionId: session.id,
       message: userMessage,
       assistantMessage: answer,
       assistantMessageRecord: assistantMessage,
-      shouldCreateActionPlan: Boolean(monitoringActionPlan),
+      shouldCreateActionPlan: false,
       actionIntent: null,
-      actionContract: monitoringActionPlan ? {
-        canCreateActionPlan: true,
-        manualOnly: false,
-        executable: true,
-        executionSupport: "connector",
-        implementationState: "implemented",
-        executionMode: env.actionExecutionMode,
-        lifecycle: {
-          actionPlanId: monitoringActionPlan.id,
-          status: monitoringActionPlan.status,
-          planRevision: 1,
-          planState: "draft",
-        },
-      } : noActionContract(),
-      executionSupport: monitoringActionPlan ? "connector" : "conversation",
-      implementationState: monitoringActionPlan ? "implemented" : "not_applicable",
+      actionContract: noActionContract(),
+      executionSupport: "conversation",
+      implementationState: "not_applicable",
       blueprintId: null,
       initialValues: null,
       actionSessionId: null,
@@ -536,13 +427,13 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
       deviceId: earlySelectedDevice?.id ?? null,
       selectedDeviceName: earlySelectedDevice?.name ?? null,
       clarification: classification.requiresClarification ? { questionFa: nonActionNextStep(classification), options: [] } : null,
-      mappedTemplate: monitoringResolution?.executionTemplateRef ?? null,
+      mappedTemplate: null,
       missingFields: [],
       nextStepFa: nonActionNextStep(classification),
       warnings: [],
-      resolution: monitoringResolution,
+      resolution: null,
       actionDebug: null,
-      providerStatus: getAiProviderStatus(providerResponse.error),
+      providerStatus: getAiProviderStatus(providerResponse.error, true),
       evidenceMetadata: context.evidencePack.metadata,
       targetDeviceContext: context.targetDeviceContext,
       structured: {
@@ -556,7 +447,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         intentDecision,
         executionStrategy,
         answer,
-        actionPlan: monitoringActionPlan,
+        actionPlan: null,
         confidence: Math.min(classification.confidence, providerResponse.confidence),
         requiresClarification: classification.requiresClarification,
         reasonCode: classification.reasonCode,
@@ -572,7 +463,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   const deterministicResolved = earlyResolution.mode === "executable_action_plan" || earlyResolution.mode === "guided_workflow" || Boolean((earlyResolution.catalogItem ?? earlyResolution.targetSupportedAction) && earlyResolution.missingFields.length > 0);
   const deterministicUnsupportedAction = earlyResolution.mode === "manual_or_not_supported" && earlyResolution.executionSupport !== "connector";
   const catalogMatch = routeCatalogIntent(planningMessage);
-  const providerCandidate = deterministicResolved || deterministicUnsupportedAction
+  const providerCandidate = deterministicResolved
     ? {
         assistantMessage: earlyResolution.mode === "executable_action_plan"
           ? "درخواست به اکشن کنترل‌شده کاتالوگ نگاشت شد."
@@ -585,7 +476,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         keyConfigured: false,
         fallbackUsed: false
       }
-    : catalogMatch.aiRequired
+    : deterministicUnsupportedAction || catalogMatch.aiRequired
     ? await runAiProvider({ message: planningMessage, context })
     : {
         assistantMessage: catalogMatch.status === "matched" && catalogMatch.catalogEntry
@@ -680,14 +571,7 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     selectedDeviceSupportsConnector(selectedDevice, resolution.connectorType) &&
     (resolution.mode === "executable_action_plan" || resolution.mode === "needs_input"),
   );
-  const canCreateReviewOnlyActionPlan = shouldCreateReviewOnlyActionPlan({
-    selectedDevice,
-    resolution,
-    canCreateSupportedActionPlan,
-    resolutionMissing,
-    structuredPlan
-  });
-  const customCommandPlan = selectedDevice && !canCreateSupportedActionPlan
+  const proposedCustomCommandPlan = selectedDevice && !canCreateSupportedActionPlan
     ? buildCustomCommandPlan({
         message: planningMessage,
         device: selectedDevice,
@@ -699,10 +583,23 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
         },
       })
     : null;
+  const customCommandValidation = proposedCustomCommandPlan && selectedDevice && proposedCustomCommandPlan.missingFields.length === 0
+    ? validateCustomCommandPlan({ plan: proposedCustomCommandPlan, device: selectedDevice, actionType: "custom_vendor_action" })
+    : null;
+  const customCommandPlan = customCommandValidation?.valid && customCommandValidation.normalizedPlan
+    ? customCommandValidation.normalizedPlan
+    : proposedCustomCommandPlan;
+  const parameterizedCustomDraft = Boolean(
+    customCommandPlan &&
+    customCommandPlan.missingFields.length > 0 &&
+    customCommandPlan.orderedCommands.length === 0 &&
+    typeof customCommandPlan.typedParameters.operation === "string"
+  );
   const canCreateCustomConnectorActionPlan = Boolean(
     selectedDevice &&
     customCommandPlan &&
-    resolution.canonicalActionType === "custom_vendor_action"
+    isCustomProposal(resolution.canonicalActionType) &&
+    (customCommandValidation?.valid || parameterizedCustomDraft)
   );
   const actionVendor = resolution.catalogItem?.vendor ?? resolution.canonicalVendor;
   const actionRiskLevel = resolution.catalogItem?.riskLevel ?? resolution.targetSupportedAction?.riskLevel ?? customCommandPlan?.riskLevel ?? "medium";
@@ -713,8 +610,6 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
     ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: resolution.canonicalActionType, riskLevel: actionRiskLevel, parametersJson: { ...resolution.normalizedParams, source: "ai_mapped_template", implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, aiStructuredPlan: structuredPlan, metadata: { source: "ai_mapped_template", catalogCommandId: resolution.catalogCommandId, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: actionTitleFa, vendor: actionVendor, actionType: resolution.canonicalActionType, implementationState: "implemented", executionSupport: "connector", supportState: actionSupportState, supportReasonKey: actionSupportReasonKey, executable: true, connectorType: resolution.connectorType, executionTemplateRef: resolution.executionTemplateRef, normalizedParams: resolution.normalizedParams, requiredParamsSatisfied: resolutionMissing.length === 0, missingFields: resolutionMissing, aiStructuredPlan: structuredPlan, structuredStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.steps.length : 0, executableStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.executableStepCount : 0, blockedStepCount: structuredPlan.kind === "action_plan" ? structuredPlan.blockedStepCount : 0, executionEligibility: structuredPlan.kind === "action_plan" ? structuredPlan.executionEligibility : "single_action", previewGenerated: false, executed: false, connectorInvoked: false, lastExecutionStatus: "not_started" } } })
     : canCreateCustomConnectorActionPlan && selectedDevice && customCommandPlan
       ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customConnectorActionPlanParameters({ message: planningMessage, actionVendor, resolution, structuredIntent: effectiveStructuredIntent, structuredPlan, customCommandPlan }) })
-    : canCreateReviewOnlyActionPlan && selectedDevice
-      ? await proposeActionPlan({ source: "ai", deviceId: selectedDevice.id, vendor: actionVendor, actionType: "custom_vendor_action", riskLevel: actionRiskLevel, parametersJson: customReviewOnlyActionPlanParameters({ message: planningMessage, actionVendor, actionRiskLevel, resolution, structuredIntent: effectiveStructuredIntent, resolutionMissing, structuredPlan }) })
     : debug.canCreateActionPlan && actionIntent && resolution.mode === "needs_input"
       ? await proposeActionPlan({ aiIntentId: actionIntent.id })
       : null;
@@ -822,8 +717,9 @@ export async function chatWithAssistant(input: { sessionId?: string; message: st
   };
 }
 
-export async function listAiChatSessions() {
+export async function listAiChatSessions(userId: string | null) {
   return prisma.aiChatSession.findMany({
+    where: { userId },
     orderBy: { updatedAt: "desc" },
     take: 50,
     include: {
@@ -835,9 +731,9 @@ export async function listAiChatSessions() {
   });
 }
 
-export async function getAiChatSession(id: string) {
-  return prisma.aiChatSession.findUnique({
-    where: { id },
+export async function getAiChatSession(id: string, userId: string | null) {
+  return prisma.aiChatSession.findFirst({
+    where: { id, userId },
     include: {
       messages: {
         orderBy: { createdAt: "asc" }
@@ -849,8 +745,8 @@ export async function getAiChatSession(id: string) {
   });
 }
 
-export async function clearAiChatSessionMessages(id: string) {
-  const session = await prisma.aiChatSession.findUnique({ where: { id }, select: { id: true } });
+export async function clearAiChatSessionMessages(id: string, userId: string | null) {
+  const session = await prisma.aiChatSession.findFirst({ where: { id, userId }, select: { id: true } });
   if (!session) return null;
   const result = await prisma.aiChatMessage.deleteMany({ where: { sessionId: id } });
   await prisma.aiChatSession.update({ where: { id }, data: { updatedAt: new Date() } });

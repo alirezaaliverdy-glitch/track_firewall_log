@@ -14,6 +14,54 @@ export type DailyCheckVendor =
 
 export type DailyImplementationState = "implemented" | "manualOnly" | "planned";
 
+export type DailyCheckStandardId =
+  | "nist-sp-800-137"
+  | "nist-csf-2-detect"
+  | "cis-controls-v8"
+  | "vendor-operational-guidance";
+
+export type DailyCheckStandardReference = {
+  id: DailyCheckStandardId;
+  title: string;
+  titleFa: string;
+  url: string | null;
+};
+
+export const DAILY_CHECK_STANDARDS: Readonly<Record<DailyCheckStandardId, DailyCheckStandardReference>> = Object.freeze({
+  "nist-sp-800-137": {
+    id: "nist-sp-800-137",
+    title: "NIST SP 800-137 Information Security Continuous Monitoring",
+    titleFa: "پایش مستمر امنیت اطلاعات NIST SP 800-137",
+    url: "https://csrc.nist.gov/pubs/sp/800/137/final",
+  },
+  "nist-csf-2-detect": {
+    id: "nist-csf-2-detect",
+    title: "NIST Cybersecurity Framework 2.0 — Detect",
+    titleFa: "تابع تشخیص در NIST CSF 2.0",
+    url: "https://www.nist.gov/cyberframework",
+  },
+  "cis-controls-v8": {
+    id: "cis-controls-v8",
+    title: "CIS Critical Security Controls v8",
+    titleFa: "کنترل‌های امنیتی CIS نسخه ۸",
+    url: "https://www.cisecurity.org/controls/v8",
+  },
+  "vendor-operational-guidance": {
+    id: "vendor-operational-guidance",
+    title: "Vendor operational monitoring guidance",
+    titleFa: "راهنمای عملیاتی رسمی وندور",
+    url: null,
+  },
+});
+
+export const DAILY_CHECK_VENDOR_GUIDANCE: Readonly<Partial<Record<DailyCheckVendor, { title: string; url: string }>>> = Object.freeze({
+  linux: { title: "Linux system and service telemetry", url: "https://www.freedesktop.org/software/systemd/man/latest/systemd-system.conf.html" },
+  mikrotik: { title: "MikroTik RouterOS logging", url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328094/Log" },
+  fortigate: { title: "FortiGate monitors", url: "https://docs.fortinet.com/document/fortigate/latest/administration-guide/133721/monitors" },
+  cisco: { title: "Cisco IOS XE system monitoring", url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/syslog/configuration/xe-17/syslog-xe-17-book.html" },
+  pfsense: { title: "pfSense monitoring", url: "https://docs.netgate.com/pfsense/en/latest/monitoring/index.html" },
+});
+
 export type DailyCheckSectionProfile = {
   key: string;
   titleFa: string;
@@ -21,6 +69,7 @@ export type DailyCheckSectionProfile = {
   parserRules: string[];
   severityRules: string[];
   suggestedActions: string[];
+  standardRefs: DailyCheckStandardId[];
 };
 
 export type VendorDailyCheckProfile = {
@@ -31,6 +80,14 @@ export type VendorDailyCheckProfile = {
   sections: DailyCheckSectionProfile[];
 };
 
+function standardsForSection(key: string): DailyCheckStandardId[] {
+  const normalized = key.toLowerCase();
+  const refs = new Set<DailyCheckStandardId>(["nist-sp-800-137", "vendor-operational-guidance"]);
+  if (/log|security|admin|firewall|policy|access|next_action/.test(normalized)) refs.add("nist-csf-2-detect");
+  if (/service|network|interface|firewall|admin|log|vpn|ha|policy|resource/.test(normalized)) refs.add("cis-controls-v8");
+  return [...refs];
+}
+
 function section(
   key: string,
   titleFa: string,
@@ -39,7 +96,7 @@ function section(
   severityRules: string[],
   suggestedActions: string[] = []
 ): DailyCheckSectionProfile {
-  return { key, titleFa, templates, parserRules, severityRules, suggestedActions };
+  return { key, titleFa, templates, parserRules, severityRules, suggestedActions, standardRefs: standardsForSection(key) };
 }
 
 function manualProfile(vendor: DailyCheckVendor, titleFa: string, suggestions: string[]): VendorDailyCheckProfile {

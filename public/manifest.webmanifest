@@ -4,8 +4,9 @@
   "description": "Persian-first and English firewall operations with controlled AI security orchestration.",
   "lang": "fa",
   "dir": "auto",
-  "start_url": "/dashboard",
-  "scope": "/",
+  "id": "./",
+  "start_url": "./dashboard",
+  "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "browser"],
   "orientation": "any",
@@ -15,13 +16,13 @@
   "categories": ["security", "productivity", "utilities"],
   "icons": [
     {
-      "src": "/pwa-icon.svg",
+      "src": "pwa-icon.svg",
       "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/pwa-icon-maskable.svg",
+      "src": "pwa-icon-maskable.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "maskable"

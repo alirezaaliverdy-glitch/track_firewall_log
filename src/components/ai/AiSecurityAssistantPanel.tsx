@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Bot, CheckCircle2, RefreshCw, ScanSearch, Send, ShieldAlert, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { Activity, Bot, ChevronDown, MessageCircle, RefreshCw, ScanSearch, Send, Server, ShieldAlert, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import {
   getAiProviderStatus,
   getSecuritySummary,
   type AiActionDebug,
   normalizeAiMessage,
   normalizeArray,
-  normalizeObject,
   sendAiMessage,
   type AiActionIntent,
   type AiIntentModeOverride,
@@ -25,33 +24,32 @@ import {
 } from "@/lib/ai";
 import { listDevices, type Device } from "@/lib/devices";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
-import { startGuidedSession } from "@/lib/guidedActions";
 import { ChatMessageBubble } from "@/features/assistant/components/AssistantMessageList";
 import { IntentCard } from "@/features/assistant/components/AssistantIntentCard";
 import { PlanningContextPanel } from "@/features/assistant/components/AssistantPlanningContext";
+import { AssistantAssessmentReport } from "@/features/assistant/components/AssistantAssessmentReport";
 import {
   canSurfaceActionPlan,
   classifyPlanningMode,
   connectorTypeOf,
   formatNumber,
-  riskClass,
   vendorOfDevice,
 } from "@/features/assistant/assistantUiHelpers";
 import type { AssistantExecutionState, GuidedStartState } from "@/features/assistant/types";
 
-const EXAMPLES = [
-  "امروز چه تهدیدهایی داشتیم؟",
-  "کدوم IP بیشتر حمله زده؟",
-  "آیا پورت ۲۲ درگیر بوده؟",
-  "پورت ۲۲ رو عوض کن روی ۲۲۰۲۲",
-  "پورت ۸۰۸۰ رو ببند",
-  "این IP رو ۳۰ دقیقه بلاک کن",
-  "FortiGate: create address object for 192.168.8.2",
-  "FortiGate: create VIP for port 443",
-  "MikroTik: change SSH port to 22022 trusted source 192.168.1.0/24",
+const CHAT_EXAMPLES = [
+  "وضعیت امنیتی این دستگاه چطور است؟",
+  "مهم‌ترین هشدارهای امروز را خلاصه کن",
+  "برای ایمن‌تر شدن این دستگاه چه پیشنهادی داری؟",
 ];
 
-const INTENT_MODE_OPTIONS: AiIntentModeOverride[] = ["Auto", "Chat", "Action"];
+const ACTION_EXAMPLES = [
+  "وضعیت سرویس fail2ban را بررسی کن",
+  "یک کاربر جدید لینوکس بساز",
+  "پورت‌های باز این دستگاه را بررسی کن",
+];
+
+const INTENT_MODE_OPTIONS: AiIntentModeOverride[] = ["Chat", "Action"];
 
 export default function AiSecurityAssistantPanel() {
   const navigate = useNavigate();
@@ -71,6 +69,7 @@ export default function AiSecurityAssistantPanel() {
     ? "AI may generate new commands and ActionPlans, but it cannot execute directly. Backend validation, preview, explicit approval, PolicyGuard, registered connector dispatch, verification, and audit are mandatory."
     : "AI may generate new commands and ActionPlans, but it cannot execute directly. Backend validation, preview, explicit approval, PolicyGuard, registered connector dispatch, verification, and audit are mandatory.";
   const viewGeneration = useRef(0);
+  const chatViewportRef = useRef<HTMLDivElement | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [lastIntent, setLastIntent] = useState<AiActionIntent | null>(null);
@@ -89,14 +88,13 @@ export default function AiSecurityAssistantPanel() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [assistantMode, setAssistantMode] = useState<string | null>(null);
-  const [intentModeOverride, setIntentModeOverride] = useState<AiIntentModeOverride>("Auto");
+  const [intentModeOverride, setIntentModeOverride] = useState<AiIntentModeOverride>("Chat");
   const previousTargetDeviceId = useRef<string | null>(null);
   const [guidedStart, setGuidedStart] = useState<GuidedStartState | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [assessment, setAssessment] = useState<SecurityAssessment | null>(null);
   const [assessmentLoading, setAssessmentLoading] = useState(false);
   const [hardeningLoading, setHardeningLoading] = useState(false);
-  const [activeAnalysisDevice, setActiveAnalysisDevice] = useState<string | null>(null);
   const [recommendationWorking, setRecommendationWorking] = useState<string | null>(null);
 
   const refreshSummary = () => {
@@ -137,7 +135,7 @@ export default function AiSecurityAssistantPanel() {
     setHardeningLoading(false);
     setRecommendationWorking(null);
     setInput("");
-    setIntentModeOverride("Auto");
+    setIntentModeOverride("Chat");
     if (activeSessionId) {
       void clearAiSessionMessages(activeSessionId).catch((reason: unknown) => {
         setTechnicalError(reason instanceof Error ? reason.message : "پاک‌کردن سابقه سمت سرور ناموفق بود.");
@@ -145,11 +143,28 @@ export default function AiSecurityAssistantPanel() {
     }
   };
 
+  const changeMode = (mode: AiIntentModeOverride) => {
+    setIntentModeOverride(mode);
+    setLastIntent(null);
+    setExecutionState(null);
+    setStructuredResponse(null);
+    setActionDebug(null);
+    setCreatedPlanId(null);
+    setAssistantMode(null);
+    setGuidedStart(null);
+    setError(null);
+    setTechnicalError(null);
+  };
+
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedPrompt = params.get("prompt")?.trim();
+    const requestedMode = params.get("mode");
+    if (requestedPrompt) setInput(requestedPrompt.slice(0, 2000));
+    if (requestedMode === "Action" || requestedMode === "Chat") setIntentModeOverride(requestedMode);
     refreshSummary();
     void listDevices().then((next) => {
       setDevices(next);
-      const params = new URLSearchParams(window.location.search);
       const selected = params.get("deviceId") ?? params.get("selectedDeviceId");
       if (selected && next.some((device) => device.id === selected)) setSelectedDeviceId(selected);
       else if (next.length === 1) setSelectedDeviceId(next[0].id);
@@ -175,33 +190,37 @@ export default function AiSecurityAssistantPanel() {
     setGuidedStart(null);
     setError(null);
     setTechnicalError(null);
+    setAssessment(null);
+    setAssessmentLoading(false);
+    setHardeningLoading(false);
+    setRecommendationWorking(null);
   }, [selectedDeviceId]);
 
   const safeMessages = useMemo(() => normalizeArray<AiMessage>(messages).map(normalizeAiMessage), [messages]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = chatViewportRef.current;
+      if (!viewport) return;
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [safeMessages.length, loading]);
   const topSourceIps = normalizeArray<{ srcIp: string | null; count: number }>(summary?.events.topSourceIps);
   const sensitivePorts = normalizeArray<{ dstPort: number | null; count: number }>(summary?.events.sensitivePorts);
-  const assessmentDetails = normalizeObject(assessment?.findingsJson);
-  const assessmentFindings = normalizeArray<Record<string, unknown>>(assessmentDetails.findings);
-  const assessmentSections = normalizeObject(assessmentDetails.sections);
-  const vendorAnalyses = normalizeArray<Record<string, unknown>>(assessmentDetails.vendorAnalyses);
-  const visibleVendorAnalyses = activeAnalysisDevice ? vendorAnalyses.filter((item) => String(item.deviceId) === activeAnalysisDevice) : vendorAnalyses.slice(0, 1);
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId) ?? null;
+  const providerIsLive = Boolean(providerStatus?.liveVerified && !providerStatus?.lastError);
+  const visibleExamples = intentModeOverride === "Chat" ? CHAT_EXAMPLES : ACTION_EXAMPLES;
   const planningMode = classifyPlanningMode({ backendMode: assistantMode, createdPlanId, guidedStart, actionIntent: lastIntent, actionDebug, executionState });
-  const severityFa = (value: string) => ({ low: "کم", medium: "متوسط", high: "زیاد", critical: "بحرانی" }[value.toLowerCase()] ?? value);
-  const evidenceText = (value: unknown): string => {
-    if (value === null || value === undefined || value === "") return "نامشخص";
-    if (Array.isArray(value)) return value.length ? value.map(evidenceText).join("، ") : "موردی ثبت نشده";
-    if (typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key}: ${evidenceText(item)}`).join("؛ ");
-    if (typeof value === "boolean") return value ? "بله" : "خیر";
-    return String(value);
-  };
 
   const runAssessment = () => {
     const generation = viewGeneration.current;
     setAssessmentLoading(true);
     setError(null);
-    runFullSecurityAnalysis()
-      .then((result) => { if (generation === viewGeneration.current) setAssessment(result); })
+    runFullSecurityAnalysis(selectedDeviceId || undefined)
+      .then((result) => {
+        if (generation !== viewGeneration.current) return;
+        setAssessment(result);
+      })
       .catch((err: unknown) => {
         if (generation !== viewGeneration.current) return;
         setError("تحلیل کامل انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
@@ -214,7 +233,16 @@ export default function AiSecurityAssistantPanel() {
     const generation = viewGeneration.current;
     setHardeningLoading(true);
     setError(null);
-    generateHardeningSuggestions(assessment?.id)
+    const assessmentMatchesScope = assessment?.id && (
+      selectedDeviceId
+        ? assessment.scopeType === "device" && assessment.scopeId === selectedDeviceId
+        : assessment.scopeType !== "device"
+    );
+    const assessmentPromise = assessmentMatchesScope
+      ? Promise.resolve(assessment)
+      : runFullSecurityAnalysis(selectedDeviceId || undefined);
+    assessmentPromise
+      .then((baseAssessment) => baseAssessment.id ? generateHardeningSuggestions(baseAssessment.id) : generateHardeningSuggestions())
       .then((result) => { if (generation === viewGeneration.current) setAssessment(result); })
       .catch((err: unknown) => {
         if (generation !== viewGeneration.current) return;
@@ -246,6 +274,10 @@ export default function AiSecurityAssistantPanel() {
   const submit = (message: string) => {
     const trimmed = message.trim();
     if (!trimmed || loading) return;
+    if (intentModeOverride === "Action" && !selectedDeviceId) {
+      setError(isFa ? "برای ساخت برنامه عملیات، ابتدا دستگاه مقصد را انتخاب کنید." : "Select a target device before creating an ActionPlan.");
+      return;
+    }
     const quickIntent = trimmed.toLowerCase();
     if (["تحلیل کامل", "full analysis"].includes(quickIntent)) {
       setInput("");
@@ -304,22 +336,6 @@ export default function AiSecurityAssistantPanel() {
         setExecutionState(canSurfacePlan ? { support: response.actionContract.executionSupport, implementation: response.actionContract.implementationState, missing: response.missingFields, nextStep: response.nextStepFa, template: response.mappedTemplate, canCreateActionPlan: response.actionContract.canCreateActionPlan, manualOnly: response.actionContract.manualOnly, executable: response.actionContract.executable, executionMode: response.actionContract.executionMode, lifecycle: response.actionContract.lifecycle } : null);
         setCreatedPlanId(canSurfacePlan ? response.actionPlan?.id ?? null : null);
         setGuidedStart(null);
-        const canOfferGuidedStart = canSurfacePlan &&
-          Boolean(response.blueprintId) &&
-          response.actionContract.implementationState === "implemented" &&
-          response.actionContract.executionSupport === "connector" &&
-          response.missingFields.length > 0 &&
-          Boolean(response.deviceId ?? selectedDeviceId);
-        if (canOfferGuidedStart && response.blueprintId) {
-          const guided = {
-            blueprintId: response.blueprintId,
-            initialValues: response.initialValues ?? {},
-            vendor: response.vendor ?? (selectedVendor || null),
-            deviceId: response.deviceId ?? (selectedDeviceId || null),
-            initialRequest: trimmed,
-          };
-          setGuidedStart(guided);
-        }
         if (canSurfacePlan && response.actionPlan?.id) {
           publishActionPlanCreated(response.actionPlan.id);
         }
@@ -327,93 +343,110 @@ export default function AiSecurityAssistantPanel() {
       })
       .catch((err: unknown) => {
         if (generation !== viewGeneration.current) return;
-        setError("پاسخ سرویس هوش مصنوعی دریافت نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
+        setError(isFa
+          ? "ارتباط زنده با هوش مصنوعی برقرار نشد؛ هیچ پاسخ قالبی جایگزین نمایش داده نشد. اتصال اینترنت یا provider را بررسی و دوباره تلاش کنید."
+          : "The live AI provider could not be reached. No canned fallback was shown; check connectivity or provider settings and try again.");
+        setProviderStatus((current) => current ? { ...current, lastError: "AI_PROVIDER_UNAVAILABLE" } : current);
         setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته سرویس هوش مصنوعی");
       })
       .finally(() => { if (generation === viewGeneration.current) setLoading(false); });
   };
 
-  const startGuidedWorkflow = () => {
-    if (!guidedStart) return;
-    startGuidedSession(guidedStart)
-      .then((session) => {
-        navigate(`/guided-actions/${encodeURIComponent(session.sessionId)}`);
-      })
-      .catch((err: unknown) => {
-        setError("شروع ساخت مرحله‌ای انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
-        setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در شروع Workflow");
-      });
-  };
-
   return (
-    <section className="mb-4 rounded-lg border border-blue-900/50 bg-slate-950/70 p-4 shadow-[inset_0_1px_0_rgba(59,130,246,0.08)]" dir={isFa ? "rtl" : "ltr"}>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-left text-lg font-semibold text-zinc-100">
-            <Bot className="h-5 w-5 text-blue-300" aria-hidden="true" />
-            {copy.title}
-          </h2>
-          <p className="mt-1 text-left text-sm text-zinc-400">
-            {copy.subtitle}
-          </p>
-          <p className="mt-1 text-left text-xs text-zinc-500">
-            {copy.lastRefresh}: {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleString() : "-"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={refreshSummary}
-          className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-blue-700 hover:text-blue-200"
-        >
-          <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-          {summaryLoading ? copy.refreshing : copy.refresh}
-        </button>
-        <div className="flex flex-col gap-1 text-right" dir="rtl">
-          <label className="text-xs text-zinc-400">{copy.target}</label>
-          <select
-            value={selectedDeviceId}
-            onChange={(event) => setSelectedDeviceId(event.target.value)}
-            className="h-9 min-w-[220px] rounded-md border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none"
-          >
-            <option value="">{copy.choose}</option>
-            {devices.map((device) => (
-              <option key={device.id} value={device.id}>
-                {device.name} - {vendorOfDevice(device)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1 text-left">
-          <span className="text-xs text-zinc-400">Mode</span>
-          <div className="inline-flex h-9 overflow-hidden rounded-md border border-zinc-700 bg-zinc-950" role="group" aria-label="Assistant mode">
-            {INTENT_MODE_OPTIONS.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setIntentModeOverride(mode)}
-                aria-pressed={intentModeOverride === mode}
-                className={`px-3 text-xs font-semibold transition-colors ${intentModeOverride === mode ? "bg-blue-700 text-white" : "text-zinc-300 hover:bg-zinc-900 hover:text-blue-200"}`}
-              >
-                {mode}
-              </button>
-            ))}
+    <section className="relative mb-4 overflow-hidden rounded-2xl border border-cyan-900/50 bg-[linear-gradient(145deg,rgba(8,31,48,.92),rgba(2,10,18,.96)_42%)] p-3 shadow-[0_24px_80px_rgba(0,0,0,.28)] sm:p-5" dir={isFa ? "rtl" : "ltr"}>
+      <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-cyan-500/10 blur-3xl" aria-hidden="true" />
+      <header className="relative mb-4 flex flex-col gap-3 border-b border-white/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300 shadow-[0_0_24px_rgba(34,211,238,.08)]">
+            <Bot className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-slate-100 sm:text-xl">{copy.title}</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-6 text-slate-400 sm:text-sm">
+              {intentModeOverride === "Chat"
+                ? (isFa ? "درباره وضعیت و امنیت دستگاه انتخابی گفت‌وگو کنید." : "Chat about the selected device and its security state.")
+                : (isFa ? "درخواست عملیاتی خود را بنویسید تا برنامه‌ای قابل بازبینی ساخته شود." : "Describe an operation to build a reviewable ActionPlan.")}
+            </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={clearChat}
-          className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm font-medium text-zinc-300 transition-colors hover:border-red-800 hover:text-red-200"
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          {copy.clear}
-        </button>
-        <button
-          type="button"
-          onClick={clearChat}
-          className="inline-flex h-9 w-fit items-center rounded-md border border-blue-800 bg-blue-950/30 px-3 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-950/50"
-        >
-          {copy.newRequest}
-        </button>
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 ${providerIsLive ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200" : providerStatus?.lastError ? "border-rose-400/20 bg-rose-400/10 text-rose-200" : "border-amber-400/20 bg-amber-400/10 text-amber-200"}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${providerIsLive ? "bg-emerald-300" : providerStatus?.lastError ? "bg-rose-300" : "bg-amber-300"}`} />
+            {providerIsLive
+              ? (isFa ? "هوش مصنوعی آماده" : "AI ready")
+              : providerStatus?.lastError
+                ? (isFa ? "ارتباط AI قطع است" : "AI unavailable")
+                : providerStatus?.keyConfigured
+                  ? (isFa ? "AI تنظیم شده؛ آماده‌ی اولین پیام" : "AI configured; send a message to verify")
+                  : (isFa ? "سرویس AI تنظیم نشده" : "AI is not configured")}
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-400">
+            {copy.lastRefresh}: {lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleTimeString() : "-"}
+          </span>
+        </div>
+      </header>
+
+      <div className="relative mb-4 grid gap-3 rounded-2xl border border-white/5 bg-black/20 p-3 lg:grid-cols-[minmax(240px,.8fr)_minmax(280px,1.2fr)_auto] lg:items-end">
+        <div>
+          <span className="mb-2 block text-xs font-semibold text-slate-300">{isFa ? "نوع درخواست" : "Request type"}</span>
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-slate-950/80 p-1" role="group" aria-label="Assistant mode">
+            {INTENT_MODE_OPTIONS.map((mode) => {
+              const active = intentModeOverride === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => changeMode(mode)}
+                  aria-pressed={active}
+                  className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold transition-all ${active ? "bg-cyan-500/15 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(34,211,238,.35)]" : "text-slate-400 hover:bg-white/5 hover:text-slate-200"}`}
+                >
+                  {mode === "Chat" ? <MessageCircle className="h-4 w-4" aria-hidden="true" /> : <Wrench className="h-4 w-4" aria-hidden="true" />}
+                  {mode === "Chat" ? (isFa ? "گفت‌وگو" : "Chat") : (isFa ? "ساخت عملیات" : "Action")}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="block min-w-0">
+          <span className="mb-2 block text-xs font-semibold text-slate-300">{copy.target}</span>
+          <span className="relative block">
+            <Server className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-400" aria-hidden="true" />
+            <select
+              value={selectedDeviceId}
+              onChange={(event) => setSelectedDeviceId(event.target.value)}
+              className="h-12 w-full appearance-none rounded-xl border border-white/10 bg-slate-950/80 px-10 text-sm font-medium text-slate-100 outline-none transition focus:border-cyan-500/60 focus:ring-4 focus:ring-cyan-500/5"
+            >
+              <option value="">{copy.choose}</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.name} — {vendorOfDevice(device)} — {device.host}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+          </span>
+        </label>
+
+        <div className="grid grid-cols-2 gap-2 lg:flex">
+          <button
+            type="button"
+            onClick={refreshSummary}
+            disabled={summaryLoading}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:border-cyan-500/30 hover:text-cyan-200 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} aria-hidden="true" />
+            {isFa ? "تازه‌سازی" : "Refresh"}
+          </button>
+          <button
+            type="button"
+            onClick={clearChat}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:border-rose-500/30 hover:text-rose-200"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            {isFa ? "گفت‌وگوی جدید" : "New chat"}
+          </button>
+        </div>
       </div>
 
       <PlanningContextPanel
@@ -426,162 +459,124 @@ export default function AiSecurityAssistantPanel() {
         isFa={isFa}
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={runAssessment}
-          disabled={assessmentLoading || hardeningLoading}
-          className="rounded-lg border border-blue-800/70 bg-blue-950/20 p-4 text-left transition-colors hover:bg-blue-950/40 disabled:opacity-60"
-        >
-          <span className="flex items-center gap-2 text-sm font-semibold text-blue-100">
-            <ScanSearch className="h-5 w-5" aria-hidden="true" />
-            تحلیل کامل
-          </span>
-          <span className="mt-1 block text-xs text-zinc-400">ارزیابی ساختاریافته دستگاه‌ها، رخدادها، سطح حمله، Policyها و پوشش لاگ</span>
-          <span className="mt-2 block text-xs font-medium text-blue-300">{assessmentLoading ? "در حال تحلیل..." : "اجرای تحلیل کامل"}</span>
-        </button>
-        <button
-          type="button"
-          onClick={runHardening}
-          disabled={assessmentLoading || hardeningLoading}
-          className="rounded-lg border border-green-800/70 bg-green-950/20 p-4 text-left transition-colors hover:bg-green-950/40 disabled:opacity-60"
-        >
-          <span className="flex items-center gap-2 text-sm font-semibold text-green-100">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-            پیشنهاد ایمن‌سازی
-          </span>
-          <span className="mt-1 block text-xs text-zinc-400">پیشنهادهای اولویت‌بندی‌شده با نگاشت امن به اکشن‌های کاتالوگ</span>
-          <span className="mt-2 block text-xs font-medium text-green-300">{hardeningLoading ? "در حال تولید..." : "تولید پیشنهادهای ایمن‌سازی"}</span>
-        </button>
-      </div>
+      <details className="group mb-4 rounded-xl border border-white/5 bg-black/15">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-semibold text-slate-300 marker:hidden">
+          <span className="inline-flex items-center gap-2"><Activity className="h-4 w-4 text-cyan-400" aria-hidden="true" />{isFa ? "ابزارهای تحلیل پیشرفته" : "Advanced analysis tools"}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="grid gap-3 border-t border-white/5 p-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={runAssessment}
+            disabled={assessmentLoading || hardeningLoading}
+            className="rounded-xl border border-blue-400/15 bg-blue-400/5 p-4 text-start transition hover:border-blue-400/30 hover:bg-blue-400/10 disabled:opacity-60"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-blue-100">
+              <ScanSearch className="h-5 w-5" aria-hidden="true" />
+              تحلیل کامل
+            </span>
+            <span className="mt-2 block text-xs leading-6 text-slate-400">{selectedDevice ? `ارزیابی شواهد تازه، رخدادها و سطح حمله ${selectedDevice.name}` : "ارزیابی ساختاریافته همه دستگاه‌ها، رخدادهای فعال و پوشش داده"}</span>
+            <span className="mt-2 block text-xs font-medium text-blue-300">{assessmentLoading ? "در حال تحلیل..." : "اجرای تحلیل کامل"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={runHardening}
+            disabled={assessmentLoading || hardeningLoading}
+            className="rounded-xl border border-emerald-400/15 bg-emerald-400/5 p-4 text-start transition hover:border-emerald-400/30 hover:bg-emerald-400/10 disabled:opacity-60"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-emerald-100">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              پیشنهاد ایمن‌سازی
+            </span>
+            <span className="mt-2 block text-xs leading-6 text-slate-400">{assessment ? "پیشنهادهای اولویت‌بندی‌شده دقیقاً بر پایه آخرین گزارش بالا" : "ابتدا تحلیل تازه اجرا می‌شود؛ سپس پیشنهادها از همان شواهد ساخته می‌شوند"}</span>
+            <span className="mt-2 block text-xs font-medium text-emerald-300">{hardeningLoading ? "در حال تولید..." : "تولید پیشنهادهای ایمن‌سازی"}</span>
+          </button>
+        </div>
+      </details>
 
       {assessment && (
-        <div dir="rtl" className="mb-4 rounded-lg border border-zinc-700 bg-zinc-950/80 p-4 text-right">
-          <h3 className="text-base font-semibold text-zinc-100">گزارش ارزیابی امنیتی</h3>
-          <p className="mt-2 text-xs text-zinc-400">{assessment.summary}</p>
-          <p className="mt-2 rounded border border-amber-900/60 bg-amber-950/20 p-2 text-xs text-amber-200">{String(assessmentDetails.dataNotice ?? "داده خوانده‌شده از دستگاه موجود نیست؛ تحلیل بر اساس داده‌های ثبت‌شده در برنامه انجام شده است.")}</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">امتیاز ریسک</p><p className="mt-1 text-xl font-bold text-red-200">{assessment.riskScore} از ۱۰۰</p></div>
-            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">یافته‌های مهم</p><p className="mt-1 text-xl font-bold text-yellow-200">{assessmentFindings.length}</p></div>
-            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">پوشش دستگاه</p><p className="mt-1 text-sm text-blue-200">{evidenceText(normalizeObject(assessmentSections.assetsAndVendors).connected)} دستگاه متصل</p></div>
-            <div className="rounded border border-zinc-800 p-3"><p className="text-xs text-zinc-500">پیشرفت ایمن‌سازی</p><p className="mt-1 text-sm text-green-200">{assessment.recommendations.filter((item) => item.status === "action_plan_created").length} اقدام برنامه‌ریزی‌شده</p></div>
-          </div>
-          {vendorAnalyses.length > 0 && <div className="mt-4">
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Vendor and device analysis">
-              {vendorAnalyses.map((item) => <button key={String(item.deviceId)} type="button" role="tab" aria-selected={(activeAnalysisDevice ?? String(vendorAnalyses[0]?.deviceId)) === String(item.deviceId)} onClick={() => setActiveAnalysisDevice(String(item.deviceId))} className={`rounded border px-3 py-1.5 text-xs ${(activeAnalysisDevice ?? String(vendorAnalyses[0]?.deviceId)) === String(item.deviceId) ? "border-blue-600 bg-blue-950/50 text-blue-100" : "border-zinc-700 text-zinc-400"}`}>{String(item.device)} · {String(item.vendorLabel ?? item.vendor)}</button>)}
-            </div>
-            {visibleVendorAnalyses.map((item) => {
-              const collected = normalizeArray<string>(item.collectedData);
-              const missing = normalizeArray<string>(item.missingData);
-              const findings = normalizeArray<Record<string, unknown>>(item.findings);
-              const actions = normalizeArray<string>(item.recommendedActions);
-              return <div key={String(item.deviceId)} className="mt-3 grid gap-2 md:grid-cols-2">
-                <div className="rounded border border-green-900/60 bg-green-950/10 p-3"><h4 className="text-xs font-semibold text-green-200">Collected data</h4><p className="mt-2 text-xs text-zinc-400">{collected.length ? collected.join(" · ") : "No vendor telemetry collected"}</p></div>
-                <div className="rounded border border-amber-900/60 bg-amber-950/10 p-3"><h4 className="text-xs font-semibold text-amber-200">Missing data</h4><p className="mt-2 text-xs text-zinc-400">{missing.length ? missing.join(" · ") : "None identified"}</p></div>
-                <div className="rounded border border-red-900/60 bg-red-950/10 p-3"><h4 className="text-xs font-semibold text-red-200">Findings</h4><div className="mt-2 space-y-2 text-xs text-zinc-400">{findings.length ? findings.map((finding) => <p key={String(finding.id)}><span className="text-zinc-200">{String(finding.title)}</span>: {String(finding.evidence)}</p>) : <p>No confirmed vendor-specific findings.</p>}</div></div>
-                <div className="rounded border border-blue-900/60 bg-blue-950/10 p-3"><h4 className="text-xs font-semibold text-blue-200">Recommended actions</h4><p className="mt-2 text-xs text-zinc-400">{actions.length ? actions.join(" · ") : "Collect missing telemetry, then reassess."}</p></div>
-              </div>;
-            })}
-          </div>}
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {Object.entries(assessmentSections).filter(([key, section]) => key !== "vendorSpecificChecks" && section && typeof section === "object" && !Array.isArray(section)).map(([, section], index) => {
-              const item = normalizeObject(section);
-              if (item.title === "یافته‌ها") return null;
-              return <div key={index} className="rounded border border-zinc-800 bg-black/20 p-3"><h4 className="text-xs font-semibold text-blue-100">{String(item.title ?? "بخش گزارش")}</h4><p className="mt-2 text-xs leading-6 text-zinc-400">{evidenceText(Object.fromEntries(Object.entries(item).filter(([key]) => key !== "title")))}</p></div>;
-            })}
-          </div>
-          {assessmentFindings.length > 0 && (
-            <div className="mt-4"><h3 className="mb-2 text-sm font-semibold text-zinc-100">یافته‌ها</h3><div className="grid gap-2 md:grid-cols-2">
-              {assessmentFindings.slice(0, 6).map((finding, index) => (
-                <div key={String(finding.id ?? index)} className="rounded border border-zinc-800 bg-black/20 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-zinc-200">{String(finding.title ?? "یافته امنیتی")}</p>
-                    <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(String(finding.severity ?? "medium"))}`}>{severityFa(String(finding.severity ?? "medium"))}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-400">{String(finding.explanation ?? "")}</p>
-                  <p className="mt-2 text-xs text-zinc-500"><span className="text-zinc-300">شواهد:</span> {evidenceText(finding.evidence)}</p>
-                  <p className="mt-1 text-xs text-green-300"><span className="text-zinc-300">اقدام پیشنهادی:</span> {String(finding.recommendedNextStep ?? "نیازمند بررسی دستی")}</p>
-                </div>
-              ))}
-            </div></div>
-          )}
-          {assessment.recommendations.length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-sm font-semibold text-zinc-100">پیشنهادهای ایمن‌سازی</h3>
-              <div className="mt-2 space-y-2">
-                {assessment.recommendations.map((recommendation) => (
-                  <div key={recommendation.id} className="rounded border border-zinc-800 bg-black/20 p-3">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-xs font-semibold text-zinc-100">{recommendation.title}</p>
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${riskClass(recommendation.severity)}`}>{severityFa(recommendation.severity)}</span>
-                          <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">{recommendation.vendor}</span>
-                          <span className={`rounded border px-1.5 py-0.5 text-[10px] ${recommendation.executable ? "border-green-800 text-green-300" : "border-zinc-700 text-zinc-500"}`}>
-                          {recommendation.createActionSupported ? "ActionPlan supported" : "نیاز به بررسی دستی"}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-zinc-400">{recommendation.reason}</p>
-                        <p className="mt-1 text-xs text-zinc-500">دستگاه: {recommendation.device?.name ?? "همه دستگاه‌ها"} · دسته: {recommendation.category}</p>
-                        <p className="mt-1 text-xs text-zinc-500">شواهد: {evidenceText(recommendation.evidenceJson)}</p>
-                        <p className="mt-1 text-xs text-green-300">اقدام پیشنهادی: {recommendation.recommendation}</p>
-                      </div>
-                      {recommendation.createActionSupported && !recommendation.actionPlanId && (
-                        <button
-                          type="button"
-                          onClick={() => createRecommendationPlan(recommendation.id)}
-                          disabled={recommendationWorking === recommendation.id}
-                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {recommendationWorking === recommendation.id ? "در حال ساخت..." : "Create Fix Action · ساخت اکشن"}
-                        </button>
-                      )}
-                      {recommendation.actionPlanId && <span className="text-xs font-medium text-green-300">در مرکز اکشن آماده است</span>}
-                    </div>
-                    {recommendation.executable && <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer">جزئیات فنی اکشن</summary><p className="mt-2">شناسه کاتالوگ: {recommendation.catalogActionId}</p><p className="mt-1">پارامترها: {evidenceText(recommendation.parametersJson)}</p></details>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <AssistantAssessmentReport
+          assessment={assessment}
+          isFa={isFa}
+          recommendationWorking={recommendationWorking}
+          onCreatePlan={createRecommendationPlan}
+        />
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+      <details className="group mb-4 rounded-xl border border-white/5 bg-black/15">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-xs font-semibold text-slate-300 marker:hidden">
+          <span>{isFa ? "خلاصه داده‌های امنیتی" : "Security data summary"}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="grid grid-cols-2 gap-2 border-t border-white/5 p-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3">
           <p className="text-xs text-zinc-500">{copy.recent}</p>
           <p className="mt-1 text-xl font-semibold text-blue-100">{formatNumber(summary?.events.recentCount)}</p>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+        <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3">
           <p className="text-xs text-zinc-500">{copy.devices}</p>
           <p className="mt-1 text-xl font-semibold text-blue-100">{formatNumber(summary?.devices.length)}</p>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+        <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3">
           <p className="text-xs text-zinc-500">{copy.topIp}</p>
           <p className="mt-2 text-xs text-zinc-300">{topSourceIps[0]?.srcIp ?? "none"}</p>
         </div>
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+        <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3">
           <p className="text-xs text-zinc-500">{copy.ports}</p>
           <p className="mt-2 text-xs text-zinc-300">
             {sensitivePorts.slice(0, 3).map((item) => `${item.dstPort}: ${item.count}`).join(", ") || "none"}
           </p>
         </div>
-      </div>
+        </div>
+      </details>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        <div className="flex h-[500px] min-h-0 flex-col rounded-lg border border-zinc-800 bg-zinc-950">
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex h-[min(68vh,660px)] min-h-[520px] min-w-0 flex-col overflow-hidden rounded-2xl border border-cyan-400/15 bg-slate-950/75 shadow-[inset_0_1px_0_rgba(255,255,255,.03)] max-sm:h-[72vh] max-sm:min-h-[540px]">
+          <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${intentModeOverride === "Chat" ? "bg-cyan-400/10 text-cyan-300" : "bg-violet-400/10 text-violet-300"}`}>
+                {intentModeOverride === "Chat" ? <MessageCircle className="h-4 w-4" aria-hidden="true" /> : <Wrench className="h-4 w-4" aria-hidden="true" />}
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-100">{intentModeOverride === "Chat" ? (isFa ? "گفت‌وگو با دستیار" : "Assistant chat") : (isFa ? "طراحی برنامه عملیات" : "Action planning")}</p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-500">{selectedDevice ? `${selectedDevice.name} · ${vendorOfDevice(selectedDevice)}` : (isFa ? "دستگاهی انتخاب نشده است" : "No device selected")}</p>
+              </div>
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/5 bg-white/[.03] px-2 py-1 text-[10px] text-slate-500">
+              <ShieldCheck className="h-3 w-3 text-emerald-400" aria-hidden="true" />
+              {isFa ? "اجرای کنترل‌شده" : "Controlled execution"}
+            </span>
+          </div>
+
+          <div ref={chatViewportRef} className="min-h-0 flex-1 overflow-y-auto scroll-smooth p-3 sm:p-5" aria-live="polite">
             {safeMessages.length === 0 ? (
-              <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 text-center text-zinc-500">
-                <Sparkles className="h-8 w-8" aria-hidden="true" />
-                <p className="text-sm">{copy.empty}</p>
+              <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center px-2 text-center">
+                <span className="grid h-14 w-14 place-items-center rounded-2xl border border-cyan-400/15 bg-cyan-400/10 text-cyan-300 shadow-[0_0_32px_rgba(34,211,238,.08)]">
+                  <Sparkles className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 text-base font-bold text-slate-100">{intentModeOverride === "Chat" ? (isFa ? "چه چیزی را می‌خواهید بررسی کنیم؟" : "What should we investigate?") : (isFa ? "چه عملیاتی باید انجام شود؟" : "What operation should be planned?")}</h3>
+                <p className="mt-2 max-w-md text-xs leading-6 text-slate-500">{intentModeOverride === "Chat" ? copy.empty : (isFa ? "درخواست را با زبان ساده بنویسید؛ پارامترهای لازم در مرکز عملیات تکمیل می‌شوند." : "Describe the request naturally; required parameters continue in Action Center.")}</p>
+                <div className="mt-5 grid w-full gap-2 sm:grid-cols-3">
+                  {visibleExamples.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => setInput(example)}
+                      className="min-h-16 rounded-xl border border-white/5 bg-white/[.025] p-3 text-start text-[11px] leading-5 text-slate-400 transition hover:border-cyan-400/20 hover:bg-cyan-400/5 hover:text-cyan-100"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {safeMessages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}
+              <div className="assistant-chat-thread">
+                {safeMessages.map((message) => <ChatMessageBubble key={message.id} message={message} isFa={isFa} />)}
                 {loading && (
-                  <p className="text-left text-xs text-zinc-500">{copy.thinking}</p>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span className="flex gap-1"><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 [animation-delay:150ms]" /><i className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400 [animation-delay:300ms]" /></span>
+                    {copy.thinking}
+                  </div>
                 )}
               </div>
             )}
@@ -592,55 +587,72 @@ export default function AiSecurityAssistantPanel() {
               event.preventDefault();
               submit(input);
             }}
-            className="border-t border-zinc-800 p-3"
+            className="border-t border-white/5 bg-black/20 p-3 sm:p-4"
           >
-            <div className="flex gap-2">
-              <input
+            <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-slate-950/90 p-2 transition focus-within:border-cyan-400/35 focus-within:ring-4 focus-within:ring-cyan-400/5">
+              <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    submit(input);
+                  }
+                }}
                 placeholder={t("assistant.promptPlaceholder")}
-                className="h-10 min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none focus:border-blue-700"
+                rows={2}
+                className="max-h-32 min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-6 text-slate-100 outline-none placeholder:text-slate-600"
               />
               <button
                 type="submit"
                 disabled={loading || input.trim() === ""}
                 title={loading || input.trim() === "" ? t("assistant.sendUnavailable") : undefined}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-blue-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
+                className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-cyan-500 to-blue-600 px-4 text-sm font-bold text-white shadow-[0_8px_24px_rgba(8,145,178,.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 max-sm:w-11 max-sm:px-0"
               >
                 <Send className="h-4 w-4" aria-hidden="true" />
-                {copy.send}
+                <span className="max-sm:hidden">{copy.send}</span>
               </button>
             </div>
+            <p className="mt-2 px-1 text-[10px] text-slate-600">{isFa ? "Enter برای ارسال · Shift + Enter برای خط جدید" : "Enter to send · Shift + Enter for a new line"}</p>
           </form>
         </div>
 
-        <aside className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-          <div className="mb-3 flex items-center gap-2 text-left text-sm font-semibold text-zinc-100">
-            <ShieldAlert className="h-4 w-4 text-yellow-300" aria-hidden="true" />
-            {copy.safety}
-          </div>
-          <p className="text-left text-xs text-zinc-400">
-            {copy.safetyText}
-          </p>
-          <div className="mt-3 rounded border border-zinc-800 bg-black/30 p-2 text-left">
-            <p className="text-xs font-semibold text-zinc-200">{copy.provider}</p>
-            <div className="mt-2 grid gap-1 text-xs text-zinc-400">
-              <p><span className="text-zinc-500">provider:</span> {providerStatus?.provider ?? "mock"}</p>
-              <p><span className="text-zinc-500">model:</span> {providerStatus?.model ?? "mock-deterministic"}</p>
-              <p><span className="text-zinc-500">key configured:</span> {providerStatus?.keyConfigured ? "true" : "false"}</p>
-              <p><span className="text-zinc-500">execution:</span> disabled</p>
-            </div>
-            {evidenceMetadata && (
-              <div className="mt-2 border-t border-zinc-800 pt-2 text-xs text-zinc-400">
-                <p className="font-medium text-blue-300">compact evidence mode</p>
-                <p>events {evidenceMetadata.includedEventsCount} · findings {evidenceMetadata.includedFindingsCount} · incidents {evidenceMetadata.includedIncidentsCount}</p>
-                <p>context truncated: {String(evidenceMetadata.contextTruncated)}</p>
+        <aside className="flex min-w-0 flex-col gap-3 rounded-2xl border border-white/5 bg-black/20 p-3 sm:p-4">
+          <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3">
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300"><Server className="h-5 w-5" aria-hidden="true" /></span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-slate-500">{isFa ? "زمینه فعال" : "Active context"}</p>
+                <p className="mt-1 truncate text-sm font-bold text-slate-100">{selectedDevice?.name ?? (isFa ? "دستگاهی انتخاب نشده" : "No device selected")}</p>
+                <p className="mt-1 truncate text-[11px] text-slate-500">{selectedDevice ? `${vendorOfDevice(selectedDevice)} · ${selectedDevice.host}` : (isFa ? "برای پاسخ دقیق‌تر یک دستگاه انتخاب کنید." : "Select a device for better context.")}</p>
               </div>
-            )}
-            {providerStatus?.lastError && (
-              <p className="mt-2 text-xs text-red-300">{providerStatus.lastError}</p>
-            )}
+            </div>
           </div>
+
+          <div className={`rounded-xl border p-3 ${intentModeOverride === "Chat" ? "border-cyan-400/15 bg-cyan-400/5" : "border-violet-400/15 bg-violet-400/5"}`}>
+            <div className="flex items-center gap-2">
+              {intentModeOverride === "Chat" ? <MessageCircle className="h-4 w-4 text-cyan-300" aria-hidden="true" /> : <Wrench className="h-4 w-4 text-violet-300" aria-hidden="true" />}
+              <p className="text-xs font-bold text-slate-200">{intentModeOverride === "Chat" ? (isFa ? "فقط گفت‌وگو" : "Conversation only") : (isFa ? "ساخت برنامه عملیات" : "ActionPlan creation")}</p>
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-slate-500">{intentModeOverride === "Chat" ? (isFa ? "در این حالت هیچ برنامه عملیاتی ساخته نمی‌شود." : "No ActionPlan is created in this mode.") : (isFa ? "هیچ عملیاتی بدون بازبینی و تأیید شما اجرا نمی‌شود." : "Nothing executes without your review and approval.")}</p>
+          </div>
+
+          <details className="group rounded-xl border border-white/5 bg-slate-950/40">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-3 text-xs font-semibold text-slate-400 marker:hidden">
+              <span className="inline-flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-amber-300" aria-hidden="true" />{isFa ? "ایمنی و وضعیت سرویس" : "Safety and provider"}</span>
+              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="border-t border-white/5 p-3 text-[11px] leading-5 text-slate-500">
+              <p>{copy.safetyText}</p>
+              <div className="mt-3 grid gap-1 border-t border-white/5 pt-3" dir="ltr">
+                <p><span className="text-slate-600">provider:</span> {providerStatus?.provider ?? "mock"}</p>
+                <p><span className="text-slate-600">model:</span> {providerStatus?.model ?? "mock-deterministic"}</p>
+                <p><span className="text-slate-600">key configured:</span> {providerStatus?.keyConfigured ? "true" : "false"}</p>
+              </div>
+              {evidenceMetadata && <p className="mt-2 text-cyan-400">{evidenceMetadata.includedEventsCount} events · {evidenceMetadata.includedFindingsCount} findings · {evidenceMetadata.includedIncidentsCount} incidents</p>}
+              {providerStatus?.lastError && <p className="mt-2 text-rose-300">{providerStatus.lastError}</p>}
+            </div>
+          </details>
           {structuredResponse?.intent && !lastIntent && (
             <div className="mt-3 rounded border border-yellow-800/70 bg-yellow-950/20 p-2 text-left">
               <p className="text-xs font-semibold text-yellow-100">Structured intent proposed</p>
@@ -660,23 +672,10 @@ export default function AiSecurityAssistantPanel() {
               </div>
               <p className="mt-2 text-xs text-slate-300">{executionState.nextStep}</p>
               {executionState.lifecycle && <p className="mt-2 text-[11px] text-slate-500">ActionPlan {executionState.lifecycle.actionPlanId} · revision {executionState.lifecycle.planRevision} · {executionState.lifecycle.planState} · {executionState.executionMode}</p>}
-              {createdPlanId && <button type="button" onClick={() => reviewInActionCenter(createdPlanId)} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">رفتن به مرکز عملیات</button>}
-              {guidedStart && <button type="button" onClick={startGuidedWorkflow} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">شروع ساخت مرحله‌ای</button>}
+              {createdPlanId && <button type="button" onClick={() => executionState?.missing.length ? navigate(`/actions/${encodeURIComponent(createdPlanId)}/configure`) : reviewInActionCenter(createdPlanId)} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">{executionState?.missing.length ? "تکمیل پارامترها در مرکز عملیات" : "رفتن به مرکز عملیات"}</button>}
               {!createdPlanId && executionState.missing.length > 0 && <button type="button" onClick={() => setInput(executionState.nextStep)} className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white">تکمیل اطلاعات</button>}
             </div>
           )}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {EXAMPLES.map((example) => (
-              <button
-                key={example}
-                type="button"
-                onClick={() => setInput(example)}
-                className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-left text-[11px] text-zinc-300 hover:border-blue-700 hover:text-blue-200"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
           <IntentCard
             intent={lastIntent}
             debug={actionDebug}

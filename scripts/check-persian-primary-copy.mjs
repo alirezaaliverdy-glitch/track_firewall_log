@@ -32,11 +32,11 @@ for (const key of requiredKeys) {
 }
 
 const shell = read("src/components/layout/AppShell.tsx");
-for (const key of ["shell.toggleNavigation", "shell.notifications", "auth.logout"]) {
+for (const key of ["shell.toggleNavigation", "auth.logout"]) {
   if (!shell.includes(`t("${key}")`)) failures.push(`${key}: AppShell does not use the dictionary`);
 }
-if (!/input disabled title=\{t\("shell\.searchUnavailable"\)\}/.test(shell)) failures.push("global search is not explicitly disabled and explained");
-if (!/button type="button" className="icon-button" disabled title=\{t\("shell\.notificationsUnavailable"\)\}/.test(shell)) failures.push("notifications are not explicitly disabled and explained");
+if (/platform-search|shell\.searchUnavailable/.test(shell)) failures.push("removed global search control returned to the operational top bar");
+if (/shell\.notifications|shell\.notificationsUnavailable/.test(shell)) failures.push("removed notifications control returned to the operational top bar");
 
 const actionCenter = read("src/components/actions/ActionCenterPanel.tsx");
 for (const key of requiredKeys.filter((key) => key.startsWith("actionCenter."))) {

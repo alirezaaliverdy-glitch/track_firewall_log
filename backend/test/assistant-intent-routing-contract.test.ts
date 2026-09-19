@@ -114,31 +114,38 @@ test("chat service gates planning behind classifier and returns explicit respons
 
 test("chat service supports connector-backed custom AI ActionPlans", () => {
   assert.match(chatService, /buildCustomCommandPlan/);
+  assert.match(chatService, /validateCustomCommandPlan/);
   assert.match(chatService, /canCreateCustomConnectorActionPlan/);
+  assert.match(chatService, /isCustomProposal\(resolution\.canonicalActionType\)/);
+  assert.match(chatService, /deterministicUnsupportedAction \|\| catalogMatch\.aiRequired/);
   assert.match(chatService, /source: "ai_custom_connector_plan"/);
   assert.match(chatService, /executionSupport: "connector"/);
   assert.match(chatService, /rawCommandExecution: false/);
+  assert.doesNotMatch(chatService, /customReviewOnlyActionPlanParameters/);
+  assert.doesNotMatch(chatService, /source: "ai_custom_proposal"/);
 });
 
 test("non-action branch does not call ActionPlan or execution backend", () => {
   const nonActionBlock = chatService.slice(chatService.indexOf('if (classification.mode !== "action_request")'), chatService.indexOf("const earlyResolution = resolveAiTemplate"));
-  assert.match(nonActionBlock, /intentDecision\.intent === "monitoring_live"/);
-  assert.match(nonActionBlock, /isReadOnlyResolution\(monitoringResolution\)/);
-  const withoutMonitoringPlanCreation = nonActionBlock.replace(/const monitoringActionPlan[\s\S]*?: null;\r?\n/, "");
-  assert.doesNotMatch(withoutMonitoringPlanCreation, /proposeActionPlan\(/);
+  assert.match(nonActionBlock, /Chat is an explicit hard boundary/);
+  assert.doesNotMatch(nonActionBlock, /proposeActionPlan\(/);
   assert.doesNotMatch(nonActionBlock, /createAiActionIntent\(/);
   assert.doesNotMatch(nonActionBlock, /quickExecuteActionPlan|executeActionPlan|selectDeviceConnector/);
-  assert.match(nonActionBlock, /runAiProvider\(\{ message, context \}\)/);
+  assert.match(nonActionBlock, /runAiProvider\(\{[\s\S]*mode: "chat",[\s\S]*conversationHistory/);
+  assert.match(nonActionBlock, /shouldCreateActionPlan: false/);
+  assert.match(nonActionBlock, /actionPlan: null/);
 });
 
 test("frontend treats chat and device_question as assistant-only and clears stale plans when switching devices", () => {
-  assert.match(assistantUi, /INTENT_MODE_OPTIONS/);
+  assert.match(assistantUi, /INTENT_MODE_OPTIONS: AiIntentModeOverride\[\] = \["Chat", "Action"\]/);
+  assert.doesNotMatch(assistantUi, /\["Auto", "Chat", "Action"\]/);
   assert.match(assistantUi, /intentModeOverride/);
   assert.match(assistantUi, /sendAiMessage\(sessionId, trimmed, selectedDeviceId \|\| undefined, \{[\s\S]*intentModeOverride/);
   assert.match(assistantUi, /const canSurfacePlan = canSurfaceActionPlan\(response\.mode\)/);
   assert.match(assistantUi, /setExecutionState\(canSurfacePlan \? \{ support: response\.actionContract\.executionSupport/);
   assert.match(assistantUi, /setCreatedPlanId\(canSurfacePlan \? response\.actionPlan\?\.id \?\? null : null\)/);
-  assert.match(assistantUi, /const canOfferGuidedStart = canSurfacePlan/);
+  assert.doesNotMatch(assistantUi, /startGuidedSession/);
   assert.match(assistantUi, /previousTargetDeviceId/);
   assert.match(assistantUi, /setSessionId\(null\);[\s\S]*setMessages\(\[\]\);[\s\S]*setLastIntent\(null\);[\s\S]*setCreatedPlanId\(null\);/);
+  assert.match(assistantUi, /تکمیل پارامترها در مرکز عملیات/);
 });

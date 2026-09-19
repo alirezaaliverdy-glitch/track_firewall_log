@@ -1,0 +1,16 @@
+def googleAndroidMirror = uri('https://redirector.gvt1.com/edgedl/android/maven2')
+
+gradle.beforeProject { project ->
+    project.buildscript.repositories {
+        maven { url = googleAndroidMirror }
+    }
+}
+
+settingsEvaluated { settings ->
+    settings.pluginManagement.repositories {
+        maven { url = googleAndroidMirror }
+    }
+    settings.dependencyResolutionManagement.repositories {
+        maven { url = googleAndroidMirror }
+    }
+}

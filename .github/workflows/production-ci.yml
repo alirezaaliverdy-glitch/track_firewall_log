@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+      - product-persian-command-catalog
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VITE_APP_ENV: production
+      VITE_BASE_PATH: /firewall/
+      VITE_API_BASE_URL: /firewall-api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate frontend environment
+        run: pnpm run validate:env:frontend
+
+      - name: TypeScript check
+        run: pnpm exec tsc -b
+
+      - name: Build frontend
+        run: pnpm run build
+
+      - name: Frontend smoke tests
+        run: pnpm run test:smoke:frontend
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  backend:
+    name: Backend typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate backend environment
+        working-directory: backend
+        run: pnpm run validate:env
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: pnpm run prisma:generate
+
+      - name: Build backend
+        working-directory: backend
+        run: pnpm run build
+
+      - name: Backend smoke tests
+        working-directory: backend
+        run: pnpm run test:smoke
+
+      - name: Validate command catalog
+        working-directory: backend
+        run: pnpm run validate:command-catalog
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist-${{ github.sha }}
+          path: backend/dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  compose:
+    name: Docker Compose syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate compose files
+        env:
+          DEPLOY_VERSION: ci-${{ github.sha }}
+          FRONTEND_IMAGE: ghcr.io/example/firewall/frontend:ci-${{ github.sha }}
+          BACKEND_IMAGE: ghcr.io/example/firewall/backend:ci-${{ github.sha }}
+          DATABASE_URL: postgresql://firewall_app:ci-password@firewall-db:5432/firewall_log_analyzer
+          CORS_ORIGIN: https://firewall.example.invalid
+          CREDENTIAL_ENCRYPTION_KEY: ci-placeholder-key-with-at-least-32-characters
+          ADMIN_PASSWORD: ci-placeholder-password
+          AUTH_SESSION_SECRET: ci-placeholder-secret-with-at-least-32-chars
+          POSTGRES_PASSWORD: ci-placeholder-db-password
+        run: |
+          docker compose -f docker-compose.yml config
+          docker compose -f docker-compose.development.yml config
+          docker compose -f docker-compose.staging.yml config
+          docker compose -f docker-compose.production.yml config
+          docker compose -f docker-compose.firewall.yml config

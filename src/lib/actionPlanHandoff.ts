@@ -33,3 +33,9 @@ export function subscribeToActionPlanCreated(listener: (actionPlanId: string) =>
 export function reviewInActionCenter(actionPlanId: string, target: EventTarget = window) {
   target.dispatchEvent(new CustomEvent("app:navigate", { detail: { to: actionPlanPath(actionPlanId) } }));
 }
+
+export function configureInActionCenter(actionPlanId: string, target: EventTarget = window) {
+  const id = actionPlanId.trim();
+  if (!id) throw new Error("actionPlanId is required");
+  target.dispatchEvent(new CustomEvent("app:navigate", { detail: { to: `/actions/${encodeURIComponent(id)}/configure` } }));
+}

@@ -1,0 +1,19 @@
+Read these task files in order:
+00_START_HERE_FA.md
+01_MASTER_RULES.md
+02_CURRENT_BASELINE.md
+03_PHASE_A_SECURITY_FOUNDATION.md
+04_PHASE_B_AI_INTENT_AND_ACTION_PLANNING.md
+05_PHASE_C_COMMAND_POLICY_ENGINE.md
+06_PHASE_D_BACKEND_REFACTOR.md
+07_PHASE_E_FRONTEND_REFACTOR.md
+08_PHASE_F_PRODUCTION_DOCS_BUNDLE.md
+09_PHASE_G_MOBILE_FOUNDATION.md
+10_ACCEPTANCE_MATRIX.md
+11_COMMIT_ROLLBACK_PLAN.md
+
+Execute the work phase-by-phase against the existing project. First inspect the current worktree and preserve all unrelated changes. Create/fix baseline characterization tests before implementation. Commit each successful phase separately and do not begin the next phase if validation fails.
+
+Use Filesystem MCP for code inspection and Playwright MCP for live UI acceptance. Do not rewrite the project, do not run destructive real-device tests, and do not stage secrets, runtime data, backups, or unrelated files.
+
+Start with Phase A. Continue automatically through the phases only while every phase passes its required tests. At the end, report commits, changed architecture, test results, skipped tests, remaining risks, and exact manual mobile test paths.

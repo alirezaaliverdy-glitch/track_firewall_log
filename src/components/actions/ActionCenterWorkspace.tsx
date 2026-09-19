@@ -11,15 +11,12 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { actionExecutionPermission } from "@/lib/frontendPermissions";
 import { useAuth } from "@/context/AuthContext";
 import { InlineActionReviewPanel } from "@/features/actions/components/ActionReviewSheet";
+import { ExecutionReviewDialog } from "@/features/actions/components/ExecutionReviewDialog";
 import {
-  AdvancedBlock,
   actionDisplayName,
-  commandLines,
   fieldValue,
   formatDate,
   humanize,
-  pretty,
-  resultMessage,
   reviewParametersFrom,
   terminalLifecycle,
 } from "@/features/actions/actionCenterWorkspaceModel";
@@ -131,10 +128,10 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   };
 
   const lifecycleLabels: Record<ActionLifecycle, string> = isFa ? {
-    draft: "پیش‌نویس", needs_input: "نیازمند اطلاعات", ready_for_confirmation: "آماده تأیید", confirmed: "تأییدشده",
+    queued: "در انتظار اجرا", draft: "پیش‌نویس", needs_input: "نیازمند اطلاعات", ready_for_confirmation: "آماده تأیید", confirmed: "تأییدشده",
     executing: "در حال اجرا", succeeded: "موفق", failed: "ناموفق", skipped: "ردشده", cancelled: "لغوشده"
   } : {
-    draft: "Draft", needs_input: "Needs input", ready_for_confirmation: "Preview ready", confirmed: "Confirmed",
+    queued: "Queued", draft: "Draft", needs_input: "Needs input", ready_for_confirmation: "Preview ready", confirmed: "Confirmed",
     executing: "Executing", succeeded: "Succeeded", failed: "Failed", skipped: "Skipped", cancelled: "Cancelled"
   };
   const lifecycleLabel = (value: ActionLifecycle) => lifecycleLabels[value] ?? (isFa ? "اطلاعات موجود نیست" : "Not available");
@@ -158,6 +155,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<Partial<Record<ActionLifecycle, number>>>({});
+  const [actionPlanCount, setActionPlanCount] = useState(0);
   const [historyBusy, setHistoryBusy] = useState(true);
   const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
   const [historyNotice, setHistoryNotice] = useState("");
@@ -173,6 +172,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
       const response = await listActionCenter({ view, q: query, status, offset, limit: 10 });
       setItems(response.items);
       setTotal(response.total);
+      setSummary(response.summary);
+      setActionPlanCount(Object.values(response.summary).reduce((sum, count) => sum + count, 0));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "ActionPlan history failed.");
     } finally {
@@ -211,7 +212,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   useEffect(() => {
     if (!selected) return;
     setReviewParameters(reviewParametersFrom(selected.parametersJson));
-  }, [selected?.id, selected?.updatedAt]);
+  }, [selected]);
 
   useEffect(() => {
     setActionId("");
@@ -363,14 +364,14 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     finally { setActionBusy(false); }
   }
 
-  async function clearCompletedHistory() {
+  async function clearAllHistory() {
     setHistoryBusy(true); setError(""); setHistoryNotice("");
     try {
       const response = await clearActionCenterHistory();
       setClearHistoryOpen(false);
-      setSelected((current) => current && ["succeeded", "failed", "skipped", "cancelled"].includes(current.lifecycleState) ? null : current);
+      setSelected((current) => current?.lifecycleState === "executing" ? current : null);
       if (initialActionPlanId) navigate("/actions/history");
-      setHistoryNotice(isFa ? `${response.deleted} رکورد نهایی حذف شد؛ ${response.retainedActive} اکشن فعال حفظ شد.` : `${response.deleted} completed records deleted; ${response.retainedActive} active actions preserved.`);
+      setHistoryNotice(isFa ? `${response.archived} رکورد از تاریخچه پاک شد؛ ${response.retainedActive} عملیات در حال اجرا حفظ شد.` : `${response.archived} records cleared from history; ${response.retainedActive} executing actions preserved.`);
       setOffset(0);
       await loadHistory();
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not clear ActionPlan history."); }
@@ -382,10 +383,16 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const pages = Math.max(1, Math.ceil(total / 10));
   const currentPage = Math.floor(offset / 10) + 1;
   const selectedActionName = selected ? actionDisplayName(selected, isFa) : "";
+  const pendingCount = (summary.queued ?? 0) + (summary.ready_for_confirmation ?? 0) + (summary.confirmed ?? 0);
+  const activeCount = summary.executing ?? 0;
+  const succeededCount = summary.succeeded ?? 0;
+  const failedCount = summary.failed ?? 0;
+  const selectedHistoryId = selected?.id;
   const selectedExecutionPermission = selected
     ? actionExecutionPermission(user, selected.riskLevel, isFa)
     : { allowed: false, reason: null };
   const historyActionLabel = (item: ActionCenterItem) => {
+    if (item.lifecycleState === "queued") return isFa ? "مشاهده زمان‌بندی" : "View schedule";
     if (item.controls.canPreview) return isFa ? "بررسی و ساخت پیش‌نمایش" : "Review and preview";
     if (item.controls.canConfirm || item.controls.canExecute) return isFa ? "بررسی و تأیید اجرا" : "Review and execute";
     if (item.lifecycleState === "failed") return isFa ? "بررسی و تلاش دوباره" : "Review and retry";
@@ -395,17 +402,15 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   return (
     <section className="action-workspace operator-action-center" aria-label="Action Center">
-      {selected && <section ref={handoffRef} className="operator-handoff" aria-label={isFa ? "اکشن انتخاب‌شده" : "Selected action"} tabIndex={-1}>
-        <div><p className="operator-eyebrow">{isFa ? "اکشن آماده بررسی" : "Action ready for review"}</p><h2>{selectedActionName}</h2><span>{selected.device?.name || (isFa ? "اطلاعات دستگاه موجود نیست" : "Device information is not available")}</span></div>
-        <div className="operator-result__actions">
-          {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-          {selected.controls.canEditParameters && <Link className="secondary-button" to={`/actions/${encodeURIComponent(selected.id)}/configure`}>{isFa ? "تنظیم پارامترها" : "Configure parameters"}</Link>}
-          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy || !selectedExecutionPermission.allowed} title={selectedExecutionPermission.reason ?? undefined} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
-          {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
-          {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
-        </div>
+      {!selected && <section className="operations-summary" aria-label={isFa ? "خلاصه وضعیت عملیات" : "Operations summary"}>
+        <div className="operations-summary__intro"><span>{isFa ? "نمای سریع" : "At a glance"}</span><strong>{isFa ? `${actionPlanCount.toLocaleString("fa-IR")} عملیات ثبت‌شده` : `${actionPlanCount.toLocaleString("en-US")} recorded operations`}</strong></div>
+        <div className="operations-summary__metric operations-summary__metric--pending"><span>{isFa ? "نیازمند بررسی" : "Needs review"}</span><strong>{pendingCount.toLocaleString(locale)}</strong></div>
+        <div className="operations-summary__metric operations-summary__metric--active"><span>{isFa ? "در حال اجرا" : "Executing"}</span><strong>{activeCount.toLocaleString(locale)}</strong></div>
+        <div className="operations-summary__metric operations-summary__metric--success"><span>{isFa ? "موفق" : "Succeeded"}</span><strong>{succeededCount.toLocaleString(locale)}</strong></div>
+        <div className="operations-summary__metric operations-summary__metric--failed"><span>{isFa ? "ناموفق" : "Failed"}</span><strong>{failedCount.toLocaleString(locale)}</strong></div>
       </section>}
-      {selected && <InlineActionReviewPanel
+
+      {selected && <section ref={handoffRef} className="operator-handoff operations-review-focus" aria-label={isFa ? "اکشن انتخاب‌شده" : "Selected action"} tabIndex={-1}><InlineActionReviewPanel
         item={selected}
         actionName={selectedActionName}
         isFa={isFa}
@@ -421,29 +426,31 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
           setSelected(null);
           if (initialActionPlanId) navigate("/actions");
         }}
-      />}
-      {selected && reviewOpen && <section className="action-review-dialog" role="dialog" aria-modal="true" aria-label="Execution review"><div className="action-review-dialog__card"><header><div><p className="operator-eyebrow">Explicit confirmation</p><h2>Review action execution</h2></div><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Close</button></header><dl className="detail-list"><dt>Target device</dt><dd>{selected.device?.name ?? selected.deviceId ?? "-"}</dd><dt>Action purpose</dt><dd>{selectedActionName}</dd><dt>Risk</dt><dd>{selected.riskLevel}</dd><dt>Backup requirement</dt><dd>{String(selected.rollback.required ?? selected.commandPreview.requiresBackup ?? selected.validationJson.requiresBackup ?? "Not specified")}</dd></dl><section><h3>Generated commands</h3>{commandLines(selected.commandPreview).length ? <ol className="command-review-list">{commandLines(selected.commandPreview).map((command, index) => <li key={`${command}-${index}`}><code dir="ltr">{command}</code></li>)}</ol> : <p>Generate a preview first to show commands.</p>}</section><section><h3>Editable parameters</h3>{Object.keys(reviewParameters).length ? <div className="operator-parameters">{Object.entries(reviewParameters).map(([key, value]) => <label key={key}>{humanize(key)}<input value={value} onChange={(event) => setReviewParameters((current) => ({ ...current, [key]: event.target.value }))} /></label>)}</div> : <p>No simple editable parameters are available.</p>}</section><footer className="button-row"><button className="secondary-button" type="button" disabled={actionBusy} onClick={() => setReviewOpen(false)}>Cancel</button><button className="primary-button operator-execute" type="button" disabled={actionBusy || !selectedExecutionPermission.allowed} title={selectedExecutionPermission.reason ?? undefined} onClick={() => void executeSelected()}>{actionBusy ? copy.running : "Confirm and execute"}</button></footer></div></section>}
+      /></section>}
+      {selected && reviewOpen && <ExecutionReviewDialog item={selected} actionName={selectedActionName} parameters={reviewParameters} permission={selectedExecutionPermission} busy={actionBusy} isFa={isFa} onParameterChange={(key, value) => setReviewParameters((current) => ({ ...current, [key]: value }))} onCancel={() => setReviewOpen(false)} onConfirm={() => void executeSelected()} />}
+      {!selected && <div className="operations-compose-grid">
       <section className={`operator-connection operator-connection--${connectionTone}`} aria-label={copy.connection}>
         <header>
-          <div><p className="operator-eyebrow">{copy.connection}</p><h2>{verification?.connected ? copy.connected : verification?.error ? copy.failed : copy.notTested}</h2><span>{copy.connectionHelp}</span></div>
+          <div><p className="operator-eyebrow">{isFa ? "آمادگی اجرا" : "Execution readiness"}</p><h2>{!selectedDevice ? (isFa ? "یک دستگاه انتخاب کنید" : "Select a device") : verification?.connected ? copy.connected : verification?.error ? copy.failed : copy.notTested}</h2><span>{!selectedDevice ? (isFa ? "پس از انتخاب دستگاه، وضعیت واقعی اتصال اینجا نمایش داده می‌شود." : "Live connection readiness appears here after selecting a device.") : copy.connectionHelp}</span></div>
           <div className="operator-connection__actions">
             <button className="secondary-button" type="button" disabled={!selectedDevice || !credentialId || connectionBusy} onClick={() => void runConnection(false)}>{connectionBusy ? copy.testing : copy.test}</button>
             <button className="secondary-button" type="button" disabled={!selectedDevice || connectionBusy} onClick={() => void refreshConnection()}>{copy.refresh}</button>
             {verification?.error && <button className="primary-button" type="button" disabled={connectionBusy} onClick={() => void runConnection(true)}>{copy.retry}</button>}
           </div>
         </header>
-        <div className="operator-connection__grid">
+        {selectedDevice && <div className="operator-device-identity"><span>{selectedDevice.name}</span><strong dir="ltr">{selectedDevice.host}</strong><small>{selectedDevice.vendor} · {selectedDevice.protocol}</small></div>}
+        {selectedDevice && <div className="operator-connection__grid">
           <div><span>{copy.lastSuccess}</span><strong>{formatDate(verification?.lastSuccessAt, locale)}</strong></div>
           <div><span>{copy.lastFailure}</span><strong>{formatDate(verification?.lastFailureAt ?? latestFailure?.attemptedAt, locale)}</strong></div>
           <div><span>{copy.connectorState}</span><strong>{verification?.connectorState ?? "unknown"}</strong><small>{verification?.connectorType ?? "—"}</small></div>
           <div><span>{copy.ssh}</span><strong>{verification?.sshReachability ?? "unknown"}</strong></div>
           <div><span>{copy.auth}</span><strong>{verification?.authenticationStatus ?? "unknown"}</strong></div>
-        </div>
+        </div>}
         {verification?.error && <div className="operator-connection__error" role="alert">{verification.error}</div>}
       </section>
 
       <section className="operator-run-card" aria-label={copy.operatorAction}>
-        <header><div><p className="operator-eyebrow">Operator workflow</p><h2>{copy.operatorAction}</h2><span>{copy.operatorHelp}</span></div></header>
+        <header><div><p className="operator-eyebrow">{isFa ? "ساخت عملیات" : "Build operation"}</p><h2>{isFa ? "چه کاری انجام شود؟" : "What should be done?"}</h2><span>{isFa ? "هدف، اعتبارنامه و عملیات را انتخاب کنید؛ ابتدا فقط یک پیش‌نمایش امن ساخته می‌شود." : "Choose the target, credential, and operation; an inspection-only preview is created first."}</span></div><span className="operator-run-card__safe-note">{isFa ? "بدون تغییر دستگاه" : "No device changes"}</span></header>
         <div className="operator-run-card__selectors">
           <label>{copy.selectDevice}<select aria-label={copy.selectDevice} value={deviceId} onChange={(event) => setDeviceId(event.target.value)}><option value="">{copy.choose}</option>{devices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.vendor}</option>)}</select></label>
           <label>{copy.selectCredential}<select aria-label={copy.selectCredential} value={credentialId} disabled={!selectedDevice} onChange={(event) => setCredentialId(event.target.value)}><option value="">{copy.choose}</option>{credentials.map((credential) => <option key={credential.id} value={credential.id}>{credential.name} · {credential.type}</option>)}</select></label>
@@ -455,36 +462,20 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         </section>}
 
         {error && <div className="state-panel state-panel--error" role="alert">{error}</div>}
-        <footer><p>{copy.previewHelp}</p><button className="primary-button operator-execute" type="button" disabled={!selectedDevice || !credentialId || !selectedAction || !requiredComplete || actionBusy} onClick={() => void runOperatorAction()}>{actionBusy ? copy.running : copy.generatePreview}</button></footer>
+        <footer><p>{isFa ? "مرحله بعد: بازبینی فرمان‌ها و تأیید صریح شما" : "Next: inspect generated commands and explicitly confirm"}</p><button className="primary-button operator-execute" type="button" disabled={!selectedDevice || !credentialId || !selectedAction || !requiredComplete || actionBusy} onClick={() => void runOperatorAction()}>{actionBusy ? copy.running : copy.generatePreview}</button></footer>
       </section>
+      </div>}
 
-      {selected && <section className={`operator-result operator-result--${selected.lifecycleState}`} aria-label={copy.result}>
-        <header><div><p className="operator-eyebrow">{copy.result}</p><h2>{selectedActionName}</h2></div><StatusBadge value={lifecycleLabel(selected.lifecycleState)} tone={selected.lifecycleState === "succeeded" ? "good" : selected.lifecycleState === "failed" ? "danger" : "warning"} /></header>
-        <p>{resultMessage(selected, isFa)}</p>
-        <div className="operator-result__proof"><span>{copy.connectorProof}</span><strong>{selected.evidence.connectorInvoked ? (isFa ? "اجرای کانکتور ثبت شد" : "Connector execution recorded") : (isFa ? "فقط پیش‌نمایش یا توقف قبل از اجرا" : "Preview only or stopped before execution")}</strong><small>{formatDate(selected.updatedAt, locale)}</small></div>
-        {!selected.support.executable && <div className="state-panel state-panel--error" role="alert"><strong>{isFa ? "غیرقابل اجرا" : "Unsupported action"}</strong><p>{String(selected.support.reason ?? (isFa ? "برای این فروشنده Connector ثبت‌شده‌ای وجود ندارد." : "No registered connector supports this action for the selected vendor."))}</p></div>}
-        <div className="operator-result__actions">
-          {selected.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={actionBusy} onClick={() => void previewSelected()}>{actionBusy ? copy.running : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
-          {selected.controls.canEditParameters && <Link className="secondary-button" to={`/actions/${encodeURIComponent(selected.id)}/configure`}>{isFa ? "تنظیم پارامترها" : "Configure parameters"}</Link>}
-          {(selected.controls.canConfirm || selected.controls.canExecute) && <button className="primary-button operator-execute" type="button" disabled={actionBusy || !selectedExecutionPermission.allowed} title={selectedExecutionPermission.reason ?? undefined} onClick={openExecutionReview}>{actionBusy ? copy.running : selected.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : copy.executeNow}</button>}
-          {selected.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
-          {selected.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={actionBusy} onClick={() => void repeatSelected()}>{isFa ? "اجرای دوباره" : "Run again"}</button>}
-        </div>
-        {(selected.lifecycleState === "executing" || selected.connectorResult.stdout !== undefined || selected.connectorResult.stderr !== undefined) && <section className="operator-live-result" aria-live="polite"><h3>{isFa ? "خروجی زنده" : "Live result"}</h3><p><strong>{isFa ? "وضعیت نهایی" : "Final status"}:</strong> {lifecycleLabel(selected.lifecycleState)}</p><h4>stdout</h4><pre>{String(selected.connectorResult.stdout ?? (isFa ? "اطلاعات موجود نیست" : "Not available"))}</pre><h4>stderr</h4><pre>{String(selected.connectorResult.stderr ?? (isFa ? "اطلاعات موجود نیست" : "Not available"))}</pre><h4>{isFa ? "شواهد" : "Evidence"}</h4><pre>{pretty(selected.evidence)}</pre></section>}
-        {selected.controls.relatedDevicePath && <Link className="secondary-link" to={selected.controls.relatedDevicePath}>{isFa ? "باز کردن فضای کاری دستگاه" : "Open Device Workspace"}</Link>}
-        <details className="operator-advanced"><summary>{copy.advanced}</summary><div><AdvancedBlock title="Command preview" value={selected.commandPreview} /><AdvancedBlock title="Validation" value={selected.validationJson} /><AdvancedBlock title="Connector result" value={selected.connectorResult} /><AdvancedBlock title="Evidence and audit" value={{ evidence: selected.evidence, audit: selected.audit }} /></div></details>
-      </section>}
-
-      <details className="operator-history" open={view === "history" || Boolean(initialActionPlanId)}>
-        <summary><span><strong>{copy.history}</strong><small>{copy.historyHelp}</small></span><span>{total}</span></summary>
+      {!selected && <section className="operator-history">
+        <header className="operator-history__header"><span><strong>{isFa ? "صف عملیات" : "Operations queue"}</strong><small>{isFa ? "موارد نیازمند بررسی، اجراهای اخیر و نتیجه‌ها در یک فهرست قابل جست‌وجو" : "Review requests, recent executions, and results in one searchable queue"}</small></span><span>{total.toLocaleString(locale)}</span></header>
         <div className="operator-history__content">
-          <div className="action-workspace__toolbar"><div className="button-row"><button className="secondary-button" type="button" onClick={onCreate}>{copy.fullLibrary}</button><button className="danger-button" type="button" disabled={historyBusy || total === 0} onClick={() => setClearHistoryOpen(true)}>{isFa ? "پاک‌کردن تاریخچه" : "Clear history"}</button></div><nav className="action-workspace__views" aria-label={copy.history}><Link aria-current={view === "all" ? "page" : undefined} to="/actions">{isFa ? "همه" : "All"}</Link><Link aria-current={view === "pending" ? "page" : undefined} to="/actions/pending">{isFa ? "در انتظار" : "Pending"}</Link><Link aria-current={view === "history" ? "page" : undefined} to="/actions/history">{copy.history}</Link></nav></div>
-          {clearHistoryOpen && <section className="destructive-confirm" role="alertdialog" aria-label={isFa ? "تأیید پاک‌کردن تاریخچه" : "Confirm clearing history"}><strong>{isFa ? "تاریخچه نهایی پاک شود؟" : "Clear completed history?"}</strong><p>{isFa ? "اکشن‌های موفق، ناموفق و لغوشده همراه Audit وابسته حذف می‌شوند. اکشن‌های در انتظار یا در حال اجرا حفظ می‌شوند." : "Succeeded, failed, and cancelled actions and their related audit are deleted. Pending or executing actions are preserved."}</p><div className="button-row"><button className="danger-button" type="button" disabled={historyBusy} onClick={() => void clearCompletedHistory()}>{isFa ? "بله، تاریخچه نهایی پاک شود" : "Yes, clear completed history"}</button><button className="secondary-button" type="button" disabled={historyBusy} onClick={() => setClearHistoryOpen(false)}>{isFa ? "انصراف" : "Cancel"}</button></div></section>}
+          <div className="action-workspace__toolbar"><div className="button-row"><button className="secondary-button" type="button" onClick={onCreate}>{copy.fullLibrary}</button><button className="danger-button" type="button" disabled={historyBusy || actionPlanCount === 0} onClick={() => setClearHistoryOpen(true)}>{isFa ? "پاک‌کردن تاریخچه" : "Clear history"}</button></div><nav className="action-workspace__views" aria-label={copy.history}><Link aria-current={view === "all" ? "page" : undefined} to="/actions">{isFa ? "همه" : "All"}</Link><Link aria-current={view === "pending" ? "page" : undefined} to="/actions/pending">{isFa ? "در انتظار" : "Pending"}</Link><Link aria-current={view === "history" ? "page" : undefined} to="/actions/history">{copy.history}</Link></nav></div>
+          {clearHistoryOpen && <section className="destructive-confirm" role="alertdialog" aria-label={isFa ? "تأیید پاک‌کردن تاریخچه" : "Confirm clearing history"}><strong>{isFa ? "همه تاریخچه پاک شود؟" : "Clear all history?"}</strong><p>{isFa ? "همه ActionPlanها با هر وضعیت از تاریخچه پاک می‌شوند؛ فقط عملیات در حال اجرا حفظ می‌شود. اطلاعات Audit حذف فیزیکی نمی‌شود." : "ActionPlans in every state are cleared; only executing operations are preserved. Audit evidence is not physically deleted."}</p><div className="button-row"><button className="danger-button" type="button" disabled={historyBusy} onClick={() => void clearAllHistory()}>{isFa ? "بله، همه تاریخچه پاک شود" : "Yes, clear all history"}</button><button className="secondary-button" type="button" disabled={historyBusy} onClick={() => setClearHistoryOpen(false)}>{isFa ? "انصراف" : "Cancel"}</button></div></section>}
           {historyNotice && <div className="state-panel state-panel--success" role="status">{historyNotice}</div>}
           <div className="filter-bar action-workspace__filters"><input aria-label={copy.search} placeholder={copy.search} value={query} onChange={(event) => { setQuery(event.target.value); setOffset(0); }} /><select aria-label={copy.lifecycle} value={status} onChange={(event) => { setStatus(event.target.value); setOffset(0); }}><option value="">{copy.allStates}</option>{Object.entries(lifecycleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-          <section className="table-shell action-list" aria-busy={historyBusy}>{historyBusy ? <div className="state-panel">{copy.loading}</div> : items.length === 0 ? <div className="state-panel">{copy.empty}</div> : <table><thead><tr><th>{copy.action}</th><th>{copy.device}</th><th>{copy.lifecycle}</th><th>{copy.updated}</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : ""}><td><strong>{actionDisplayName(item, isFa)}</strong><small>{item.id}</small></td><td>{item.device?.name || (isFa ? "اطلاعات موجود نیست" : "Not available")}</td><td><StatusBadge value={lifecycleLabel(item.lifecycleState)} tone={item.lifecycleState === "succeeded" ? "good" : item.lifecycleState === "failed" ? "danger" : "warning"} /></td><td>{formatDate(item.updatedAt, locale)}</td><td><button className={item.controls.canPreview || item.controls.canConfirm || item.controls.canExecute ? "primary-button" : "text-button"} type="button" onClick={() => navigate(`/actions/${encodeURIComponent(item.id)}`)}>{historyActionLabel(item)}</button></td></tr>)}</tbody></table>}{!historyBusy && total > 0 && <div className="action-pagination"><button className="secondary-button" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 10))}>{copy.previous}</button><span>{currentPage} / {pages}</span><button className="secondary-button" type="button" disabled={offset + 10 >= total} onClick={() => setOffset(offset + 10)}>{copy.next}</button></div>}</section>
+          <section className="table-shell action-list" aria-busy={historyBusy}>{historyBusy ? <div className="state-panel">{copy.loading}</div> : items.length === 0 ? <div className="state-panel">{copy.empty}</div> : <table><thead><tr><th>{copy.action}</th><th>{copy.device}</th><th>{copy.lifecycle}</th><th>{copy.updated}</th><th /></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={selectedHistoryId === item.id ? "is-selected" : ""}><td><strong>{actionDisplayName(item, isFa)}</strong><small>{item.id}</small></td><td>{item.device?.name || (isFa ? "اطلاعات موجود نیست" : "Not available")}</td><td><StatusBadge value={lifecycleLabel(item.lifecycleState)} tone={item.lifecycleState === "succeeded" ? "good" : item.lifecycleState === "failed" ? "danger" : "warning"} /></td><td>{formatDate(item.updatedAt, locale)}</td><td><button className={item.controls.canPreview || item.controls.canConfirm || item.controls.canExecute ? "primary-button" : "text-button"} type="button" onClick={() => navigate(`/actions/${encodeURIComponent(item.id)}`)}>{historyActionLabel(item)}</button></td></tr>)}</tbody></table>}{!historyBusy && total > 0 && <div className="action-pagination"><button className="secondary-button" type="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 10))}>{copy.previous}</button><span>{currentPage} / {pages}</span><button className="secondary-button" type="button" disabled={offset + 10 >= total} onClick={() => setOffset(offset + 10)}>{copy.next}</button></div>}</section>
         </div>
-      </details>
+      </section>}
     </section>
   );
 }

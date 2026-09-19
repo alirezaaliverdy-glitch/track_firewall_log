@@ -375,12 +375,14 @@ export function compileRouterOsAction(input: {
     return result({ category: "system", riskLevel: AiRiskLevel.medium, normalizedParameters: { name }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/system identity set name=<name>", command, target: { name }, rollbackSteps: ["Restore previous identity from backup/export."], warnings: [] })], rollbackJson: { type: "restore_identity_manual" } });
   }
 
-  const rebootActions = new Set<ActionType>([ActionType.mikrotik_reboot, ActionType.mikrotik_schedule_reboot]);
+  const rebootActions = new Set<ActionType>([ActionType.mikrotik_reboot, ActionType.mikrotik_shutdown, ActionType.mikrotik_schedule_reboot]);
   if (rebootActions.has(actionType)) {
     const schedule = actionType === ActionType.mikrotik_schedule_reboot;
+    const shutdown = actionType === ActionType.mikrotik_shutdown;
     const delay = duration(p, "delay", "5m");
-    const command = schedule ? `/system scheduler add name=${quote(`firewall-log-analyzer-reboot-${Date.now()}`)} start-time=startup interval=0 on-event=${quote(`/system reboot`)} disabled=yes` : "/system reboot";
-    return result({ category: "system", riskLevel: AiRiskLevel.critical, normalizedParameters: { delay }, requiresBackup: true, requiresBreakGlass: true, lockoutSensitive: true, warnings: ["Reboot is critical and requires break-glass."], commandSpecs: [spec({ template: schedule ? "/system scheduler add disabled reboot job" : "/system reboot", command, target: { delay }, rollbackSteps: schedule ? ["Remove scheduled reboot job before enabling/running it."] : [], warnings: [] })], rollbackJson: { type: schedule ? "remove_scheduled_reboot" : "none_reboot" } });
+    const command = schedule ? `/system scheduler add name=${quote(`firewall-log-analyzer-reboot-${Date.now()}`)} start-time=startup interval=0 on-event=${quote(`/system reboot`)} disabled=yes` : shutdown ? "/system shutdown" : "/system reboot";
+    const operation = shutdown ? "Shutdown" : "Reboot";
+    return result({ category: "system", riskLevel: AiRiskLevel.critical, normalizedParameters: { delay }, requiresBackup: true, requiresBreakGlass: true, lockoutSensitive: true, warnings: [`${operation} interrupts management connectivity and requires explicit confirmation.`], commandSpecs: [spec({ template: schedule ? "/system scheduler add disabled reboot job" : shutdown ? "/system shutdown" : "/system reboot", command, target: { delay }, rollbackSteps: schedule ? ["Remove scheduled reboot job before enabling/running it."] : [], warnings: [] })], rollbackJson: { type: schedule ? "remove_scheduled_reboot" : shutdown ? "none_shutdown" : "none_reboot" } });
   }
 
   throw new Error("ROUTEROS_UNSUPPORTED_FEATURE");

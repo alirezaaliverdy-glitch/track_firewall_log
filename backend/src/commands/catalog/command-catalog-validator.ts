@@ -4,7 +4,7 @@ import type { CommandCatalogItem, CommandVendor } from "./types.js";
 import { getDeviceConnectors, getVendorPlanners } from "../../connectors/connector-registry.service.js";
 import { evaluateCatalogSupportState } from "./support-state.js";
 
-const vendors = new Set<CommandVendor>(["linux", "mikrotik", "fortigate", "cisco", "pfsense", "juniper", "paloalto", "windows", "generic"]);
+const vendors = new Set<CommandVendor>(["linux", "mikrotik", "fortigate", "cisco", "sophos", "pfsense", "juniper", "paloalto", "windows", "generic"]);
 export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
   const errors: string[] = []; const ids = new Set<string>(); const actionTypes = new Set<string>(Object.values(ActionType));
   for (const item of items) {
@@ -28,7 +28,7 @@ export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
       if (!template) errors.push(`${prefix}: verified command has no registered template`);
       else if (template.actionType !== item.actionType || template.connectorType !== item.connectorType) errors.push(`${prefix}: template/action/connector mismatch`);
       else {
-        const connectorVendor = template.connectorType === "linux-ssh" ? "linux_edge" : template.connectorType === "fortigate-ssh" ? "fortigate" : template.connectorType === "cisco-ios-xe-ssh" ? "cisco" : "mikrotik";
+        const connectorVendor = template.connectorType === "linux-ssh" ? "linux_edge" : template.connectorType === "fortigate-ssh" ? "fortigate" : template.connectorType === "cisco-ios-xe-ssh" ? "cisco" : template.connectorType === "sophos-api" ? "sophos" : "mikrotik";
         const connector = getDeviceConnectors().find((candidate) => candidate.name === connectorVendor);
         const planner = getVendorPlanners().find((candidate) => candidate.vendor === connectorVendor);
         if (!connector?.supportedActions.includes(item.actionType as ActionType)) errors.push(`${prefix}: action is absent from real connector`);

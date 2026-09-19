@@ -32,9 +32,14 @@ function projectedSuccess(plan: Pick<ActionPlan, "status" | "resultJson">) {
   return plan.status === ActionPlanStatus.succeeded && connectorInvoked(plan);
 }
 
-function displayTitle(plan: Pick<ActionPlan, "actionType" | "parametersJson">) {
+function displayTitles(plan: Pick<ActionPlan, "actionType" | "parametersJson">) {
   const item = catalogFor(plan);
-  return item?.titleEn || item?.titleFa || String(plan.actionType).replace(/_/g, " ");
+  const fallback = String(plan.actionType).replace(/_/g, " ");
+  return {
+    title: item?.titleFa || item?.titleEn || fallback,
+    titleFa: item?.titleFa || item?.titleEn || fallback,
+    titleEn: item?.titleEn || item?.titleFa || fallback
+  };
 }
 
 function isConfigurationChange(plan: Pick<ActionPlan, "actionType" | "parametersJson" | "status" | "resultJson">) {
@@ -47,9 +52,10 @@ function isConfigurationChange(plan: Pick<ActionPlan, "actionType" | "parameters
 function planSummary(plan: ActionPlan & { device: Pick<Device, "id" | "name" | "vendor" | "host"> | null }) {
   const item = catalogFor(plan);
   const success = projectedSuccess(plan);
+  const titles = displayTitles(plan);
   return {
     id: plan.id,
-    title: displayTitle(plan),
+    ...titles,
     actionType: plan.actionType,
     status: plan.status,
     outcome: success ? "succeeded" : plan.status === ActionPlanStatus.succeeded ? "failed_integrity" : plan.status,
@@ -98,7 +104,7 @@ export async function getOperationalDashboardActivity() {
   const configurationChanges = [
     ...plans.filter(isConfigurationChange).map((plan) => ({
       id: `plan:${plan.id}`,
-      title: displayTitle(plan),
+      title: displayTitles(plan).title,
       source: "action" as const,
       status: plan.status,
       actionType: plan.actionType,

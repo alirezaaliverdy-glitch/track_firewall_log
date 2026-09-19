@@ -1,29 +1,32 @@
 import { useState } from "react";
 import type { AiMessage } from "@/lib/ai";
 import { formatDateTime } from "../assistantUiHelpers";
+import "./AssistantMessageList.css";
 
-export function ChatMessageBubble({ message }: { message: AiMessage }) {
+export function ChatMessageBubble({ message, isFa = false }: { message: AiMessage; isFa?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const long = message.content.length > 360;
   const content = long && !expanded ? `${message.content.slice(0, 360)}...` : message.content;
+  const isUser = message.role === "user";
+  const sender = isUser ? (isFa ? "شما" : "You") : (isFa ? "دستیار" : "Assistant");
+  const sentAt = formatDateTime(message.createdAt);
+
   return (
-    <div
-      className={`rounded-lg border px-3 py-2 text-left ${
-        message.role === "user"
-          ? "ml-auto max-w-[82%] border-blue-800/70 bg-blue-950/30"
-          : "mr-auto max-w-[88%] border-zinc-800 bg-zinc-900/70"
-      }`}
+    <article
+      className={`assistant-chat-message assistant-chat-message--${isUser ? "user" : "assistant"}`}
+      dir={isFa ? "rtl" : "ltr"}
+      aria-label={`${sender} · ${sentAt}`}
+      title={`${sender} · ${sentAt}`}
     >
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium uppercase text-zinc-500">{message.role}</span>
-        <span className="text-[10px] text-zinc-600">{formatDateTime(message.createdAt)}</span>
+      <span className="sr-only">{sender}</span>
+      <div className="assistant-chat-message__bubble">
+        <p>{content}</p>
+        {long && (
+          <button type="button" onClick={() => setExpanded((value) => !value)} className="assistant-chat-message__expand">
+            {expanded ? (isFa ? "نمایش کمتر" : "Show less") : (isFa ? "نمایش کامل" : "Show more")}
+          </button>
+        )}
       </div>
-      <p className="whitespace-pre-wrap text-xs leading-5 text-zinc-200">{content}</p>
-      {long && (
-        <button type="button" onClick={() => setExpanded((value) => !value)} className="mt-1 text-xs text-blue-300">
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
-    </div>
+    </article>
   );
 }

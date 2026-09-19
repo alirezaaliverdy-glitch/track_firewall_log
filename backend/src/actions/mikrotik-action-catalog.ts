@@ -80,6 +80,7 @@ const MIKROTIK_ACTIONS = new Set<ActionType>([
   ActionType.mikrotik_show_logs,
   ActionType.mikrotik_show_resources,
   ActionType.mikrotik_reboot,
+  ActionType.mikrotik_shutdown,
   ActionType.mikrotik_schedule_reboot,
   ActionType.mikrotik_disable_rule_by_id,
   ActionType.mikrotik_remove_rule_by_id

@@ -2,7 +2,7 @@ import { VENDOR_REGISTRY } from "../vendors/vendor.registry.js";
 import type { ProductFeature, ProductFeatureState, ProductIntegrationState, ProductNavigationGroup } from "./product-state.types.js";
 
 const VERIFIED_AT = "2026-07-13";
-export const PRODUCT_STATE_CONTRACT_VERSION = "19.2-A";
+export const PRODUCT_STATE_CONTRACT_VERSION = "20.1-A";
 
 function feature(input: Omit<ProductFeature, "lastVerifiedAt">): ProductFeature {
   return { ...input, lastVerifiedAt: input.tested ? VERIFIED_AT : undefined };
@@ -26,14 +26,17 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
   feature({ key: "assets.vendor_detail", titleFa: "جزئیات وندور", titleEn: "Vendor detail", route: "/assets/vendors/:vendorKey", groupKey: "assets", order: 43, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.sites", titleFa: "سایت‌ها", titleEn: "Sites", route: "/assets/sites", groupKey: "assets", order: 50, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
   feature({ key: "assets.networks", titleFa: "شبکه‌ها و VLANها", titleEn: "Networks and VLANs", route: "/assets/networks", groupKey: "assets", order: 60, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
-  feature({ key: "assets.topology", titleFa: "توپولوژی", titleEn: "Topology", route: "/assets/topology", groupKey: "assets", order: 70, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
+  feature({ key: "assets.topology", titleFa: "پورت‌ها و اتصالات", titleEn: "Ports & connections", route: "/assets/topology", groupKey: "assets", order: 25, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
 
   feature({ key: "security.overview", titleFa: "نمای کلی", titleEn: "Overview", route: "/security", groupKey: "security", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "security.findings", titleFa: "یافته‌ها", titleEn: "Findings", route: "/security/findings", groupKey: "security", order: 20, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "security.finding_detail", titleFa: "جزئیات یافته", titleEn: "Finding detail", route: "/security/findings/:findingId", groupKey: "security", order: 21, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "security.rules", titleFa: "قوانین تشخیص", titleEn: "Detection rules", route: "/security/rules", groupKey: "security", order: 30, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "The seeded rule library is readable and tested; the full rule lifecycle is deferred to Milestone 19D." }),
-  feature({ key: "security.rule_detail", titleFa: "جزئیات قانون", titleEn: "Rule detail", route: "/security/rules/:ruleId", groupKey: "security", order: 31, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: false, uiReady: false, tested: false }),
+  feature({ key: "security.email_alerts", titleFa: "اعلان‌های ایمیلی", titleEn: "Email alerts", route: "/security/email-alerts", groupKey: "security", order: 31, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "security.rule_detail", titleFa: "جزئیات قانون", titleEn: "Rule detail", route: "/security/rules/:ruleId", groupKey: "security", order: 32, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: false, uiReady: false, tested: false }),
   feature({ key: "security.events", titleFa: "رویدادها", titleEn: "Events", route: "/security/events", groupKey: "security", order: 40, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
+
+  feature({ key: "attackers.overview", titleFa: "مهاجمان", titleEn: "Attackers", route: "/attackers", groupKey: "attackers", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Source IPs require an open security finding and are enriched only with locally provable cross-vendor telemetry." }),
 
   feature({ key: "monitoring.overview", titleFa: "وضعیت کلی", titleEn: "Overview", route: "/monitoring", groupKey: "monitoring", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "monitoring.linux", titleFa: "Linux", titleEn: "Linux", route: "/monitoring/linux", groupKey: "monitoring", order: 20, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Read APIs degrade safely; persisted refresh requires the pending observability migration." }),
@@ -46,31 +49,29 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
   feature({ key: "actions.center", titleFa: "اقدامات", titleEn: "Actions", route: "/actions", groupKey: "actions", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "actions.pending", titleFa: "تأییدهای منتظر", titleEn: "Pending approvals", route: "/actions/pending", groupKey: "actions", order: 20, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "The route currently reuses the complete Action Center without a dedicated pending filter." }),
   feature({ key: "actions.history", titleFa: "تاریخچه اجرا", titleEn: "Execution history", route: "/actions/history", groupKey: "actions", order: 30, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "The route currently reuses the complete Action Center without a dedicated history filter." }),
+  feature({ key: "actions.scheduled", titleFa: "زمان‌بندی عملیات", titleEn: "Scheduled tasks", route: "/actions/scheduled", groupKey: "actions", order: 31, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "actions.configure", titleFa: "تنظیم ActionPlan", titleEn: "Configure ActionPlan", route: "/actions/:actionId/configure", groupKey: "actions", order: 35, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "actions.detail", titleFa: "جزئیات Action", titleEn: "Action detail", route: "/actions/:actionId", groupKey: "actions", order: 40, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "actions.guided", titleFa: "اقدام راهنما", titleEn: "Guided actions", route: "/actions/guided", groupKey: "actions", order: 50, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
 
   feature({ key: "assistant", titleFa: "دستیار هوشمند", titleEn: "AI Assistant", route: "/assistant", groupKey: "assistant", order: 10, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Proposal and guided-workflow paths work; provider availability remains environment-dependent." }),
 
-  feature({ key: "tools.overview", titleFa: "ابزارهای تشخیصی", titleEn: "Diagnostic tools", route: "/tools", groupKey: "integrations", order: 5, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Check-Host-backed public DNS/HTTP/Ping/TCP sessions persist through AuditLog; Nmap and monitors remain gated." }),
-  feature({ key: "tools.network_check", titleFa: "تست سریع شبکه", titleEn: "Network quick check", route: "/tools/network-check", groupKey: "integrations", order: 6, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Public Check-Host-backed quick checks persist session evidence; private targets and Nmap remain policy-gated." }),
-  feature({ key: "tools.domain_check", titleFa: "بررسی دامنه", titleEn: "Domain check", route: "/tools/domain-check", groupKey: "integrations", order: 7, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
-  feature({ key: "tools.ip_check", titleFa: "بررسی IP", titleEn: "IP check", route: "/tools/ip-check", groupKey: "integrations", order: 8, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
-  feature({ key: "tools.nmap", titleFa: "Nmap", titleEn: "Nmap", route: "/tools/nmap", groupKey: "integrations", order: 9, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Safe isolated worker is not implemented yet." }),
-  feature({ key: "tools.dns", titleFa: "DNS", titleEn: "DNS", route: "/tools/dns", groupKey: "integrations", order: 10, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
-  feature({ key: "tools.http", titleFa: "HTTP و TLS", titleEn: "HTTP and TLS", route: "/tools/http", groupKey: "integrations", order: 11, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
-  feature({ key: "tools.ports", titleFa: "پورت‌ها", titleEn: "Ports", route: "/tools/ports", groupKey: "integrations", order: 12, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host TCP workflow." }),
-  feature({ key: "tools.traceroute", titleFa: "مسیر", titleEn: "Traceroute", route: "/tools/traceroute", groupKey: "integrations", order: 13, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Traceroute provider is not implemented yet." }),
-  feature({ key: "tools.ip_info", titleFa: "اطلاعات IP", titleEn: "IP info", route: "/tools/ip-info", groupKey: "integrations", order: 14, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "IP/ASN enrichment provider is not implemented yet." }),
-  feature({ key: "tools.subnet", titleFa: "Subnet", titleEn: "Subnet", route: "/tools/subnet", groupKey: "integrations", order: 15, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Subnet calculator is not implemented yet." }),
-  feature({ key: "tools.history", titleFa: "تاریخچه", titleEn: "History", route: "/tools/history", groupKey: "integrations", order: 16, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Displays persisted diagnostic AuditLog sessions." }),
-  feature({ key: "tools.monitors", titleFa: "مانیتورها", titleEn: "Monitors", route: "/tools/monitors", groupKey: "integrations", order: 17, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Scheduler and monitor run history are not implemented yet." }),
-  feature({ key: "integrations.overview", titleFa: "یکپارچه‌سازی‌ها", titleEn: "Integrations", route: "/integrations", groupKey: "integrations", order: 10, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "The page exposes explicit mock preview workflows only." }),
-  feature({ key: "integrations.netbox", titleFa: "NetBox", titleEn: "NetBox", route: "/integrations/netbox", groupKey: "integrations", order: 20, state: "not_configured", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Only a mock adapter is configured; production apply is disabled.", requirements: ["production endpoint", "credential reference", "health verification"] }),
-  feature({ key: "integrations.wazuh", titleFa: "Wazuh", titleEn: "Wazuh", route: "/integrations/wazuh", groupKey: "integrations", order: 30, state: "not_configured", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Only a mock adapter is configured; production apply is disabled.", requirements: ["production endpoint", "credential reference", "mapping verification"] }),
-  feature({ key: "mobile.local", titleFa: "Local Mode", titleEn: "Local Mode", route: "/mobile-local", groupKey: "settings", order: 5, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Local mobile runtime route uses RuntimeFacade, SQLite, native vault references, pinned SSH contracts, lifecycle state, audit, and backup controls." }),
+  feature({ key: "tools.overview", titleFa: "ابزارهای تشخیصی", titleEn: "Diagnostic tools", route: "/tools", groupKey: "tools", order: 5, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Check-Host-backed public DNS/HTTP/Ping/TCP sessions persist through AuditLog; Nmap and monitors remain gated." }),
+  feature({ key: "tools.network_check", titleFa: "تست سریع شبکه", titleEn: "Network quick check", route: "/tools/network-check", groupKey: "tools", order: 6, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Public Check-Host-backed quick checks persist session evidence; private targets and Nmap remain policy-gated." }),
+  feature({ key: "tools.domain_check", titleFa: "بررسی دامنه", titleEn: "Domain check", route: "/tools/domain-check", groupKey: "tools", order: 7, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
+  feature({ key: "tools.ip_check", titleFa: "بررسی IP", titleEn: "IP check", route: "/tools/ip-check", groupKey: "tools", order: 8, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
+  feature({ key: "tools.nmap", titleFa: "Nmap", titleEn: "Nmap", route: "/tools/nmap", groupKey: "tools", order: 9, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Safe isolated worker is not implemented yet." }),
+  feature({ key: "tools.dns", titleFa: "DNS", titleEn: "DNS", route: "/tools/dns", groupKey: "tools", order: 10, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
+  feature({ key: "tools.http", titleFa: "HTTP و TLS", titleEn: "HTTP and TLS", route: "/tools/http", groupKey: "tools", order: 11, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
+  feature({ key: "tools.ports", titleFa: "پورت‌ها", titleEn: "Ports", route: "/tools/ports", groupKey: "tools", order: 12, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host TCP workflow." }),
+  feature({ key: "tools.traceroute", titleFa: "مسیر", titleEn: "Traceroute", route: "/tools/traceroute", groupKey: "tools", order: 13, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Traceroute provider is not implemented yet." }),
+  feature({ key: "tools.ip_info", titleFa: "اطلاعات IP", titleEn: "IP info", route: "/tools/ip-info", groupKey: "tools", order: 14, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "IP/ASN enrichment provider is not implemented yet." }),
+  feature({ key: "tools.subnet", titleFa: "Subnet", titleEn: "Subnet", route: "/tools/subnet", groupKey: "tools", order: 15, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Subnet calculator is not implemented yet." }),
+  feature({ key: "tools.history", titleFa: "تاریخچه", titleEn: "History", route: "/tools/history", groupKey: "tools", order: 16, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Displays persisted diagnostic AuditLog sessions." }),
+  feature({ key: "tools.monitors", titleFa: "مانیتورها", titleEn: "Monitors", route: "/tools/monitors", groupKey: "tools", order: 17, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: true, tested: false, reason: "Scheduler and monitor run history are not implemented yet." }),
+  feature({ key: "mobile.local", titleFa: "Local Mode", titleEn: "Local Mode", route: "/mobile-local", groupKey: "settings", order: 20, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Local mobile runtime route uses RuntimeFacade, SQLite, native vault references, pinned SSH contracts, lifecycle state, audit, and backup controls." }),
 
-  feature({ key: "settings", titleFa: "تنظیمات", titleEn: "Settings", route: "/settings", groupKey: "settings", order: 10, state: "planned", userVisible: true, navigationVisible: false, backendReady: false, apiReady: false, uiReady: false, tested: false, reason: "Milestone 19F owns the functional Settings Center; 19A must not fake it." })
+  feature({ key: "settings", titleFa: "کاربران و تنظیمات", titleEn: "Users and settings", route: "/settings", groupKey: "settings", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true })
 ];
 
 const NAVIGATION_GROUPS = [
@@ -80,7 +81,7 @@ const NAVIGATION_GROUPS = [
   { key: "monitoring", titleFa: "پایش", titleEn: "Monitoring", iconKey: "monitoring", mobilePrimary: false },
   { key: "actions", titleFa: "اقدامات", titleEn: "Actions", iconKey: "actions", mobilePrimary: true },
   { key: "assistant", titleFa: "دستیار هوشمند", titleEn: "Assistant", iconKey: "assistant", mobilePrimary: false },
-  { key: "integrations", titleFa: "یکپارچه‌سازی‌ها", titleEn: "Integrations", iconKey: "integrations", mobilePrimary: false },
+  { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", mobilePrimary: false },
   { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", mobilePrimary: false }
 ] as const;
 
@@ -105,9 +106,11 @@ export function validateProductState(features: ProductFeature[] = PRODUCT_FEATUR
   return true;
 }
 
-export function getProductNavigation(): ProductNavigationGroup[] {
+export function getProductNavigation(allowedGroups?: readonly string[]): ProductNavigationGroup[] {
   validateProductState();
+  const allowed = allowedGroups ? new Set([...allowedGroups, "settings"]) : null;
   return NAVIGATION_GROUPS.flatMap((group) => {
+    if (allowed && !allowed.has(group.key)) return [];
     const features = PRODUCT_FEATURES.filter((item) => item.groupKey === group.key && item.navigationVisible).sort((a, b) => a.order - b.order);
     const landing = features[0];
     if (!landing?.route) return [];
@@ -131,13 +134,13 @@ export function getProductVendors() {
   }));
 }
 
-export function getProductStateContract() {
+export function getProductStateContract(allowedGroups?: readonly string[]) {
   validateProductState();
   return {
     contractVersion: PRODUCT_STATE_CONTRACT_VERSION,
     verifiedAt: VERIFIED_AT,
     features: PRODUCT_FEATURES,
-    navigation: getProductNavigation(),
+    navigation: getProductNavigation(allowedGroups),
     vendors: getProductVendors(),
     integrations: PRODUCT_INTEGRATIONS
   };

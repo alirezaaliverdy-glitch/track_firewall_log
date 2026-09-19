@@ -67,7 +67,10 @@ const write = (
 });
 
 export const FORTIGATE_FULL_CONTROL_REGISTRY: readonly FortiGateControlAction[] = Object.freeze([
+  write("fortigate_reboot", "راه‌اندازی دوباره FortiGate", "system", "critical", [], { updateTemplate: "execute reboot" }, ["dispatch accepted; SSH disconnect expected"]),
+  write("fortigate_shutdown", "خاموش کردن FortiGate", "system", "critical", [], { updateTemplate: "execute shutdown" }, ["dispatch accepted; SSH disconnect expected"]),
   read("fortigate_show_interfaces", "نمایش اینترفیس‌ها", "interface", "show system interface", "interfaces"),
+  write("fortigate_set_interface_alias", "ثبت توضیح اینترفیس", "interface", "medium", ["name", "alias"], { updateTemplate: "config system interface/edit <name>/set alias" }, ["show full-configuration system interface"]),
   write("fortigate_create_vlan_interface", "ساخت VLAN Interface", "interface", "high", ["name", "parent", "vlanId"], { createTemplate: "config system interface/edit <name>/set type vlan" }, ["show system interface"]),
   write("fortigate_update_interface_ip", "تغییر IP اینترفیس", "interface", "high", ["name", "ip"], { updateTemplate: "config system interface/edit <name>/set ip" }, ["show system interface"]),
   write("fortigate_update_interface_allowaccess", "تغییر دسترسی مدیریتی اینترفیس", "interface", "high", ["name", "allowaccess"], { updateTemplate: "config system interface/edit <name>/set allowaccess" }, ["show system interface"]),

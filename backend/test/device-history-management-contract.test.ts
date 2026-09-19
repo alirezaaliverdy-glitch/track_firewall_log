@@ -18,12 +18,14 @@ test("device and vendor navigation expose overview, edit, and guarded delete con
   assert.match(deviceUi, /deleteName\.trim\(\) !== workspace\.device\.name/);
 });
 
-test("ActionPlan history clearing is admin-only, explicitly confirmed, and preserves active plans", async () => {
+test("ActionPlan history clearing is admin-only, explicitly confirmed, and clears every non-executing plan", async () => {
   assert.match(actionsRoute, /delete<\{ Body: \{ confirmation\?: string \} \}>\("\/api\/action-center\/history"/);
   assert.match(actionsRoute, /DELETE ACTION HISTORY/);
-  assert.match(actionService, /ActionPlanStatus\.succeeded/);
-  assert.match(actionService, /ActionPlanStatus\.failed/);
-  assert.match(actionService, /notIn: terminalStatuses/);
+  assert.match(actionService, /not: ActionPlanStatus\.executing/);
+  assert.match(actionService, /status: ActionPlanStatus\.executing/);
+  assert.doesNotMatch(actionService, /terminalStatuses/);
+  assert.match(actionUi, /response\.archived/);
+  assert.match(actionUi, /Clear all history/);
   assert.match(actionUi, /پاک‌کردن تاریخچه/);
   assert.match(actionUi, /بله، تاریخچه نهایی پاک شود/);
 

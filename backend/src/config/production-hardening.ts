@@ -2,7 +2,6 @@ import type { ActionExecutionMode } from "./env.js";
 
 const MIN_SECRET_LENGTH = 32;
 const DEFAULT_AUTH_SESSION_SECRET = "development-only-change-this-secret";
-const DEFAULT_ADMIN_PASSWORDS = new Set(["", "admin", "password", "change-me", "change-me-please"]);
 const DEFAULT_SECRET_MARKERS = ["change-me", "replace-with", "development-only", "default", "secret"];
 const DEFAULT_CORS_ORIGINS = [
   "http://localhost:5173",
@@ -40,11 +39,8 @@ function hasDefaultPostgresCredentials(databaseUrl: string | undefined) {
   }
 }
 
-function isDefaultAdminPassword(value: string | undefined) {
-  const normalized = (value ?? "").trim();
-  const lower = normalized.toLowerCase();
-  return DEFAULT_ADMIN_PASSWORDS.has(lower) ||
-    DEFAULT_SECRET_MARKERS.some((marker) => lower.includes(marker));
+function isMissing(value: string | undefined) {
+  return !value || value.trim().length === 0;
 }
 
 export function productionConfigFailures(input: {
@@ -53,7 +49,6 @@ export function productionConfigFailures(input: {
   authSessionSecret?: string;
   credentialEncryptionKey?: string;
   databaseUrl?: string;
-  adminPassword?: string;
   actionExecutionMode?: ActionExecutionMode;
   actionAllowLabUnrestrictedManagement?: boolean;
   corsOrigins?: string[];
@@ -61,6 +56,12 @@ export function productionConfigFailures(input: {
   if (!resolveProductionProfile(input)) return [];
 
   const failures: string[] = [];
+  if (isMissing(input.databaseUrl)) {
+    failures.push("DATABASE_URL must be set in production");
+  }
+  if (!input.corsOrigins || input.corsOrigins.length === 0) {
+    failures.push("CORS_ORIGIN must be explicitly configured in production");
+  }
   if (isWeakSecret(input.authSessionSecret, DEFAULT_AUTH_SESSION_SECRET)) {
     failures.push(`AUTH_SESSION_SECRET must be set to a non-default value with at least ${MIN_SECRET_LENGTH} characters`);
   }
@@ -70,13 +71,10 @@ export function productionConfigFailures(input: {
   if (hasDefaultPostgresCredentials(input.databaseUrl)) {
     failures.push("DATABASE_URL must not use the default postgres:postgres credentials in production");
   }
-  if (isDefaultAdminPassword(input.adminPassword) || (input.adminPassword ?? "").length < 8) {
-    failures.push("ADMIN_PASSWORD must be changed from the default and contain at least 8 characters in production");
-  }
   if (input.actionExecutionMode === "quick_controlled" || input.actionExecutionMode === "lab_fast" || input.actionAllowLabUnrestrictedManagement === true) {
     failures.push("Lab quick controlled execution and unrestricted management are not allowed in production");
   }
-  if (!input.corsOrigins || input.corsOrigins.length === 0 || input.corsOrigins.some((origin) => /localhost|127\.0\.0\.1|192\.168\./.test(origin))) {
+  if (input.corsOrigins?.some((origin) => /localhost|127\.0\.0\.1|192\.168\./.test(origin))) {
     failures.push("CORS origins must be explicitly configured for production and must not include development origins");
   }
   return failures;

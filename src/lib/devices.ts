@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type DeviceType =
   | "linux"
@@ -15,6 +15,8 @@ export type DeviceStatus = "unknown" | "online" | "offline" | "error";
 
 export type Device = {
   id: string;
+  companyId: string | null;
+  company?: { id: string; name: string; code: string } | null;
   name: string;
   vendor: string;
   type: DeviceType;
@@ -46,6 +48,7 @@ export type Device = {
 };
 
 export type DeviceInput = {
+  companyId?: string;
   name: string;
   vendor: string;
   type: DeviceType;
@@ -215,6 +218,8 @@ export function normalizeDevice(value: unknown): Device {
   const source = normalizeObject(value);
   return {
     id: String(source.id ?? ""),
+    companyId: typeof source.companyId === "string" ? source.companyId : null,
+    company: source.company ? normalizeObject(source.company) as Device["company"] : null,
     name: String(source.name ?? "Unnamed device"),
     vendor: String(source.vendor ?? source.type ?? "generic_firewall"),
     type: String(source.type ?? "generic_firewall") as DeviceType,

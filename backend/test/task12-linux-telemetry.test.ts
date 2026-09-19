@@ -52,6 +52,7 @@ test("live parser recognizes authentication and firewall signals", () => {
   assert.equal(parseLinuxLiveLogLine("auth", "sshd: Failed password for root from 203.0.113.5 port 4444").suspicious, true);
   assert.match(parseLinuxLiveLogLine("auth", "sshd: Invalid user demo from 203.0.113.6").summary, /Invalid/);
   assert.equal(parseLinuxLiveLogLine("auth", "sshd: Accepted publickey for ops from 10.0.0.2").suspicious, false);
+  assert.equal(parseLinuxLiveLogLine("system", "sudo[3253083]: pam_unix(sudo:session): session opened for user root by ops").suspicious, false);
   assert.match(parseLinuxLiveLogLine("firewall", "[UFW BLOCK] SRC=203.0.113.7 DPT=22").summary, /Firewall/);
   assert.equal(parseLinuxLiveLogLine("nginx", "GET /admin HTTP/1.1 403", { repeated: 12 }).suspicious, true);
   assert.equal(stopLinuxLogStream("missing"), null);

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { ActionType, AiRiskLevel, DeviceProtocol, DeviceType } from "@prisma/client";
 import { buildCustomCommandPlan, customDryRun, validateCustomCommandPlan } from "../src/ai/custom-action-plan.js";
+import { actionExecutionUiState } from "../../src/lib/actionApprovalState.js";
 
 const actionService = [
   "../src/services/action-plan.service.ts",
@@ -15,6 +16,7 @@ const linuxConnector = readFileSync(new URL("../src/connectors/linux-ssh.connect
 const mikrotikConnector = readFileSync(new URL("../src/connectors/mikrotik-ssh.connector.ts", import.meta.url), "utf8");
 const fortigateConnector = readFileSync(new URL("../src/connectors/fortigate-ssh.connector.ts", import.meta.url), "utf8");
 const ciscoConnector = readFileSync(new URL("../src/connectors/cisco-ios-xe.connector.ts", import.meta.url), "utf8");
+const commandCatalogRoute = readFileSync(new URL("../src/routes/command-catalog.ts", import.meta.url), "utf8");
 
 const linuxDevice = {
   id: "linux-1",
@@ -96,12 +98,9 @@ test("missing parameter collection is explicit for custom action", () => {
   assert.ok(validation.missingFields.includes("serviceName"));
 });
 
-test("cross-vendor custom commands are rejected", () => {
+test("cross-vendor custom commands are rejected before ActionPlan creation", () => {
   const plan = buildCustomCommandPlan({ message: "Cisco set interface GigabitEthernet1 description uplink", device: mikrotikDevice });
-  assert.ok(plan);
-  const validation = validateCustomCommandPlan({ plan, device: mikrotikDevice, actionType: ActionType.custom_vendor_action });
-  assert.equal(validation.valid, false);
-  assert.ok(validation.errors.some((error) => /different vendor|does not match/i.test(error)));
+  assert.equal(plan, null);
 });
 
 test("custom command safety rejects shell escape shapes", () => {
@@ -129,6 +128,45 @@ test("custom execution remains connector-only", () => {
     assert.match(source, /customPlanFromParameters/);
   }
   assert.doesNotMatch(assistantUi, /selectDeviceConnector|executeActionPlan|quickExecuteActionPlan/);
+});
+
+test("AI proposal routes create only validated connector plans", () => {
+  assert.match(commandCatalogRoute, /validateCustomCommandPlan/);
+  assert.match(commandCatalogRoute, /source: "ai_custom_connector_plan"/);
+  assert.match(commandCatalogRoute, /actionPlan: null/);
+  assert.doesNotMatch(commandCatalogRoute, /source: "ai_custom_proposal"/);
+  assert.doesNotMatch(commandCatalogRoute, /support\.reason\.manualReview/);
+});
+
+test("Action Center UI permits a validated custom connector plan and blocks incomplete parameters", () => {
+  const base = {
+    actionType: "custom_vendor_action",
+    status: "proposed",
+    validationJson: null,
+    dryRunJson: null,
+    parametersJson: {
+      executionSupport: "connector",
+      metadata: {
+        source: "ai_custom_connector_plan",
+        implementationState: "implemented",
+        supportState: "verified",
+        executionSupport: "connector",
+        executionTemplateRef: "linux_custom_connector_command",
+        executable: true,
+        missingFields: [],
+      },
+    },
+  };
+  assert.equal(actionExecutionUiState(base as never).canExecute, true);
+  const incomplete = {
+    ...base,
+    parametersJson: {
+      ...base.parametersJson,
+      metadata: { ...base.parametersJson.metadata, executable: false, missingFields: ["serviceName"] },
+    },
+  };
+  assert.equal(actionExecutionUiState(incomplete as never).state, "needs_value");
+  assert.equal(actionExecutionUiState(incomplete as never).canExecute, false);
 });
 
 test("verification failure is still persisted through execution evidence and audit", () => {

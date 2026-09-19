@@ -7,7 +7,6 @@ import { env } from "../config/env.js";
 import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { resolveEphemeralSecretRef } from "../services/ephemeral-secret.service.js";
-import { compileFortiGateAction } from "../services/fortigate-command-compiler.js";
 import { evaluateFortiGatePolicy } from "../services/fortigate-policy-guard.service.js";
 import { assertNoFortiGateCliFailure, verifyFortiGateExecution } from "../fortigate/execution-verifier.js";
 import type {
@@ -34,6 +33,9 @@ type ExecResult = {
   stderr: string;
   exitCode: number | null;
 };
+
+const TERMINAL_ESCAPE = String.fromCharCode(27);
+const ANSI_COLOR_PATTERN = new RegExp(`${TERMINAL_ESCAPE}\\[[0-9;]*m`, "g");
 
 export class FortiGateConnectorError extends Error {
   code: string;
@@ -71,7 +73,10 @@ const DISCOVERY_COMMANDS = [
 ] as const;
 
 const OPTIONAL_COMMANDS = [
-  "get system ha status"
+  "get system ha status",
+  "execute log filter reset",
+  "execute log filter view-lines 500",
+  "execute log display"
 ] as const;
 
 const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...DISCOVERY_COMMANDS, ...OPTIONAL_COMMANDS]);
@@ -185,7 +190,7 @@ async function withSshWithCredential<T>(device: Device, credential: FortiGateCre
 
 function sanitizeOutput(value: string) {
   return value
-    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(ANSI_COLOR_PATTERN, "")
     .replace(/(set\s+(?:password|passwd|private-key|secret)\s+).+/gi, "$1<redacted>")
     .replace(/(ENC\s+)[A-Za-z0-9+/=]+/g, "$1<redacted>")
     .trim();
@@ -201,13 +206,14 @@ function assertCatalogCommand(command: string, allowedCommands: Set<string>) {
   if (!allowedCommands.has(command)) {
     throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", "FortiGate command is not part of the approved action plan.", 500);
   }
-  if (FORBIDDEN_EXEC_PATTERN.test(command)) {
+  const registeredPowerCommand = command === "execute reboot" || command === "execute shutdown";
+  if (FORBIDDEN_EXEC_PATTERN.test(command) && !registeredPowerCommand) {
     throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", "FortiGate command is blocked by PolicyGuard.", 500);
   }
 }
 
 const PROMPT_PATTERN = /(?:^|\r?\n)[^\r\n]{1,160}(?:\s+\([^)]+\))?\s*[#$]\s*$/;
-const MORE_PATTERN = /(?:\u001b\[[0-9;?]*[A-Za-z])*\s*--More--\s*(?:\u001b\[[0-9;?]*[A-Za-z])*/g;
+const MORE_PATTERN = new RegExp(`(?:${TERMINAL_ESCAPE}\\[[0-9;?]*[A-Za-z])*\\s*--More--\\s*(?:${TERMINAL_ESCAPE}\\[[0-9;?]*[A-Za-z])*`, "g");
 
 function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeoutMs, allowedCommands?: Set<string>): Promise<ExecResult> {
   if (allowedCommands) assertCatalogCommand(command, allowedCommands);
@@ -221,6 +227,7 @@ function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeout
       let stdout = "";
       let stderr = "";
       let commandSent = false;
+      let confirmationSent = false;
       let settled = false;
       const finish = (result: ExecResult) => {
         if (settled) return;
@@ -234,7 +241,7 @@ function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeout
         stream.close();
         reject(new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", "FortiGate SSH command timed out.", 504));
       }, timeoutMs);
-      stream.on("close", () => finish({ stdout, stderr: sanitizeOutput(stderr), exitCode: PROMPT_PATTERN.test(stdout) ? 0 : 1 }));
+      stream.on("close", () => finish({ stdout, stderr: sanitizeOutput(stderr), exitCode: PROMPT_PATTERN.test(stdout) || confirmationSent ? 0 : 1 }));
       stream.on("data", (chunk: Buffer) => {
         const text = chunk.toString("utf8");
         stdout += text;
@@ -250,6 +257,11 @@ function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeout
           stream.write(" ");
           return;
         }
+        if (commandSent && !confirmationSent && /^execute\s+(?:reboot|shutdown)$/i.test(command) && /(?:continue|proceed)[\s\S]*\(y\/n\)/i.test(stdout)) {
+          confirmationSent = true;
+          stream.write("y\n");
+          return;
+        }
         MORE_PATTERN.lastIndex = 0;
         if (commandSent && PROMPT_PATTERN.test(stdout)) finish({ stdout, stderr: sanitizeOutput(stderr), exitCode: 0 });
       });
@@ -261,6 +273,23 @@ function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeout
 function lines(value: string, limit?: number) {
   const result = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return typeof limit === "number" ? result.slice(0, limit) : result;
+}
+
+export async function collectFortiGateRecentLogs(device: Device) {
+  const credential = await getCredential(device);
+  await tcpConnect(device.host, device.managementPort);
+  return withSshWithCredential(device, credential, async (client) => {
+    // FortiOS keeps log filters in the administrator session. Reset stale UI/CLI
+    // filters and request a bounded page so every poll sees all recent categories
+    // (event, traffic, VPN and UTM) without downloading the full log database.
+    await exec(client, "execute log filter reset").catch(() => undefined);
+    await exec(client, "execute log filter view-lines 500").catch(() => undefined);
+    const result = await exec(client, "execute log display");
+    if (result.exitCode !== 0) {
+      throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || "FortiGate log collection failed.", 502);
+    }
+    return lines(result.stdout, 500);
+  });
 }
 
 function matchStatus(status: string, label: string) {
@@ -543,7 +572,8 @@ export const fortigateSshConnector: DeviceConnector = {
     if (!policy.valid) throw new FortiGateConnectorError("CONNECTOR_ACTION_UNSUPPORTED", policy.errors.join(" "), 400);
     const params = asObject(actionPlan.parametersJson);
     const breakGlassReady = policy.breakGlass && params.deviceNameConfirmation === device.name && params.executeConfirmation === "EXECUTE" && typeof params.reason === "string" && params.reason.trim().length > 0;
-    if (policy.requiresBreakGlass && !breakGlassReady) {
+    const protectedLabSingleConfirmation = env.actionExecutionMode === "quick_controlled" && env.actionAllowLabUnrestrictedManagement;
+    if (policy.requiresBreakGlass && !breakGlassReady && !protectedLabSingleConfirmation) {
       throw new FortiGateConnectorError("FORTIGATE_BREAK_GLASS_REQUIRED", "Critical FortiGate action requires breakGlass=true, executeConfirmation=EXECUTE, matching deviceNameConfirmation, and a reason.", 409);
     }
     const allowedCommands = new Set([...policy.preflightCommands, ...validation.commandSpecs.map((spec) => spec.command)]);

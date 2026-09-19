@@ -148,6 +148,7 @@ function sinceArg(since: Date) {
 
 export const linuxSshLogCollector: DeviceCollector = {
   name: "linux_ssh_log",
+  stateSourceType: "linux_ssh",
   sourceTypes: LINUX_SOURCE_TYPES,
   supports(device) {
     return Boolean(device && device.protocol === DeviceProtocol.ssh && (
@@ -190,6 +191,8 @@ export const linuxSshLogCollector: DeviceCollector = {
 
       return {
         deviceId: device.id,
+        vendor: "linux",
+        collectorName: "linux_ssh_log",
         sourceTypes: LINUX_SOURCE_TYPES,
         lines,
         warnings,

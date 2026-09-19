@@ -1,6 +1,6 @@
 import type { ActionPlan, ActionType, AiRiskLevel, Device, DeviceProtocol, DeviceType } from "@prisma/client";
 
-export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "cisco" | "generic";
+export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "cisco" | "sophos" | "generic";
 export type CommandPlanStatus = "planned" | "needs_clarification" | "unsupported";
 export type CommandTransport = "ssh" | "api" | "manual";
 
@@ -56,6 +56,8 @@ export type DeviceConnectionTestResult = {
   vendor?: VendorPlannerName;
   host: string;
   port: number;
+  detectedManagementPort?: number;
+  managementPortRecovered?: boolean;
   credentialResolved?: boolean;
   credentialName?: string;
   username?: string;
@@ -64,10 +66,13 @@ export type DeviceConnectionTestResult = {
   ufwAvailable?: boolean;
   ufwStatus?: string;
   listeningPorts?: string;
+  listeningPortsCollected?: boolean;
+  listeningPortsCheckedAt?: string;
   sshServiceStatus?: string;
   currentSshPort?: number | null;
   mikrotik?: MikroTikDiscovery;
   fortigate?: FortiGateDiscovery;
+  sophos?: SophosDiscovery;
   stages: Array<{
     name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "shell" | "prompt" | "privilege" | "platform_detection" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
     status: "ok" | "warning" | "failed";
@@ -120,6 +125,7 @@ export type DeviceCapabilities = {
   warnings?: Array<{ code: string; message: string }>;
   mikrotik?: MikroTikDiscovery;
   fortigate?: FortiGateDiscovery;
+  sophos?: SophosDiscovery;
   canExecuteChangeSshPort: boolean;
   supportedActions: ActionType[];
 };
@@ -171,6 +177,31 @@ export type FortiGateDiscovery = {
   routes: string[];
   haStatus?: string[];
   raw?: Record<string, string>;
+};
+
+export type SophosInterface = {
+  name: string;
+  hardware: string;
+  zone?: string;
+  ipAddresses: string[];
+  netmask?: string;
+  macAddress?: string;
+  speed?: string;
+  operationalStatus: "up" | "down" | "unknown";
+  administrativeStatus: "up" | "down" | "unknown";
+};
+
+export type SophosDiscovery = {
+  product: "Sophos Firewall";
+  apiVersion?: string;
+  interfaces: SophosInterface[];
+  zones: string[];
+  gateways: string[];
+  firewallRules: Array<{ name: string; status: "enabled" | "disabled" | "unknown"; action?: string; sourceZones: string[]; destinationZones: string[]; services: string[] }>;
+  ipHosts: Array<{ name: string; address?: string; hostType?: string }>;
+  services: Array<{ name: string; protocol?: string; ports: string[] }>;
+  vpnConnections: Array<{ name: string; status?: string }>;
+  collectedAt: string;
 };
 
 export type ConnectorDryRun = {

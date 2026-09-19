@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 export type TelemetrySeverity = "info" | "low" | "medium" | "high" | "critical";
 export type LinuxFinding = { id: string; title: string; severity: TelemetrySeverity; category: string; evidence: string[]; impact: string; recommendation: string; relatedActionHints: string[]; canCreateActionPlan: boolean };
 export type LinuxSnapshot = {

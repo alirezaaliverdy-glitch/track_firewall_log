@@ -29,11 +29,17 @@ test("Linux Service Health panel exposes quick checks and important service acti
 test("Action result view and formatter cover structured output and raw fallback", () => {
   const resultView = read("../../src/components/actions/ActionResultView.tsx");
   const formatter = read("../../src/features/actions/actionResultFormatter.ts");
-  assert.match(resultView, /خلاصه نتیجه/);
-  assert.match(resultView, /وضعیت اجرا/);
-  assert.match(resultView, /خروجی ساختاریافته/);
-  assert.match(resultView, /پیشنهادهای بعدی/);
-  assert.match(resultView, /خروجی خام/);
+  const resultHelpers = read("../../src/lib/actionResult.ts");
+  assert.match(resultView, /نتیجه اجرای دستور/);
+  assert.match(resultView, /خروجی اجرا/);
+  assert.match(resultView, /خلاصه خوانا/);
+  assert.match(resultView, /پیام خطا/);
+  assert.match(resultView, /جزئیات فنی اجرا/);
+  assert.match(resultView, /navigator\.clipboard\.writeText/);
+  assert.match(resultHelpers, /export function actionCommandOutputs/);
+  assert.match(resultHelpers, /command\.stdout/);
+  assert.match(resultHelpers, /command\.stderr/);
+  assert.match(resultHelpers, /command\.exitCode/);
   for (const actionType of ["linux_open_port", "linux_check_service_status", "linux_list_running_services", "linux_list_failed_services", "linux_daily_check", "mikrotik_daily_check", "mikrotik_check_login_logs", "mikrotik_list_management_services"]) {
     assert.match(formatter, new RegExp(actionType));
   }

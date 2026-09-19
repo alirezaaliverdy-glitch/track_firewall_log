@@ -1,9 +1,14 @@
 import type { Device } from "@prisma/client";
 import type { DeviceCollector } from "./types.js";
 import { linuxSshLogCollector } from "./linux-ssh-log.collector.js";
+import { ciscoLogCollector, fortiGateLogCollector, mikroTikLogCollector, pfSenseLogCollector } from "./vendor-ssh-log.collector.js";
 
 const collectors: DeviceCollector[] = [
-  linuxSshLogCollector
+  linuxSshLogCollector,
+  mikroTikLogCollector,
+  fortiGateLogCollector,
+  ciscoLogCollector,
+  pfSenseLogCollector
 ];
 
 export function getCollectors() {

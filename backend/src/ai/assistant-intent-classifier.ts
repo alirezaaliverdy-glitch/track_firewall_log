@@ -1,5 +1,5 @@
 export type AssistantIntentMode = "conversation" | "device_question" | "action_request";
-export type AssistantIntentModeOverride = "Auto" | "Chat" | "Action";
+export type AssistantIntentModeOverride = "Chat" | "Action";
 
 export type AssistantIntentClassification = {
   mode: AssistantIntentMode;
@@ -108,10 +108,10 @@ function result(input: {
   };
 }
 
-export function normalizeAssistantIntentModeOverride(value: unknown): AssistantIntentModeOverride {
+export function normalizeAssistantIntentModeOverride(value: unknown): AssistantIntentModeOverride | null {
   if (value === "Chat" || value === "chat") return "Chat";
   if (value === "Action" || value === "action") return "Action";
-  return "Auto";
+  return null;
 }
 
 export function stripExplicitActionMarker(message: string) {
@@ -192,27 +192,21 @@ export function classifyAssistantIntent(input: { message: string; hasSelectedDev
   if (isAdviceAboutAction(text)) {
     return result({ mode: "conversation", confidence: 0.9, requiresClarification: false, reasonCode: "advice_or_safety_question" });
   }
-
   if (isExplanationAboutAction(text)) {
     return result({ mode: "conversation", confidence: 0.92, requiresClarification: false, reasonCode: "explanation_about_action" });
   }
-
   if (isChatPhrase(text) && !hasInstructionShape(text)) {
     return result({ mode: "conversation", confidence: 0.88, requiresClarification: false, reasonCode: "chat_phrase" });
   }
-
   if (isDeviceQuestion(text, hasSelectedDevice)) {
     return result({ mode: "device_question", confidence: 0.86, requiresClarification: false, reasonCode: "read_only_selected_device_question" });
   }
-
   if (isAmbiguousAction(text)) {
     return result({ mode: "conversation", confidence: 0.45, requiresClarification: true, reasonCode: "ambiguous_operation_text" });
   }
-
   if (hasActionVerb(text) && hasInstructionShape(text) && hasOperationObject(text) && !isAdviceAboutAction(text)) {
     return result({ mode: "action_request", confidence: 0.84, requiresClarification: false, reasonCode: "explicit_operation_instruction" });
   }
-
   return result({ mode: "conversation", confidence: hasSelectedDevice ? 0.78 : 0.82, requiresClarification: false, reasonCode: "default_conversation" });
 }
 

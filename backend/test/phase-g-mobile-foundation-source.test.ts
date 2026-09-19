@@ -70,11 +70,15 @@ test("Phase G PWA artifacts support installability, updates, offline shell, and 
 
   assert.match(registration, /import\.meta\.env\.PROD/);
   assert.match(registration, /VITE_ENABLE_PWA/);
+  assert.match(registration, /Capacitor\.isNativePlatform\(\)/);
   assert.match(registration, /updatefound/);
   assert.match(registration, /app:pwa-update/);
   assert.match(registration, /app:pwa-ready/);
 
   assert.match(worker, /SAFE_API_CACHE_PATHS/);
+  assert.match(worker, /APP_BASE_PATH/);
+  assert.match(worker, /self\.registration\.scope/);
+  assert.match(worker, /caches\.match\(appAsset\("index\.html"\)\)/);
   assert.match(worker, /UNSAFE_API_CACHE_PATHS/);
   assert.match(worker, /sanitizeForOfflineCache/);
   assert.match(worker, /X-Offline-Readonly/);

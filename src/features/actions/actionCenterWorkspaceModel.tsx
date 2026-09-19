@@ -38,8 +38,14 @@ export function terminalLifecycle(value: ActionLifecycle) {
   return value === "succeeded" || value === "failed" || value === "skipped" || value === "cancelled";
 }
 
+const NON_OPERATOR_PARAMETER_FIELDS = new Set([
+  "metadata", "actionType", "deviceId", "vendor", "protocol", "executionSupport", "missingFields", "clarificationQuestions",
+  "source", "implementationState", "supportState", "supportReasonKey", "executable", "connectorType", "executionTemplateRef", "normalizedParams", "requiredParamsSatisfied",
+  "requiresExplicitReview", "expectedImpact", "suggestedPrechecks", "suggestedVerification", "suggestedRollback",
+]);
+
 export function reviewParametersFrom(value: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== "metadata" && (item === null || ["string", "number", "boolean"].includes(typeof item))).map(([key, item]) => [key, fieldValue(item)]));
+  return Object.fromEntries(Object.entries(value).filter(([key, item]) => !NON_OPERATOR_PARAMETER_FIELDS.has(key) && (item === null || ["string", "number", "boolean"].includes(typeof item))).map(([key, item]) => [key, fieldValue(item)]));
 }
 
 export function commandLines(preview: Record<string, unknown>) {
@@ -56,6 +62,7 @@ export function AdvancedBlock({ title, value }: { title: string; value: unknown 
 }
 
 export function resultMessage(item: ActionCenterItem, isFa: boolean) {
+  if (item.lifecycleState === "queued") return isFa ? "این عملیات ثبت شده و تا زمان تعیین‌شده در صف اجرا می‌ماند." : "This operation is queued until its scheduled time.";
   if (item.lifecycleState === "succeeded" && item.evidence.connectorInvoked) return isFa ? "اجرای واقعی Connector با موفقیت تکمیل شد." : "The connector completed the operation successfully.";
   if (item.lifecycleState === "failed") {
     const exactError = typeof item.connectorResult.message === "string" ? item.connectorResult.message : null;

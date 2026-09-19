@@ -26,6 +26,8 @@ export function evaluateFortiGatePolicy(plan: ActionPlan, device: Device) {
   const confirmation = text(parameters.deviceNameConfirmation);
   const executeConfirmation = text(parameters.executeConfirmation);
   const lockoutSensitiveActions = new Set<ActionType>([
+    ActionType.fortigate_reboot,
+    ActionType.fortigate_shutdown,
     ActionType.fortigate_change_admin_port,
     ActionType.fortigate_disable_unused_admin_service,
     ActionType.fortigate_restrict_admin_trusthost,

@@ -1,12 +1,19 @@
-import type { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { lazy, Suspense, type ReactNode } from "react";
 import { useAuth } from "@/context/AuthContext";
-import LoginPage from "./LoginPage";
+import { useLocation } from "react-router-dom";
+
+const LoginPage = lazy(() => import("./LoginPage"));
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
   const location = useLocation();
-  if (location.pathname === "/" || location.pathname === "/landing") return children;
-  if (loading) return <div className="auth-loading"><span />Verifying secure session…</div>;
-  return user ? children : <LoginPage />;
+  const { user, loading, restoreError, retrySessionRestore } = useAuth();
+  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+  if (normalizedPath === "/" || normalizedPath === "/landing") return children;
+  if (loading) return <div className="auth-loading" role="status"><span />در حال بررسی نشست امن…</div>;
+  if (restoreError) return <div className="auth-loading auth-loading--error" role="alert"><strong>سرویس ورود در دسترس نیست</strong><small>اتصال برنامه به سرور احراز هویت برقرار نشد.</small><button type="button" onClick={() => void retrySessionRestore()}>تلاش دوباره</button></div>;
+  return user ? children : (
+    <Suspense fallback={<div className="auth-loading" role="status"><span />در حال آماده‌سازی صفحه ورود…</div>}>
+      <LoginPage />
+    </Suspense>
+  );
 }

@@ -54,6 +54,7 @@ export function evaluateMikroTikExpertPolicy(plan: ActionPlan, device: Device) {
     ActionType.mikrotik_change_service_port,
     ActionType.mikrotik_disable_service,
     ActionType.mikrotik_reboot,
+    ActionType.mikrotik_shutdown,
     ActionType.mikrotik_schedule_reboot,
     ActionType.mikrotik_disable_rule_by_id,
     ActionType.mikrotik_remove_rule_by_id

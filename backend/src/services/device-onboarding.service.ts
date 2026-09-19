@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, Prisma, type Device } from "@prisma/client";
-import { CiscoConnectorError, ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
+import { CiscoConnectorError, ciscoIosXeSshConnector, redactCiscoCliOutput } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { buildCiscoIosCollection, CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS, CISCO_IOS_CLASSIC_INVENTORY_COMMANDS } from "../connectors/cisco/ios-xe/cisco-iosxe.inventory.js";
 import { detectCiscoPlatform, isSupportedCiscoAutomationPlatform } from "../connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
@@ -9,8 +9,35 @@ import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js
 import { getDeviceById } from "./device.service.js";
 import { resolveCredentialById } from "./credential.service.js";
 
-type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik";
+type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
 export class OnboardingCredentialInvalidError extends Error {}
+export class OnboardingConnectionTestError extends Error {
+  readonly code: string;
+  readonly connectorInvoked = true;
+  readonly diagnostic: Record<string, unknown>;
+
+  constructor(result: {
+    errorCode?: string;
+    message?: string;
+    stages?: unknown;
+    warnings?: unknown;
+    capabilities?: unknown;
+  }) {
+    const code = result.errorCode?.trim() || "ONBOARDING_CONNECTION_FAILED";
+    const message = result.message?.trim() || "The connector did not complete a successful connection test.";
+    super(message);
+    this.name = "OnboardingConnectionTestError";
+    this.code = code;
+    this.diagnostic = {
+      code,
+      message,
+      connectorInvoked: true,
+      stages: result.stages ?? [],
+      warnings: result.warnings ?? [],
+      capabilities: result.capabilities ?? {}
+    };
+  }
+}
 type SessionStatus =
   | "draft"
   | "answers_saved"
@@ -34,6 +61,7 @@ type SessionStatus =
   | "cancelled";
 
 type Draft = {
+  companyId: string;
   vendor: OnboardingVendor;
   platform: string;
   connectionMethod: "ssh" | "api";
@@ -50,6 +78,7 @@ type Draft = {
 
 type OnboardingSession = {
   id: string;
+  ownerId?: string;
   deviceId?: string;
   status: SessionStatus;
   step: string;
@@ -59,7 +88,11 @@ type OnboardingSession = {
   discovery: Record<string, unknown> | null;
   preview: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
-  privateEvidence: { showVersion?: string; ciscoOutputs?: Record<string, string> };
+  privateEvidence: {
+    showVersion?: string;
+    ciscoOutputs?: Record<string, string>;
+    vendorStatus?: Record<string, unknown>;
+  };
   createdAt: string;
   updatedAt: string;
   expiresAt: string;
@@ -71,17 +104,18 @@ const SUPPORTED_PLATFORMS: Record<OnboardingVendor, string[]> = {
   linux: ["linux"],
   cisco: ["cisco-ios-xe", "cisco-ios-classic", "cisco-nx-os", "cisco-asa"],
   fortigate: ["fortios"],
-  mikrotik: ["routeros"]
+  mikrotik: ["routeros"],
+  sophos: ["sophos-sfos"]
 };
 
 function normalizeVendor(value: unknown): OnboardingVendor {
   const vendor = String(value ?? "linux").trim().toLowerCase().replace(/[\s_-]+edge$/, "").replace(/[\s_-]+/g, "");
-  if (vendor === "linux" || vendor === "cisco" || vendor === "fortigate" || vendor === "mikrotik") return vendor;
-  throw new Error("Unsupported vendor. Choose Linux, Cisco, FortiGate, or MikroTik.");
+  if (vendor === "linux" || vendor === "cisco" || vendor === "fortigate" || vendor === "mikrotik" || vendor === "sophos" || vendor === "sfos") return vendor === "sfos" ? "sophos" : vendor;
+  throw new Error("Unsupported vendor. Choose Linux, Cisco, FortiGate, MikroTik, or Sophos.");
 }
 
 function defaultPlatform(vendor: OnboardingVendor) { return SUPPORTED_PLATFORMS[vendor][0]; }
-function defaultPort(method: string) { return method === "api" ? 443 : 22; }
+function defaultPort(method: string, vendor?: OnboardingVendor) { return method === "api" ? vendor === "sophos" ? 4444 : 443 : 22; }
 function now() { return new Date().toISOString(); }
 function expiresAt() { return new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); }
 
@@ -90,6 +124,10 @@ function assertNoSecrets(input: Record<string, unknown>) {
     if (SENSITIVE_KEYS.test(key)) throw new Error("Onboarding accepts credential references only; plaintext secrets are forbidden.");
     if (value && typeof value === "object" && !Array.isArray(value)) assertNoSecrets(value as Record<string, unknown>);
   }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function publicSession(session: OnboardingSession) {
@@ -103,12 +141,12 @@ function nullableJson(value: Record<string, unknown> | null) {
 }
 
 function hydrateSession(row: {
-  id: string; deviceId: string | null; status: string; step: string; draftJson: unknown;
+  id: string; ownerId: string | null; deviceId: string | null; status: string; step: string; draftJson: unknown;
   testJson: unknown; detectionJson: unknown; discoveryJson: unknown; previewJson: unknown;
   resultJson: unknown; privateEvidenceJson: unknown; createdAt: Date; updatedAt: Date; expiresAt: Date;
 }): OnboardingSession {
   return {
-    id: row.id, deviceId: row.deviceId ?? undefined, status: row.status as SessionStatus, step: row.step,
+    id: row.id, ownerId: row.ownerId ?? undefined, deviceId: row.deviceId ?? undefined, status: row.status as SessionStatus, step: row.step,
     draft: row.draftJson as Draft,
     test: row.testJson as Record<string, unknown> | null,
     detection: row.detectionJson as Record<string, unknown> | null,
@@ -122,7 +160,7 @@ function hydrateSession(row: {
 
 async function persistSession(session: OnboardingSession) {
   const data = {
-    deviceId: session.deviceId ?? null, status: session.status, step: session.step,
+    ownerId: session.ownerId ?? null, deviceId: session.deviceId ?? null, status: session.status, step: session.step,
     draftJson: json(session.draft), testJson: nullableJson(session.test), detectionJson: nullableJson(session.detection),
     discoveryJson: nullableJson(session.discovery), previewJson: nullableJson(session.preview), resultJson: nullableJson(session.result),
     privateEvidenceJson: json(session.privateEvidence), expiresAt: new Date(session.expiresAt)
@@ -134,7 +172,7 @@ async function persistSession(session: OnboardingSession) {
   sessions.set(session.id, session);
 }
 
-async function activeSession(id: string) {
+async function activeSession(id: string, ownerId?: string) {
   let session = sessions.get(id);
   if (!session) {
     const row = await prisma.deviceOnboardingSession.findUnique({ where: { id } });
@@ -142,6 +180,7 @@ async function activeSession(id: string) {
     if (session) sessions.set(id, session);
   }
   if (!session) throw new Error("Onboarding session not found.");
+  if (ownerId && session.ownerId !== ownerId) throw new Error("Onboarding session not found.");
   if (new Date(session.expiresAt).getTime() <= Date.now()) {
     throw new Error("Onboarding session expired. Start a new session.");
   }
@@ -176,6 +215,8 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
   const timestamp = new Date();
   return {
     id: session.deviceId ?? session.id,
+    companyId: draft.companyId || null,
+    deletedAt: null,
     name: draft.name || `${draft.vendor}-device`,
     vendor: draft.vendor,
     type: deviceType(draft.vendor),
@@ -196,33 +237,47 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
 function requireConnectionDraft(session: OnboardingSession) {
   const { draft } = session;
   if (!draft.name.trim()) throw new Error("Device name is required.");
+  if (!draft.companyId.trim()) throw new Error("Company is required.");
   if (!draft.host.trim()) throw new Error("Management address is required.");
   if (!Number.isInteger(draft.managementPort) || draft.managementPort < 1 || draft.managementPort > 65535) throw new Error("Management port must be between 1 and 65535.");
   if (!draft.credentialId) {
     fail(session, "credential_missing", "credential", "A stored credential reference is required.");
     throw new Error("A stored credential reference is required.");
   }
-  if (draft.connectionMethod !== "ssh") throw new Error(`No registered onboarding connector supports ${draft.vendor}/${draft.connectionMethod}. Use SSH or register unverified.`);
+  const validTransport = draft.vendor === "sophos"
+    ? draft.connectionMethod === "api"
+    : draft.vendor === "mikrotik"
+      ? draft.connectionMethod === "ssh" || draft.connectionMethod === "api"
+      : draft.connectionMethod === "ssh";
+  if (!validTransport) throw new Error(`No registered onboarding connector supports ${draft.vendor}/${draft.connectionMethod}.`);
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
 }
 
-export async function createOnboardingSession(input: Record<string, unknown> = {}) {
+async function assertOnboardingCompany(companyId: string, ownerId?: string) {
+  if (!ownerId) return;
+  const company = await prisma.company.findFirst({ where: { id: companyId, ownerId, deletedAt: null }, select: { id: true } });
+  if (!company) throw new Error("Company not found or unavailable.");
+}
+
+export async function createOnboardingSession(input: Record<string, unknown> = {}, ownerId?: string) {
   assertNoSecrets(input);
-  const existing = typeof input.deviceId === "string" && input.deviceId ? await getDeviceById(input.deviceId) : null;
+  const existing = typeof input.deviceId === "string" && input.deviceId ? await getDeviceById(input.deviceId, ownerId) : null;
   const vendor = normalizeVendor(input.vendor ?? existing?.vendor ?? existing?.type ?? "linux");
   const method = String(input.connectionMethod ?? existing?.protocol ?? "ssh") === "api" ? "api" : "ssh";
   const session: OnboardingSession = {
     id: randomUUID(),
+    ownerId,
     deviceId: existing?.id,
     status: "draft",
     step: "vendor",
     draft: {
+      companyId: String(input.companyId ?? existing?.companyId ?? ""),
       vendor,
       platform: String(input.platform ?? defaultPlatform(vendor)),
       connectionMethod: method,
       name: String(input.name ?? existing?.name ?? ""),
       host: normalizeManagementAddress(String(input.host ?? existing?.host ?? "")),
-      managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method)),
+      managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method, vendor)),
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
       enableCredentialId: String(input.enableCredentialId ?? ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).enableCredentialId ?? "")),
       site: String(input.site ?? ""),
@@ -240,25 +295,27 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
     updatedAt: now(),
     expiresAt: expiresAt()
   };
+  await assertOnboardingCompany(session.draft.companyId, ownerId);
   await persistSession(session);
   return publicSession(session);
 }
 
-export async function getOnboardingSession(id: string) { return publicSession(await activeSession(id)); }
+export async function getOnboardingSession(id: string, ownerId?: string) { return publicSession(await activeSession(id, ownerId)); }
 
-export async function answerOnboardingSession(id: string, input: Record<string, unknown>) {
+export async function answerOnboardingSession(id: string, input: Record<string, unknown>, ownerId?: string) {
   assertNoSecrets(input);
-  const session = await activeSession(id);
+  const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const nextVendor = input.vendor === undefined ? session.draft.vendor : normalizeVendor(input.vendor);
   const nextMethod = input.connectionMethod === undefined ? session.draft.connectionMethod : String(input.connectionMethod) === "api" ? "api" : "ssh";
   session.draft = {
+    companyId: String(input.companyId ?? session.draft.companyId).trim(),
     vendor: nextVendor,
     platform: String(input.platform ?? (nextVendor === session.draft.vendor ? session.draft.platform : defaultPlatform(nextVendor))),
     connectionMethod: nextMethod,
     name: String(input.name ?? session.draft.name).trim(),
     host: normalizeManagementAddress(String(input.host ?? session.draft.host).trim()),
-    managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod))),
+    managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod, nextVendor))),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
@@ -266,6 +323,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     location: String(input.location ?? session.draft.location).trim(),
     environment: String(input.environment ?? session.draft.environment) as Draft["environment"]
   };
+  await assertOnboardingCompany(session.draft.companyId, ownerId);
   try {
     requireConnectionDraft(session);
   } catch (error) {
@@ -283,8 +341,8 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
   return response;
 }
 
-export async function testOnboardingConnection(id: string) {
-  const session = await activeSession(id);
+export async function testOnboardingConnection(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   try {
     requireConnectionDraft(session);
     try {
@@ -312,8 +370,8 @@ export async function testOnboardingConnection(id: string) {
         result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, "legacy_cisco"), [...CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS]);
       }
       const platformResult = result.results.find((item) => item.commandId === "platform") ?? result.results[0];
-      const outputById = Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout]));
-      session.privateEvidence.showVersion = platformResult?.stdout ?? "";
+      const outputById = Object.fromEntries(result.results.map((item) => [item.commandId, redactCiscoCliOutput(item.stdout)]));
+      session.privateEvidence.showVersion = redactCiscoCliOutput(platformResult?.stdout ?? "");
       session.privateEvidence.ciscoOutputs = outputById;
       session.test = {
         connected: result.connectorInvoked && Boolean(platformResult),
@@ -333,14 +391,22 @@ export async function testOnboardingConnection(id: string) {
       };
     } else {
       const result = await connector!.testConnection(device);
+      session.privateEvidence.vendorStatus = JSON.parse(JSON.stringify({
+        ...result,
+        credentialName: undefined,
+        username: undefined
+      })) as Record<string, unknown>;
       session.test = {
         connected: result.connected,
         connectorInvoked: true,
         connectorType: connector!.name,
         stages: result.stages,
         warnings: result.warnings,
-        capabilities: result.capabilities
+        capabilities: result.capabilities,
+        ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+        ...(result.message ? { error: result.message } : {})
       };
+      if (result.connected !== true) throw new OnboardingConnectionTestError(result);
     }
     if (session.test.connected !== true || session.test.connectorInvoked !== true) throw new Error("The connector did not complete a successful connection test.");
     const response = touch(session, "connection_verified", "detect");
@@ -350,12 +416,17 @@ export async function testOnboardingConnection(id: string) {
     const credentialInvalid = error instanceof Error && error.message.startsWith("CREDENTIAL_INVALID:");
     const safeError = credentialInvalid ? new Error(error.message.replace(/^CREDENTIAL_INVALID:\s*/, "")) : error;
     const ciscoDiagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;
+    const connectorDiagnostic = error instanceof OnboardingConnectionTestError ? error.diagnostic : null;
     session.test = {
       connected: false,
-      connectorInvoked: ciscoDiagnostic?.connectorInvoked ?? session.test?.connectorInvoked === true,
+      connectorInvoked: ciscoDiagnostic?.connectorInvoked ?? (connectorDiagnostic?.connectorInvoked === true || session.test?.connectorInvoked === true),
       connectorType: session.test?.connectorType,
-      error: safeError instanceof Error ? safeError.message : "Connection test failed.",
-      diagnostic: ciscoDiagnostic,
+      error: connectorDiagnostic?.message ?? (safeError instanceof Error ? safeError.message : "Connection test failed."),
+      ...(typeof connectorDiagnostic?.code === "string" ? { errorCode: connectorDiagnostic.code } : {}),
+      diagnostic: ciscoDiagnostic ?? connectorDiagnostic,
+      ...(connectorDiagnostic?.stages ? { stages: connectorDiagnostic.stages } : session.test?.stages ? { stages: session.test.stages } : {}),
+      ...(connectorDiagnostic?.warnings ? { warnings: connectorDiagnostic.warnings } : session.test?.warnings ? { warnings: session.test.warnings } : {}),
+      ...(connectorDiagnostic?.capabilities ? { capabilities: connectorDiagnostic.capabilities } : session.test?.capabilities ? { capabilities: session.test.capabilities } : {}),
       legacyCompatibilityRequested: ciscoDiagnostic?.legacyCompatibilityRequested ?? session.draft.ciscoLegacyCompatibilityApproved === true,
       legacyCompatibilityApplied: ciscoDiagnostic?.legacyCompatibilityApplied ?? false,
       connectionPhase: ciscoDiagnostic?.connectionPhase ?? (session.test?.connectorInvoked === true ? "ssh_negotiation" : "input")
@@ -366,8 +437,8 @@ export async function testOnboardingConnection(id: string) {
   }
 }
 
-export async function detectOnboardingPlatform(id: string) {
-  const session = await activeSession(id);
+export async function detectOnboardingPlatform(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.test?.connected !== true || session.test?.connectorInvoked !== true) throw new Error("Run a successful connector-backed connection test first.");
   touch(session, "platform_detecting", "platform");
   if (session.draft.vendor === "cisco") {
@@ -395,15 +466,15 @@ export async function detectOnboardingPlatform(id: string) {
   return response;
 }
 
-export async function discoverOnboardingInventory(id: string) {
-  const session = await activeSession(id);
+export async function discoverOnboardingInventory(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.detection?.supported !== true) throw new Error("A supported platform must be detected before discovery.");
   touch(session, "discovery_running", "discover");
   try {
     if (session.draft.vendor === "cisco") {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(asDevice(session, session.draft.ciscoLegacyCompatibilityApproved ? "legacy_cisco" : "modern"), [...CISCO_IOS_CLASSIC_INVENTORY_COMMANDS]);
       if (!result.connectorInvoked) throw new Error("Cisco inventory connector was not invoked.");
-      const evidenceOutputs = { ...session.privateEvidence.ciscoOutputs, ...Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout])) };
+      const evidenceOutputs = { ...session.privateEvidence.ciscoOutputs, ...Object.fromEntries(result.results.map((item) => [item.commandId, redactCiscoCliOutput(item.stdout)])) };
       session.privateEvidence.ciscoOutputs = evidenceOutputs;
       const collection = buildCiscoIosCollection(evidenceOutputs, result.warnings);
       session.discovery = {
@@ -428,11 +499,24 @@ export async function discoverOnboardingInventory(id: string) {
         warnings: result.warnings
       };
     } else {
+      const vendorStatus = record(session.privateEvidence.vendorStatus);
+      const vendorDiscovery = session.draft.vendor === "mikrotik"
+        ? record(vendorStatus.mikrotik)
+        : session.draft.vendor === "fortigate"
+          ? record(vendorStatus.fortigate)
+          : {};
       session.discovery = {
         connectorInvoked: session.test?.connectorInvoked === true,
         connectorType: session.test?.connectorType,
         capabilities: session.test?.capabilities ?? {},
-        warnings: session.test?.warnings ?? []
+        warnings: session.test?.warnings ?? [],
+        hostname: vendorStatus.hostname ?? vendorDiscovery.identity ?? vendorDiscovery.hostname ?? null,
+        version: vendorStatus.os ?? vendorDiscovery.routerosVersion ?? vendorDiscovery.version ?? null,
+        model: vendorDiscovery.model ?? null,
+        serialNumber: vendorDiscovery.serial ?? null,
+        uptime: vendorDiscovery.uptime ?? null,
+        interfaceCount: Array.isArray(vendorDiscovery.interfaces) ? vendorDiscovery.interfaces.length : 0,
+        vendorStatus
       };
     }
     const response = touch(session, "discovery_completed", "preview");
@@ -445,8 +529,8 @@ export async function discoverOnboardingInventory(id: string) {
   }
 }
 
-export async function previewOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function previewOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.discovery?.connectorInvoked !== true) throw new Error("Connector-backed discovery is required before preview.");
   try {
     session.preview = {
@@ -528,8 +612,8 @@ type RegistrationTarget = { deviceId: string | null; assetId: string | null; rea
 
 async function resolveOnboardingRegistrationTarget(tx: Prisma.TransactionClient, draft: Draft, sessionDeviceId?: string): Promise<RegistrationTarget> {
   const managementIp = normalizeManagementAddress(draft.host);
-  const asset = await tx.asset.findUnique({ where: { managementIp }, include: { device: true } });
-  const devices = await tx.device.findMany({ where: { host: { equals: managementIp, mode: "insensitive" } }, orderBy: { updatedAt: "desc" }, take: 10 });
+  const asset = await tx.asset.findFirst({ where: { companyId: draft.companyId, managementIp }, include: { device: true } });
+  const devices = await tx.device.findMany({ where: { companyId: draft.companyId, host: { equals: managementIp, mode: "insensitive" } }, orderBy: { updatedAt: "desc" }, take: 10 });
   const byId = new Map<string, typeof devices[number]>();
   for (const device of devices) byId.set(device.id, device);
   if (asset?.device) byId.set(asset.device.id, asset.device);
@@ -565,7 +649,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   if (!Number.isInteger(managementPort) || managementPort < 1 || managementPort > 65535) throw new Error("Management port must be an integer between 1 and 65535.");
   if (!(["lab", "staging", "production"] as string[]).includes(environment)) throw new Error("Environment must be lab, staging, or production.");
   return {
-    vendor, platform, name, host, managementPort, environment, connectionMethod,
+    companyId: String(input.companyId ?? session.draft.companyId).trim(), vendor, platform, name, host, managementPort, environment, connectionMethod,
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
@@ -574,10 +658,11 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   } satisfies Draft;
 }
 
-export async function registerUnverifiedOnboardingSession(id: string, input: Record<string, unknown> = {}) {
-  const session = await activeSession(id);
+export async function registerUnverifiedOnboardingSession(id: string, input: Record<string, unknown> = {}, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const draft = validateUnverifiedDraft(session, input);
+  await assertOnboardingCompany(draft.companyId, ownerId);
   const normalizedVendor = draft.vendor.toLowerCase();
 
   touch(session, "saving", "save");
@@ -602,6 +687,8 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       const existingDevice = target.deviceId ? await tx.device.findUnique({ where: { id: target.deviceId } }) : null;
       const wasUpdate = Boolean(target.deviceId);
       const data = {
+        companyId: draft.companyId,
+        deletedAt: null,
         name: draft.name,
         vendor: normalizedVendor,
         type: deviceType(draft.vendor),
@@ -671,13 +758,14 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   }
 }
 
-export async function commitOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function commitOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.status !== "preview_ready" || session.test?.connectorInvoked !== true || session.discovery?.connectorInvoked !== true) {
     throw new Error("A connector-backed test, supported detection, discovery, and preview are required before save.");
   }
   touch(session, "saving", "save");
   const draft = session.draft;
+  await assertOnboardingCompany(draft.companyId, ownerId);
 
   const capabilities: Record<string, unknown> = {
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
@@ -688,6 +776,12 @@ export async function commitOnboardingSession(id: string) {
     capabilities.cisco = { showVersion: session.privateEvidence.showVersion, outputs: session.privateEvidence.ciscoOutputs ?? {}, facts: session.discovery?.system ?? {}, collection: session.discovery?.collection ?? null, capabilityProfile: (session.discovery?.collection as { capabilityProfile?: unknown } | undefined)?.capabilityProfile ?? null, inventoryStatus: session.discovery?.inventoryStatus ?? "partial", capabilityStatus: session.discovery?.capabilityStatus ?? "partial" };
     capabilities.ciscoDetection = session.detection;
     capabilities.ciscoDiscovery = session.discovery;
+  } else {
+    const vendorStatus = record(session.privateEvidence.vendorStatus);
+    if (Object.keys(vendorStatus).length > 0) {
+      const statusKey = draft.vendor === "mikrotik" ? "mikrotikStatus" : draft.vendor === "fortigate" ? "fortigateStatus" : draft.vendor === "sophos" ? "sophosStatus" : "linuxStatus";
+      capabilities[statusKey] = { ...vendorStatus, collectedAt: now() };
+    }
   }
   try {
     const persisted = await prisma.$transaction(async (tx) => {
@@ -695,8 +789,9 @@ export async function commitOnboardingSession(id: string) {
       const existingDevice = target.deviceId ? await tx.device.findUnique({ where: { id: target.deviceId } }) : null;
       const wasUpdate = Boolean(target.deviceId);
       const data = {
+        companyId: draft.companyId, deletedAt: null,
         name: draft.name, vendor: draft.vendor, type: deviceType(draft.vendor), host: draft.host,
-        managementPort: draft.managementPort, protocol: DeviceProtocol.ssh, credentialId: draft.credentialId,
+        managementPort: draft.managementPort, protocol: draft.connectionMethod === "api" ? DeviceProtocol.api : DeviceProtocol.ssh, credentialId: draft.credentialId,
         environment: draft.environment as DeviceEnvironment,
         tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
         status: DeviceStatus.online, capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, capabilities))
@@ -724,6 +819,14 @@ export async function commitOnboardingSession(id: string) {
           deviceId: device.id, assetId: asset.id, score: 100, state: "healthy",
           summary: "Initial connector-backed onboarding verification succeeded.",
           metricsJson: json({ connectionVerified: true, connectorInvoked: true }), warningsJson: json([])
+        }
+      });
+      await tx.deviceStatusCheck.create({
+        data: {
+          deviceId: device.id,
+          status: DeviceStatus.online,
+          message: "Connector-backed onboarding and inventory collection succeeded.",
+          latencyMs: typeof session.test?.durationMs === "number" ? session.test.durationMs : null
         }
       });
       await tx.auditLog.create({
@@ -757,15 +860,15 @@ export async function commitOnboardingSession(id: string) {
   }
 }
 
-export async function cancelOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function cancelOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   const response = touch(session, "cancelled", "cancelled");
   await persistSession(session);
   return response;
 }
 
-export async function retryOnboardingSession(id: string) {
-  const session = await activeSession(id);
+export async function retryOnboardingSession(id: string, ownerId?: string) {
+  const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions cannot be retried.");
   if (session.status === "cancelled") throw new Error("Cancelled onboarding sessions cannot be retried. Start a new session.");
   if (session.status === "draft") {

@@ -1,4 +1,3 @@
-import { ActionType } from "@prisma/client";
 import { customPlanFromParameters } from "../ai/custom-action-plan.js";
 
 export type ActionParameterField = {
@@ -9,6 +8,13 @@ export type ActionParameterField = {
   secure?: boolean;
   defaultValue?: unknown;
   dependsOn?: string[];
+  configured?: boolean;
+  descriptionFa?: string;
+  descriptionEn?: string;
+  placeholderFa?: string;
+  placeholderEn?: string;
+  minLength?: number;
+  confirmFor?: string;
 };
 
 export type ValidationRule = {
@@ -87,6 +93,35 @@ const SCHEMAS: ActionParameterSchema[] = [
   schema({ vendor: "fortigate", actionType: "sdwan_rule", fields: [field("name", "string"), field("srcInterface", "string"), field("dstInterface", "string")] }),
 
   schema({ vendor: "linux", actionType: "systemd_service", fields: [field("serviceName", "string"), field("operation", "string")] }),
+  schema({
+    vendor: "linux",
+    actionType: "create_user",
+    fields: [
+      field("username", "string", true, {
+        descriptionFa: "نام حساب لینوکس؛ فقط حروف انگلیسی کوچک، عدد، خط تیره و زیرخط مجاز است.",
+        descriptionEn: "Linux account name using letters, numbers, dash, dot, or underscore.",
+        placeholderFa: "برای نمونه: operator",
+        placeholderEn: "For example: operator",
+      }),
+      field("initialPassword", "string", true, {
+        secure: true,
+        minLength: 12,
+        descriptionFa: "رمز اولیه حداقل ۱۲ نویسه؛ فقط در مخزن رمزگذاری‌شده عملیات نگهداری می‌شود.",
+        descriptionEn: "Initial password with at least 12 characters; stored only in the encrypted action vault.",
+        placeholderFa: "رمز اولیه قوی",
+        placeholderEn: "Strong initial password",
+      }),
+      field("confirmPassword", "string", true, {
+        secure: true,
+        minLength: 12,
+        confirmFor: "initialPassword",
+        descriptionFa: "برای جلوگیری از خطا، رمز اولیه را دوباره وارد کنید.",
+        descriptionEn: "Repeat the initial password to prevent typing mistakes.",
+        placeholderFa: "تکرار رمز اولیه",
+        placeholderEn: "Repeat initial password",
+      }),
+    ],
+  }),
   schema({ vendor: "linux", actionType: "reverse_proxy", fields: [field("serverName", "string"), field("upstreamUrl", "string"), field("certificateRef", "secretRef", false, { secure: true })] }),
   schema({ vendor: "linux", actionType: "docker_compose", fields: [field("composeRef", "string"), field("projectName", "string")] }),
   schema({ vendor: "linux", actionType: "firewall_rule", fields: [field("port", "number"), field("protocol", "string", false, { defaultValue: "tcp" }), field("sourceCidr", "cidr", false)] }),
@@ -113,6 +148,29 @@ function normalizeActionType(actionType: string, parameters: Record<string, unkn
   return operation;
 }
 
+function missingParameterNames(parameters: Record<string, unknown>) {
+  const custom = customPlanFromParameters(parameters);
+  const source = custom?.missingFields ?? (Array.isArray(parameters.missingFields) ? parameters.missingFields : []);
+  return Array.from(new Set(source.map(String).filter(Boolean)));
+}
+
+function inferredField(key: string): ActionParameterField {
+  const lower = key.toLowerCase();
+  const type: ActionParameterField["type"] = lower.includes("port") || lower.includes("timeout") || lower.endsWith("id")
+    ? "number"
+    : lower.includes("cidr") || lower.includes("subnet")
+      ? "cidr"
+      : lower.includes("ip") || lower.includes("gateway")
+        ? "ip"
+        : lower.includes("secret") || lower.includes("password") || lower.endsWith("ref")
+          ? "secretRef"
+          : "string";
+  return field(key, type, true, {
+    secure: type === "secretRef",
+    label: key,
+  });
+}
+
 export function listActionParameterSchemas() {
   return SCHEMAS;
 }
@@ -122,9 +180,25 @@ export function getActionParameterSchema(input: {
   vendor?: string | null;
   platform?: string | null;
   parametersJson?: Record<string, unknown>;
+  configuredSecretFields?: string[];
 }): ActionParameterSchema {
   const vendor = normalizeVendor(input.vendor ?? input.parametersJson?.vendor);
   const actionType = normalizeActionType(input.actionType, input.parametersJson ?? {});
-  return SCHEMAS.find((item) => item.vendor === vendor && item.actionType === actionType)
-    ?? schema({ vendor, platform: input.platform, actionType, fields: [] });
+  const registered = SCHEMAS.find((item) => item.vendor === vendor && item.actionType === actionType);
+  const missing = missingParameterNames(input.parametersJson ?? {});
+  const configuredSecrets = new Set(input.configuredSecretFields ?? []);
+  const fields: ActionParameterField[] = (registered?.fields ?? []).map((item) => ({
+    ...item,
+    configured: configuredSecrets.has(item.key),
+  }));
+  for (const key of missing) {
+    if (!fields.some((item) => item.key === key)) fields.push(inferredField(key));
+  }
+  return schema({
+    vendor,
+    platform: input.platform ?? registered?.platform,
+    actionType,
+    fields,
+    derivedValues: registered?.derivedValues,
+  });
 }

@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type DeviceCredentialType = "password" | "private_key";
 
@@ -10,6 +10,7 @@ export type DeviceCredential = {
   sudo: boolean;
   createdAt: string;
   updatedAt: string;
+  deviceCount: number;
 };
 
 export type CredentialInput = {
@@ -44,8 +45,11 @@ function parsePayload(text: string): unknown {
 
 function apiErrorMessage(url: string, status: number, payload: unknown) {
   const body = normalizeObject(payload);
+  const structured = normalizeObject(body.error);
   const detail = typeof body.error === "string"
     ? `${body.error}${typeof body.detail === "string" ? `: ${body.detail}` : ""}`
+    : typeof structured.message === "string"
+      ? structured.message
     : typeof body.message === "string"
       ? body.message
       : "No response details were provided.";
@@ -76,6 +80,7 @@ export function normalizeCredential(value: unknown): DeviceCredential {
     sudo: Boolean(source.sudo),
     createdAt: String(source.createdAt ?? ""),
     updatedAt: String(source.updatedAt ?? ""),
+    deviceCount: Number(source.deviceCount ?? 0),
   };
 }
 
@@ -92,6 +97,13 @@ export function createCredential(input: CredentialInput) {
   }).then(normalizeCredential);
 }
 
-export function deleteCredential(id: string) {
-  return requestJson<void>(`/credentials/${id}`, { method: "DELETE" });
+export function updateCredential(id: string, input: Partial<CredentialInput>) {
+  return requestJson<unknown>(`/credentials/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  }).then(normalizeCredential);
+}
+
+export function deleteCredential(id: string, force = false) {
+  return requestJson<{ deleted: true; detachedDeviceCount: number }>(`/credentials/${id}${force ? "?force=true" : ""}`, { method: "DELETE" });
 }

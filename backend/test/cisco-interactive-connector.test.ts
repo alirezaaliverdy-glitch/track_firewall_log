@@ -14,6 +14,7 @@ import {
   ciscoConnectConfig,
   ciscoConnectionSemantic
 } from "../src/connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
+import { parseCiscoInterfacesStatus } from "../src/connectors/cisco/ios-xe/cisco-iosxe.parsers.js";
 import { createCredential } from "../src/services/credential.service.js";
 import { prisma } from "../src/db/prisma.js";
 
@@ -97,6 +98,21 @@ test("platform semantics preserve connected-but-unsupported classic IOS and NX-O
   assert.equal(ciscoConnectionSemantic(classic), "connected_supported");
   assert.equal(ciscoConnectionSemantic(nxos), "connected_unsupported");
   assert.equal(ciscoConnectionSemantic(iosxe), "connected_supported");
+});
+
+test("Cisco interface status parser preserves operational details", () => {
+  const parsed = parseCiscoInterfacesStatus([
+    "Port      Name               Status       Vlan       Duplex  Speed Type",
+    "Gi1/0/1   Office uplink      connected    trunk      a-full a-1000 10/100/1000BaseTX",
+    "Gi1/0/2                      notconnect   20         auto   auto   10/100/1000BaseTX"
+  ].join("\n"));
+  assert.deepEqual(parsed.map((item) => ({ name: item.name, status: item.status, vlan: item.vlan, speed: item.speed })), [
+    { name: "Gi1/0/1", status: "connected", vlan: "trunk", speed: "a-1000" },
+    { name: "Gi1/0/2", status: "notconnect", vlan: "20", speed: "auto" }
+  ]);
+  assert.equal(parsed[0].description, "Office uplink");
+  assert.equal(parsed[0].operationalStatus, "up");
+  assert.equal(parsed[1].operationalStatus, "down");
 });
 
 test("legacy compatibility algorithms are opt-in per device and modern remains default", () => {

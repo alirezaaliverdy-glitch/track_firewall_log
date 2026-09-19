@@ -33,6 +33,8 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "linux_check_user_groups",
   "linux_lock_user",
   "linux_unlock_user",
+  "linux_reboot",
+  "linux_shutdown",
   "mikrotik_daily_check",
   "mikrotik_list_management_services",
   "mikrotik_list_filter_rules",
@@ -40,6 +42,17 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "mikrotik_check_login_logs",
   "mikrotik_block_ip",
   "mikrotik_create_backup",
+  "mikrotik_enable_interface",
+  "mikrotik_disable_interface",
+  "mikrotik_set_interface_comment",
+  "mikrotik_enable_service",
+  "mikrotik_disable_service",
+  "mikrotik_reboot",
+  "mikrotik_shutdown",
+  "fortigate_set_interface_alias",
+  "fortigate_enable_interface",
+  "fortigate_disable_interface",
+  "fortigate_update_interface_ip",
   "fortigate_daily_check",
   "fortigate_show_interfaces",
   "fortigate_route_dns_check",
@@ -52,6 +65,14 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "fortigate_show_vpn_status",
   "fortigate_show_ha_vdom_zone",
   "fortigate_guided_vpn_setup",
+  "fortigate_reboot",
+  "fortigate_shutdown",
+  "sophos_inventory",
+  "sophos_enable_interface",
+  "sophos_disable_interface",
+  "sophos_set_interface_ipv4",
+  "sophos_enable_firewall_rule",
+  "sophos_disable_firewall_rule",
   ...executableCiscoOperations().map((operation) => operation.executionTemplateRef!)
 ]);
 
@@ -60,6 +81,7 @@ function connectorVendor(connectorType: string | null) {
   if (connectorType === "fortigate-ssh") return "fortigate";
   if (connectorType === "mikrotik-ssh") return "mikrotik";
   if (connectorType === "cisco-ios-xe-ssh") return "cisco";
+  if (connectorType === "sophos-api") return "sophos";
   return null;
 }
 

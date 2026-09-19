@@ -1,0 +1,198 @@
+name: Production Deployment
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: production-deployment-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-images:
+    name: Build immutable production images
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VITE_APP_ENV: production
+      VITE_BASE_PATH: /firewall/
+      VITE_API_BASE_URL: /firewall-api
+    outputs:
+      version: ${{ steps.images.outputs.version }}
+      frontend_image: ${{ steps.images.outputs.frontend_image }}
+      backend_image: ${{ steps.images.outputs.backend_image }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify version tag
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Production deployments require a version tag such as v1.2.3"
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            backend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate frontend environment
+        run: pnpm run validate:env:frontend
+
+      - name: TypeScript check frontend
+        run: pnpm exec tsc -b
+
+      - name: Build frontend
+        run: pnpm run build
+
+      - name: Frontend smoke tests
+        run: pnpm run test:smoke:frontend
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate backend environment
+        working-directory: backend
+        run: pnpm run validate:env
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: pnpm run prisma:generate
+
+      - name: Build backend
+        working-directory: backend
+        run: pnpm run build
+
+      - name: Backend smoke tests
+        working-directory: backend
+        run: pnpm run test:smoke
+
+      - name: Validate command catalog
+        working-directory: backend
+        run: pnpm run validate:command-catalog
+
+      - name: Resolve image names
+        id: images
+        run: |
+          namespace="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${namespace}/frontend:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${namespace}/backend:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "frontend_sha_image=${namespace}/frontend:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "backend_sha_image=${namespace}/backend:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.frontend
+          push: true
+          build-args: |
+            VITE_APP_ENV=production
+            VITE_BASE_PATH=/firewall/
+            VITE_API_BASE_URL=/firewall-api
+          tags: |
+            ${{ steps.images.outputs.frontend_image }}
+            ${{ steps.images.outputs.frontend_sha_image }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.backend_image }}
+            ${{ steps.images.outputs.backend_sha_image }}
+
+  deploy-production:
+    name: Deploy production
+    needs: build-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+        run: |
+          test -n "$SSH_HOST"
+          test -n "$SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Copy deployment files
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH/scripts/deploy'"
+          scp -i ~/.ssh/deploy_key docker-compose.production.yml nginx.firewall-main.conf "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+          scp -i ~/.ssh/deploy_key scripts/deploy/deploy-compose-version.sh scripts/deploy/rollback-one-version.sh "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/scripts/deploy/"
+
+      - name: Log in remote host to GHCR
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          GHCR_USER: ${{ secrets.PRODUCTION_GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.PRODUCTION_GHCR_TOKEN }}
+        run: |
+          test -n "$GHCR_USER"
+          test -n "$GHCR_TOKEN"
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+
+      - name: Deploy version tag
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_VERSION: ${{ needs.build-images.outputs.version }}
+          FRONTEND_IMAGE: ${{ needs.build-images.outputs.frontend_image }}
+          BACKEND_IMAGE: ${{ needs.build-images.outputs.backend_image }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "cd '$DEPLOY_PATH' && COMPOSE_FILE=docker-compose.production.yml DEPLOY_VERSION='$DEPLOY_VERSION' FRONTEND_IMAGE='$FRONTEND_IMAGE' BACKEND_IMAGE='$BACKEND_IMAGE' sh scripts/deploy/deploy-compose-version.sh"

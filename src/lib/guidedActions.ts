@@ -1,7 +1,6 @@
 import type { ActionPlan } from "./actions";
 import type { GuidedActionField } from "./commandCatalog";
-
-const API = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL as API } from "@/config/frontendEnv";
 
 export type GuidedActionStep = {
   id: string;

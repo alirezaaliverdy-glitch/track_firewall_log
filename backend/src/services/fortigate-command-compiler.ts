@@ -53,6 +53,22 @@ export function compileFortiGateAction(input: {
   const vdom = safeOptionalName(p, "vdom");
   if (p.vdomRequired === true && !vdom) throw new Error("FORTIGATE_VDOM_REQUIRED");
 
+  if (actionType === ActionType.fortigate_reboot || actionType === ActionType.fortigate_shutdown) {
+    const shutdown = actionType === ActionType.fortigate_shutdown;
+    const command = shutdown ? "execute shutdown" : "execute reboot";
+    return result({
+      category: "system",
+      riskLevel: AiRiskLevel.critical,
+      normalizedParameters: { operation: shutdown ? "shutdown" : "reboot" },
+      requiresBackup: false,
+      requiresBreakGlass: true,
+      lockoutSensitive: true,
+      warnings: ["This operation interrupts management connectivity; the FortiOS confirmation prompt is answered only after user approval."],
+      commandSpecs: [spec({ template: command, command, write: true, target: { operation: shutdown ? "shutdown" : "reboot" }, rollbackSteps: [], warnings: [] })],
+      rollbackJson: { type: shutdown ? "none_shutdown" : "none_reboot", expectedDisconnect: true }
+    });
+  }
+
   const readOnlyCompiled = compileFortiGateReadOnlyAction(actionType);
   if (readOnlyCompiled) return readOnlyCompiled;
 
@@ -152,7 +168,8 @@ export function compileFortiGateAction(input: {
       rollback = `restore previous allowaccess for ${name}`;
     }
     lines.push("next", "end");
-    return result({ category: "interface", riskLevel, normalizedParameters: { name, vdom, managementFacing: p.managementFacing === true }, requiresBackup: true, requiresBreakGlass, lockoutSensitive: true, warnings: ["Interface changes can cause connectivity loss. Verify alternate access."], commandSpecs: [spec({ template: "config system interface/edit <name>/controlled update", command: withVdom(block(lines), vdom), target: { name, vdom }, rollbackSteps: [rollback], warnings: [] })], rollbackJson: { type: "restore_interface_manual", name, vdom } });
+    const verificationCommand = withVdom(`show full-configuration system interface ${name}`, vdom);
+    return result({ category: "interface", riskLevel, normalizedParameters: { name, vdom, managementFacing: p.managementFacing === true, requestedIp: text(p, "cidr") ?? text(p, "ip"), requestedAlias: text(p, "alias") }, requiresBackup: true, requiresBreakGlass, lockoutSensitive: true, warnings: ["Interface changes can cause connectivity loss. Verify alternate access."], commandSpecs: [spec({ template: "config system interface/edit <name>/controlled update", command: withVdom(block(lines), vdom), target: { name, vdom }, rollbackSteps: [rollback], warnings: [] }), spec({ template: "verify interface full configuration", command: verificationCommand, write: false, target: { name, vdom }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "restore_interface_manual", name, vdom } });
   }
 
   if (actionType === ActionType.fortigate_create_vlan_interface) {

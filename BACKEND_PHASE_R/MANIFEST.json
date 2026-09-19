@@ -1,0 +1,14 @@
+{
+  "BACKEND_TRIPLE_AUDIT_2026-07-25.md": {
+    "sha256": "05fdc8d09f5bcd1cae5da6cf3adbad62cadc3d46afaebac08ca06cf27d1e4e43",
+    "bytes": 14672
+  },
+  "CODEX_START_PHASE_R.txt": {
+    "sha256": "2c83cd01d22730a7edbb9d6a63f223bdd0a0e53c387c3d85d9bf1ae0ac612e20",
+    "bytes": 1079
+  },
+  "PHASE_R_BACKEND_STABILIZATION.md": {
+    "sha256": "53a287e3684de275d2641174c1cdde161bfa0212ff55dc230cad11298655355a",
+    "bytes": 8228
+  }
+}

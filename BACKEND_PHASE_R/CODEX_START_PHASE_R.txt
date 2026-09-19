@@ -1,0 +1,29 @@
+Read these files completely before modifying code:
+
+- BACKEND_TRIPLE_AUDIT_2026-07-25.md
+- PHASE_R_BACKEND_STABILIZATION.md
+- CODEX_HANDOFF.md
+
+Work from:
+
+C:\Users\SurfaceLand\Desktop\track_firewall_log
+
+The review ZIP had the wrong package manifest, so treat the real repository as authoritative.
+
+Execute Phase R in order: R0, R1, R2, R3.
+
+Before changes:
+- record branch, HEAD, status, tool versions
+- inspect the real backend/package.json
+- run baseline tests with an isolated database
+- confirm and repair the empty Cisco enable-secret migration safely
+- add failing characterization tests
+
+Preserve all unrelated dirty, deleted, and untracked files.
+Do not reset, clean, or stage prompt/document bundles.
+Do not execute destructive commands against real devices.
+
+After each subphase run validation Pass A, B, and C.
+At final acceptance, run all three passes three consecutive times.
+
+Create focused commits, print staged files before every commit, and finish with exact test commands, exit codes, commit IDs, remaining risks, deployment notes, and rollback instructions.

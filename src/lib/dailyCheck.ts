@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type DailyCheckSectionProfile = {
   key: string;
@@ -7,6 +7,14 @@ export type DailyCheckSectionProfile = {
   parserRules: string[];
   severityRules: string[];
   suggestedActions: string[];
+  standardRefs: string[];
+};
+
+export type DailyCheckStandardReference = {
+  id: string;
+  title: string;
+  titleFa: string;
+  url: string | null;
 };
 
 export type VendorDailyCheckProfile = {
@@ -17,6 +25,23 @@ export type VendorDailyCheckProfile = {
   sections: DailyCheckSectionProfile[];
 };
 
+export type DailyCheckReadiness = {
+  deviceName: string;
+  connectionStatus: string;
+  protocol: string;
+  credentialConfigured: boolean;
+  connectorConfigured: boolean;
+  lastConnectionCheckAt: string | null;
+  lastConnectionLatencyMs: number | null;
+  lastConnectionStatus: string | null;
+};
+
+export type DailyCheckProfilesResponse = {
+  profiles: VendorDailyCheckProfile[];
+  standards: DailyCheckStandardReference[];
+  vendorGuidance: Record<string, { title: string; url: string }>;
+};
+
 async function requestJson<T>(path: string) {
   const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include" });
   const payload = await response.json();
@@ -25,5 +50,9 @@ async function requestJson<T>(path: string) {
 }
 
 export async function getDailyCheckProfile(deviceId: string) {
-  return requestJson<{ deviceId: string; detectedVendor: string; profile: VendorDailyCheckProfile }>(`/daily-check/devices/${encodeURIComponent(deviceId)}/profile`);
+  return requestJson<{ deviceId: string; detectedVendor: string; profile: VendorDailyCheckProfile; readiness: DailyCheckReadiness }>(`/daily-check/devices/${encodeURIComponent(deviceId)}/profile`);
+}
+
+export async function getDailyCheckProfiles() {
+  return requestJson<DailyCheckProfilesResponse>("/daily-check/profiles");
 }

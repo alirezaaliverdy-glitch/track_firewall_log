@@ -13,6 +13,7 @@ function deviceVendor(device: { type: string; vendor: string }) {
   if (device.type === "fortigate" || vendor.includes("forti")) return "fortigate";
   if (device.type === "mikrotik" || vendor.includes("mikrotik") || vendor.includes("routeros")) return "mikrotik";
   if (device.type === "linux_edge" || vendor.includes("linux")) return "linux";
+  if (vendor.includes("sophos") || vendor.includes("sfos") || vendor.includes("cyberoam")) return "sophos";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type;
 }

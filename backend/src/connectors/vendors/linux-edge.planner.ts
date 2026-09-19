@@ -122,6 +122,8 @@ export const linuxEdgePlanner: VendorPlanner = {
     ActionType.linux_lock_user,
     ActionType.linux_unlock_user,
     ActionType.linux_daily_check,
+    ActionType.linux_reboot,
+    ActionType.linux_shutdown,
     ActionType.custom_vendor_action,
     ...READ_ACTIONS.keys()
   ],
@@ -144,6 +146,14 @@ export const linuxEdgePlanner: VendorPlanner = {
       const plan = base(input);
       plan.commands = ["controlled Linux daily-check bundle (read-only)"];
       plan.requiresApproval = false;
+      return plan;
+    }
+    if (input.actionType === ActionType.linux_reboot || input.actionType === ActionType.linux_shutdown) {
+      const plan = base(input);
+      const verb = input.actionType === ActionType.linux_reboot ? "reboot" : "poweroff";
+      plan.commands = [`sudo -n systemd-run --quiet --no-block --on-active=3s systemctl ${verb}`];
+      plan.rollbackSteps = [];
+      plan.warnings.push(`The ${verb} request is delayed for three seconds so the audited SSH dispatch can complete.`);
       return plan;
     }
     if (input.actionType === ActionType.open_port || input.actionType === ActionType.linux_open_port) return portPlan(input, "allow");

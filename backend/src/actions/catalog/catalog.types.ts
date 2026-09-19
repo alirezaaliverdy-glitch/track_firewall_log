@@ -1,6 +1,6 @@
 import type { ActionType, AiRiskLevel } from "@prisma/client";
 
-export type CatalogVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco";
+export type CatalogVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "sophos";
 
 export type CommandCatalogEntry = {
   id: string;
@@ -29,4 +29,3 @@ export type CommandCatalogEntry = {
   rollback: { available: boolean; strategy?: string };
   supported: boolean;
 };
-

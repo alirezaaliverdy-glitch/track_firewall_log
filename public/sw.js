@@ -1,8 +1,10 @@
-const CACHE_VERSION = "phase-g-mobile-foundation-v1";
+const CACHE_VERSION = "public-landing-current-ui-v3";
 const SHELL_CACHE = `firewall-shell-${CACHE_VERSION}`;
 const SAFE_API_CACHE = `firewall-readonly-api-${CACHE_VERSION}`;
 const API_PREFIX = "/firewall-api";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/pwa-icon.svg", "/pwa-icon-maskable.svg"];
+const APP_BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/?$/, "/");
+const appAsset = (path = "") => `${APP_BASE_PATH}${path}`;
+const APP_SHELL = [appAsset(), appAsset("index.html"), appAsset("manifest.webmanifest"), appAsset("pwa-icon.svg"), appAsset("pwa-icon-maskable.svg")];
 const SAFE_API_CACHE_PATHS = [
   /^\/firewall-api\/devices(?:\?.*)?$/,
   /^\/firewall-api\/actions(?:\?.*)?$/,
@@ -130,7 +132,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => response)
-        .catch(() => caches.match("/index.html"))
+        .catch(() => caches.match(appAsset("index.html")))
     );
     return;
   }

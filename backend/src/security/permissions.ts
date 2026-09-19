@@ -14,6 +14,8 @@ export type Permission =
   | "audit.read"
   | "security.policy.manage"
   | "uploads.create"
+  | "users.manage"
+  | "auth.session.terminate"
   | "auth.session.manage";
 
 export const ALL_PERMISSIONS: readonly Permission[] = [
@@ -30,6 +32,8 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
   "audit.read",
   "security.policy.manage",
   "uploads.create",
+  "users.manage",
+  "auth.session.terminate",
   "auth.session.manage"
 ] as const;
 

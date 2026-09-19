@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getCiscoDevices, getVendorDetail, listVendors, type VendorDetail, type VendorSummary } from "@/lib/vendors";
 import { Link, useLocation } from "react-router-dom";
+import { Boxes, CheckCircle2, ChevronLeft, CircleDashed, Network, Radio, Router, Server, Shield, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 type CiscoDeviceResponse = { data: unknown[]; warnings: string[]; meta: Record<string, unknown> };
 
@@ -33,15 +35,26 @@ const vendorPurposeFa: Record<string, string> = {
   generic: "منبع عمومی برای داده یا لاگ، بدون اقدام واقعی."
 };
 
-const vendorOnboardingLabelFa: Record<string, string> = {
-  cisco: "ثبت دستگاه Cisco",
-  fortigate: "ثبت دستگاه FortiGate",
-  mikrotik: "ثبت دستگاه MikroTik",
-  linux: "ثبت سرور Linux"
-};
+const supportedOnboarding = new Set(["linux", "cisco", "fortigate", "mikrotik"]);
+const vendorVisuals = {
+  linux: { icon: Server, tone: "cyan" },
+  cisco: { icon: Router, tone: "violet" },
+  fortigate: { icon: Shield, tone: "rose" },
+  mikrotik: { icon: Radio, tone: "amber" },
+  pfsense: { icon: Network, tone: "emerald" },
+} as const;
+
+function readinessPercent(state: string) {
+  if (state === "implemented") return 100;
+  if (state === "partial") return 64;
+  if (state === "planned") return 28;
+  return 8;
+}
 
 export default function CiscoOverviewPage() {
   const location = useLocation();
+  const { t, i18n } = useTranslation();
+  const locale = (i18n.resolvedLanguage ?? i18n.language).startsWith("fa") ? "fa-IR" : "en-US";
   const isCiscoRoute = location.pathname.includes("/assets/vendors/cisco");
   const [vendors, setVendors] = useState<VendorSummary[]>([]);
   const [vendor, setVendor] = useState<VendorDetail | null>(null);
@@ -77,21 +90,43 @@ export default function CiscoOverviewPage() {
   if (!vendor) return <section className="page-stack"><PageHeader title="وندورها" eyebrow="Vendor management" /><div className="state-card">در حال دریافت وضعیت وندورها...</div></section>;
 
   if (!isCiscoRoute) {
+    const readyCount = vendors.filter((item) => item.implementationState === "implemented").length;
+    const partialCount = vendors.filter((item) => item.implementationState === "partial").length;
+    const plannedCount = vendors.length - readyCount - partialCount;
     return (
-      <section className="page-stack">
-        <PageHeader title="وندورها" eyebrow="مدیریت قابلیت‌ها" description="نمای خلاصه وندورها، Connectorها و سطح آمادگی هر مسیر عملیاتی." actions={<Link className="primary-link" to="/assets/devices/new">ثبت دستگاه</Link>} />
-        <div className="content-grid">
-          {vendors.map((item) => (
-            <section key={item.key} className="content-panel">
-              <h2>{item.titleFa || item.titleEn}</h2>
-              <dl className="detail-list">
-                <dt>وضعیت</dt><dd>{stateFa[item.implementationState] ?? item.implementationState}</dd>
-                <dt>Connector</dt><dd>{item.connectorTypes.join("، ") || "ندارد"}</dd>
-                <dt>کاربرد</dt><dd>{vendorPurposeFa[item.key] ?? item.description}</dd>
-              </dl>
-              <div className="button-row"><Link className="secondary-link" to={`/assets/vendors/${item.key}`}>مشاهده وندور</Link><Link className="primary-link" to={`/assets/vendors/${item.key}/devices/new`}>{vendorOnboardingLabelFa[item.key] ?? "ثبت دستگاه"}</Link></div>
-            </section>
-          ))}
+      <section className="page-stack vendor-catalog-page">
+        <PageHeader title={t("vendors.title")} eyebrow={t("vendors.eyebrow")} description={t("vendors.description")} actions={<Link className="primary-link" to="/assets/devices/new"><Sparkles size={16} />{t("vendors.actions.guidedRegister")}</Link>} />
+
+        <section className="vendor-readiness-overview">
+          <div className="vendor-readiness-overview__copy"><span>{t("vendors.overview.eyebrow")}</span><h2>{t("vendors.overview.title")}</h2><p>{t("vendors.overview.description")}</p></div>
+          <div className="vendor-readiness-stats" aria-label={t("vendors.overview.statsLabel")}>
+            <article><span className="is-ready"><CheckCircle2 size={18} /></span><div><strong>{readyCount.toLocaleString(locale)}</strong><small>{t("vendors.states.implemented")}</small></div></article>
+            <article><span className="is-partial"><CircleDashed size={18} /></span><div><strong>{partialCount.toLocaleString(locale)}</strong><small>{t("vendors.states.partial")}</small></div></article>
+            <article><span className="is-planned"><Boxes size={18} /></span><div><strong>{plannedCount.toLocaleString(locale)}</strong><small>{t("vendors.states.planned")}</small></div></article>
+          </div>
+        </section>
+
+        <div className="vendor-catalog-grid">
+          {vendors.map((item, index) => {
+            const visual = vendorVisuals[item.key as keyof typeof vendorVisuals] ?? { icon: Boxes, tone: "slate" };
+            const Icon = visual.icon;
+            const canRegister = supportedOnboarding.has(item.key);
+            const readiness = readinessPercent(item.implementationState);
+            return (
+              <article key={item.key} className={`vendor-catalog-card vendor-catalog-card--${visual.tone}`} style={{ "--vendor-delay": `${index * 70}ms` } as CSSProperties} data-testid="vendor-catalog-card">
+                <header><span className="vendor-catalog-card__icon"><Icon size={25} /></span><span className={`vendor-state vendor-state--${item.implementationState}`}><i />{t(`vendors.states.${item.implementationState}`, { defaultValue: item.implementationState })}</span></header>
+                <div className="vendor-catalog-card__title"><h2>{item.titleFa || item.titleEn}</h2><span>{item.key}</span></div>
+                <p>{t(`vendors.purpose.${item.key}`, { defaultValue: vendorPurposeFa[item.key] ?? item.description })}</p>
+                <div className="vendor-readiness-meter"><span><b>{t("vendors.card.readiness")}</b><strong>{readiness.toLocaleString(locale)}٪</strong></span><div><i style={{ width: `${readiness}%` }} /></div></div>
+                <div className="vendor-connector-row"><span>{t("vendors.card.connectors")}</span><div>{item.connectorTypes.length ? item.connectorTypes.map((connector) => <b key={connector} dir="ltr">{connector}</b>) : <b>{t("vendors.card.noConnector")}</b>}</div></div>
+                <ul className="vendor-card-facts">
+                  <li><CheckCircle2 size={15} />{canRegister ? t("vendors.card.guidedAvailable") : t("vendors.card.guidedPlanned")}</li>
+                  <li><Network size={15} />{t(`vendors.card.execution.${item.implementationState}`, { defaultValue: t("vendors.card.execution.planned") })}</li>
+                </ul>
+                <footer><Link className="vendor-details-link" to={`/assets/vendors/${item.key}`}>{t("vendors.actions.details")}<ChevronLeft size={16} /></Link>{canRegister ? <Link className="vendor-register-link" to={`/assets/vendors/${item.key}/devices/new`}>{t("vendors.actions.register", { vendor: item.titleFa || item.titleEn })}</Link> : <span className="vendor-planned-label">{t("vendors.actions.registrationPlanned")}</span>}</footer>
+              </article>
+            );
+          })}
         </div>
       </section>
     );

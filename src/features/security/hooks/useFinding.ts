@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL } from "@/config/frontendEnv";
 import { type SecurityFinding } from "@/lib/platform";
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
 
 async function request<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include" });

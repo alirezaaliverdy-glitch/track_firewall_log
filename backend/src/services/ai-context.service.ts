@@ -1,3 +1,4 @@
+import { IncidentStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 
@@ -15,9 +16,16 @@ async function safeContextQuery<T>(query: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-export async function buildSecurityContext(input: { recentMinutes?: number } = {}) {
+export async function buildSecurityContext(input: { recentMinutes?: number; deviceId?: string } = {}) {
   const recentMinutes = Math.max(5, Math.min(input.recentMinutes ?? 60, 1440));
   const since = sinceMinutes(recentMinutes);
+  const deviceWhere = input.deviceId ? { deviceId: input.deviceId } : {};
+  const incidentWhere = {
+    ...deviceWhere,
+    lastSeenAt: { gte: since },
+    status: { in: [IncidentStatus.open, IncidentStatus.investigating] }
+  };
+  const eventWhere = { ...deviceWhere, receivedAt: { gte: since } };
 
   const [
     recentIncidents,
@@ -34,6 +42,7 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
     linuxTelemetrySnapshots
   ] = await Promise.all([
     safeContextQuery(prisma.incident.findMany({
+      where: incidentWhere,
       orderBy: { lastSeenAt: "desc" },
       take: env.aiMaxContextIncidents,
       include: {
@@ -44,30 +53,32 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
     }), []),
     safeContextQuery(prisma.incident.groupBy({
       by: ["severity"],
+      where: incidentWhere,
       _count: { _all: true },
       orderBy: { _count: { severity: "desc" } }
     }), []),
     safeContextQuery(prisma.incident.groupBy({
       by: ["status"],
+      where: incidentWhere,
       _count: { _all: true },
       orderBy: { _count: { status: "desc" } }
     }), []),
     safeContextQuery(prisma.securityEvent.groupBy({
       by: ["srcIp"],
-      where: { receivedAt: { gte: since }, srcIp: { not: null } },
+      where: { ...eventWhere, srcIp: { not: null } },
       _count: { _all: true },
       orderBy: { _count: { srcIp: "desc" } },
       take: env.aiMaxContextEvents
     }), []),
     safeContextQuery(prisma.securityEvent.groupBy({
       by: ["dstPort"],
-      where: { receivedAt: { gte: since }, dstPort: { in: SENSITIVE_PORTS } },
+      where: { ...eventWhere, dstPort: { in: SENSITIVE_PORTS } },
       _count: { _all: true },
       orderBy: { _count: { dstPort: "desc" } },
       take: env.aiMaxContextEvents
     }), []),
     safeContextQuery(prisma.securityEvent.count({
-      where: { receivedAt: { gte: since } }
+      where: eventWhere
     }), 0),
     safeContextQuery(prisma.detectionRule.findMany({
       orderBy: { updatedAt: "desc" },
@@ -75,6 +86,7 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
       select: { id: true, name: true, ruleType: true, severity: true, enabled: true, updatedAt: true }
     }), []),
     safeContextQuery(prisma.device.findMany({
+      where: input.deviceId ? { id: input.deviceId } : undefined,
       orderBy: { updatedAt: "desc" },
       take: 25,
       select: {
@@ -92,6 +104,7 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
       }
     }), []),
     safeContextQuery(prisma.eventBatch.findMany({
+      where: deviceWhere,
       orderBy: { createdAt: "desc" },
       take: 10,
       include: {
@@ -100,6 +113,7 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
       }
     }), []),
     safeContextQuery(prisma.actionPlan.findMany({
+      where: deviceWhere,
       orderBy: { updatedAt: "desc" },
       take: 10,
       select: {
@@ -114,10 +128,10 @@ export async function buildSecurityContext(input: { recentMinutes?: number } = {
       }
     }), []),
     safeContextQuery(prisma.actionPlan.count({
-      where: { status: { in: ["awaiting_approval", "dry_run_ready", "approved"] } }
+      where: { ...deviceWhere, status: { in: ["awaiting_approval", "dry_run_ready", "approved"] } }
     }), 0),
     safeContextQuery(prisma.deviceSnapshot.findMany({
-      where: { vendor: "linux", snapshotType: "linux_security" },
+      where: { ...deviceWhere, vendor: "linux", snapshotType: "linux_security" },
       orderBy: { collectedAt: "desc" },
       take: 10,
       select: { deviceId: true, collectedAt: true, dataJson: true }

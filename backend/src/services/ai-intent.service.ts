@@ -713,8 +713,9 @@ async function resolveDeviceHint(parameters: Record<string, unknown>, intentType
   });
 }
 
-export async function listAiActionIntents() {
+export async function listAiActionIntents(userId: string | null) {
   return prisma.aiActionIntent.findMany({
+    where: { session: { userId } },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {
@@ -724,9 +725,9 @@ export async function listAiActionIntents() {
   });
 }
 
-export async function getAiActionIntent(id: string) {
-  return prisma.aiActionIntent.findUnique({
-    where: { id },
+export async function getAiActionIntent(id: string, userId: string | null) {
+  return prisma.aiActionIntent.findFirst({
+    where: { id, session: { userId } },
     include: {
       device: { select: { id: true, name: true, type: true } },
       session: { select: { id: true, title: true } },
@@ -735,7 +736,7 @@ export async function getAiActionIntent(id: string) {
   });
 }
 
-export async function updateAiActionIntent(id: string, input: Record<string, unknown>): Promise<AiActionIntent> {
+export async function updateAiActionIntent(id: string, input: Record<string, unknown>, userId: string | null): Promise<AiActionIntent> {
   const data: Prisma.AiActionIntentUpdateInput = {};
   if (typeof input.status === "string" && input.status in AiActionIntentStatus) {
     data.status = input.status as AiActionIntentStatus;
@@ -747,8 +748,11 @@ export async function updateAiActionIntent(id: string, input: Record<string, unk
     data.explanation = input.explanation;
   }
 
+  const owned = await prisma.aiActionIntent.findFirst({ where: { id, session: { userId } }, select: { id: true } });
+  if (!owned) throw new Error("AiActionIntent not found");
+
   return prisma.aiActionIntent.update({
-    where: { id },
+    where: { id: owned.id },
     data
   });
 }
@@ -788,8 +792,8 @@ function remainingMissingFields(parameters: Record<string, unknown>, fields: Rec
   });
 }
 
-export async function completeAiActionRequest(id: string, input: { fields?: Record<string, unknown> }) {
-  const intent = await prisma.aiActionIntent.findUnique({ where: { id }, include: { device: { select: { id: true, name: true, type: true, host: true } } } });
+export async function completeAiActionRequest(id: string, input: { fields?: Record<string, unknown> }, userId: string | null) {
+  const intent = await prisma.aiActionIntent.findFirst({ where: { id, session: { userId } }, include: { device: { select: { id: true, name: true, type: true, host: true } } } });
   if (!intent) throw new Error("AiActionIntent not found");
 
   const fields = normalizeCompletionFields(input.fields && typeof input.fields === "object" ? input.fields : {});

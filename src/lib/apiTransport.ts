@@ -1,4 +1,6 @@
-export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
+
+export { API_BASE_URL };
 export const MUTATION_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 export type ApiTransport = {

@@ -1,40 +1,52 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import enCommon from "./locales/en/common.json";
-import faCommon from "./locales/fa/common.json";
+import {
+  LOCALE_STORAGE_KEY,
+  applyDocumentLocale,
+  applyStoredDocumentLocale,
+  normalizeLocale,
+  type AppLocale,
+} from "./localeState";
 
-export const SUPPORTED_LOCALES = ["fa", "en"] as const;
-export type AppLocale = (typeof SUPPORTED_LOCALES)[number];
+export { SUPPORTED_LOCALES, applyDocumentLocale, type AppLocale } from "./localeState";
 
-const STORAGE_KEY = "firewall-log-analyzer.locale";
+const initialLocale = applyStoredDocumentLocale();
 
-function normalizeLocale(value: unknown): AppLocale {
-  return value === "en" ? "en" : "fa";
+const localeLoaders = {
+  fa: () => import("./locales/fa/common.json"),
+  en: () => import("./locales/en/common.json")
+} satisfies Record<AppLocale, () => Promise<{ default: Record<string, unknown> }>>;
+
+async function loadLocale(locale: AppLocale) {
+  if (i18n.hasResourceBundle(locale, "common")) return;
+  const messages = await localeLoaders[locale]();
+  i18n.addResourceBundle(locale, "common", messages.default, true, true);
 }
 
-export function applyDocumentLocale(locale: AppLocale) {
-  document.documentElement.lang = locale;
-  document.documentElement.dir = locale === "fa" ? "rtl" : "ltr";
-}
+const initialMessages = await localeLoaders[initialLocale]();
 
-const initialLocale = normalizeLocale(window.localStorage.getItem(STORAGE_KEY));
-applyDocumentLocale(initialLocale);
-
-void i18n.use(initReactI18next).init({
+await i18n.use(initReactI18next).init({
   resources: {
-    en: { common: enCommon },
-    fa: { common: faCommon }
+    [initialLocale]: { common: initialMessages.default }
   },
   lng: initialLocale,
   fallbackLng: "fa",
   defaultNS: "common",
+  partialBundledLanguages: true,
   interpolation: { escapeValue: false }
 });
 
 i18n.on("languageChanged", (locale) => {
   const normalized = normalizeLocale(locale);
-  window.localStorage.setItem(STORAGE_KEY, normalized);
+  window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
   applyDocumentLocale(normalized);
 });
+
+const originalChangeLanguage = i18n.changeLanguage.bind(i18n);
+i18n.changeLanguage = async (locale?: string) => {
+  const normalized = normalizeLocale(locale);
+  await loadLocale(normalized);
+  return originalChangeLanguage(normalized);
+};
 
 export default i18n;

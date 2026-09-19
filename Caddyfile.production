@@ -1,0 +1,38 @@
+{
+	admin off
+}
+
+http:// {
+	redir https://{host}:{$FIREWALL_HTTPS_PORT}{uri} 308
+}
+
+https:// {
+	tls internal {
+		on_demand
+	}
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	@api path_regexp api ^/firewall-api(/.*)$
+	handle @api {
+		rewrite * /api{re.api.1}
+		reverse_proxy firewall-api:4000 {
+			header_up -Origin
+		}
+	}
+
+	handle /firewall/* {
+		reverse_proxy firewall-web:50
+	}
+
+	handle {
+		redir /firewall/ 302
+	}
+}

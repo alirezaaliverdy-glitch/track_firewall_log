@@ -1,7 +1,8 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type OnboardingDraft = {
-  vendor: "linux" | "cisco" | "fortigate" | "mikrotik";
+  companyId: string;
+  vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
   platform: string;
   connectionMethod: "ssh" | "api";
   name: string;
@@ -130,6 +131,7 @@ export type DeviceWorkspace = {
     recentChanges: Array<{ timestamp: string; label: string }>;
   };
   vendor: { key: string; sections: Array<{ key: string; titleFa: string; titleEn: string; state: "available" | "no_data"; capabilityState?: string; reason: string | null; requirement: string; nextAction: string }> };
+  vendorDetails: Record<string, unknown> | null;
 };
 
 export type WorkspaceChartPoint = { timestamp: string; value: number; label?: string; unit?: string | null };

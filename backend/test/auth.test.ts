@@ -74,4 +74,26 @@ test("authentication lifecycle, bootstrap, and protected routes", async (t) => {
   assert.equal(logout.statusCode, 200);
   assert.match(String(logout.headers["set-cookie"]), /firewall_session=;/);
   assert.equal((await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie } })).statusCode, 401);
+
+  const nativeLogin = await app.inject({
+    method: "POST",
+    url: "/api/auth/login",
+    headers: { origin: "https://localhost", "x-firewall-client": "android" },
+    payload: { username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD }
+  });
+  assert.equal(nativeLogin.statusCode, 200);
+  assert.equal(nativeLogin.headers["set-cookie"], undefined);
+  assert.match(nativeLogin.json().sessionToken, /^[A-Za-z0-9_-]{43}$/);
+  const authorization = `Bearer ${nativeLogin.json().sessionToken}`;
+
+  const nativeMe = await app.inject({ method: "GET", url: "/api/auth/me", headers: { authorization } });
+  assert.equal(nativeMe.statusCode, 200);
+  assert.equal(nativeMe.json().user.username, process.env.ADMIN_USERNAME);
+
+  const nativeProtected = await app.inject({ method: "GET", url: "/api/devices", headers: { authorization } });
+  assert.equal(nativeProtected.statusCode, 200);
+
+  const nativeLogout = await app.inject({ method: "POST", url: "/api/auth/logout", headers: { authorization, origin: "https://localhost" } });
+  assert.equal(nativeLogout.statusCode, 200);
+  assert.equal((await app.inject({ method: "GET", url: "/api/auth/me", headers: { authorization } })).statusCode, 401);
 });

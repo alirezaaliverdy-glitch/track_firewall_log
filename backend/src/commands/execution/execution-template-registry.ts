@@ -1,7 +1,7 @@
 import { FORTIGATE_FULL_CONTROL_ACTION_TYPES } from "../../fortigate/full-control-registry.js";
 import { executableCiscoOperations } from "../../cisco/cisco-operation-registry.js";
 
-export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh"; handler: string };
+export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh" | "sophos-api"; handler: string };
 
 const templates: ExecutionTemplate[] = [
   { id: "linux_open_port", actionType: "linux_open_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
@@ -23,6 +23,8 @@ const templates: ExecutionTemplate[] = [
   { id: "linux_lock_user", actionType: "linux_lock_user", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_unlock_user", actionType: "linux_unlock_user", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_daily_check", actionType: "linux_daily_check", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_reboot", actionType: "linux_reboot", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
+  { id: "linux_shutdown", actionType: "linux_shutdown", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_custom_connector_command", actionType: "custom_vendor_action", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "mikrotik_list_management_services", actionType: "mikrotik_list_management_services", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
   { id: "mikrotik_check_firewall_filter", actionType: "mikrotik_list_filter_rules", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
@@ -31,6 +33,13 @@ const templates: ExecutionTemplate[] = [
   { id: "mikrotik_block_ip", actionType: "mikrotik_block_ip", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" },
   { id: "mikrotik_backup_config", actionType: "mikrotik_create_backup", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "mikrotik_daily_check", actionType: "mikrotik_daily_check", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_enable_interface", actionType: "mikrotik_enable_interface", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_disable_interface", actionType: "mikrotik_disable_interface", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_set_interface_comment", actionType: "mikrotik_set_interface_comment", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_enable_service", actionType: "mikrotik_enable_service", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_disable_service", actionType: "mikrotik_disable_service", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_reboot", actionType: "mikrotik_reboot", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,{ id: "mikrotik_shutdown", actionType: "mikrotik_shutdown", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "mikrotik_custom_connector_command", actionType: "custom_vendor_action", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "fortigate_daily_check", actionType: "fortigate_daily_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_interfaces", actionType: "fortigate_show_interfaces", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
@@ -46,6 +55,10 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "fortigate_guided_vpn_setup", actionType: "fortigate_guided_vpn_setup", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_custom_connector_command", actionType: "custom_vendor_action", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "cisco_custom_connector_command", actionType: "custom_vendor_action", connectorType: "cisco-ios-xe-ssh", handler: "ciscoIosXePlanner" }
+  ,...[
+    "sophos_inventory", "sophos_enable_interface", "sophos_disable_interface", "sophos_set_interface_ipv4",
+    "sophos_enable_firewall_rule", "sophos_disable_firewall_rule"
+  ].map((id) => ({ id, actionType: "generic_security_action", connectorType: "sophos-api" as const, handler: "sophosPlanner" }))
   ,...executableCiscoOperations().map((operation) => ({ id: operation.executionTemplateRef!, actionType: "generic_security_action", connectorType: "cisco-ios-xe-ssh" as const, handler: "ciscoIosXePlanner" }))
   ,...FORTIGATE_FULL_CONTROL_ACTION_TYPES.map((actionType) => ({ id: actionType, actionType, connectorType: "fortigate-ssh" as const, handler: "fortigatePlanner" }))
 ];

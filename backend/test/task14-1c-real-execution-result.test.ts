@@ -38,7 +38,8 @@ test("manual catalog actions cannot expose execute and successful UI navigates t
   assert.match(center, /actionResultUrl\(plan\.id\)/);
   assert.match(center, /disabled=\{Boolean\(working\)/);
   assert.match(result, /نتیجه اجرای دستور/);
-  assert.match(result, /خروجی خام/);
+  assert.match(result, /خروجی اجرا/);
+  assert.match(result, /actionCommandOutputs/);
   assert.match(result, /formatActionResult/);
 });
 

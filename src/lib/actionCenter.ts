@@ -1,6 +1,6 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
-export type ActionLifecycle = "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "skipped" | "cancelled";
+export type ActionLifecycle = "queued" | "draft" | "needs_input" | "ready_for_confirmation" | "confirmed" | "executing" | "succeeded" | "failed" | "skipped" | "cancelled";
 export type ActionCenterItem = {
   id: string;
   source: string;
@@ -45,11 +45,12 @@ function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-const LIFECYCLES = new Set<ActionLifecycle>(["draft", "needs_input", "ready_for_confirmation", "confirmed", "executing", "succeeded", "failed", "skipped", "cancelled"]);
+const LIFECYCLES = new Set<ActionLifecycle>(["queued", "draft", "needs_input", "ready_for_confirmation", "confirmed", "executing", "succeeded", "failed", "skipped", "cancelled"]);
 
 function lifecycle(value: unknown, status: unknown, connectorInvoked: boolean): ActionLifecycle {
   if (LIFECYCLES.has(value as ActionLifecycle)) return value as ActionLifecycle;
   const normalized = String(status ?? "").toLowerCase();
+  if (normalized === "scheduled" || normalized === "queued") return "queued";
   if (["awaiting_approval", "dry_run_ready"].includes(normalized)) return "ready_for_confirmation";
   if (normalized === "approved") return "confirmed";
   if (normalized === "executing") return "executing";
@@ -88,8 +89,10 @@ export function normalizeActionCenterItem(value: unknown): ActionCenterItem {
     } : null,
     support: { state: String(rawSupport.state ?? "unverified"), execution: String(rawSupport.execution ?? "unknown"), executable, reason: rawSupport.reason ?? null },
     controls: {
-      canReview: rawControls.canReview !== false, canEditParameters: rawControls.canEditParameters === true || !terminal,
-      canSelectDevice: rawControls.canSelectDevice === true || !terminal, canSelectCredential: rawControls.canSelectCredential === true,
+      canReview: rawControls.canReview !== false,
+      canEditParameters: typeof rawControls.canEditParameters === "boolean" ? rawControls.canEditParameters : !terminal,
+      canSelectDevice: typeof rawControls.canSelectDevice === "boolean" ? rawControls.canSelectDevice : !terminal,
+      canSelectCredential: rawControls.canSelectCredential === true,
       canPreview: rawControls.canPreview === true, canConfirm: rawControls.canConfirm === true,
       canExecute: rawControls.canExecute === true, canRetry: rawControls.canRetry === true || state === "failed",
       canCancel: rawControls.canCancel === true, canViewEvidence: rawControls.canViewEvidence !== false,
@@ -134,4 +137,4 @@ export const getActionCenterItem = (id: string) => request<unknown>(`/action-cen
 export const cancelActionCenterItem = (id: string, reason = "Cancelled from Action Center") => request<unknown>(`/action-center/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }).then(normalizeActionCenterItem);
 export const retryActionCenterItem = (id: string) => request<unknown>(`/action-center/${encodeURIComponent(id)}/retry`, { method: "POST", body: "{}" }).then(normalizeActionCenterItem);
 export const updateActionCenterTarget = (id: string, deviceId: string) => request<unknown>(`/action-center/${encodeURIComponent(id)}/target`, { method: "PATCH", body: JSON.stringify({ deviceId }) }).then(normalizeActionCenterItem);
-export const clearActionCenterHistory = () => request<{ deleted: number; retainedActive: number }>("/action-center/history", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE ACTION HISTORY" }) });
+export const clearActionCenterHistory = () => request<{ archived: number; deleted: number; retainedActive: number }>("/action-center/history", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE ACTION HISTORY" }) });

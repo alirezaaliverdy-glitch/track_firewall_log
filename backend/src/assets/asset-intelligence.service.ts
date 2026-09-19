@@ -1,6 +1,8 @@
 import { ActionPlanSource, ActionType, AiRiskLevel, DetectionRuleType, IncidentSeverity, type Device, type Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
+import { notifySecurityFinding } from "../services/security-alert-email.service.js";
+import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionEvents, eventMatchesVendorRule, groupSubject, normalizeDetectionVendor } from "../security/vendor-detection-rule-library.js";
 
 const MAX_IMPORT_ASSETS = 100;
 const SECRET_KEY_PATTERN = /(password|passwd|token|api[_-]?key|secret|authorization|privateKey|passphrase)/i;
@@ -29,6 +31,7 @@ type ImportAssetInput = {
 };
 
 type ImportInput = {
+  companyId?: string;
   sourceType?: string;
   idempotencyKey?: string;
   assets?: ImportAssetInput[];
@@ -76,7 +79,7 @@ function assertNoSecrets(value: unknown, path = "payload") {
 function normalizeImport(input: ImportInput) {
   const sourceType = cleanText(input.sourceType, "manual_json") || "manual_json";
   const assets = Array.isArray(input.assets) ? input.assets.slice(0, MAX_IMPORT_ASSETS) : [];
-  return { sourceType, idempotencyKey: cleanText(input.idempotencyKey), assets };
+  return { companyId: cleanText(input.companyId), sourceType, idempotencyKey: cleanText(input.idempotencyKey), assets };
 }
 
 function assetIdentity(input: ImportAssetInput) {
@@ -87,14 +90,14 @@ function assetIdentity(input: ImportAssetInput) {
   return { managementIp, serial, hostname, externalId };
 }
 
-function duplicateWhere(input: ImportAssetInput): Prisma.AssetWhereInput {
+function duplicateWhere(input: ImportAssetInput, companyId?: string): Prisma.AssetWhereInput {
   const identity = assetIdentity(input);
   const OR: Prisma.AssetWhereInput[] = [];
   if (identity.externalId) OR.push({ externalId: identity.externalId });
   if (identity.serial) OR.push({ serial: identity.serial });
   if (identity.managementIp) OR.push({ managementIp: identity.managementIp });
   if (identity.hostname) OR.push({ hostname: { equals: identity.hostname, mode: "insensitive" } });
-  return OR.length ? { OR } : { id: "__no_match__" };
+  return OR.length ? { ...(companyId ? { companyId } : {}), OR } : { id: "__no_match__" };
 }
 
 async function upsertNameModel<T extends "assetRole" | "assetVendor" | "assetPlatform" | "assetSite">(
@@ -129,7 +132,20 @@ async function upsertSource(tx: Prisma.TransactionClient, sourceType: string) {
   });
 }
 
-type DeviceAssetProjection = Pick<Device, "id" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags" | "capabilities">;
+async function upsertAssetIpAddress(
+  tx: Prisma.TransactionClient,
+  companyId: string | null | undefined,
+  address: string,
+  data: { assetId: string; interfaceId?: string | null; role?: string | null }
+) {
+  const scope = { companyId: companyId ?? null, address };
+  const existing = await tx.assetIpAddress.findFirst({ where: scope, select: { id: true } });
+  return existing
+    ? tx.assetIpAddress.update({ where: { id: existing.id }, data: { ...data, companyId: companyId ?? null } })
+    : tx.assetIpAddress.create({ data: { ...data, ...scope } });
+}
+
+type DeviceAssetProjection = Pick<Device, "id" | "companyId" | "deletedAt" | "name" | "vendor" | "type" | "host" | "protocol" | "managementPort" | "status" | "tags" | "capabilities">;
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -144,6 +160,7 @@ function isArchivedDevice(device: Pick<Device, "capabilities">) {
 async function projectionCandidates(tx: Prisma.TransactionClient, device: DeviceAssetProjection) {
   return tx.asset.findMany({
     where: {
+      ...(device.companyId ? { companyId: device.companyId } : {}),
       OR: [
         { deviceId: device.id },
         {
@@ -190,10 +207,12 @@ export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, devi
   const existing = linked[0] ?? unlinked[0];
   const data = {
     name: device.name,
+    companyId: device.companyId,
     hostname: collectedHostname,
     managementIp: device.host,
     serial: collectedSerial,
     managedState: "managed",
+    deletedAt: device.deletedAt,
     healthState: device.status,
     deviceId: device.id,
     vendorId,
@@ -205,11 +224,7 @@ export async function syncDeviceRecordToAsset(tx: Prisma.TransactionClient, devi
     metadataJson: toJson({ deviceType: device.type, protocol: device.protocol, managementPort: device.managementPort, cisco: { inventoryStatus: cisco.inventoryStatus ?? null, capabilityStatus: cisco.capabilityStatus ?? null, platform: collectedPlatform } })
   };
   const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
-  await tx.assetIpAddress.upsert({
-    where: { address: device.host },
-    update: { assetId: asset.id, role: "management" },
-    create: { address: device.host, assetId: asset.id, role: "management" }
-  });
+  await upsertAssetIpAddress(tx, device.companyId, device.host, { assetId: asset.id, role: "management" });
   return { asset, created: !existing };
 }
 
@@ -263,15 +278,16 @@ export async function repairDeviceAssetReconciliation(apply = false) {
   return { mode: "apply" as const, audit: await auditDeviceAssetReconciliation(), changed };
 }
 
-export async function syncExistingDevicesToAssets() {
-  const devices = await prisma.device.findMany({ orderBy: { id: "asc" } });
+export async function syncExistingDevicesToAssets(ownerId?: string) {
+  const devices = await prisma.device.findMany({ where: { deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) }, orderBy: { id: "asc" } });
   let created = 0;
   let updated = 0;
   await prisma.$transaction(async (tx) => {
     for (const device of devices) {
       if (isArchivedDevice(device)) continue;
       const result = await syncDeviceRecordToAsset(tx, device);
-      result.created ? created += 1 : updated += 1;
+      if (result.created) created += 1;
+      else updated += 1;
     }
   });
   return { scanned: devices.length, created, updated };
@@ -291,7 +307,7 @@ export async function previewAssetImport(input: ImportInput) {
   for (const item of normalized.assets) {
     const identity = assetIdentity(item);
     if (identity.managementIp && !IPV4_PATTERN.test(identity.managementIp)) throw new Error(`Invalid management IP: ${identity.managementIp}`);
-    const existing = await prisma.asset.findFirst({ where: duplicateWhere(item), select: { id: true, name: true } });
+    const existing = await prisma.asset.findFirst({ where: duplicateWhere(item, normalized.companyId), select: { id: true, name: true } });
     rows.push({
       input: item,
       action: existing ? "update" : "create",
@@ -328,8 +344,9 @@ export async function applyAssetImport(input: ImportInput) {
       const platformId = await upsertNameModel(tx, "assetPlatform", item.platform);
       const roleId = await upsertNameModel(tx, "assetRole", item.role);
       const identity = assetIdentity(item);
-      const existing = await tx.asset.findFirst({ where: duplicateWhere(item) });
+      const existing = await tx.asset.findFirst({ where: duplicateWhere(item, normalized.companyId) });
       const data = {
+        companyId: normalized.companyId || null,
         name: cleanText(item.name || item.hostname || item.managementIp, "Unnamed asset"),
         hostname: identity.hostname || null,
         managementIp: identity.managementIp || null,
@@ -349,13 +366,13 @@ export async function applyAssetImport(input: ImportInput) {
       };
       const asset = existing ? await tx.asset.update({ where: { id: existing.id }, data }) : await tx.asset.create({ data });
       if (existing) updated += 1; else created += 1;
-      if (identity.managementIp) await tx.assetIpAddress.upsert({ where: { address: identity.managementIp }, update: { assetId: asset.id, role: "management" }, create: { address: identity.managementIp, assetId: asset.id, role: "management" } });
+      if (identity.managementIp) await upsertAssetIpAddress(tx, normalized.companyId || null, identity.managementIp, { assetId: asset.id, role: "management" });
       for (const iface of Array.isArray(item.interfaces) ? item.interfaces : []) {
         const name = cleanText(iface.name);
         if (!name) continue;
         const saved = await tx.assetInterface.upsert({ where: { assetId_name: { assetId: asset.id, name } }, update: { macAddress: cleanText(iface.macAddress) || null }, create: { assetId: asset.id, name, macAddress: cleanText(iface.macAddress) || null } });
         for (const ip of Array.isArray(iface.ips) ? iface.ips : []) {
-          if (IPV4_PATTERN.test(ip)) await tx.assetIpAddress.upsert({ where: { address: ip }, update: { assetId: asset.id, interfaceId: saved.id }, create: { address: ip, assetId: asset.id, interfaceId: saved.id } });
+          if (IPV4_PATTERN.test(ip)) await upsertAssetIpAddress(tx, normalized.companyId || null, ip, { assetId: asset.id, interfaceId: saved.id });
         }
       }
     }
@@ -374,43 +391,54 @@ export async function applyAssetImport(input: ImportInput) {
   return { ...preview, applied: { created, updated }, syncRunId: run.id, idempotentReplay: false };
 }
 
-export async function listAssets(view: "active" | "archived" | "all" = "active") {
-  await syncExistingDevicesToAssets();
-  const where = view === "all" ? {} : view === "archived" ? { managedState: "archived" } : { managedState: { not: "archived" } };
+export async function listAssets(view: "active" | "archived" | "all" = "active", ownerId?: string, companyId?: string) {
+  await syncExistingDevicesToAssets(ownerId);
+  const scope = { ...(ownerId ? { company: { ownerId } } : {}), ...(companyId ? { companyId } : {}) };
+  const where = view === "all"
+    ? scope
+    : view === "archived"
+      ? { ...scope, OR: [{ managedState: "archived" }, { deletedAt: { not: null } }] }
+      : { ...scope, managedState: { not: "archived" }, deletedAt: null, company: ownerId ? { ownerId, deletedAt: null } : undefined };
   const [assets, total, active, archived, byHealth, byManaged] = await Promise.all([
     prisma.asset.findMany({
       where,
       orderBy: [{ healthState: "asc" }, { name: "asc" }],
       take: 100,
-      include: { site: true, vendor: true, platform: true, device: { select: { id: true, name: true, type: true, host: true } }, ipAddresses: { take: 5 } }
+      include: { company: { select: { id: true, name: true, code: true } }, site: true, vendor: true, platform: true, device: { select: { id: true, name: true, type: true, host: true } }, ipAddresses: { take: 5 } }
     }),
     prisma.asset.count({ where }),
-    prisma.asset.count({ where: { managedState: { not: "archived" } } }),
-    prisma.asset.count({ where: { managedState: "archived" } }),
+    prisma.asset.count({ where: { ...scope, managedState: { not: "archived" }, deletedAt: null } }),
+    prisma.asset.count({ where: { ...scope, OR: [{ managedState: "archived" }, { deletedAt: { not: null } }] } }),
     prisma.asset.groupBy({ by: ["healthState"], where, _count: { _all: true } }),
-    prisma.asset.groupBy({ by: ["managedState"], _count: { _all: true } })
+    prisma.asset.groupBy({ by: ["managedState"], where, _count: { _all: true } })
   ]);
   return { assets, summary: { total, active, archived, view, byHealth, byManaged } };
 }
 
-export async function getAsset(id: string) {
-  return prisma.asset.findUnique({
-    where: { id },
+export async function getAsset(id: string, ownerId?: string) {
+  return prisma.asset.findFirst({
+    where: { id, ...(ownerId ? { company: { ownerId } } : {}) },
     include: {
-      site: true, location: true, role: true, vendor: true, platform: true, source: true,
+      company: { select: { id: true, name: true, code: true } }, site: true, location: true, role: true, vendor: true, platform: true, source: true,
       device: { select: { id: true, name: true, vendor: true, type: true, host: true, managementPort: true, status: true } },
       interfaces: { include: { ipAddresses: true } },
       ipAddresses: true,
-      relationshipsFrom: { include: { toAsset: true } },
-      relationshipsTo: { include: { fromAsset: true } },
+      relationshipsFrom: { ...(ownerId ? { where: { toAsset: { company: { ownerId } } } } : {}), include: { toAsset: true } },
+      relationshipsTo: { ...(ownerId ? { where: { fromAsset: { company: { ownerId } } } } : {}), include: { fromAsset: true } },
       findings: { orderBy: { lastSeen: "desc" }, take: 20 },
       actionPlans: { orderBy: { createdAt: "desc" }, take: 20 }
     }
   });
 }
 
-export async function getAssetTopology(id: string) {
-  const asset = await prisma.asset.findUnique({ where: { id }, include: { relationshipsFrom: { include: { toAsset: true } }, relationshipsTo: { include: { fromAsset: true } } } });
+export async function getAssetTopology(id: string, ownerId?: string) {
+  const asset = await prisma.asset.findFirst({
+    where: { id, ...(ownerId ? { company: { ownerId } } : {}) },
+    include: {
+      relationshipsFrom: { ...(ownerId ? { where: { toAsset: { company: { ownerId } } } } : {}), include: { toAsset: true } },
+      relationshipsTo: { ...(ownerId ? { where: { fromAsset: { company: { ownerId } } } } : {}), include: { fromAsset: true } }
+    }
+  });
   if (!asset) return null;
   return {
     assetId: id,
@@ -419,33 +447,18 @@ export async function getAssetTopology(id: string) {
   };
 }
 
-const seededRules = [
-  ["Repeated failed logins", "Repeated denied SSH/login attempts from one source.", "ssh_bruteforce", "high", { eventType: "auth_failure", threshold: 5 }],
-  ["Login from new source", "Authentication success from an unseen source.", "ssh_bruteforce", "medium", { eventType: "login_success_new_source" }],
-  ["Admin account created", "Administrative account creation was observed.", "suspicious_outbound", "high", { eventType: "admin_created" }],
-  ["Firewall policy change", "Firewall or policy configuration changed.", "suspicious_outbound", "high", { eventType: "policy_change" }],
-  ["NAT change", "NAT configuration changed.", "suspicious_outbound", "medium", { eventType: "nat_change" }],
-  ["Management service enabled", "Management service was enabled.", "sensitive_port_exposure", "high", { eventType: "management_service_enabled" }],
-  ["Interface unexpectedly down", "Interface transitioned down.", "suspicious_outbound", "medium", { eventType: "interface_down" }],
-  ["VPN authentication failure", "VPN authentication failed repeatedly.", "ssh_bruteforce", "high", { eventType: "vpn_auth_failure", threshold: 3 }],
-  ["New listening port", "New listening service was detected.", "sensitive_port_exposure", "medium", { eventType: "new_listening_port" }],
-  ["Firewall disabled", "Host firewall was disabled.", "suspicious_outbound", "critical", { eventType: "firewall_disabled" }],
-  ["Critical service stopped", "Critical service stopped or failed.", "suspicious_outbound", "high", { eventType: "critical_service_stopped" }],
-  ["Repeated Daily Check failures", "Daily Check failed repeatedly.", "deny_drop_spike", "medium", { eventType: "daily_check_failed", threshold: 3 }]
-] as const;
-
 export async function ensureSeededSecurityRules() {
-  for (const [name, description, type, severity, query] of seededRules) {
-    const threshold = "threshold" in query ? query.threshold : 1;
+  for (const definition of VENDOR_DETECTION_RULES) {
+    const query = { ruleKey: definition.key, vendor: definition.vendor, category: definition.category, mitreTags: definition.mitreTags, standards: definition.standards, sourceUrl: definition.sourceUrl, implementation: "event_backed", priorityEmail: PRIORITY_EMAIL_RULE_KEYS.has(definition.key) };
     await prisma.detectionRule.upsert({
-      where: { ruleType_name: { ruleType: type as DetectionRuleType, name } },
-      update: { description, severity: severity as IncidentSeverity, enabled: true, queryJson: toJson(query), thresholdJson: toJson({ count: threshold, windowMinutes: 15 }) },
-      create: { name, description, ruleType: type as DetectionRuleType, severity: severity as IncidentSeverity, enabled: true, queryJson: toJson(query), thresholdJson: toJson({ count: threshold, windowMinutes: 15 }) }
+      where: { ruleType_name: { ruleType: definition.ruleType as DetectionRuleType, name: definition.name } },
+      update: { description: definition.description, severity: definition.severity as IncidentSeverity, queryJson: toJson(query), thresholdJson: toJson({ count: definition.threshold, windowMinutes: definition.windowMinutes }) },
+      create: { name: definition.name, description: definition.description, ruleType: definition.ruleType as DetectionRuleType, severity: definition.severity as IncidentSeverity, enabled: true, queryJson: toJson(query), thresholdJson: toJson({ count: definition.threshold, windowMinutes: definition.windowMinutes }) }
     });
   }
 }
 
-function normalizedEventType(event: { eventType: string; rawMessage: string | null; action: string | null; dstPort: number | null }) {
+function normalizedLegacyEventType(event: { eventType: string; rawMessage: string | null; action: string | null }) {
   const text = `${event.eventType} ${event.action ?? ""} ${event.rawMessage ?? ""}`.toLowerCase();
   if (/failed password|auth_failure|login failed|denied ssh/.test(text)) return "auth_failure";
   if (/accepted password|login_success_new_source/.test(text)) return "login_success_new_source";
@@ -455,7 +468,7 @@ function normalizedEventType(event: { eventType: string; rawMessage: string | nu
   if (/management.*enabled|management_service_enabled/.test(text)) return "management_service_enabled";
   if (/interface.*down|interface_down/.test(text)) return "interface_down";
   if (/vpn.*fail|vpn_auth_failure/.test(text)) return "vpn_auth_failure";
-  if (/new.*listening|new_listening_port/.test(text) || event.dstPort) return "new_listening_port";
+  if (/new.*listening|new_listening_port/.test(text)) return "new_listening_port";
   if (/firewall.*disabled|firewall_disabled/.test(text)) return "firewall_disabled";
   if (/critical.*service.*stopped|service.*failed|critical_service_stopped/.test(text)) return "critical_service_stopped";
   if (/daily.*check.*fail|daily_check_failed/.test(text)) return "daily_check_failed";
@@ -463,10 +476,10 @@ function normalizedEventType(event: { eventType: string; rawMessage: string | nu
 }
 
 export async function createSecurityEvent(input: SecurityEventInput) {
-  const device = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId }, select: { host: true } }) : null;
+  const device = input.deviceId ? await prisma.device.findUnique({ where: { id: input.deviceId }, select: { host: true, companyId: true } }) : null;
   const assetId = input.assetId ??
     (input.deviceId ? (await prisma.asset.findUnique({ where: { deviceId: input.deviceId }, select: { id: true } }))?.id : undefined) ??
-    (device?.host ? (await prisma.asset.findUnique({ where: { managementIp: device.host }, select: { id: true } }))?.id : undefined);
+    (device?.host ? (await prisma.asset.findFirst({ where: { managementIp: device.host, ...(device.companyId ? { companyId: device.companyId } : {}) }, select: { id: true } }))?.id : undefined);
   return prisma.securityEvent.create({
     data: {
       deviceId: input.deviceId,
@@ -486,73 +499,142 @@ export async function createSecurityEvent(input: SecurityEventInput) {
   });
 }
 
-export async function runSecurityDetection(input: { deviceId?: string; assetId?: string } = {}) {
+async function executeSecurityDetection(input: { deviceId?: string; assetId?: string } = {}) {
   await ensureSeededSecurityRules();
-  const events = await prisma.securityEvent.findMany({
-    where: { ...(input.deviceId ? { deviceId: input.deviceId } : {}), ...(input.assetId ? { assetId: input.assetId } : {}) },
-    orderBy: { receivedAt: "desc" },
-    take: 500
-  });
   const rules = await prisma.detectionRule.findMany({ where: { enabled: true } });
+  const longestWindowMinutes = rules.reduce((longest, rule) => {
+    const threshold = rule.thresholdJson && typeof rule.thresholdJson === "object" ? rule.thresholdJson as Record<string, unknown> : {};
+    return Math.max(longest, Number(threshold.windowMinutes) || 15);
+  }, 15);
+  const cutoff = new Date(Date.now() - Math.min(1440, Math.max(1, longestWindowMinutes)) * 60_000);
+  const events = await prisma.securityEvent.findMany({
+    where: {
+      ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+      ...(input.assetId ? { assetId: input.assetId } : {}),
+      OR: [{ timestamp: { gte: cutoff } }, { receivedAt: { gte: cutoff } }]
+    },
+    orderBy: { receivedAt: "desc" },
+    take: 5000
+  });
+  const definitionsByKey = new Map(VENDOR_DETECTION_RULES.map((definition) => [definition.key, definition]));
+  const eventsByVendor = new Map<string, typeof events>();
+  for (const event of events) {
+    const vendor = normalizeDetectionVendor(event.vendor);
+    const bucket = eventsByVendor.get(vendor);
+    if (bucket) bucket.push(event);
+    else eventsByVendor.set(vendor, [event]);
+  }
+  const deviceIds = [...new Set(events.map((event) => event.deviceId).filter((id): id is string => Boolean(id)))];
+  const devices = deviceIds.length ? await prisma.device.findMany({ where: { id: { in: deviceIds } }, select: { id: true, host: true } }) : [];
+  const deviceHosts = new Map(devices.map((device) => [device.id, device.host]));
+  const managementIps = [...new Set(devices.map((device) => device.host).filter(Boolean))];
+  const assets = deviceIds.length ? await prisma.asset.findMany({ where: { OR: [{ deviceId: { in: deviceIds } }, { managementIp: { in: managementIps } }] }, select: { id: true, deviceId: true, managementIp: true } }) : [];
+  const assetByDevice = new Map(assets.filter((asset) => asset.deviceId).map((asset) => [asset.deviceId as string, asset.id]));
+  const assetByManagementIp = new Map(assets.filter((asset) => asset.managementIp).map((asset) => [asset.managementIp as string, asset.id]));
   let created = 0;
   let updated = 0;
   for (const rule of rules) {
     const query = rule.queryJson && typeof rule.queryJson === "object" ? rule.queryJson as Record<string, unknown> : {};
+    const ruleKey = String(query.ruleKey ?? "");
+    const definition = definitionsByKey.get(ruleKey);
     const wanted = String(query.eventType ?? "");
-    if (!wanted) continue;
-    const matched = events.filter((event) => normalizedEventType(event) === wanted);
-    const threshold = Number((rule.thresholdJson as Record<string, unknown> | null)?.count ?? query.threshold ?? 1);
+    if (!definition && !wanted) continue;
+    const thresholdConfig = rule.thresholdJson as Record<string, unknown> | null;
+    const threshold = Number(thresholdConfig?.count ?? definition?.threshold ?? query.threshold ?? 1);
+    const windowMinutes = Number(thresholdConfig?.windowMinutes ?? definition?.windowMinutes ?? 15);
+    const cutoff = Date.now() - Math.max(1, windowMinutes) * 60_000;
+    const vendors = Array.isArray(query.vendors) ? query.vendors.map((item) => String(item).toLowerCase()) : [];
+    const candidateEvents = definition ? (eventsByVendor.get(definition.vendor) ?? []) : events;
+    const matched = candidateEvents.filter((event) => (event.timestamp ?? event.receivedAt).getTime() >= cutoff && (definition ? eventMatchesVendorRule(ruleKey, event) : normalizedLegacyEventType(event) === wanted && (!vendors.length || vendors.includes(String(event.vendor ?? "").toLowerCase()))));
+    const subjectFor = (event: (typeof events)[number]) => definition ? groupSubject(definition, event) : event.srcIp ?? event.username ?? String(event.dstPort ?? "device");
     const grouped = new Map<string, typeof matched>();
     for (const event of matched) {
-      const key = [event.deviceId ?? "none", event.assetId ?? "none", event.srcIp ?? event.username ?? event.dstPort ?? "global"].join("|");
-      grouped.set(key, [...(grouped.get(key) ?? []), event]);
+      const key = [event.deviceId ?? "none", event.assetId ?? "none", subjectFor(event)].join("|");
+      const bucket = grouped.get(key);
+      if (bucket) bucket.push(event);
+      else grouped.set(key, [event]);
     }
-    for (const group of grouped.values()) {
+    for (const rawGroup of grouped.values()) {
+      const group = definition ? deduplicateDetectionEvents(definition, rawGroup) : rawGroup;
       if (group.length < threshold || !group[0].deviceId) continue;
       const first = group[0];
       const deviceId = first.deviceId;
       if (!deviceId) continue;
-      const device = await prisma.device.findUnique({ where: { id: deviceId }, select: { host: true } });
       const assetId = first.assetId ??
-        (await prisma.asset.findUnique({ where: { deviceId }, select: { id: true } }))?.id ??
-        (device?.host ? (await prisma.asset.findUnique({ where: { managementIp: device.host }, select: { id: true } }))?.id : undefined);
-      const fingerprint = `detection:${rule.id}:${deviceId}:${assetId ?? "none"}:${wanted}:${first.srcIp ?? first.username ?? first.dstPort ?? "global"}`;
+        assetByDevice.get(deviceId) ??
+        assetByManagementIp.get(deviceHosts.get(deviceId) ?? "");
+      const subject = subjectFor(first);
+      const fingerprint = `detection:${rule.id}:${deviceId}:${assetId ?? "none"}:${ruleKey || wanted}:${subject}`;
       const existing = await prisma.finding.findUnique({ where: { deviceId_fingerprint: { deviceId, fingerprint } } });
+      const existingRefs = new Set(Array.isArray(existing?.rawRefsJson) ? existing.rawRefsJson.map(String) : []);
+      const newEvents = group.filter((event) => !existingRefs.has(event.id));
+      if (existing && newEvents.length === 0) continue;
+      const mergedRefs = Array.from(new Set([...existingRefs, ...group.map((event) => event.id)])).slice(-100);
       const data = {
         deviceId,
         assetId,
         vendor: first.vendor ?? "generic",
         title: rule.name,
         severity: normalizeSeverity(rule.severity),
-        category: "detection",
+        category: definition?.category ?? "general-detection",
         status: "active",
-        confidence: 0.82,
-        summary: `${rule.description} (${group.length} matching events)`,
+        confidence: definition?.key === "fortigate.security-threat" ? 0.98 : definition?.logicalEventFamily === "authentication_failure" ? 0.9 : definition?.ruleType === "deny_drop_spike" ? 0.84 : 0.82,
+        summary: `${rule.description} (${group.length} matching events in ${windowMinutes} minutes)`,
         evidenceJson: toJson(group.slice(0, 10).map((event) => ({ id: event.id, message: event.rawMessage, srcIp: event.srcIp, dstPort: event.dstPort }))),
         source: "seeded_detection_rule",
-        rawRefsJson: toJson(group.slice(0, 25).map((event) => event.id)),
-        firstSeen: group.reduce((min, event) => event.receivedAt < min ? event.receivedAt : min, group[0].receivedAt),
-        lastSeen: group.reduce((max, event) => event.receivedAt > max ? event.receivedAt : max, group[0].receivedAt),
-        count: existing ? existing.count + group.length : group.length,
-        recommendedActions: toJson([{ intent: wanted === "auth_failure" ? "linux_check_failed_logins" : "generic_security_action", label: "Create reviewed ActionPlan" }]),
+        rawRefsJson: toJson(mergedRefs),
+        firstSeen: group.reduce((min, event) => (event.timestamp ?? event.receivedAt) < min ? (event.timestamp ?? event.receivedAt) : min, group[0].timestamp ?? group[0].receivedAt),
+        lastSeen: group.reduce((max, event) => (event.timestamp ?? event.receivedAt) > max ? (event.timestamp ?? event.receivedAt) : max, group[0].timestamp ?? group[0].receivedAt),
+        count: existing ? existing.count + newEvents.length : group.length,
+        mitreTags: definition?.mitreTags ?? [],
+        srcIp: first.srcIp,
+        dstIp: first.dstIp,
+        dstPort: first.dstPort,
+        actor: first.username,
+        recommendedActions: toJson([{
+          intent: definition?.vendor === "fortigate" && first.srcIp ? "fortigate_create_deny_policy" : definition?.vendor === "mikrotik" && first.srcIp ? "mikrotik_block_ip" : definition?.vendor === "linux" && first.srcIp ? "linux_block_ip" : "generic_security_action",
+          label: definition?.vendor === "fortigate" ? "Create reviewed FortiGate deny policy" : "Create reviewed ActionPlan"
+        }]),
         fingerprint
       };
+      let saved;
       if (existing) {
-        await prisma.finding.update({ where: { id: existing.id }, data });
+        saved = await prisma.finding.update({ where: { id: existing.id }, data });
         updated += 1;
       } else {
-        await prisma.finding.create({ data });
+        saved = await prisma.finding.create({ data });
         created += 1;
       }
+      await notifySecurityFinding({ finding: saved, rule, eventIds: existing ? newEvents.map((event) => event.id) : group.map((event) => event.id) });
     }
   }
   return { rulesEvaluated: rules.length, eventsEvaluated: events.length, findingsCreated: created, findingsUpdated: updated };
 }
 
-export async function listSecurityFindings() {
-  await runSecurityDetection();
+const detectionQueues = new Map<string, Promise<unknown>>();
+
+export function runSecurityDetection(input: { deviceId?: string; assetId?: string } = {}) {
+  const key = input.deviceId ? `device:${input.deviceId}` : input.assetId ? `asset:${input.assetId}` : "global";
+  const previous = detectionQueues.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => executeSecurityDetection(input));
+  detectionQueues.set(key, run);
+  void run.finally(() => {
+    if (detectionQueues.get(key) === run) detectionQueues.delete(key);
+  }).catch(() => undefined);
+  return run;
+}
+
+export async function listSecurityFindings(filters: { vendor?: string; deviceId?: string; status?: string } = {}) {
+  const vendor = cleanText(filters.vendor).toLowerCase();
+  const deviceId = cleanText(filters.deviceId);
+  const status = cleanText(filters.status);
   return {
     findings: await prisma.finding.findMany({
+      where: {
+        ...(vendor ? { vendor: { equals: vendor, mode: "insensitive" as const } } : {}),
+        ...(deviceId ? { deviceId } : {}),
+        ...(status ? { status } : {})
+      },
       orderBy: [{ severity: "desc" }, { lastSeen: "desc" }],
       take: 100,
       include: { asset: { select: { id: true, name: true, managementIp: true, healthState: true } }, device: { select: { id: true, name: true, vendor: true, host: true } } }
@@ -564,21 +646,55 @@ export async function createFindingActionPlan(id: string) {
   const finding = await prisma.finding.findUnique({ where: { id }, include: { asset: true, device: true } });
   if (!finding) return null;
   const actions = Array.isArray(finding.recommendedActions) ? finding.recommendedActions as Array<Record<string, unknown>> : [];
+  const vendor = normalizeDetectionVendor(finding.vendor || finding.device.vendor);
+  const latestEvent = finding.srcIp ? await prisma.securityEvent.findFirst({
+    where: { deviceId: finding.deviceId, srcIp: finding.srcIp },
+    orderBy: [{ timestamp: "desc" }, { receivedAt: "desc" }],
+    select: { interfaceIn: true, interfaceOut: true, dstIp: true, dstPort: true, protocol: true }
+  }) : null;
+  const sourceIp = finding.srcIp ?? undefined;
+  const responseAction = vendor === "linux" && sourceIp
+    ? ActionType.linux_block_ip
+    : vendor === "mikrotik" && sourceIp
+      ? ActionType.mikrotik_block_ip
+      : vendor === "fortigate" && sourceIp
+        ? ActionType.fortigate_create_deny_policy
+        : ActionType.custom_vendor_action;
+  const responseParameters: Record<string, unknown> = responseAction === ActionType.linux_block_ip
+    ? { ipAddress: sourceIp, durationMinutes: 60 }
+    : responseAction === ActionType.mikrotik_block_ip
+      ? { sourceIp, address: sourceIp, timeout: "1h", listName: "firewall-log-analyzer-blocked", comment: `finding:${finding.id}` }
+      : responseAction === ActionType.fortigate_create_deny_policy
+        ? {
+            sourceIp,
+            ...(latestEvent?.interfaceIn ? { srcintf: latestEvent.interfaceIn } : {}),
+            ...(latestEvent?.interfaceOut ? { dstintf: latestEvent.interfaceOut } : {}),
+            dstaddr: ["all"],
+            services: ["ALL"],
+            schedule: "always",
+            disabled: false,
+            name: `fla-block-${String(sourceIp).replace(/[^A-Za-z0-9]/g, "-")}`.slice(0, 35),
+            comment: `Threat response for finding ${finding.id}`
+          }
+        : {};
   const plan = await proposeActionPlan({
     source: ActionPlanSource.detection,
     requestedBy: `finding:${finding.id}`,
     deviceId: finding.deviceId,
-    actionType: ActionType.custom_vendor_action,
-    riskLevel: finding.severity as AiRiskLevel,
+    actionType: responseAction,
+    riskLevel: responseAction === ActionType.fortigate_create_deny_policy ? AiRiskLevel.high : finding.severity as AiRiskLevel,
     parametersJson: {
+      ...responseParameters,
       findingId: finding.id,
       assetId: finding.assetId,
       assetContext: finding.asset ? { id: finding.asset.id, name: finding.asset.name, managementIp: finding.asset.managementIp, siteId: finding.asset.siteId } : null,
-      vendor: finding.vendor,
+      vendor,
       title: finding.title,
       evidence: finding.evidenceJson,
       recommendedIntent: String(actions[0]?.intent ?? "generic_security_action"),
-      executionSupport: "manual_or_not_implemented",
+      executionSupport: responseAction === ActionType.custom_vendor_action ? "manual_or_not_implemented" : "connector",
+      responseSourceIp: sourceIp,
+      observedTarget: latestEvent,
       requiresExplicitReview: true
     }
   });
@@ -601,9 +717,9 @@ export function validateRuleDsl(rule: unknown) {
   return { valid: errors.length === 0, errors };
 }
 
-export async function removeAssetFromInventory(id: string) {
+export async function removeAssetFromInventory(id: string, ownerId?: string) {
   const removedAt = new Date();
-  const asset = await prisma.asset.findUnique({ where: { id }, include: { device: true } });
+  const asset = await prisma.asset.findFirst({ where: { id, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) }, include: { device: true } });
   if (!asset) return null;
   const alreadyArchived = asset.managedState === "archived";
   if (!alreadyArchived) {
@@ -613,6 +729,7 @@ export async function removeAssetFromInventory(id: string) {
         data: {
           managedState: "archived",
           healthState: "archived",
+          deletedAt: removedAt,
           metadataJson: toJson({ ...object(asset.metadataJson), inventoryStatus: "archived", removedAt: removedAt.toISOString(), removedReason: "removed_from_inventory" })
         }
       });
@@ -620,7 +737,7 @@ export async function removeAssetFromInventory(id: string) {
         const capabilities = object(asset.device.capabilities);
         await tx.device.update({
           where: { id: asset.deviceId },
-          data: { status: "unknown", capabilities: toJson({ ...capabilities, inventoryStatus: "archived", inventory: { ...object(capabilities.inventory), status: "archived", removedAt: removedAt.toISOString(), reason: "removed_from_inventory" } }) }
+          data: { status: "unknown", deletedAt: removedAt, capabilities: toJson({ ...capabilities, inventoryStatus: "archived", inventory: { ...object(capabilities.inventory), status: "archived", removedAt: removedAt.toISOString(), reason: "removed_from_inventory" } }) }
         });
         await tx.deviceOnboardingSession.updateMany({ where: { deviceId: asset.deviceId, status: { notIn: ["completed", "cancelled"] } }, data: { status: "cancelled", step: "removed", expiresAt: removedAt } });
       }

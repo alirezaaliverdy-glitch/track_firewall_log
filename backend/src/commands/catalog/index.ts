@@ -26,7 +26,7 @@ function item(vendor: CommandVendor, slug: string, titleFa: string, titleEn: str
     supportState: executable ? "verified" : manual ? "manual_only" : "unsupported",
     supportReason: "",
     supportReasonKey: "support.reason.unsupported",
-    connectorType: executable ? (vendor === "linux" ? "linux-ssh" : vendor === "fortigate" ? "fortigate-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : "mikrotik-ssh") : null,
+    connectorType: executable ? (vendor === "linux" ? "linux-ssh" : vendor === "fortigate" ? "fortigate-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : vendor === "sophos" ? "sophos-api" : "mikrotik-ssh") : null,
     riskLevel: options.riskLevel ?? (mutating ? "high" : "low") as CommandRiskLevel,
     privilegeLevel: options.privilegeLevel ?? (mutating ? "admin" : "read"),
     readOnly: !mutating, mutating, requiresConfirmation: mutating,
@@ -35,14 +35,14 @@ function item(vendor: CommandVendor, slug: string, titleFa: string, titleEn: str
     paramLabelsFa: Object.fromEntries(requiredParams.map((field) => [field.key, field.labelFa])),
     paramHelpFa: Object.fromEntries(requiredParams.map((field) => [field.key, field.helpFa])),
     tagsFa: options.tagsFa ?? [titleFa, category], searchKeywordsFa: options.searchKeywordsFa ?? [],
-    supportedConnectors: executable ? [vendor === "linux" ? "linux-ssh" : vendor === "fortigate" ? "fortigate-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : "mikrotik-ssh"] : [],
+    supportedConnectors: executable ? [vendor === "linux" ? "linux-ssh" : vendor === "fortigate" ? "fortigate-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : vendor === "sophos" ? "sophos-api" : "mikrotik-ssh"] : [],
     prechecks: options.prechecks ?? ["اتصال و اعتبارنامه دستگاه بررسی شود"],
     validationRules: options.validationRules ?? Object.fromEntries(requiredParams.map((field) => [field.key, [field.type, "required"]])),
     executionTemplateRef: options.template ?? null,
     verification: options.verification ?? ["خروجی فرمان و وضعیت دستگاه بازبینی شود"],
     rollback: options.rollback ?? (mutating ? { available: false, notAvailableReasonFa: "بازگشت خودکار برای این عملیات پیاده‌سازی نشده است؛ بازگشت باید دستی بازبینی شود." } : { available: false, notAvailableReasonFa: "عملیات فقط‌خواندنی است و تغییری برای بازگشت ندارد." }),
     evidenceOutput: options.evidenceOutput ?? ["خروجی خلاصه‌شده", "زمان بررسی", "دستگاه هدف"],
-    supportedDeviceCapabilities: options.supportedDeviceCapabilities ?? (executable ? [vendor === "linux" ? "ssh" : vendor === "cisco" ? "ios-xe-ssh" : "routeros-ssh"] : []),
+    supportedDeviceCapabilities: options.supportedDeviceCapabilities ?? (executable ? [vendor === "linux" ? "ssh" : vendor === "cisco" ? "ios-xe-ssh" : vendor === "sophos" ? "sfos-xml-api" : "routeros-ssh"] : []),
     disabledReasonFa: executable || manual ? null : options.disabledReasonFa ?? "handler اجرایی معتبر هنوز پیاده‌سازی نشده است.",
     uiHints: { executable, badgeFa }
   };
@@ -113,6 +113,8 @@ const ciscoCommandCatalogItems = CISCO_OPERATION_REGISTRY.map((operation) => ite
 
 const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("linux", "daily-check", "چک روزانه", "Daily check", "daily-check", "linux_daily_check", implemented("linux_daily_check", { searchKeywordsFa: ["چک روزانه سرور", "بررسی روزانه"] })),
+  item("linux", "reboot", "راه‌اندازی دوباره سرور", "Reboot server", "system", "linux_reboot", implemented("linux_reboot", { mutates: true, riskLevel: "critical", verification: ["پذیرش فرمان systemd توسط کانکتور و ثبت قطع مورد انتظار نشست SSH"] })),
+  item("linux", "shutdown", "خاموش کردن سرور", "Power off server", "system", "linux_shutdown", implemented("linux_shutdown", { mutates: true, riskLevel: "critical", verification: ["پذیرش فرمان poweroff توسط کانکتور و ثبت قطع مورد انتظار نشست SSH"] })),
   item("linux", "open-port", "باز کردن پورت", "Open port", "firewall", "linux_open_port", implemented("linux_open_port", { mutates: true, required: [param("port", "شماره پورت", "شماره پورت TCP/UDP معتبر را وارد کنید.", "number", "55000")], defaultParams: { protocol: "tcp" } })),
   item("linux", "close-port", "بستن پورت", "Close port", "firewall", "close_port", implemented("linux_close_port", { mutates: true, riskLevel: "medium", required: [param("port", "شماره پورت", "شماره پورت TCP/UDP معتبر را وارد کنید.", "number", "545")], defaultParams: { protocol: "tcp" }, verification: ["وضعیت موثر فایروال پس از اجرا بررسی شود"], rollback: { available: true, steps: ["قانون allow حذف شده فقط با تایید کاربر بازگردانده شود"] } })),
   item("linux", "open-ports", "نمایش پورت‌های باز", "Show open ports", "network", "linux_list_open_ports", implemented("linux_list_open_ports")),
@@ -135,12 +137,19 @@ const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("linux", "enable-fail2ban", "فعال‌سازی fail2ban", "Enable fail2ban", "hardening", "generic_security_action", manual({ riskLevel: "medium" })),
 
   item("mikrotik", "daily-check", "چک روزانه", "Daily check", "daily-check", "mikrotik_daily_check", implemented("mikrotik_daily_check", { searchKeywordsFa: ["چک روزانه روتر", "بررسی روزانه"] })),
+  item("mikrotik", "reboot", "راه‌اندازی دوباره روتر", "Reboot router", "system", "mikrotik_reboot", implemented("mikrotik_reboot", { mutates: true, riskLevel: "critical", verification: ["پذیرش فرمان RouterOS و ثبت قطع مورد انتظار نشست SSH"] })),
+  item("mikrotik", "shutdown", "خاموش کردن روتر", "Shut down router", "system", "mikrotik_shutdown", implemented("mikrotik_shutdown", { mutates: true, riskLevel: "critical", verification: ["پذیرش فرمان RouterOS و ثبت قطع مورد انتظار نشست SSH"] })),
   item("mikrotik", "management-services", "نمایش سرویس‌های مدیریتی", "Show management services", "management", "mikrotik_list_management_services", implemented("mikrotik_list_management_services")),
   item("mikrotik", "firewall-filter", "بررسی firewall filter", "Review firewall filter", "firewall", "mikrotik_list_filter_rules", implemented("mikrotik_check_firewall_filter")),
   item("mikrotik", "dangerous-nat", "بررسی NATهای خطرناک", "Review dangerous NAT", "nat", "mikrotik_list_nat_rules", implemented("mikrotik_check_nat_exposure")),
   item("mikrotik", "failed-logins", "نمایش لاگ‌های ورود ناموفق", "Show failed logins", "authentication", "mikrotik_check_login_logs", implemented("mikrotik_check_failed_logins")),
   item("mikrotik", "block-ip", "بلاک کردن IP", "Block IP", "firewall", "mikrotik_block_ip", implemented("mikrotik_block_ip", { mutates: true, required: [ipAddress], defaultParams: { timeout: "30m", listName: "firewall-log-analyzer-blocked" }, rollback: { available: true, steps: ["حذف IP از address-list مدیریت‌شده"] } })),
   item("mikrotik", "backup", "بکاپ تنظیمات", "Backup configuration", "backup", "mikrotik_create_backup", implemented("mikrotik_backup_config", { mutates: true, riskLevel: "medium", rollback: { available: false, notAvailableReasonFa: "ساخت فایل بکاپ تغییر پیکربندی ندارد؛ فایل در صورت نیاز دستی حذف می‌شود." } })),
+  item("mikrotik", "enable-interface", "روشن کردن پورت", "Enable interface", "interfaces", "mikrotik_enable_interface", implemented("mikrotik_enable_interface", { mutates: true, riskLevel: "medium", required: [param("interfaceName", "نام پورت", "نام دقیق اینترفیس انتخاب‌شده را وارد کنید.", "string", "ether1")], rollback: { available: true, steps: ["غیرفعال‌کردن همان اینترفیس پس از بررسی مسیر مدیریت"] } })),
+  item("mikrotik", "disable-interface", "خاموش کردن پورت", "Disable interface", "interfaces", "mikrotik_disable_interface", implemented("mikrotik_disable_interface", { mutates: true, riskLevel: "critical", required: [param("interfaceName", "نام پورت", "نام دقیق اینترفیس انتخاب‌شده را وارد کنید.", "string", "ether1")], rollback: { available: true, steps: ["فعال‌کردن دوباره همان اینترفیس"] } })),
+  item("mikrotik", "set-interface-comment", "ثبت توضیح پورت", "Set interface comment", "interfaces", "mikrotik_set_interface_comment", implemented("mikrotik_set_interface_comment", { mutates: true, riskLevel: "medium", required: [param("interfaceName", "نام پورت", "نام دقیق اینترفیس انتخاب‌شده را وارد کنید.", "string", "ether1"), param("comment", "توضیح", "توضیح کوتاه و قابل شناسایی برای پورت.", "string", "uplink-to-core")], rollback: { available: true, steps: ["بازگرداندن comment قبلی از شواهد پیش‌نمایش"] } })),
+  item("mikrotik", "enable-service", "فعال کردن سرویس مدیریتی", "Enable management service", "management", "mikrotik_enable_service", implemented("mikrotik_enable_service", { mutates: true, riskLevel: "medium", required: [param("serviceName", "نام سرویس", "سرویس RouterOS مانند ssh یا winbox.", "string", "ssh")] })),
+  item("mikrotik", "disable-service", "غیرفعال کردن سرویس مدیریتی", "Disable management service", "management", "mikrotik_disable_service", implemented("mikrotik_disable_service", { mutates: true, riskLevel: "high", required: [param("serviceName", "نام سرویس", "سرویس RouterOS مانند ssh یا winbox.", "string", "ssh")] })),
   item("mikrotik", "restrict-management", "محدود کردن دسترسی WinBox/SSH", "Restrict WinBox/SSH", "management", "generic_security_action", manual({ required: [allowedSource], riskLevel: "high" })),
   item("mikrotik", "change-ssh-port", "تغییر پورت SSH", "Change SSH port", "management", "mikrotik_change_service_port", planned({ mutates: true, riskLevel: "high" })),
 
@@ -156,6 +165,32 @@ const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("fortigate", "vpn-status", "وضعیت VPN", "VPN status", "vpn", "fortigate_show_vpn_status", implemented("fortigate_show_vpn_status", { mutates: false, searchKeywordsFa: ["وضعیت vpn", "تونل ipsec", "ssl vpn"] })),
   item("fortigate", "ha-vdom-zone", "HA، VDOM و Zone", "HA, VDOM and zones", "network", "fortigate_show_ha_vdom_zone", implemented("fortigate_show_ha_vdom_zone", { mutates: false, searchKeywordsFa: ["وضعیت ha", "vdom ها", "zone ها"] })),
   ...fullControlFortiGateItems,
+  item("sophos", "inventory", "جمع‌آوری کامل وضعیت سوفوس", "Collect Sophos inventory", "system", "generic_security_action", implemented("sophos_inventory", {
+    mutates: false,
+    descriptionFa: "اینترفیس‌ها، Zoneها، Gatewayها، قوانین فایروال، میزبان‌ها، سرویس‌ها و اتصال‌های VPN را از XML API رسمی SFOS می‌خواند.",
+    verification: ["پاسخ API معتبر باشد و تعداد موجودی‌های دریافت‌شده ثبت شود"],
+    searchKeywordsFa: ["وضعیت سوفوس", "اطلاعات فایروال سوفوس", "SFOS", "Sophos Firewall"]
+  })),
+  item("sophos", "enable-interface", "روشن کردن پورت سوفوس", "Enable Sophos interface", "interfaces", "generic_security_action", implemented("sophos_enable_interface", {
+    mutates: true, riskLevel: "high", required: [param("interfaceName", "نام پورت", "نام دقیق پورت مانند Port1 را وارد کنید.", "string", "Port1")],
+    verification: ["شیء Interface دوباره خوانده شود و InterfaceStatus برابر ON باشد"], rollback: { available: true, steps: ["بازگرداندن InterfaceStatus قبلی که پیش از اجرا ثبت شده است"] }
+  })),
+  item("sophos", "disable-interface", "خاموش کردن پورت سوفوس", "Disable Sophos interface", "interfaces", "generic_security_action", implemented("sophos_disable_interface", {
+    mutates: true, riskLevel: "critical", required: [param("interfaceName", "نام پورت", "نام دقیق پورت را وارد کنید؛ خاموش کردن مسیر مدیریت ممکن است ارتباط را قطع کند.", "string", "Port2")],
+    verification: ["شیء Interface دوباره خوانده شود و InterfaceStatus برابر OFF باشد"], rollback: { available: true, steps: ["بازگرداندن InterfaceStatus قبلی که پیش از اجرا ثبت شده است"] }
+  })),
+  item("sophos", "set-interface-ipv4", "تنظیم IPv4 پورت سوفوس", "Set Sophos interface IPv4", "interfaces", "generic_security_action", implemented("sophos_set_interface_ipv4", {
+    mutates: true, riskLevel: "critical", required: [param("interfaceName", "نام پورت", "نام دقیق پورت مانند Port1.", "string", "Port1"), param("ipAddress", "IPv4/CIDR", "آدرس و Prefix مانند 192.168.10.1/24.", "cidr", "192.168.10.1/24")],
+    verification: ["آدرس و Netmask جدید از API دوباره خوانده و با درخواست تطبیق داده شود"], rollback: { available: true, steps: ["بازگرداندن IP و Netmask ثبت‌شده پیش از اجرا"] }
+  })),
+  item("sophos", "enable-firewall-rule", "فعال کردن قانون فایروال سوفوس", "Enable Sophos firewall rule", "firewall", "generic_security_action", implemented("sophos_enable_firewall_rule", {
+    mutates: true, riskLevel: "high", required: [param("ruleName", "نام قانون", "نام دقیق قانون موجود در Sophos Firewall.", "string", "Allow-Web")],
+    verification: ["قانون دوباره خوانده شود و Status برابر Enable باشد"], rollback: { available: true, steps: ["بازگرداندن Status قبلی قانون"] }
+  })),
+  item("sophos", "disable-firewall-rule", "غیرفعال کردن قانون فایروال سوفوس", "Disable Sophos firewall rule", "firewall", "generic_security_action", implemented("sophos_disable_firewall_rule", {
+    mutates: true, riskLevel: "high", required: [param("ruleName", "نام قانون", "نام دقیق قانون موجود در Sophos Firewall.", "string", "Allow-Web")],
+    verification: ["قانون دوباره خوانده شود و Status برابر Disable باشد"], rollback: { available: true, steps: ["بازگرداندن Status قبلی قانون"] }
+  })),
   ...ciscoCommandCatalogItems,
   item("cisco", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),
   item("pfsense", "daily-check", "چک روزانه", "Daily check", "daily-check", "generic_security_action", manual({ mutates: false })),

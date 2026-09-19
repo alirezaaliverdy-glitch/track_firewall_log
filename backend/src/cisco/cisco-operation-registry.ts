@@ -195,7 +195,9 @@ export const CISCO_OPERATION_REGISTRY: readonly CiscoOperationDefinition[] = Obj
   planned("create-extended-acl", "Create extended ACL", "security", "configure", "high", ["aclName", "entries"], ["extended ACL"]),
   planned("apply-acl-interface", "Apply ACL to interface", "security", "configure", "high", ["interfaceName", "aclName", "direction"], ["ip access-group"]),
   planned("remove-acl-interface", "Remove ACL from interface", "security", "configure", "high", ["interfaceName", "aclName", "direction"], ["no ip access-group"]),
-  planned("reload-device", "Reload device", "configuration", "configure", "critical", ["maintenanceWindow"], ["reload"]),
+  implementedCli("reload-device", "Reload device", "configuration", "configure", "critical", false, [], ["reload", "reboot device"], () => [
+    cli("reload.schedule", "reload in 1 reason Firewall-SOAR-approved-action", { write: true, confirmationPattern: /Proceed with reload.*\[confirm\]/i, confirmationResponse: "\n" })
+  ], { verification: ["Cisco accepted the interactive confirmation and scheduled reload in one minute."], rollback: configRollback(["Run reload cancel before the timer expires if the reboot must be cancelled."]) }),
   planned("erase-configuration", "Erase configuration", "configuration", "configure", "critical", ["maintenanceWindow"], ["write erase"]),
   planned("delete-vlan", "Delete VLAN", "switching", "configure", "critical", ["vlanId"], ["no vlan"]),
   planned("remove-routing-process", "Remove routing process", "routing", "configure", "critical", ["processType", "processId"], ["no router"]),

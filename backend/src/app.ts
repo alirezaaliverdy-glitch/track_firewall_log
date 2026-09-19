@@ -4,7 +4,7 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyError } from "fastify";
 import { env, isProduction, maxUploadBytes } from "./config/env.js";
-import { withDatabaseStartupRetry } from "./db/prisma.js";
+import { prisma, withDatabaseStartupRetry } from "./db/prisma.js";
 import { actionRoutes } from "./routes/actions.js";
 import { loggerConfig } from "./lib/logger.js";
 import { analysisRoutes } from "./routes/analysis.js";
@@ -21,6 +21,7 @@ import { jobRoutes } from "./routes/jobs.js";
 import { uploadRoutes } from "./routes/uploads.js";
 import { assessmentRoutes } from "./routes/assessments.js";
 import { authRoutes } from "./routes/auth.js";
+import { adminUserRoutes } from "./routes/admin-users.js";
 import { linuxTelemetryRoutes } from "./routes/linux-telemetry.js";
 import { telemetryFindingRoutes } from "./routes/telemetry-findings.js";
 import { commandCatalogRoutes } from "./routes/command-catalog.js";
@@ -35,23 +36,28 @@ import { deviceOnboardingRoutes } from "./routes/device-onboarding.js";
 import { deviceWorkspaceRoutes } from "./routes/device-workspaces.js";
 import { diagnosticRoutes } from "./routes/diagnostics.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
+import { scheduledTaskRoutes } from "./routes/scheduled-tasks.js";
+import { companyRoutes } from "./routes/companies.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
-import { bootstrapAdmin } from "./services/auth.service.js";
 import { registerSecurityPlugin } from "./plugins/security.plugin.js";
+import { stopSecurityMonitor } from "./services/security-monitor.service.js";
+import { stopScheduledTaskWorker } from "./services/scheduled-task-worker.service.js";
+import { NATIVE_APP_ORIGINS } from "./security/session-transport.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
   validateCommandCatalog(COMMAND_CATALOG);
   const app = Fastify({
     logger: loggerConfig,
-    bodyLimit: maxUploadBytes
+    bodyLimit: maxUploadBytes,
+    trustProxy: env.trustProxy ? ["loopback", "linklocal", "uniquelocal"] : false
   });
 
   await app.register(helmet);
   await app.register(cors, {
-    origin: env.corsOrigins,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    origin: [...env.corsOrigins, ...NATIVE_APP_ORIGINS],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true
   });
   await app.register(cookie);
@@ -91,13 +97,20 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   });
 
   const authRequired = options.authRequired !== false;
-  if (authRequired) await withDatabaseStartupRetry("Authentication bootstrap", bootstrapAdmin);
+  if (authRequired) {
+    await withDatabaseStartupRetry("Authentication database check", async () => {
+      await prisma.appUser.count();
+    });
+  }
   await registerSecurityPlugin(app, { authRequired });
 
   await app.register(authRoutes);
+  await app.register(adminUserRoutes);
+  await app.register(companyRoutes);
   await app.register(healthRoutes);
   await app.register(dashboardRoutes);
   await app.register(actionRoutes);
+  await app.register(scheduledTaskRoutes);
   await app.register(assessmentRoutes);
   await app.register(connectorPlanRoutes);
   await app.register(collectorRoutes);
@@ -125,6 +138,8 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(incidentRoutes);
 
   app.addHook("onClose", async () => {
+    await stopSecurityMonitor();
+    await stopScheduledTaskWorker();
     stopAllLinuxLogStreams();
   });
 

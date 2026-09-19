@@ -14,6 +14,14 @@ export function actionExecutionUiState(action: ActionPlan) {
   const metadata = object(parameters.metadata);
   const catalogState = String(metadata.implementationState ?? "");
   const supportState = String(metadata.supportState ?? metadataValue(parameters, "supportState") ?? (catalogState === "implemented" && executionSupport === "connector" ? "verified" : ""));
+  const customAction = action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action";
+  const customConnectorPlan = customAction &&
+    metadata.source === "ai_custom_connector_plan" &&
+    catalogState === "implemented" &&
+    supportState === "verified" &&
+    executionSupport === "connector" &&
+    typeof metadata.executionTemplateRef === "string" &&
+    metadata.executionTemplateRef.length > 0;
   if (metadata.source === "guided_action_wizard" && (metadata.executable === false || executionSupport === "planned_or_partial" || catalogState === "partial" || catalogState === "planned")) {
     return {
       state: "blocked",
@@ -32,7 +40,18 @@ export function actionExecutionUiState(action: ActionPlan) {
       missingField: null
     };
   }
-  if (action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action" || ["manual_or_not_implemented", "unsupported_vendor", "needs_parameters", "planned_or_partial"].includes(executionSupport)) {
+  if (customAction && customConnectorPlan) {
+    const missingFields = array(metadata.missingFields ?? parameters.missingFields).map(String).filter(Boolean);
+    if (missingFields.length > 0) {
+      return {
+        state: "needs_value",
+        canApproveAndExecute: false,
+        canExecute: false,
+        reason: "Required parameters must be completed before preview and execution.",
+        missingField: missingFields.length === 1 ? missingFields[0] : null
+      };
+    }
+  } else if (customAction || ["manual_or_not_implemented", "unsupported_vendor", "needs_parameters", "planned_or_partial"].includes(executionSupport)) {
     return {
       state: executionSupport === "needs_parameters" ? "needs_value" : "blocked",
       canApproveAndExecute: false,

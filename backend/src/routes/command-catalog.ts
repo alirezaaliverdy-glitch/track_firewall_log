@@ -8,6 +8,7 @@ import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { buildAssistantTargetContextFromRecord } from "../ai/context/assistant-target-context.js";
+import { buildCustomCommandPlan, validateCustomCommandPlan } from "../ai/custom-action-plan.js";
 
 const bool = (value: unknown) => value === "true" ? true : value === "false" ? false : undefined;
 const deviceVendor = (device: { type: string; vendor: string }) => {
@@ -16,10 +17,11 @@ const deviceVendor = (device: { type: string; vendor: string }) => {
   if (device.type === "mikrotik" || vendor.includes("mikrotik") || vendor.includes("routeros")) return "mikrotik";
   if (device.type === "linux_edge" || vendor.includes("linux")) return "linux";
   if (vendor.includes("cisco")) return "cisco";
+  if (vendor.includes("sophos") || vendor.includes("sfos") || vendor.includes("cyberoam")) return "sophos";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type;
 };
-const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : null;
+const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : vendor === "sophos" ? "sophos-api" : null;
 const selectedDeviceSupportsConnector = (device: { protocol?: string | null }, connectorType: string | null) => connectorType?.endsWith("-ssh") ? device.protocol === "ssh" : Boolean(connectorType);
 function invalidValue(type: string, value: unknown) {
   if (type === "ip") return typeof value !== "string" || net.isIP(value) === 0;
@@ -40,7 +42,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     }
     const items = searchCatalog({ ...request.query, vendor, readOnly: bool(request.query.readOnly), executable: bool(request.query.executable), includePlanned: bool(request.query.includePlanned) }).filter((item) => {
       if (!device || item.implementationState === "manualOnly") return true;
-      return item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" || item.connectorType === "cisco-ios-xe-ssh" ? device.protocol === "ssh" : true;
+      return item.connectorType === "sophos-api" ? device.protocol === "api" : item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" || item.connectorType === "cisco-ios-xe-ssh" ? device.protocol === "ssh" : true;
     });
     return { count: items.length, items };
   });
@@ -244,60 +246,121 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
+    const proposedCustomPlan = buildCustomCommandPlan({
+      message: userRequest,
+      device,
+      parameters: resolution.normalizedParams,
+    });
+    const customValidation = proposedCustomPlan?.missingFields.length === 0
+      ? validateCustomCommandPlan({ plan: proposedCustomPlan, device, actionType: "custom_vendor_action" })
+      : null;
+    const customPlan = customValidation?.valid && customValidation.normalizedPlan
+      ? customValidation.normalizedPlan
+      : proposedCustomPlan;
+    const parameterizedDraft = Boolean(
+      customPlan &&
+      customPlan.missingFields.length > 0 &&
+      customPlan.orderedCommands.length === 0 &&
+      typeof customPlan.typedParameters.operation === "string"
+    );
+    if (!customPlan || (!customValidation?.valid && !parameterizedDraft)) {
+      return reply.code(422).send({
+        mode: "unsupported",
+        actionPlan: null,
+        actionPlanId: null,
+        messageFa: "\u0627\u06cc\u0646 \u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0628\u0647 \u0642\u0631\u0627\u0631\u062f\u0627\u062f \u0627\u062c\u0631\u0627\u06cc\u06cc \u0627\u0645\u0646 \u0648 \u062b\u0628\u062a\u200c\u0634\u062f\u0647 \u0627\u06cc\u0646 \u0648\u0646\u062f\u0648\u0631 \u0646\u06af\u0627\u0634\u062a \u0646\u0634\u062f\u061b ActionPlan \u063a\u06cc\u0631\u0642\u0627\u0628\u0644\u200c\u0627\u062c\u0631\u0627 \u0633\u0627\u062e\u062a\u0647 \u0646\u0634\u062f.",
+        validationErrors: customValidation?.errors ?? [],
+        draft,
+        resolution,
+      });
+    }
+    const customMissingFields = customPlan.missingFields;
+    const customNormalizedParams = customPlan.typedParameters;
     const actionPlan = await proposeActionPlan({
       source: "ai",
       requestedBy: request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined,
       deviceId: selectedDeviceId,
-      vendor: resolution.canonicalVendor,
+      vendor: customPlan.vendor,
       actionType: "custom_vendor_action",
-      riskLevel: "medium",
+      riskLevel: customPlan.riskLevel,
       parametersJson: {
         ...resolution.normalizedParams,
-        vendor: resolution.canonicalVendor,
+        ...customNormalizedParams,
+        vendor: customPlan.vendor,
         userRequest,
-        source: "ai_custom_proposal",
-        implementationState: "manualOnly",
-        executionSupport: "manual",
-        supportState: "manual_only",
-        supportReasonKey: "support.reason.manualReview",
-        executable: false,
-        connectorType: null,
-        executionTemplateRef: null,
-        normalizedParams: resolution.normalizedParams,
-        requiredParamsSatisfied: true,
-        missingFields: resolution.missingFields,
+        source: "ai_custom_connector_plan",
+        implementationState: "implemented",
+        executionSupport: "connector",
+        supportState: "verified",
+        supportReasonKey: "support.reason.customConnectorValidated",
+        executable: customMissingFields.length === 0,
+        connectorType: customPlan.connectorType,
+        executionTemplateRef: customPlan.executionTemplateRef,
+        customCommandPlan: customPlan,
+        orderedCommands: customPlan.orderedCommands,
+        typedParameters: customNormalizedParams,
+        normalizedParams: customNormalizedParams,
+        requiredParamsSatisfied: customMissingFields.length === 0,
+        missingFields: customMissingFields,
+        expectedImpact: customPlan.expectedImpact,
+        suggestedVerification: customPlan.verificationCommands,
+        suggestedRollback: customPlan.rollbackGuidance,
+        rollbackGuidance: customPlan.rollbackGuidance,
         requiresExplicitReview: true,
+        backendExecutionRequired: true,
+        rawCommandExecution: false,
         metadata: {
-          source: "ai_custom_proposal",
+          source: "ai_custom_connector_plan",
           catalogCommandId: null,
           catalogVersion: COMMAND_CATALOG_VERSION,
           catalogTitleFa: "پیشنهاد سفارشی هوش مصنوعی",
-          vendor: resolution.canonicalVendor,
+          vendor: customPlan.vendor,
+          platform: customPlan.platform,
           actionType: "custom_vendor_action",
           requestedActionType: resolution.canonicalActionType,
-          implementationState: "manualOnly",
-          executionSupport: "manual",
-          supportState: "manual_only",
-          supportReasonKey: "support.reason.manualReview",
-          executable: false,
-          connectorType: null,
-          executionTemplateRef: null,
-          normalizedParams: resolution.normalizedParams,
-          requiredParamsSatisfied: true,
-          missingFields: resolution.missingFields,
+          implementationState: "implemented",
+          executionSupport: "connector",
+          supportState: "verified",
+          supportReasonKey: "support.reason.customConnectorValidated",
+          executable: customMissingFields.length === 0,
+          connectorType: customPlan.connectorType,
+          executionTemplateRef: customPlan.executionTemplateRef,
+          customCommandPlan: customPlan,
+          orderedCommands: customPlan.orderedCommands,
+          typedParameters: customNormalizedParams,
+          normalizedParams: customNormalizedParams,
+          requiredParamsSatisfied: customMissingFields.length === 0,
+          missingFields: customMissingFields,
+          structuredStepCount: customPlan.orderedCommands.length,
+          executableStepCount: customMissingFields.length === 0 ? customPlan.orderedCommands.length : 0,
+          executionEligibility: customMissingFields.length === 0 ? "ready_for_action_center" : "needs_parameters",
+          expectedImpact: customPlan.expectedImpact,
+          suggestedVerification: customPlan.verificationCommands,
+          suggestedRollback: customPlan.rollbackGuidance,
+          rollbackGuidance: customPlan.rollbackGuidance,
+          requiresExplicitReview: true,
+          backendExecutionRequired: true,
+          rawCommandExecution: false,
           previewGenerated: false,
           executed: false,
           connectorInvoked: false,
           lastExecutionStatus: "not_started",
-          reviewOnly: true
+          reviewOnly: false
         }
       }
     });
 
-    return reply.code(200).send({
-      mode: "manual_or_not_supported",
+    return reply.code(201).send({
+      mode: customMissingFields.length ? "needs_input" : "executable_action_plan",
       actionPlanId: actionPlan.id,
-      messageFa: "پیشنهاد سفارشی قابل بازبینی ساخته شد. این برنامه بدون template ثبت‌شده اجرایی نیست و باید در مرکز عملیات بررسی شود.",
+      executionSupport: "connector",
+      implementationState: "implemented",
+      executionTemplateRef: customPlan.executionTemplateRef,
+      connectorType: customPlan.connectorType,
+      missingFields: customMissingFields,
+      messageFa: customMissingFields.length
+        ? missingFieldsMessageFa(customMissingFields)
+        : "\u0628\u0631\u0646\u0627\u0645\u0647 \u0627\u062c\u0631\u0627\u06cc\u06cc \u0648\u0646\u062f\u0648\u0631 \u067e\u0633 \u0627\u0632 \u0627\u0639\u062a\u0628\u0627\u0631\u0633\u0646\u062c\u06cc \u0628\u06a9\u200c\u0627\u0646\u062f \u0633\u0627\u062e\u062a\u0647 \u0634\u062f.",
       draft,
       actionPlan,
       resolution,

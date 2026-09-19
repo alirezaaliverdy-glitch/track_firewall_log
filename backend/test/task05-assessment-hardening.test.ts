@@ -82,7 +82,7 @@ test("full analysis draft produces score, findings, evidence, and next steps", (
   assert.equal(draft.evidence.connectorSnapshots, 1);
 });
 
-test("hardening suggestions include executable catalog actions and manual items", () => {
+test("hardening suggestions stay catalog-controlled and never block a busy IP without attack evidence", () => {
   const assessment = { findingsJson: buildAssessmentDraft(context() as never, 0) };
   const recommendations = buildHardeningRecommendationDrafts(assessment, context().devices.map((device) => ({
     id: device.id, name: device.name, vendor: device.vendor, type: device.type, managementPort: device.managementPort
@@ -91,7 +91,7 @@ test("hardening suggestions include executable catalog actions and manual items"
   assert.ok(executable?.catalogActionId);
   assert.ok(executable?.actionType);
   assert.ok(recommendations.some((item) => !item.executable && item.catalogActionId === null));
-  assert.ok(recommendations.some((item) => item.catalogActionId === "linux.temporary_block_ip" && item.executable));
+  assert.ok(!recommendations.some((item) => item.catalogActionId === "linux.temporary_block_ip"));
 });
 
 test("assessment persistence models and APIs are wired", () => {

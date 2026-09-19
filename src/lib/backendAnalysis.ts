@@ -2,8 +2,7 @@ import type { LogProfile } from "@/types/logProfile";
 import type { Finding } from "@/types/finding";
 import type { NormalizedLog } from "@/types/log";
 import type { LogSummary } from "@/lib/analytics";
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/firewall-api").replace(/\/$/, "");
+import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type BackendAnalysisJobStatus = {
   id: string;

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { Prisma, type Device } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { getVendorTelemetryProfile, type FindingCategory, type TelemetryVendor, type VendorFindingRule } from "./vendor-telemetry-profiles.js";
+import { notifySecurityFinding } from "../services/security-alert-email.service.js";
 
 export type NormalizedFinding = { id: string; deviceId: string; vendor: TelemetryVendor; title: string; severity: "low" | "medium" | "high" | "critical"; category: FindingCategory; status: "active" | "acknowledged" | "resolved" | "suppressed"; confidence: number; summary: string; evidence: string[]; source: string; rawRefs: string[]; firstSeen: string; lastSeen: string; count: number; mitreTags: string[]; affectedObject?: string; actor?: string; srcIp?: string; dstIp?: string; dstPort?: number; recommendedActions: Array<{ intent: string; label: string }>; suppressionReason?: string; fingerprint: string };
 export type RawTelemetryEvent = { id?: string; timestamp?: string | Date; source?: string; raw?: string; message?: string; summary?: string; eventType?: string; action?: string; severity?: string; srcIp?: string; dstIp?: string; dstPort?: number; actor?: string; username?: string; affectedObject?: string; [key: string]: unknown };
@@ -34,9 +35,17 @@ export async function processVendorTelemetry(input: Parameters<typeof evaluateVe
   const persisted: NormalizedFinding[] = [];
   for (const finding of result.findings) {
     const existing = await prisma.finding.findUnique({ where: { deviceId_fingerprint: { deviceId: finding.deviceId, fingerprint: finding.fingerprint } } });
+    const existingRefs = new Set(Array.isArray(existing?.rawRefsJson) ? existing.rawRefsJson.map(String) : []);
+    const newRefs = finding.rawRefs.filter((reference) => !existingRefs.has(reference));
+    const snapshotAlreadyRecorded = Boolean(existing) && finding.source === "snapshot";
+    if (existing && ((finding.rawRefs.length > 0 && newRefs.length === 0) || snapshotAlreadyRecorded)) {
+      persisted.push(serializeFinding(existing as unknown as Record<string, unknown>) as unknown as NormalizedFinding);
+      continue;
+    }
     const evidence = Array.from(new Set([...(Array.isArray(existing?.evidenceJson) ? existing.evidenceJson.map(String) : []), ...finding.evidence])).slice(-20);
-    const refs = Array.from(new Set([...(Array.isArray(existing?.rawRefsJson) ? existing.rawRefsJson.map(String) : []), ...finding.rawRefs])).slice(-50);
-    const saved = await prisma.finding.upsert({ where: { deviceId_fingerprint: { deviceId: finding.deviceId, fingerprint: finding.fingerprint } }, create: { deviceId: finding.deviceId, vendor: finding.vendor, title: finding.title, severity: finding.severity, category: finding.category, status: finding.status, confidence: finding.confidence, summary: finding.summary, evidenceJson: finding.evidence as Prisma.InputJsonValue, source: finding.source, rawRefsJson: finding.rawRefs as Prisma.InputJsonValue, firstSeen: new Date(finding.firstSeen), lastSeen: new Date(finding.lastSeen), count: finding.count, mitreTags: finding.mitreTags, affectedObject: finding.affectedObject, actor: finding.actor, srcIp: finding.srcIp, dstIp: finding.dstIp, dstPort: finding.dstPort, recommendedActions: finding.recommendedActions as Prisma.InputJsonValue, fingerprint: finding.fingerprint }, update: { lastSeen: new Date(finding.lastSeen), count: { increment: finding.count }, evidenceJson: evidence as Prisma.InputJsonValue, rawRefsJson: refs as Prisma.InputJsonValue, confidence: finding.confidence, severity: finding.severity, status: "active" } });
+    const refs = Array.from(new Set([...existingRefs, ...finding.rawRefs])).slice(-50);
+    const saved = await prisma.finding.upsert({ where: { deviceId_fingerprint: { deviceId: finding.deviceId, fingerprint: finding.fingerprint } }, create: { deviceId: finding.deviceId, vendor: finding.vendor, title: finding.title, severity: finding.severity, category: finding.category, status: finding.status, confidence: finding.confidence, summary: finding.summary, evidenceJson: finding.evidence as Prisma.InputJsonValue, source: finding.source, rawRefsJson: finding.rawRefs as Prisma.InputJsonValue, firstSeen: new Date(finding.firstSeen), lastSeen: new Date(finding.lastSeen), count: finding.count, mitreTags: finding.mitreTags, affectedObject: finding.affectedObject, actor: finding.actor, srcIp: finding.srcIp, dstIp: finding.dstIp, dstPort: finding.dstPort, recommendedActions: finding.recommendedActions as Prisma.InputJsonValue, fingerprint: finding.fingerprint }, update: { lastSeen: new Date(finding.lastSeen), count: { increment: Math.max(newRefs.length, 1) }, evidenceJson: evidence as Prisma.InputJsonValue, rawRefsJson: refs as Prisma.InputJsonValue, confidence: finding.confidence, severity: finding.severity, status: "active" } });
+    await notifySecurityFinding({ finding: saved, eventIds: newRefs.length ? newRefs : [`snapshot:${finding.fingerprint}:${finding.lastSeen}`] });
     persisted.push(serializeFinding(saved as unknown as Record<string, unknown>) as unknown as NormalizedFinding);
   }
   return { ...result, findings: persisted };
