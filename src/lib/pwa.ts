@@ -6,10 +6,21 @@ export function registerPwaServiceWorker() {
   if (!import.meta.env.PROD && import.meta.env.VITE_ENABLE_PWA !== "true") return;
 
   const baseUrl = import.meta.env.BASE_URL;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshing = false;
+
+  // A service worker update is safe to apply automatically because navigation
+  // is network-first. This removes the old "close and reopen the app" step.
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
 
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register(`${baseUrl}sw.js`, { scope: baseUrl })
+    void navigator.serviceWorker.register(`${baseUrl}sw.js`, { scope: baseUrl, updateViaCache: "none" })
       .then((registration) => {
+        void registration.update();
         registration.addEventListener("updatefound", () => {
           const installingWorker = registration.installing;
           if (!installingWorker) return;

@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.20.0",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/validate-frontend-env.mjs && tsc -b && vite build",
+    "build": "node scripts/validate-frontend-env.mjs && tsc -b && vite build && node scripts/stamp-pwa-version.mjs",
     "mobile:build:web": "npm run build",
     "mobile:sync": "npx cap sync",
     "mobile:open:android": "npx cap open android",

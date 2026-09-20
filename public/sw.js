@@ -1,4 +1,6 @@
-const CACHE_VERSION = "public-landing-current-ui-v4";
+// Replaced at build time by scripts/stamp-pwa-version.mjs. Keeping a build
+// fingerprint here prevents an older installed PWA from serving stale assets.
+const CACHE_VERSION = "__FIREWALL_PWA_VERSION__";
 const SHELL_CACHE = `firewall-shell-${CACHE_VERSION}`;
 const SAFE_API_CACHE = `firewall-readonly-api-${CACHE_VERSION}`;
 const API_PREFIX = "/firewall-api";

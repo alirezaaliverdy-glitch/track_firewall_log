@@ -1,3 +1,5 @@
+name: track_firewall_log
+
 services:
   main-nginx:
     image: nginx:1.27-alpine
