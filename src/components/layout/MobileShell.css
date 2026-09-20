@@ -373,10 +373,63 @@
   }
 
   .platform-sidebar__nav {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: stretch;
     min-height: 0;
+    width: 100%;
+    margin: 12px 0 8px;
+    padding: 2px 2px 14px;
     overflow-y: auto;
+    overflow-x: hidden;
+    gap: 5px;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+  }
+
+  /* Every group must remain in normal flow. This prevents long child lists
+     from painting over the following section on narrow phone viewports. */
+  .platform-sidebar.is-mobile-open .platform-nav-group {
+    display: block;
+    flex: 0 0 auto;
+    width: 100%;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+    padding: 3px;
+    box-sizing: border-box;
+  }
+
+  .platform-sidebar.is-mobile-open .platform-nav-group__label {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+    line-height: 1.45;
+  }
+
+  .platform-sidebar.is-mobile-open .platform-nav-group__children {
+    display: grid;
+    grid-auto-rows: minmax(32px, auto);
+    height: auto;
+    min-height: 0;
+    margin: 2px 0 6px;
+    gap: 2px;
+    overflow: visible;
+  }
+
+  .platform-sidebar.is-mobile-open .platform-nav-group__children a {
+    display: flex;
+    min-height: 32px;
+    align-items: center;
+    line-height: 1.45;
+  }
+
+  .platform-sidebar__profile {
+    flex: 0 0 auto;
+    min-height: 66px;
+    box-sizing: border-box;
   }
 
   .platform-sidebar__close { display: inline-grid; }

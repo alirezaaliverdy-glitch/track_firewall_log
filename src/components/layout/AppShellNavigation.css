@@ -32,7 +32,7 @@
 .platform-nav-group.is-active .platform-nav-group__signal { opacity: 1; animation: sidebar-signal 2.4s ease-out infinite; }
 .platform-nav-group__children { position: relative; display: grid; gap: 2px; margin: 2px 0 5px; padding-inline-start: 36px; }
 .platform-nav-group__children::before { content: ""; position: absolute; top: 2px; bottom: 3px; inset-inline-start: 21px; width: 1px; background: linear-gradient(to bottom, rgba(var(--nav-rgb), .42), transparent); }
-.platform-nav-group__children a { min-height: 30px; padding: 0 8px; border-radius: 8px; color: #657f92; font-size: .67rem; }
+.platform-nav-group__children a { display: flex; min-height: 30px; align-items: center; padding: 0 8px; border-radius: 8px; color: #657f92; font-size: .67rem; }
 .platform-nav-group__children a:hover, .platform-nav-group__children a.is-current { color: rgb(var(--nav-rgb)); background: rgba(var(--nav-rgb), .07); }
 .platform-sidebar__profile { position: relative; display: flex; min-height: 64px; flex: 0 0 auto; align-items: center; gap: 10px; margin: 0 -4px -4px; padding: 11px 11px 4px; border: 1px solid rgba(125, 211, 252, .08); border-radius: 14px; background: linear-gradient(135deg, rgba(12, 35, 50, .92), rgba(8, 22, 36, .96)); box-shadow: 0 -12px 28px rgba(0, 0, 0, .12); }
 .platform-sidebar__avatar { position: relative; display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid rgba(167, 139, 250, .32); border-radius: 12px; color: #ddd6fe; background: linear-gradient(145deg, rgba(124, 58, 237, .2), rgba(6, 182, 212, .11)); font-weight: 900; }
