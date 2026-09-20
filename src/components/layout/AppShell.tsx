@@ -9,9 +9,11 @@ import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { getMobilePreference, setMobilePreference } from "@/lib/mobileStorage";
 import { clearNativeServerUrl, isNativeAndroidApp } from "@/mobile/nativeServerConfig";
 import { clearNativeSessionToken } from "@/mobile/nativeSession";
-import "./MobileShell.css";
 import "./AppShellNavigation.css";
 import "./AppShellTopbar.css";
+// Load the final mobile overrides after the desktop navigation skin. The navigation
+// skin intentionally owns the desktop grid, so mobile rules must win the cascade.
+import "./MobileShell.css";
 
 const navigationIcons = {
   dashboard: LayoutDashboard,

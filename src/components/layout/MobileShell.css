@@ -292,3 +292,249 @@
 @media (prefers-reduced-motion: reduce) {
   .platform-sidebar { transition: none; }
 }
+
+/*
+ * Mobile shell contract
+ *
+ * AppShellNavigation.css is the desktop navigation skin and is loaded before
+ * this file. Keep the mobile layout here as the final cascade layer so a
+ * desktop grid/sidebar rule can never force horizontal overflow on a phone.
+ */
+@media (max-width: 900px) {
+  :root { overflow-x: hidden; }
+  html,
+  body,
+  #root,
+  .authenticated-app {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .authenticated-app {
+    min-height: 100dvh;
+    overflow-y: visible;
+  }
+
+  .platform-shell,
+  .platform-shell.is-sidebar-collapsed {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .platform-main {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding-bottom: 0;
+  }
+
+  .platform-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    box-sizing: border-box;
+    padding: 14px 12px calc(92px + env(safe-area-inset-bottom));
+  }
+
+  /* Closed drawer: it must not occupy layout space or peek into the page. */
+  .platform-sidebar,
+  .platform-sidebar.is-collapsed {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    z-index: 70;
+    display: flex;
+    width: min(86vw, 336px);
+    max-width: calc(100vw - 18px);
+    height: 100dvh;
+    min-height: 100dvh;
+    margin: 0;
+    box-sizing: border-box;
+    transform: translateX(110%);
+    transition: transform .24s cubic-bezier(.22, 1, .36, 1);
+    padding: calc(14px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom));
+    overflow: hidden;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .platform-sidebar.is-mobile-open,
+  .platform-shell[dir="ltr"] .platform-sidebar.is-mobile-open {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .platform-sidebar__nav {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .platform-sidebar__close { display: inline-grid; }
+  .platform-sidebar__toggle { display: none; }
+  .platform-sidebar__brand { display: flex; }
+  .platform-sidebar__controls { justify-content: space-between; }
+  .platform-sidebar.is-collapsed .platform-sidebar__brand { display: flex; }
+  .platform-sidebar.is-collapsed .platform-sidebar__profile-copy,
+  .platform-sidebar.is-collapsed .platform-sidebar__profile > button { display: grid; }
+  .platform-sidebar.is-collapsed .platform-nav-group { width: auto; min-height: 0; margin: 0; padding: 3px; }
+  .platform-sidebar.is-collapsed .platform-nav-group__label { width: auto; min-height: 43px; justify-content: flex-start; padding: 0 10px; }
+  .platform-sidebar.is-collapsed .platform-nav-group__label > span,
+  .platform-sidebar.is-collapsed .platform-nav-group__children,
+  .platform-sidebar.is-collapsed .platform-nav-group__signal { display: initial; }
+
+  .platform-drawer-scrim.is-open {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgba(1, 7, 14, .66);
+    backdrop-filter: blur(2px);
+  }
+
+  .platform-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+  }
+
+  .platform-mobile-menu { display: inline-grid; }
+  .topbar-current { min-width: 0; }
+  .topbar-current__icon { width: 38px; height: 38px; }
+  .topbar-tools { min-width: 0; max-width: 100%; overflow: visible; }
+  .topbar-device { width: 40px; min-width: 40px; max-width: 40px; height: 40px; justify-content: center; padding: 0; }
+  .topbar-device > span { display: none; }
+  .topbar-create { width: 40px; height: 40px; padding: 0; }
+  .topbar-create span { display: none; }
+  .topbar-account > summary { height: 40px; padding: 3px; }
+  .topbar-account > summary > strong,
+  .topbar-account > summary > svg { display: none; }
+  .topbar-account__menu {
+    position: fixed;
+    inset-block-start: calc(64px + env(safe-area-inset-top));
+    inset-inline: 12px;
+    width: auto;
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+  }
+
+  .platform-offline-banner { padding-inline: 12px; }
+
+  .platform-bottom-nav {
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: 60;
+    display: grid;
+    width: 100%;
+    min-height: 64px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    box-sizing: border-box;
+    padding: 5px max(4px, env(safe-area-inset-left)) env(safe-area-inset-bottom);
+    border-top: 1px solid rgba(103, 232, 249, .16);
+    background: rgba(3, 13, 23, .96);
+    box-shadow: 0 -14px 34px rgba(0, 0, 0, .34);
+    backdrop-filter: blur(18px);
+  }
+
+  .platform-bottom-nav a,
+  .platform-bottom-nav button {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    min-height: 58px;
+    place-content: center;
+    gap: 3px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    padding: 6px 2px 3px;
+    color: var(--app-muted);
+    font: inherit;
+    font-size: .59rem;
+    font-weight: 800;
+    text-align: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .platform-bottom-nav a > svg,
+  .platform-bottom-nav button > svg { width: 19px; height: 19px; margin-inline: auto; }
+  .platform-bottom-nav a > span,
+  .platform-bottom-nav button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .platform-bottom-nav a.is-current,
+  .platform-bottom-nav button.is-current { color: var(--app-accent); background: rgba(34, 211, 238, .08); }
+  .platform-bottom-nav a.is-current::before,
+  .platform-bottom-nav button.is-current::before {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 25%;
+    height: 2px;
+    border-radius: 0 0 4px 4px;
+    background: var(--app-accent);
+    content: "";
+  }
+
+  /* Common page primitives must never widen the mobile viewport. */
+  .page-stack,
+  .page-header,
+  .page-header__actions,
+  .content-grid,
+  .summary-grid,
+  .dashboard-summary,
+  .workspace-chart-grid,
+  .form-grid,
+  .onboarding-form,
+  .content-panel,
+  .metric-panel,
+  .state-panel,
+  .table-shell,
+  .action-workspace,
+  .action-workspace__body,
+  .dashboard-v2,
+  .dashboard-main-grid { min-width: 0; max-width: 100%; }
+
+  .page-header,
+  .page-header__actions,
+  .button-row { width: 100%; box-sizing: border-box; }
+  .page-header__actions > *,
+  .button-row > * { max-width: 100%; }
+  .page-header h1,
+  .page-header p,
+  .content-panel h2,
+  .content-panel p { overflow-wrap: anywhere; }
+
+  .table-shell,
+  .data-table-wrap,
+  .overflow-x-auto { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+  img,
+  svg,
+  video,
+  canvas { max-width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .platform-content { padding-inline: 10px; }
+  .platform-topbar { padding-inline: 10px; }
+  .platform-bottom-nav a,
+  .platform-bottom-nav button { font-size: .55rem; }
+  .platform-bottom-nav a > svg,
+  .platform-bottom-nav button > svg { width: 18px; height: 18px; }
+}
