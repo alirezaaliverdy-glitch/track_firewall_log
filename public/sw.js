@@ -1,4 +1,4 @@
-const CACHE_VERSION = "public-landing-current-ui-v3";
+const CACHE_VERSION = "public-landing-current-ui-v4";
 const SHELL_CACHE = `firewall-shell-${CACHE_VERSION}`;
 const SAFE_API_CACHE = `firewall-readonly-api-${CACHE_VERSION}`;
 const API_PREFIX = "/firewall-api";

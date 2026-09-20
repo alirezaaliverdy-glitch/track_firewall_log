@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 import AnimatedShield from "./AnimatedShield";
 import CyberBackground from "./CyberBackground";
 import "./NativeLoginStability.css";
+import "@/mobile/PwaMobile.css";
 
 type LoginIconName = "eye" | "eyeOff" | "lock" | "shield" | "user";
 
