@@ -1,6 +1,5 @@
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
-import { DashboardAssistantPanel } from "@/features/dashboard/components/DashboardAssistantPanel";
 import { useAssets } from "@/features/assets/hooks/useAssets";
 import { useFindings } from "@/features/security/hooks/useFindings";
 import {
@@ -396,13 +395,6 @@ export default function DashboardPage() {
         </div>
       </div>
         </div>
-        <DashboardAssistantPanel
-          isFa={isFa}
-          criticalFindings={criticalFindings}
-          pendingApprovals={pendingApprovals}
-          failedActions={failedActions}
-          latestFindingTitle={latestFindings[0]?.title}
-        />
       </div>
 
       <div className="command-operations-grid">
