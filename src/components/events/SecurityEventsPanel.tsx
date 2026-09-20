@@ -21,6 +21,9 @@ import { Input } from "@/components/ui/input";
 
 const EMPTY_SUMMARY: EventsSummary = {
   totalEvents: 0,
+  storedRows: 0,
+  latestEventAt: null,
+  window: { from: null, to: null },
   countBySeverity: [],
   countByAction: [],
   topSourceIps: [],

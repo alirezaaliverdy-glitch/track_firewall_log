@@ -22,9 +22,7 @@ import {
 } from "@/lib/platform";
 import {
   getSecurityEventsSummary,
-  listSecurityEvents,
   type EventsSummary,
-  type SecurityEvent,
 } from "@/lib/securityEvents";
 import {
   Activity,
@@ -62,6 +60,9 @@ type DashboardTone = "good" | "warning" | "danger" | "neutral";
 
 const EMPTY_EVENT_SUMMARY: EventsSummary = {
   totalEvents: 0,
+  storedRows: 0,
+  latestEventAt: null,
+  window: { from: null, to: null },
   countBySeverity: [],
   countByAction: [],
   topSourceIps: [],
@@ -165,6 +166,41 @@ function vendorName(asset: PlatformAsset) {
   return asset.vendor?.name || asset.platform?.name || asset.device?.type || "Unknown";
 }
 
+const PORT_SERVICES: Record<string, string> = {
+  "20": "FTP data",
+  "21": "FTP",
+  "22": "SSH",
+  "25": "SMTP",
+  "53": "DNS",
+  "67": "DHCP",
+  "68": "DHCP",
+  "80": "HTTP",
+  "110": "POP3",
+  "123": "NTP",
+  "143": "IMAP",
+  "161": "SNMP",
+  "389": "LDAP",
+  "443": "HTTPS",
+  "445": "SMB",
+  "514": "Syslog",
+  "636": "LDAPS",
+  "993": "IMAPS",
+  "995": "POP3S",
+  "1433": "MSSQL",
+  "1521": "Oracle",
+  "3306": "MySQL",
+  "3389": "RDP",
+  "5432": "PostgreSQL",
+  "6379": "Redis",
+  "8080": "HTTP Alt",
+  "8443": "HTTPS Alt",
+  "22022": "SSH Alt",
+};
+
+function portService(port: string, isFa: boolean) {
+  return PORT_SERVICES[port] ?? copy(isFa, "سرویس سفارشی", "Custom service");
+}
+
 function Ring({ radius, value, color, width, delay = 0 }: { radius: number; value: number | null; color: string; width: number; delay?: number }) {
   const safe = value === null ? 0 : Math.max(0, Math.min(100, value));
   const style = { "--ring-offset": String(100 - safe), "--ring-color": color, "--ring-delay": `${delay}ms` } as CSSProperties;
@@ -237,7 +273,6 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<OperationalDashboardActivity | null>(null);
   const [monitoring, setMonitoring] = useState<SecurityMonitoringStatus | null>(null);
   const [eventSummary, setEventSummary] = useState<EventsSummary>(EMPTY_EVENT_SUMMARY);
-  const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [dataRefreshing, setDataRefreshing] = useState(false);
   const [activityError, setActivityError] = useState(false);
   const [linuxError, setLinuxError] = useState(false);
@@ -265,13 +300,13 @@ export default function DashboardPage() {
 
   const loadOperationalData = useCallback(async (showBusy = false) => {
     if (showBusy) setDataRefreshing(true);
-    const [activityResult, monitoringResult, summaryResult, eventsResult] = await Promise.allSettled([
-      getOperationalDashboardActivity(), getSecurityMonitoringStatus(), getSecurityEventsSummary(), listSecurityEvents(),
+    const from = new Date(Date.now() - 86_400_000).toISOString();
+    const [activityResult, monitoringResult, summaryResult] = await Promise.allSettled([
+      getOperationalDashboardActivity(), getSecurityMonitoringStatus(), getSecurityEventsSummary({ from }),
     ]);
     if (activityResult.status === "fulfilled") { setActivity(activityResult.value); setActivityError(false); } else setActivityError(true);
     if (monitoringResult.status === "fulfilled") setMonitoring(monitoringResult.value);
     if (summaryResult.status === "fulfilled") setEventSummary(summaryResult.value);
-    if (eventsResult.status === "fulfilled") setEvents(eventsResult.value);
     setDataRefreshing(false);
   }, []);
 
@@ -320,10 +355,7 @@ export default function DashboardPage() {
   const dailyHealthy = dailyChecks.every((item) => item.ok) && criticalFindings === 0;
 
   const maxPortCount = Math.max(1, ...eventSummary.topDestinationPorts.map((item) => item.count));
-  const event24hCount = events.filter((event) => {
-    const value = new Date(event.timestamp ?? event.receivedAt).getTime();
-    return Number.isFinite(value) && Date.now() - value <= 86_400_000;
-  }).reduce((sum, event) => sum + Math.max(1, Number(event.count) || 1), 0);
+  const observedPortEvents = eventSummary.topDestinationPorts.reduce((sum, item) => sum + item.count, 0);
 
   const refreshAll = () => {
     assets.refresh();
@@ -383,9 +415,17 @@ export default function DashboardPage() {
 
         <div className="command-side-stack">
           <article className="command-panel top-traffic-panel">
-            <header className="command-panel-heading"><div><span className="command-panel__icon"><Network /></span><div><h2>{copy(isFa, "پورت‌های پرترافیک", "Top destination ports")}</h2><p>{number(eventSummary.totalEvents, language)} {copy(isFa, "رخداد ذخیره‌شده", "stored events")}</p></div></div><Link to="/monitoring">{copy(isFa, "رخدادها", "Events")}<ArrowUpLeft size={14} /></Link></header>
-            {eventSummary.topDestinationPorts.length ? <ul>{eventSummary.topDestinationPorts.slice(0, 5).map((item) => <li key={item.value}><span dir="ltr">{item.value}</span><i><b style={{ width: `${Math.max(5, (item.count / maxPortCount) * 100)}%` }} /></i><strong>{number(item.count, language)}</strong></li>)}</ul> : <div className="command-empty command-empty--compact"><Activity /><p>{copy(isFa, "هنوز رخداد پورت ثبت نشده است.", "No port events recorded yet.")}</p></div>}
-            <footer>{copy(isFa, "رخدادهای نمونه اخیر در ۲۴ ساعت", "Recent sampled events in 24h")} <b>{number(event24hCount, language)}</b></footer>
+            <header className="command-panel-heading"><div><span className="command-panel__icon"><Network /></span><div><h2>{copy(isFa, "پورت‌های پرترافیک واقعی", "Live high-traffic ports")}</h2><p>{copy(isFa, "بر پایه رخدادهای جمع‌آوری‌شده در ۲۴ ساعت اخیر", "Based on collected events from the last 24 hours")}</p></div></div><Link to="/monitoring">{copy(isFa, "رخدادها", "Events")}<ArrowUpLeft size={14} /></Link></header>
+            {eventSummary.topDestinationPorts.length ? <ul>{eventSummary.topDestinationPorts.slice(0, 5).map((item, index) => {
+              const share = observedPortEvents ? Math.round((item.count / observedPortEvents) * 100) : 0;
+              return <li key={item.value}>
+                <span className="top-traffic-panel__rank">{number(index + 1, language)}</span>
+                <span className="top-traffic-panel__identity"><b dir="ltr">:{item.value}</b><small>{portService(item.value, isFa)}</small></span>
+                <span className="top-traffic-panel__meter"><i><b style={{ width: `${Math.max(5, (item.count / maxPortCount) * 100)}%` }} /></i><small>{number(share, language)}%</small></span>
+                <strong>{number(item.count, language)}<small>{copy(isFa, "رخداد", "events")}</small></strong>
+              </li>;
+            })}</ul> : <div className="command-empty command-empty--compact"><Activity /><p>{copy(isFa, "در ۲۴ ساعت اخیر رخداد دارای پورت ثبت نشده است.", "No port-bearing event was recorded in the last 24 hours.")}</p></div>}
+            <footer><span><i />{copy(isFa, "داده واقعی Collector", "Live collector data")}</span><span>{copy(isFa, "آخرین رخداد", "Latest")}: <b>{relativeDate(eventSummary.latestEventAt, language, "—")}</b></span><span>{copy(isFa, "کل رخدادها", "Total")}: <b>{number(eventSummary.totalEvents, language)}</b></span></footer>
           </article>
 
           <article className="command-panel latest-findings-panel">

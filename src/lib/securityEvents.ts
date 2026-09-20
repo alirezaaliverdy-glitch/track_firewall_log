@@ -52,6 +52,9 @@ export type EventBatch = {
 
 export type EventsSummary = {
   totalEvents: number;
+  storedRows: number;
+  latestEventAt: string | null;
+  window: { from: string | null; to: string | null };
   countBySeverity: Array<{ severity: string; count: number }>;
   countByAction: Array<{ action: string; count: number }>;
   topSourceIps: Array<{ value: string; count: number }>;
@@ -92,6 +95,7 @@ export type RetentionStatus = {
 };
 
 export type EventFilters = {
+  deviceId?: string;
   vendor?: string;
   action?: string;
   severity?: string;
@@ -99,10 +103,15 @@ export type EventFilters = {
   dstIp?: string;
   port?: string;
   protocol?: string;
+  from?: string;
+  to?: string;
 };
 
 const EMPTY_SUMMARY: EventsSummary = {
   totalEvents: 0,
+  storedRows: 0,
+  latestEventAt: null,
+  window: { from: null, to: null },
   countBySeverity: [],
   countByAction: [],
   topSourceIps: [],
@@ -140,6 +149,14 @@ const normalizeSummary = (value: unknown): EventsSummary => {
 
   return {
     totalEvents: safeNumber(source.totalEvents ?? source.total),
+    storedRows: safeNumber(source.storedRows ?? source.totalEvents ?? source.total),
+    latestEventAt: typeof source.latestEventAt === "string" ? source.latestEventAt : null,
+    window: source.window && typeof source.window === "object"
+      ? {
+          from: typeof (source.window as Record<string, unknown>).from === "string" ? String((source.window as Record<string, unknown>).from) : null,
+          to: typeof (source.window as Record<string, unknown>).to === "string" ? String((source.window as Record<string, unknown>).to) : null,
+        }
+      : { from: null, to: null },
     countBySeverity: Array.isArray(bySeverity)
       ? normalizeCountList(bySeverity, "severity") as EventsSummary["countBySeverity"]
       : Object.entries((bySeverity && typeof bySeverity === "object" ? bySeverity : {}) as Record<string, unknown>).map(

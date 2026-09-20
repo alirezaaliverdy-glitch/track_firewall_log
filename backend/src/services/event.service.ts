@@ -229,9 +229,14 @@ export async function getSecurityEvent(id: string) {
 
 export async function getSecurityEventsSummary(filters: EventFilters) {
   const where = buildWhere(filters);
-  const [total, severityRows, actionRows, sourceIpRows, destinationPortRows, sourceRows, deviceRows] =
+  const [totals, severityRows, actionRows, sourceIpRows, destinationPortRows, sourceRows, deviceRows] =
     await Promise.all([
-      prisma.securityEvent.count({ where }),
+      prisma.securityEvent.aggregate({
+        where,
+        _count: { _all: true },
+        _sum: { count: true },
+        _max: { receivedAt: true, timestamp: true }
+      }),
       prisma.securityEvent.groupBy({
         by: ["severity"],
         where,
@@ -256,7 +261,8 @@ export async function getSecurityEventsSummary(filters: EventFilters) {
         by: ["dstPort"],
         where: { ...where, dstPort: { not: null } },
         _count: { _all: true },
-        orderBy: { _count: { dstPort: "desc" } },
+        _sum: { count: true },
+        orderBy: { _sum: { count: "desc" } },
         take: 10
       }),
       prisma.securityEvent.groupBy({
@@ -281,7 +287,7 @@ export async function getSecurityEventsSummary(filters: EventFilters) {
   }));
   const topDestinationPorts = destinationPortRows.map((row) => ({
     value: row.dstPort == null ? "unknown" : String(row.dstPort),
-    count: row._count._all
+    count: row._sum.count ?? row._count._all
   }));
   const topSourceIds = sourceRows.map((row) => ({
     value: row.sourceId ?? "unknown",
@@ -304,7 +310,13 @@ export async function getSecurityEventsSummary(filters: EventFilters) {
   ]);
 
   return {
-    totalEvents: total,
+    totalEvents: totals._sum.count ?? totals._count._all,
+    storedRows: totals._count._all,
+    latestEventAt: totals._max.timestamp ?? totals._max.receivedAt,
+    window: {
+      from: filters.from ?? null,
+      to: filters.to ?? null
+    },
     countBySeverity: severityRows.map((row) => ({
       severity: row.severity ?? "unknown",
       count: row._count._all
