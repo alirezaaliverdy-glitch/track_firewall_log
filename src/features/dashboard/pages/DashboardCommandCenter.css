@@ -227,7 +227,25 @@
 .command-section-heading > div:last-child { display: flex; align-items: center; gap: 8px; }
 .command-section-heading > div:last-child > a { display: inline-flex; align-items: center; gap: 5px; color: #71d5df; font-size: .58rem; font-weight: 800; }
 .command-linux-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
-.command-linux-card { border-radius: 16px; background: rgba(4, 17, 28, .82); }
+.command-linux-card { border-radius: 16px; background: radial-gradient(circle at 18% 35%, rgba(34, 211, 238, .06), transparent 36%), rgba(4, 17, 28, .82); }
+.linux-health-visual { display: grid; grid-template-columns: minmax(116px, .72fr) minmax(140px, 1fr); align-items: center; gap: 15px; margin-block: 16px 4px; }
+.linux-health-dial { position: relative; display: grid; width: min(100%, 148px); aspect-ratio: 1; place-items: center; justify-self: center; border-radius: 50%; background: conic-gradient(var(--health-color) 0 var(--health-angle), rgba(91, 119, 137, .12) var(--health-angle) 360deg); filter: drop-shadow(0 0 18px color-mix(in srgb, var(--health-color) 14%, transparent)); }
+.linux-health-dial::before { content: ""; position: absolute; width: calc(100% - 15px); aspect-ratio: 1; border: 1px solid rgba(108, 148, 169, .12); border-radius: 50%; background: radial-gradient(circle at 50% 28%, rgba(255,255,255,.035), transparent 38%), #071723; box-shadow: inset 0 0 28px rgba(0,0,0,.25); }
+.linux-health-dial > div { position: relative; z-index: 1; display: grid; justify-items: center; gap: 5px; text-align: center; }
+.linux-health-dial span { color: #6f8998; font-size: .5rem; }
+.linux-health-dial strong { color: #eef9fb; font-size: 1.58rem; line-height: 1; }
+.linux-health-dial strong small { margin-inline-start: 3px; color: #527080; font-size: .48rem; font-weight: 650; }
+.linux-health-dial em { display: inline-flex; align-items: center; gap: 5px; color: #5e7a89; font-size: .42rem; font-style: normal; }
+.linux-health-dial em i { width: 5px; height: 5px; border-radius: 50%; background: var(--health-color); box-shadow: 0 0 8px var(--health-color); animation: linux-live-pulse 1.8s ease-in-out infinite; }
+.linux-resource-chart { display: grid; gap: 11px; margin: 0; }
+.linux-resource-chart > div { display: grid; gap: 6px; }
+.linux-resource-chart dt { display: grid; grid-template-columns: 25px 1fr auto; align-items: center; gap: 7px; }
+.linux-resource-chart dt > span { display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid color-mix(in srgb, var(--metric-color) 20%, transparent); border-radius: 8px; color: var(--metric-color); background: color-mix(in srgb, var(--metric-color) 7%, transparent); }
+.linux-resource-chart dt svg { width: 13px; height: 13px; }
+.linux-resource-chart dt b { color: #7892a0; font-size: .52rem; }
+.linux-resource-chart dt strong { color: #dcebef; font-size: .59rem; }
+.linux-resource-chart dd { height: 7px; margin: 0; overflow: hidden; border-radius: 99px; background: rgba(83, 116, 134, .13); }
+.linux-resource-chart dd i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--metric-color) 68%, #176b83), var(--metric-color)); box-shadow: 0 0 9px color-mix(in srgb, var(--metric-color) 28%, transparent); animation: linux-meter-reveal .8s ease-out both; }
 .command-warning { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 10px 12px; border: 1px solid rgba(255,159,67,.2); border-radius: 10px; color: #d7a871; background: rgba(255,159,67,.055); font-size: .58rem; }
 .command-warning svg { width: 16px; }
 
@@ -360,6 +378,8 @@
 
 @keyframes command-bar-in { from { transform: scaleY(.05); opacity: 0; } }
 @keyframes assistant-dot { 0%, 70%, 100% { opacity: .3; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+@keyframes linux-live-pulse { 50% { opacity: .35; transform: scale(.72); } }
+@keyframes linux-meter-reveal { from { width: 0; opacity: .35; } }
 
 @media (max-width: 1380px) {
   .command-workspace-shell { grid-template-columns: 1fr; }
@@ -414,9 +434,15 @@
   .command-section-heading > div:last-child { width: 100%; flex-wrap: wrap; }
   .command-section-heading button { flex: 1; }
   .command-linux-grid { grid-template-columns: 1fr; }
+  .linux-health-visual { grid-template-columns: 125px 1fr; }
   .top-traffic-panel li { grid-template-columns: 24px 1fr auto; }
   .top-traffic-panel__meter { grid-column: 2 / -1; }
   .top-traffic-panel > footer { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 420px) {
+  .linux-health-visual { grid-template-columns: 1fr; }
+  .linux-resource-chart { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

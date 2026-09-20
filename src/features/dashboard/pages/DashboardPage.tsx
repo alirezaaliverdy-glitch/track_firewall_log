@@ -32,6 +32,9 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
+  Cpu,
+  HardDrive,
+  MemoryStick,
   Network,
   RefreshCw,
   Server,
@@ -201,12 +204,6 @@ function portService(port: string, isFa: boolean) {
   return PORT_SERVICES[port] ?? copy(isFa, "سرویس سفارشی", "Custom service");
 }
 
-function Ring({ radius, value, color, width, delay = 0 }: { radius: number; value: number | null; color: string; width: number; delay?: number }) {
-  const safe = value === null ? 0 : Math.max(0, Math.min(100, value));
-  const style = { "--ring-offset": String(100 - safe), "--ring-color": color, "--ring-delay": `${delay}ms` } as CSSProperties;
-  return <><circle className="linux-ring__track" cx="100" cy="100" r={radius} pathLength="100" strokeWidth={width} />{value !== null ? <circle className="linux-ring__value" cx="100" cy="100" r={radius} pathLength="100" strokeWidth={width} style={style} /> : null}</>;
-}
-
 function LinuxServerChart({ device, language, isFa }: { device: LinuxMonitoringDevice; language: string; isFa: boolean }) {
   const snapshot = device.latestHealth;
   const healthState = device.healthState ?? snapshot?.state ?? "unknown";
@@ -215,18 +212,29 @@ function LinuxServerChart({ device, language, isFa }: { device: LinuxMonitoringD
   const memory = metricValue(snapshot, "memory.usage_percent");
   const disk = metricValue(snapshot, "disk.usage_percent");
   const legend = [
-    { key: "cpu", label: "CPU", value: cpu, color: "#22d3ee" },
-    { key: "memory", label: copy(isFa, "حافظه", "Memory"), value: memory, color: "#a78bfa" },
-    { key: "disk", label: copy(isFa, "دیسک", "Disk"), value: disk, color: "#f59e0b" },
+    { key: "cpu", label: "CPU", value: cpu, color: "#22d3ee", icon: <Cpu /> },
+    { key: "memory", label: copy(isFa, "حافظه", "Memory"), value: memory, color: "#a78bfa", icon: <MemoryStick /> },
+    { key: "disk", label: copy(isFa, "دیسک", "Disk"), value: disk, color: "#f59e0b", icon: <HardDrive /> },
   ];
+  const dialStyle = {
+    "--health-angle": `${(score ?? 0) * 3.6}deg`,
+    "--health-color": stateColor(healthState),
+  } as CSSProperties;
   return (
     <article className={`linux-server-card command-linux-card linux-server-card--${stateTone(healthState)}`}>
       <header className="linux-server-card__header"><div><h3>{device.name}</h3><span dir="ltr">{device.host}</span></div><span className={`dashboard-status dashboard-status--${stateTone(healthState)}`}>{stateLabel(healthState, isFa)}</span></header>
-      <div className="linux-ring" role="img" aria-label={`${copy(isFa, "امتیاز سلامت", "Health score")}: ${score ?? "—"}`}>
-        <svg viewBox="0 0 200 200" aria-hidden="true"><g transform="rotate(-90 100 100)"><Ring radius={78} value={score} color={stateColor(healthState)} width={12} /><Ring radius={61} value={cpu} color="#22d3ee" width={6} delay={100} /><Ring radius={51} value={memory} color="#a78bfa" width={6} delay={180} /><Ring radius={41} value={disk} color="#f59e0b" width={6} delay={260} /></g></svg>
-        <div className="linux-ring__center"><strong>{score === null ? "—" : number(score, language)}</strong><span>{copy(isFa, "سلامت", "Health")}</span></div>
+      <div className="linux-health-visual">
+        <div className="linux-health-dial" style={dialStyle} role="img" aria-label={`${copy(isFa, "امتیاز سلامت", "Health score")}: ${score ?? "—"}`}>
+          <div><span>{copy(isFa, "امتیاز سلامت", "Health score")}</span><strong>{score === null ? "—" : number(score, language)}<small>/ {number(100, language)}</small></strong><em><i />{snapshot ? copy(isFa, "تله‌متری متصل", "Telemetry connected") : copy(isFa, "منتظر داده", "Awaiting data")}</em></div>
+        </div>
+        <dl className="linux-resource-chart">{legend.map((item) => {
+          const value = item.value === null ? 0 : Math.round(item.value);
+          return <div key={item.key} style={{ "--metric-color": item.color } as CSSProperties}>
+            <dt><span>{item.icon}</span><b>{item.label}</b><strong>{item.value === null ? "—" : `${number(value, language)}%`}</strong></dt>
+            <dd><i style={{ width: `${value}%` }} /></dd>
+          </div>;
+        })}</dl>
       </div>
-      <dl className="linux-metric-legend">{legend.map((item) => <div key={item.key}><dt><i style={{ background: item.color }} />{item.label}</dt><dd>{item.value === null ? "—" : `${number(Math.round(item.value), language)}%`}</dd></div>)}</dl>
       <footer><span><Clock3 size={14} />{shortDate(snapshot?.collectedAt, language, copy(isFa, "ثبت نشده", "Not recorded"))}</span><Link to={`/monitoring/linux/${device.id}`}>{copy(isFa, "جزئیات", "Details")}<ArrowUpLeft size={15} /></Link></footer>
     </article>
   );
@@ -450,7 +458,7 @@ export default function DashboardPage() {
       </div>
 
       <section className="command-linux-section">
-        <header className="command-section-heading"><div><span>{copy(isFa, "تله‌متری واقعی", "Real telemetry")}</span><h2>{copy(isFa, "سلامت سرورهای Linux", "Linux server health")}</h2><p>{copy(isFa, "حلقه بیرونی امتیاز سلامت و حلقه‌های داخلی CPU، حافظه و دیسک را از آخرین Snapshot واقعی نشان می‌دهند.", "The outer ring is health; inner rings show CPU, memory and disk from the latest real snapshot.")}</p></div><div><button type="button" onClick={() => void loadLinuxHealth(true)} disabled={linuxRefreshing}><RefreshCw size={15} className={linuxRefreshing ? "is-spinning" : undefined} />{linuxRefreshing ? copy(isFa, "در حال دریافت...", "Collecting...") : copy(isFa, "دریافت داده زنده", "Collect live data")}</button><Link to="/monitoring/linux">{copy(isFa, "پایش Linux", "Linux monitoring")}<ArrowUpLeft size={14} /></Link></div></header>
+        <header className="command-section-heading"><div><span>{copy(isFa, "تله‌متری واقعی", "Real telemetry")}</span><h2>{copy(isFa, "سلامت سرورهای Linux", "Linux server health")}</h2><p>{copy(isFa, "امتیاز کلی و مصرف واقعی CPU، حافظه و دیسک از آخرین Snapshot معتبر، در یک نمای مقایسه‌پذیر.", "Overall score and real CPU, memory and disk usage from the latest valid snapshot in one comparable view.")}</p></div><div><button type="button" onClick={() => void loadLinuxHealth(true)} disabled={linuxRefreshing}><RefreshCw size={15} className={linuxRefreshing ? "is-spinning" : undefined} />{linuxRefreshing ? copy(isFa, "در حال دریافت...", "Collecting...") : copy(isFa, "دریافت داده زنده", "Collect live data")}</button><Link to="/monitoring/linux">{copy(isFa, "پایش Linux", "Linux monitoring")}<ArrowUpLeft size={14} /></Link></div></header>
         {linuxError ? <div className="command-warning"><CircleAlert />{copy(isFa, "وضعیت سرورهای Linux در دسترس نیست.", "Linux server health is unavailable.")}</div> : null}
         {linuxRefreshError ? <div className="command-warning"><CircleAlert />{copy(isFa, "داده برخی سرورها تازه نشد؛ آخرین Snapshot معتبر نمایش داده می‌شود.", "Some servers did not refresh; the latest valid snapshot is shown.")}</div> : null}
         {!linuxError && visibleLinuxDevices.length ? <div className="linux-server-grid command-linux-grid">{visibleLinuxDevices.map((device) => <LinuxServerChart key={device.id} device={device} language={language} isFa={isFa} />)}</div> : !linuxError ? <div className="command-empty command-empty--large"><Server /><div><strong>{copy(isFa, "هنوز سرور Linux ثبت نشده است", "No Linux server registered")}</strong><p>{copy(isFa, "پس از ثبت و جمع‌آوری، نمودار واقعی اینجا ظاهر می‌شود.", "After registration and collection, real charts appear here.")}</p></div><Link to="/assets/devices/new">{copy(isFa, "ثبت تجهیز", "Register device")}</Link></div> : null}
