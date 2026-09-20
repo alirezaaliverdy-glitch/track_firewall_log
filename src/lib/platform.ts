@@ -222,6 +222,10 @@ export type AttackerSummary = {
     actionableFindingCount: number;
     informationalFindingCount: number;
     logicalAuthenticationFailures: number;
+    bruteForceDetected: boolean;
+    authenticationServices: string[];
+    authenticationFailureVendors: string[];
+    targetedUsers: string[];
     authenticationSuccesses: number;
     normalSessionEvents: number;
     notes: string[];
@@ -265,7 +269,7 @@ export type AttackerDetails = AttackerSummary & {
 export type AttackerListResponse = {
   generatedAt: string;
   qualification: string;
-  summary: { total: number; critical: number; high: number; public: number; private: number; affectedDevices: number; affectedAssets: number; vendors: string[]; confirmed: number; contained: number; fortigate: number; linux: number };
+  summary: { total: number; critical: number; high: number; public: number; private: number; affectedDevices: number; affectedAssets: number; vendors: string[]; confirmed: number; contained: number; bruteForce: number; fortigate: number; linux: number };
   coverage: { findingsScanned: number; eventsScanned: number; findingLimitReached: boolean; eventSampleLimitReached: boolean; enrichment: string };
   attackers: AttackerSummary[];
 };

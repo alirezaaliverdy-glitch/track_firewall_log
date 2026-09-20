@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { buildIncidentsFromRecentEvents } from "./incident-builder.service.js";
+import { authenticationAttemptCount, authenticationFailureService, isAuthenticationFailureEvent } from "../security/brute-force-detection.js";
 
 type DetectionRunInput = {
   batchId?: string;
@@ -210,21 +211,25 @@ function detectPortScan(rule: DetectionRule, events: SecurityEvent[], bucket: st
 }
 
 function detectSshBruteforce(rule: DetectionRule, events: SecurityEvent[], bucket: string): DetectionMatch[] {
-  const sshDenied = events.filter((event) =>
-    DENY_ACTIONS.has(normalizeAction(event.action)) && (event.dstPort === 22 || event.dstPort === 22022) && event.srcIp
+  const authenticationFailures = events.filter(isAuthenticationFailureEvent);
+  const groups = groupBy(authenticationFailures, (event) =>
+    [event.srcIp, authenticationFailureService(event), event.deviceId ?? "", event.sourceId ?? ""].join("|")
   );
-  const groups = groupBy(sshDenied, (event) =>
-    [event.srcIp, event.dstIp ?? "", event.dstPort ?? "", event.deviceId ?? "", event.sourceId ?? ""].join("|")
-  );
+  const thresholdJson = rule.thresholdJson && typeof rule.thresholdJson === "object"
+    ? rule.thresholdJson as Record<string, unknown>
+    : {};
+  const threshold = Math.max(1, Number(thresholdJson.count) || 5);
 
   return Array.from(groups.values())
-    .filter((groupedEvents) => groupedEvents.length >= 5)
+    .filter((groupedEvents) => authenticationAttemptCount(groupedEvents) >= threshold)
     .map((groupedEvents) => {
       const first = groupedEvents[0];
+      const attempts = authenticationAttemptCount(groupedEvents);
+      const service = authenticationFailureService(first);
       return {
         rule,
-        title: `Possible SSH brute force from ${first.srcIp}`,
-        description: `${groupedEvents.length} denied SSH attempts were observed from ${first.srcIp}.`,
+        title: `Possible ${service} brute force from ${first.srcIp}`,
+        description: `${attempts} failed authentication attempts were observed from ${first.srcIp}.`,
         severity: rule.severity,
         events: groupedEvents,
         summary: {
@@ -232,7 +237,10 @@ function detectSshBruteforce(rule: DetectionRule, events: SecurityEvent[], bucke
           srcIp: first.srcIp,
           dstIp: first.dstIp,
           dstPort: first.dstPort,
-          attempts: groupedEvents.length,
+          attempts,
+          service,
+          vendors: [...new Set(groupedEvents.map((event) => event.vendor).filter(Boolean))],
+          usernames: [...new Set(groupedEvents.map((event) => event.username).filter(Boolean))],
           bucket
         },
         duplicateKey: {

@@ -20,6 +20,7 @@ import {
   Server,
   ShieldAlert,
   ShieldCheck,
+  KeyRound,
   Sparkles,
   Trash2,
   X
@@ -84,6 +85,7 @@ function AttackerCard({ attacker, selected, onSelect, isFa, locale }: { attacker
           <code dir="ltr">{attacker.ip}</code>
           <i>{severityLabel(attacker.severity, isFa)}</i>
           <i>{scopeLabel(attacker.scope, isFa)}</i>
+          {attacker.assessment.bruteForceDetected ? <i className="is-bruteforce"><KeyRound />{isFa ? "Brute Force" : "Brute force"}</i> : null}
         </span>
         <span className="attacker-card__facts">
           <span><ShieldAlert />{attacker.findingCount.toLocaleString(locale)} {isFa ? "یافته" : "findings"}</span>
@@ -157,6 +159,7 @@ function DetailPanel({ attacker, loading, onClose, onRespond, responseBusy, resp
           <div><dt>{isFa ? "ورود موفق مشاهده‌شده" : "Successful logins"}</dt><dd>{attacker.assessment.authenticationSuccesses.toLocaleString(locale)}</dd></div>
           <div><dt>{isFa ? "یافته قابل اقدام" : "Actionable findings"}</dt><dd>{attacker.assessment.actionableFindingCount.toLocaleString(locale)}</dd></div>
         </dl>
+        {attacker.assessment.bruteForceDetected ? <div className="attacker-bruteforce-proof"><span><KeyRound /></span><div><strong>{isFa ? "الگوی Brute Force تأیید شد" : "Brute-force pattern confirmed"}</strong><p>{isFa ? `${attacker.assessment.logicalAuthenticationFailures.toLocaleString(locale)} تلاش یکتای ناموفق روی ${attacker.assessment.authenticationServices.join("، ") || "احراز هویت"}؛ وندور: ${attacker.assessment.authenticationFailureVendors.join("، ") || "نامشخص"}` : `${attacker.assessment.logicalAuthenticationFailures} unique failures against ${attacker.assessment.authenticationServices.join(", ") || "authentication"}.`}</p>{attacker.assessment.targetedUsers.length ? <small>{isFa ? "حساب‌های هدف: " : "Targeted accounts: "}{attacker.assessment.targetedUsers.join("، ")}</small> : null}</div></div> : null}
         {attacker.assessment.notes.includes("duplicate_authentication_log_lines_collapsed") ? <p className="attacker-assessment__note"><CircleAlert />{isFa ? "خطوط تکراری PAM/SSH در این شمارش یکی شده‌اند تا یک تلاش چند بار محاسبه نشود." : "Duplicate PAM/SSH lines were collapsed so one attempt is not counted more than once."}</p> : null}
       </section>
 
@@ -330,6 +333,7 @@ export default function AttackersPage() {
         <article className="is-serious"><CircleAlert /><span>{isFa ? "پرخطر" : "High / critical"}</span><strong>{((data?.summary.critical ?? 0) + (data?.summary.high ?? 0)).toLocaleString(locale)}</strong></article>
         <article className="is-assets"><Server /><span>{isFa ? "دستگاه درگیر" : "Affected devices"}</span><strong>{(data?.summary.affectedDevices ?? 0).toLocaleString(locale)}</strong></article>
         <article className="is-contained"><ShieldCheck /><span>{isFa ? "مهار شده توسط وندور" : "Contained by vendor"}</span><strong>{(data?.summary.contained ?? 0).toLocaleString(locale)}</strong></article>
+        <article className="is-bruteforce"><KeyRound /><span>{isFa ? "Brute Force شناسایی‌شده" : "Detected brute force"}</span><strong>{(data?.summary.bruteForce ?? 0).toLocaleString(locale)}</strong></article>
       </section>
 
       <section className="attacker-toolbar">

@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js";
 import { redactForPersistence, redactText } from "../security/redaction.js";
 import { buildTrustedSourceMatcher } from "./trusted-source-ip.service.js";
 import { VENDOR_DETECTION_RULES, deduplicateDetectionEvents } from "../security/vendor-detection-rule-library.js";
+import { authenticationFailureService, isAuthenticationFailureEvent } from "../security/brute-force-detection.js";
 
 const CLOSED_FINDING_STATUSES = ["resolved", "false_positive", "accepted_risk", "suppressed"];
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 88, high: 70, medium: 48, low: 28, info: 12 };
@@ -146,11 +147,11 @@ function isActionableFinding(finding: FindingWithContext) {
     .map((entry) => entry && typeof entry === "object" && "message" in entry ? normalizedStoredEvidenceMessage(entry.message) : "")
     .filter((message) => message && isAuthenticationFailureText(message));
   if (!messages.length) return false;
-  return new Set(messages).size >= definition.threshold;
+  return finding.count >= definition.threshold;
 }
 
 function hasFailureEvidence(event: EventWithContext) {
-  return isAuthenticationFailureText(`${event.eventType} ${event.action ?? ""} ${event.rawMessage ?? ""} ${event.rawSnippet ?? ""}`);
+  return isAuthenticationFailureEvent(event);
 }
 
 function hasSuccessEvidence(event: EventWithContext) {
@@ -171,7 +172,7 @@ function buildAssessment(findings: FindingWithContext[], events: EventWithContex
   const confirmedThreat = actionableFindings.some((finding) => /threat-prevention|intrusion-detection|malware_threat/i.test(finding.category) && finding.confidence >= 0.8);
   const authThresholdReached = actionableFindings.some((finding) => {
     const rule = VENDOR_DETECTION_RULES.find((candidate) => candidate.name === finding.title && candidate.logicalEventFamily === "authentication_failure");
-    return rule ? logicalAuthenticationFailures.length >= rule.threshold : false;
+    return rule ? finding.count >= rule.threshold : false;
   });
   const correlationThresholdReached = actionableFindings.some((finding) => {
     const rule = VENDOR_DETECTION_RULES.find((candidate) => candidate.name === finding.title);
@@ -179,6 +180,9 @@ function buildAssessment(findings: FindingWithContext[], events: EventWithContex
   });
   const blockedByVendor = confirmedThreat && events.some((event) => /block|deny|drop|reset|quarantine/i.test(event.action ?? ""));
   const verdict = onlyNewSourceAnomaly ? "activity_anomaly" : confirmedThreat ? "confirmed_threat" : authThresholdReached || correlationThresholdReached ? "likely_attack" : "needs_review";
+  const authenticationServices = unique(authFailureEvents.map(authenticationFailureService));
+  const authenticationFailureVendors = unique(authFailureEvents.map((event) => event.vendor));
+  const targetedUsers = unique(authFailureEvents.map((event) => event.username));
   return {
     verdict,
     isConfirmedAttacker: confirmedThreat,
@@ -187,6 +191,10 @@ function buildAssessment(findings: FindingWithContext[], events: EventWithContex
     actionableFindingCount: actionableFindings.length,
     informationalFindingCount: findings.length - actionableFindings.length,
     logicalAuthenticationFailures: logicalAuthenticationFailures.length,
+    bruteForceDetected: authThresholdReached,
+    authenticationServices,
+    authenticationFailureVendors,
+    targetedUsers,
     authenticationSuccesses: authSuccessEvents.length,
     normalSessionEvents: events.filter((event) => /disconnect|timeout|session (?:opened|closed)/i.test(`${event.eventType} ${event.rawMessage ?? ""}`)).length,
     notes: [
@@ -375,6 +383,7 @@ export async function listAttackers(filters: AttackerFilters = {}) {
       vendors: unique(attackers.flatMap((attacker) => attacker.vendors)),
       confirmed: attackers.filter((attacker) => attacker.assessment.isConfirmedAttacker).length,
       contained: attackers.filter((attacker) => attacker.status === "contained").length,
+      bruteForce: attackers.filter((attacker) => attacker.assessment.bruteForceDetected).length,
       fortigate: attackers.filter((attacker) => attacker.vendors.includes("fortigate")).length,
       linux: attackers.filter((attacker) => attacker.vendors.includes("linux")).length
     },
