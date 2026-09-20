@@ -15,3 +15,24 @@
 .schedule-source-switch button small{font-size:.56rem;color:#61798a}
 .schedule-source-switch button.is-active{border-color:rgba(34,211,238,.28);color:#cffafe;background:linear-gradient(135deg,rgba(8,145,178,.2),rgba(76,29,149,.12));box-shadow:0 8px 24px rgba(2,132,199,.08)}
 .schedule-command-summary.is-assistant{border-color:rgba(34,211,238,.2);background:linear-gradient(135deg,rgba(8,145,178,.1),rgba(76,29,149,.09))}
+.assistant-schedule-journey{overflow:hidden;border:1px solid rgba(167,139,250,.2);border-radius:1.35rem;background:linear-gradient(125deg,rgba(20,20,54,.82),rgba(3,30,45,.86));box-shadow:0 16px 42px rgba(0,0,0,.12)}
+.assistant-schedule-journey__intro{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:1rem;padding:1.15rem 1.25rem}
+.assistant-schedule-journey__icon{display:grid;width:3.25rem;height:3.25rem;place-items:center;border:1px solid rgba(167,139,250,.3);border-radius:1rem;color:#c4b5fd;background:rgba(109,40,217,.15)}
+.assistant-schedule-journey__icon svg{width:1.5rem}
+.assistant-schedule-journey__intro>div>span{color:#a78bfa;font-size:.65rem;font-weight:900}
+.assistant-schedule-journey__intro h2{margin:.2rem 0;font-size:1rem;color:#eef7fb}
+.assistant-schedule-journey__intro p{max-width:55rem;margin:0;color:#8097a8;font-size:.7rem;line-height:1.8}
+.assistant-schedule-journey__cta{display:flex;min-height:2.75rem;align-items:center;gap:.45rem;padding:.6rem .85rem;border:1px solid rgba(34,211,238,.28);border-radius:.8rem;color:#cffafe;text-decoration:none;background:linear-gradient(120deg,rgba(8,145,178,.22),rgba(109,40,217,.16));font-size:.7rem;font-weight:900;white-space:nowrap}
+.assistant-schedule-journey__cta svg{width:1rem}.assistant-schedule-journey__cta svg:last-child{width:.85rem}
+.assistant-schedule-journey__cta:hover{border-color:rgba(103,232,249,.5);background:linear-gradient(120deg,rgba(8,145,178,.3),rgba(109,40,217,.22))}
+.assistant-schedule-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:0;padding:0;border-top:1px solid rgba(167,139,250,.12);list-style:none}
+.assistant-schedule-steps li{display:flex;align-items:center;gap:.7rem;padding:.8rem 1rem;border-inline-start:1px solid rgba(167,139,250,.1)}
+.assistant-schedule-steps li:first-child{border-inline-start:0}
+.assistant-schedule-steps li>b{display:grid;width:1.65rem;height:1.65rem;flex:none;place-items:center;border-radius:999px;color:#071b2a;background:linear-gradient(135deg,#67e8f9,#a78bfa);font-size:.66rem}
+.assistant-schedule-steps li>div{display:grid;gap:.15rem}.assistant-schedule-steps strong{font-size:.7rem}.assistant-schedule-steps span{color:#6f8798;font-size:.59rem;line-height:1.6}
+.assistant-plan-picker-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem;border:1px solid rgba(34,211,238,.14);border-radius:.85rem;background:rgba(8,145,178,.06)}
+.assistant-plan-picker-head>div{display:flex;align-items:center;gap:.55rem}.assistant-plan-picker-head>div>svg{width:1.2rem;color:#67e8f9}.assistant-plan-picker-head span{display:grid;gap:.1rem}.assistant-plan-picker-head strong{font-size:.72rem}.assistant-plan-picker-head small{color:#647f90;font-size:.57rem}
+.assistant-plan-picker-head>a,.assistant-plan-empty a{display:inline-flex;align-items:center;gap:.3rem;color:#67e8f9;text-decoration:none;font-size:.62rem;font-weight:800}.assistant-plan-picker-head>a svg,.assistant-plan-empty a svg{width:.75rem}
+.assistant-plan-empty{display:flex;align-items:flex-start;gap:.7rem;padding:1rem}.assistant-plan-empty>svg{width:1.45rem;flex:none;color:#a78bfa}.assistant-plan-empty>div{display:grid;gap:.35rem}.assistant-plan-empty strong{color:#c7dce6;font-size:.75rem}.assistant-plan-empty span{line-height:1.75}
+@media(max-width:900px){.assistant-schedule-journey__intro{grid-template-columns:auto 1fr}.assistant-schedule-journey__cta{grid-column:1/-1;justify-content:center}.assistant-schedule-steps{grid-template-columns:1fr}.assistant-schedule-steps li{border-inline-start:0;border-top:1px solid rgba(167,139,250,.08)}}
+@media(max-width:520px){.assistant-schedule-journey__intro{grid-template-columns:1fr}.assistant-schedule-journey__icon{width:2.75rem;height:2.75rem}.assistant-plan-picker-head{align-items:flex-start;flex-direction:column}.schedule-source-switch{grid-template-columns:1fr}}

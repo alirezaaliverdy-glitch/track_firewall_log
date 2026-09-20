@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CalendarClock, CheckCircle2, CirclePause, Clock3, History, Library, LoaderCircle, Pause, Play, RotateCcw, ShieldCheck, TimerReset, XCircle } from "lucide-react";
+import { ArrowLeft, Bot, CalendarClock, CheckCircle2, CirclePause, Clock3, History, Library, LoaderCircle, Pause, Play, RotateCcw, ShieldCheck, Sparkles, TimerReset, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { searchCommands, type CatalogItem, type CatalogParam } from "@/lib/commandCatalog";
 import { listDevices, type Device } from "@/lib/devices";
@@ -131,6 +131,7 @@ export default function ScheduledTasksPage() {
   const [timeZone, setTimeZone] = useState("Asia/Tehran");
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const initializedSelectionRef = useRef("");
+  const requestedPlanAppliedRef = useRef("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState("");
@@ -154,7 +155,15 @@ export default function ScheduledTasksPage() {
       setTasks(taskRows);
       setHistory(runRows);
       setAssistantPlans(planRows);
-      setAssistantPlanId((current) => planRows.some((plan) => plan.id === current) ? current : planRows[0]?.id ?? "");
+      const requestedPlanId = new URLSearchParams(window.location.search).get("planId")?.trim() ?? "";
+      const requestedPlan = requestedPlanId ? planRows.find((plan) => plan.id === requestedPlanId) : undefined;
+      setAssistantPlanId((current) => requestedPlan?.id ?? (planRows.some((plan) => plan.id === current) ? current : planRows[0]?.id ?? ""));
+      if (requestedPlan && requestedPlanAppliedRef.current !== requestedPlan.id) {
+        requestedPlanAppliedRef.current = requestedPlan.id;
+        setOperationSource("assistant");
+        setName("");
+        setMessage({ tone: "ok", text: "برنامه ساخته‌شده با دستیار انتخاب شد؛ تاریخ و ساعت اجرا را تعیین کنید." });
+      }
       if (!deviceId && deviceRows.length) setDeviceId(deviceRows[0].id);
     } catch (error) {
       setMessage({ tone: "error", text: error instanceof Error ? error.message : "دریافت اطلاعات زمان‌بندی ناموفق بود." });
@@ -263,6 +272,19 @@ export default function ScheduledTasksPage() {
 
     {message ? <div className={`scheduled-message is-${message.tone}`}>{message.text}</div> : null}
 
+    <section className="assistant-schedule-journey" aria-labelledby="assistant-schedule-title">
+      <div className="assistant-schedule-journey__intro">
+        <span className="assistant-schedule-journey__icon"><Sparkles aria-hidden="true" /></span>
+        <div><span>گردش کار دستیار تا زمان‌بندی</span><h2 id="assistant-schedule-title">عملیات اختصاصی خودتان را بسازید و زمان‌بندی کنید</h2><p>اگر عملیات موردنظر در فهرست آماده نیست، آن را در دستیار توضیح دهید. پس از ساخته‌شدن ActionPlan، با یک کلیک به همین صفحه برمی‌گردید.</p></div>
+        <Link to="/assistant?from=scheduled" className="assistant-schedule-journey__cta"><Bot aria-hidden="true" /> ساخت عملیات با دستیار <ArrowLeft aria-hidden="true" /></Link>
+      </div>
+      <ol className="assistant-schedule-steps">
+        <li><b>۱</b><div><strong>درخواست را بنویسید</strong><span>دستگاه و نتیجه موردنظر را شفاف توضیح دهید.</span></div></li>
+        <li><b>۲</b><div><strong>ActionPlan امن ساخته می‌شود</strong><span>پارامترها، ریسک و قابلیت اجرا بررسی می‌شوند.</span></div></li>
+        <li><b>۳</b><div><strong>زمان اجرا را انتخاب کنید</strong><span>برنامه آماده اینجا انتخاب و مستقیم وارد صف می‌شود.</span></div></li>
+      </ol>
+    </section>
+
     <section className="scheduled-layout">
       <form className="schedule-composer" onSubmit={submit}>
         <div className="schedule-section-title"><TimerReset /><div><h2>تسک جدید</h2><p>دستگاه، عملیات و زمان اجرا را تعیین کنید.</p></div></div>
@@ -277,8 +299,9 @@ export default function ScheduledTasksPage() {
           <label><span>عملیات اثرگذار</span><select value={commandId} onChange={(event) => { setCommandId(event.target.value); setName(""); }}>{commandGroups.map(([category, items]) => <optgroup key={category} label={operationCategoryCopy[category] ?? "سایر عملیات"}>{items.map((command) => <option key={command.id} value={command.id}>{command.titleFa}</option>)}</optgroup>)}</select></label>
           {selectedCommand ? <div className="schedule-command-summary"><div><strong>{selectedCommand.titleFa}</strong><small>{selectedCommand.descriptionFa}</small><em>این عملیات واقعاً تنظیمات یا وضعیت دستگاه را تغییر می‌دهد.</em></div><span className={`risk-${selectedCommand.riskLevel}`}>ریسک {riskCopy[selectedCommand.riskLevel] ?? selectedCommand.riskLevel}</span></div> : <div className="schedule-empty">برای این دستگاه هنوز عملیات تغییردهنده و تأییدشده‌ای وجود ندارد. فرمان‌های صرفاً مشاهده‌ای عمداً در زمان‌بندی نمایش داده نمی‌شوند.</div>}
         </> : <>
+          <div className="assistant-plan-picker-head"><div><Bot aria-hidden="true" /><span><strong>برنامه‌های آماده زمان‌بندی</strong><small>{assistantPlans.length} عملیات ساخته‌شده با دستیار</small></span></div><Link to="/assistant?from=scheduled">ساخت عملیات جدید <ArrowLeft aria-hidden="true" /></Link></div>
           <label><span>ActionPlan دستیار</span><select value={assistantPlanId} onChange={(event) => { setAssistantPlanId(event.target.value); setName(""); }}>{assistantPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.actionType.replaceAll("_", " ")} · {plan.device.name}</option>)}</select></label>
-          {selectedAssistantPlan ? <div className="schedule-command-summary is-assistant"><div><strong>{selectedAssistantPlan.actionType.replaceAll("_", " ")}</strong><small>{selectedAssistantPlan.device.name} · {selectedAssistantPlan.device.vendor} · {new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAssistantPlan.createdAt))}</small><em>در زمان اجرا مجوز، PolicyGuard و اتصال دستگاه دوباره بررسی می‌شود.</em></div><span className={`risk-${selectedAssistantPlan.riskLevel}`}>ریسک {riskCopy[selectedAssistantPlan.riskLevel] ?? selectedAssistantPlan.riskLevel}</span></div> : <div className="schedule-empty">هنوز ActionPlan اجرایی از دستیار ساخته نشده است. ابتدا در دستیار هوشمند یک اقدام بسازید و سپس به این صفحه برگردید.</div>}
+          {selectedAssistantPlan ? <div className="schedule-command-summary is-assistant"><div><strong>{selectedAssistantPlan.actionType.replaceAll("_", " ")}</strong><small>{selectedAssistantPlan.device.name} · {selectedAssistantPlan.device.vendor} · {new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAssistantPlan.createdAt))}</small><em>در زمان اجرا مجوز، PolicyGuard و اتصال دستگاه دوباره بررسی می‌شود.</em></div><span className={`risk-${selectedAssistantPlan.riskLevel}`}>ریسک {riskCopy[selectedAssistantPlan.riskLevel] ?? selectedAssistantPlan.riskLevel}</span></div> : <div className="schedule-empty assistant-plan-empty"><Bot aria-hidden="true" /><div><strong>هنوز عملیات قابل زمان‌بندی ندارید</strong><span>در دستیار هوشمند یک عملیات اجرایی بسازید؛ عملیات مشاهده‌ای یا ناقص عمداً اینجا نمایش داده نمی‌شوند.</span><Link to="/assistant?from=scheduled">رفتن به دستیار هوشمند <ArrowLeft aria-hidden="true" /></Link></div></div>}
         </>}
         <label><span>نام تسک</span><input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="مثلاً بکاپ شبانه روتر شعبه" /></label>
 

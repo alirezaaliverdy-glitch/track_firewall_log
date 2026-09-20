@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, TriangleAlert } from "lucide-react";
+import { CalendarClock, ChevronDown, TriangleAlert } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   completeAiActionRequest,
   normalizeArray,
@@ -195,16 +196,25 @@ export function IntentCard({
       )}
       {createdPlanId && (
         <div className="mt-3 rounded border border-green-900/70 bg-green-950/20 p-3">
-          <p className="text-xs font-medium text-green-200">{isFa ? "برنامه اقدام ساخته شد؛ آن را در مرکز اقدام بازبینی کنید." : "ActionPlan created. Review in Action Center."}</p>
-          <button
-            type="button"
-            onClick={() => missingFields.length > 0 ? configureInActionCenter(createdPlanId) : reviewInActionCenter(createdPlanId)}
-            className="mt-2 inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
-          >
-            {missingFields.length > 0
-              ? (isFa ? "تکمیل پارامترها در مرکز عملیات" : "Complete parameters in Action Center")
-              : (isFa ? "بازبینی در مرکز عملیات" : "Review in Action Center")}
-          </button>
+          <p className="text-xs font-medium text-green-200">{isFa ? "برنامه اقدام ساخته شد؛ می‌توانید آن را بازبینی یا برای زمان دیگری برنامه‌ریزی کنید." : "ActionPlan created. Review it or schedule it for later."}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => missingFields.length > 0 ? configureInActionCenter(createdPlanId) : reviewInActionCenter(createdPlanId)}
+              className="inline-flex h-8 items-center rounded-md border border-green-800 bg-green-950/30 px-3 text-xs font-semibold text-green-200 hover:text-green-100"
+            >
+              {missingFields.length > 0
+                ? (isFa ? "تکمیل پارامترها در مرکز عملیات" : "Complete parameters in Action Center")
+                : (isFa ? "بازبینی در مرکز عملیات" : "Review in Action Center")}
+            </button>
+            <Link
+              to={`/actions/scheduled?planId=${encodeURIComponent(createdPlanId)}`}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-cyan-700 bg-cyan-950/30 px-3 text-xs font-semibold text-cyan-100 hover:text-white"
+            >
+              <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+              {isFa ? "زمان‌بندی این عملیات" : "Schedule this operation"}
+            </Link>
+          </div>
         </div>
       )}
       {localMessage && <p className="mt-2 text-xs text-zinc-300">{localMessage}</p>}
