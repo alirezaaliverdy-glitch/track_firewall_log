@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, CheckCircle2, CirclePause, Clock3, History, LoaderCircle, Pause, Play, RotateCcw, ShieldCheck, TimerReset, XCircle } from "lucide-react";
+import { Bot, CalendarClock, CheckCircle2, CirclePause, Clock3, History, Library, LoaderCircle, Pause, Play, RotateCcw, ShieldCheck, TimerReset, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { searchCommands, type CatalogItem, type CatalogParam } from "@/lib/commandCatalog";
 import { listDevices, type Device } from "@/lib/devices";
@@ -8,6 +8,7 @@ import {
   createScheduledTask,
   formatBothCalendars,
   getScheduledTaskHistory,
+  getSchedulableAssistantPlans,
   getScheduledTasks,
   pauseScheduledTask,
   runScheduledTaskNow,
@@ -15,10 +16,12 @@ import {
   type CalendarType,
   type ScheduledTask,
   type ScheduledTaskRun,
+  type SchedulableAssistantPlan,
 } from "@/lib/scheduledTasks";
 import "./ScheduledTasksPage.css";
 
 type Tab = "upcoming" | "history";
+type OperationSource = "catalog" | "assistant";
 
 const persianNumber = new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false });
 const toLatinDigits = (value: string) => value
@@ -116,6 +119,9 @@ export default function ScheduledTasksPage() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [history, setHistory] = useState<ScheduledTaskRun[]>([]);
   const [commands, setCommands] = useState<CatalogItem[]>([]);
+  const [assistantPlans, setAssistantPlans] = useState<SchedulableAssistantPlan[]>([]);
+  const [operationSource, setOperationSource] = useState<OperationSource>("catalog");
+  const [assistantPlanId, setAssistantPlanId] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [commandId, setCommandId] = useState("");
   const [name, setName] = useState("");
@@ -131,6 +137,7 @@ export default function ScheduledTasksPage() {
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   const selectedCommand = useMemo(() => commands.find((item) => item.id === commandId) ?? null, [commands, commandId]);
+  const selectedAssistantPlan = useMemo(() => assistantPlans.find((item) => item.id === assistantPlanId) ?? null, [assistantPlans, assistantPlanId]);
   const commandGroups = useMemo(() => {
     const groups = new Map<string, CatalogItem[]>();
     commands.forEach((command) => groups.set(command.category, [...(groups.get(command.category) ?? []), command]));
@@ -142,10 +149,12 @@ export default function ScheduledTasksPage() {
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const [deviceRows, taskRows, runRows] = await Promise.all([listDevices(), getScheduledTasks(), getScheduledTaskHistory()]);
+      const [deviceRows, taskRows, runRows, planRows] = await Promise.all([listDevices(), getScheduledTasks(), getScheduledTaskHistory(), getSchedulableAssistantPlans()]);
       setDevices(deviceRows);
       setTasks(taskRows);
       setHistory(runRows);
+      setAssistantPlans(planRows);
+      setAssistantPlanId((current) => planRows.some((plan) => plan.id === current) ? current : planRows[0]?.id ?? "");
       if (!deviceId && deviceRows.length) setDeviceId(deviceRows[0].id);
     } catch (error) {
       setMessage({ tone: "error", text: error instanceof Error ? error.message : "دریافت اطلاعات زمان‌بندی ناموفق بود." });
@@ -181,6 +190,12 @@ export default function ScheduledTasksPage() {
     setName((current) => current || `${selectedCommand.titleFa} - ${devices.find((device) => device.id === deviceId)?.name ?? "دستگاه"}`);
   }, [selectedCommand, deviceId, devices]);
 
+  useEffect(() => {
+    if (operationSource !== "assistant" || !selectedAssistantPlan) return;
+    setDeviceId(selectedAssistantPlan.deviceId);
+    setName((current) => current || `${selectedAssistantPlan.actionType.replaceAll("_", " ")} - ${selectedAssistantPlan.device.name}`);
+  }, [operationSource, selectedAssistantPlan]);
+
   function switchCalendar(next: CalendarType) {
     setCalendar(next);
     setLocalDate(initialDate(next));
@@ -188,12 +203,25 @@ export default function ScheduledTasksPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!selectedCommand) return;
+    if (operationSource === "catalog" && !selectedCommand) return;
+    if (operationSource === "assistant" && !selectedAssistantPlan) return;
     setMessage(null);
     try {
       const runAt = scheduleDateToIso(calendar, localDate, localTime, timeZone);
       setSubmitting(true);
-      await createScheduledTask({ name, deviceId, catalogCommandId: selectedCommand.id, parametersJson: parameters, calendarType: calendar, localDate, localTime, timeZone, runAt, confirmed: true });
+      await createScheduledTask({
+        name,
+        deviceId,
+        ...(operationSource === "catalog"
+          ? { catalogCommandId: selectedCommand!.id, parametersJson: parameters }
+          : { sourceActionPlanId: selectedAssistantPlan!.id, parametersJson: selectedAssistantPlan!.parametersJson }),
+        calendarType: calendar,
+        localDate,
+        localTime,
+        timeZone,
+        runAt,
+        confirmed: true,
+      });
       setMessage({ tone: "ok", text: "تسک بدون مرحله اضافه در صف مرکز عملیات قرار گرفت و در زمان تعیین‌شده از مسیر کنترل‌شده اجرا می‌شود." });
       setName("");
       await load(true);
@@ -239,12 +267,22 @@ export default function ScheduledTasksPage() {
       <form className="schedule-composer" onSubmit={submit}>
         <div className="schedule-section-title"><TimerReset /><div><h2>تسک جدید</h2><p>دستگاه، عملیات و زمان اجرا را تعیین کنید.</p></div></div>
 
-        <label><span>دستگاه هدف</span><select value={deviceId} onChange={(event) => { setDeviceId(event.target.value); setName(""); }}>{devices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.vendor}</option>)}</select></label>
-        <label><span>عملیات اثرگذار</span><select value={commandId} onChange={(event) => { setCommandId(event.target.value); setName(""); }}>{commandGroups.map(([category, items]) => <optgroup key={category} label={operationCategoryCopy[category] ?? "سایر عملیات"}>{items.map((command) => <option key={command.id} value={command.id}>{command.titleFa}</option>)}</optgroup>)}</select></label>
-        {selectedCommand ? <div className="schedule-command-summary"><div><strong>{selectedCommand.titleFa}</strong><small>{selectedCommand.descriptionFa}</small><em>این عملیات واقعاً تنظیمات یا وضعیت دستگاه را تغییر می‌دهد.</em></div><span className={`risk-${selectedCommand.riskLevel}`}>ریسک {riskCopy[selectedCommand.riskLevel] ?? selectedCommand.riskLevel}</span></div> : <div className="schedule-empty">برای این دستگاه هنوز عملیات تغییردهنده و تأییدشده‌ای وجود ندارد. فرمان‌های صرفاً مشاهده‌ای عمداً در زمان‌بندی نمایش داده نمی‌شوند.</div>}
+        <div className="schedule-source-switch" role="tablist" aria-label="منبع عملیات">
+          <button type="button" className={operationSource === "catalog" ? "is-active" : ""} onClick={() => { setOperationSource("catalog"); setName(""); }}><Library /> عملیات آماده<small>فرمان‌های تأییدشده وندور</small></button>
+          <button type="button" className={operationSource === "assistant" ? "is-active" : ""} onClick={() => { setOperationSource("assistant"); setName(""); }}><Bot /> ساخته‌شده با دستیار<small>ActionPlanهای قابل اجرا</small></button>
+        </div>
+
+        {operationSource === "catalog" ? <>
+          <label><span>دستگاه هدف</span><select value={deviceId} onChange={(event) => { setDeviceId(event.target.value); setName(""); }}>{devices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.vendor}</option>)}</select></label>
+          <label><span>عملیات اثرگذار</span><select value={commandId} onChange={(event) => { setCommandId(event.target.value); setName(""); }}>{commandGroups.map(([category, items]) => <optgroup key={category} label={operationCategoryCopy[category] ?? "سایر عملیات"}>{items.map((command) => <option key={command.id} value={command.id}>{command.titleFa}</option>)}</optgroup>)}</select></label>
+          {selectedCommand ? <div className="schedule-command-summary"><div><strong>{selectedCommand.titleFa}</strong><small>{selectedCommand.descriptionFa}</small><em>این عملیات واقعاً تنظیمات یا وضعیت دستگاه را تغییر می‌دهد.</em></div><span className={`risk-${selectedCommand.riskLevel}`}>ریسک {riskCopy[selectedCommand.riskLevel] ?? selectedCommand.riskLevel}</span></div> : <div className="schedule-empty">برای این دستگاه هنوز عملیات تغییردهنده و تأییدشده‌ای وجود ندارد. فرمان‌های صرفاً مشاهده‌ای عمداً در زمان‌بندی نمایش داده نمی‌شوند.</div>}
+        </> : <>
+          <label><span>ActionPlan دستیار</span><select value={assistantPlanId} onChange={(event) => { setAssistantPlanId(event.target.value); setName(""); }}>{assistantPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.actionType.replaceAll("_", " ")} · {plan.device.name}</option>)}</select></label>
+          {selectedAssistantPlan ? <div className="schedule-command-summary is-assistant"><div><strong>{selectedAssistantPlan.actionType.replaceAll("_", " ")}</strong><small>{selectedAssistantPlan.device.name} · {selectedAssistantPlan.device.vendor} · {new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedAssistantPlan.createdAt))}</small><em>در زمان اجرا مجوز، PolicyGuard و اتصال دستگاه دوباره بررسی می‌شود.</em></div><span className={`risk-${selectedAssistantPlan.riskLevel}`}>ریسک {riskCopy[selectedAssistantPlan.riskLevel] ?? selectedAssistantPlan.riskLevel}</span></div> : <div className="schedule-empty">هنوز ActionPlan اجرایی از دستیار ساخته نشده است. ابتدا در دستیار هوشمند یک اقدام بسازید و سپس به این صفحه برگردید.</div>}
+        </>}
         <label><span>نام تسک</span><input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="مثلاً بکاپ شبانه روتر شعبه" /></label>
 
-        {selectedCommand && [...selectedCommand.requiredParams, ...selectedCommand.optionalParams].length ? <div className="schedule-parameters"><h3>تنظیمات عملیات</h3>{[...selectedCommand.requiredParams, ...selectedCommand.optionalParams].map((field, index) => <label key={field.key}><span>{field.labelFa}{index >= selectedCommand.requiredParams.length ? <small> اختیاری</small> : null}</span><ParameterInput field={field} value={parameters[field.key]} onChange={(value) => setParameters((current) => ({ ...current, [field.key]: value }))} /><em>{field.helpFa}</em></label>)}</div> : null}
+        {operationSource === "catalog" && selectedCommand && [...selectedCommand.requiredParams, ...selectedCommand.optionalParams].length ? <div className="schedule-parameters"><h3>تنظیمات عملیات</h3>{[...selectedCommand.requiredParams, ...selectedCommand.optionalParams].map((field, index) => <label key={field.key}><span>{field.labelFa}{index >= selectedCommand.requiredParams.length ? <small> اختیاری</small> : null}</span><ParameterInput field={field} value={parameters[field.key]} onChange={(value) => setParameters((current) => ({ ...current, [field.key]: value }))} /><em>{field.helpFa}</em></label>)}</div> : null}
 
         <div className="calendar-switch"><button type="button" className={calendar === "jalali" ? "is-active" : ""} onClick={() => switchCalendar("jalali")}>تاریخ شمسی</button><button type="button" className={calendar === "gregorian" ? "is-active" : ""} onClick={() => switchCalendar("gregorian")}>تاریخ میلادی</button></div>
         <div className="schedule-time-grid">
@@ -252,7 +290,7 @@ export default function ScheduledTasksPage() {
           <label><span>زمان اجرا (۲۴ ساعته)</span><PersianTimePicker value={localTime} onChange={setLocalTime} /></label>
           <label><span>منطقه زمانی</span><select value={timeZone} onChange={(event) => setTimeZone(event.target.value)}><option value="Asia/Tehran">تهران</option><option value="UTC">UTC</option></select></label>
         </div>
-        <button className="schedule-submit" disabled={!selectedCommand || submitting || !name.trim()}>{submitting ? <LoaderCircle className="is-spin" /> : <CalendarClock />} ثبت و ارسال به صف</button>
+        <button className="schedule-submit" disabled={(operationSource === "catalog" ? !selectedCommand : !selectedAssistantPlan) || submitting || !name.trim()}>{submitting ? <LoaderCircle className="is-spin" /> : <CalendarClock />} ثبت و ارسال به صف</button>
       </form>
 
       <section className="schedule-board">
@@ -260,7 +298,7 @@ export default function ScheduledTasksPage() {
         <div className="schedule-board__content">
         {loading ? <div className="schedule-loading"><LoaderCircle className="is-spin" /> در حال دریافت زمان‌بندی‌ها…</div> : null}
         {!loading && tab === "upcoming" ? <div className="schedule-list">{upcoming.length ? upcoming.map((task) => <article className={`schedule-card status-${task.status}`} key={task.id}>
-          <div className="schedule-card__head"><div><span>{task.device.vendor}</span><h3>{task.name}</h3><small>{task.device.name} · {task.actionType.replaceAll("_", " ")}</small></div><b>{statusCopy[task.status]}</b></div>
+          <div className="schedule-card__head"><div><span>{task.sourceActionPlanId ? "دستیار هوشمند" : task.device.vendor}</span><h3>{task.name}</h3><small>{task.device.name} · {task.actionType.replaceAll("_", " ")}</small></div><b>{statusCopy[task.status]}</b></div>
           <DatePair value={task.runAt} />
           <div className="schedule-card__meta"><span>ریسک {riskCopy[task.riskLevel] ?? task.riskLevel}</span><span>{task.timeZone}</span><span>ثبت‌کننده: {task.createdBy?.displayName ?? "کاربر حذف‌شده"}</span></div>
           <div className="schedule-card__actions">

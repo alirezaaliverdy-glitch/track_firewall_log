@@ -3,6 +3,7 @@ import {
   cancelScheduledTask,
   createScheduledTask,
   listScheduledTaskHistory,
+  listSchedulableAssistantPlans,
   listScheduledTasks,
   runScheduledTaskNow,
   ScheduledTaskError,
@@ -25,6 +26,14 @@ export const scheduledTaskRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { limit?: string } }>("/api/scheduled-tasks/history", async (request) => ({
     runs: await listScheduledTaskHistory(Number(request.query.limit ?? 100)),
   }));
+
+  app.get("/api/scheduled-tasks/assistant-plans", async (request, reply) => {
+    try {
+      return { plans: await listSchedulableAssistantPlans(request.authUser!) };
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
 
   app.post<{ Body: Record<string, unknown> }>("/api/scheduled-tasks", async (request, reply) => {
     try {

@@ -24,7 +24,9 @@ export type ScheduledTask = {
   id: string;
   name: string;
   deviceId: string;
-  catalogCommandId: string;
+  catalogCommandId: string | null;
+  sourceActionPlanId: string | null;
+  sourceActionPlan?: { id: string; source: string; actionType: string; status: string; riskLevel: string; createdAt: string } | null;
   actionType: string;
   riskLevel: string;
   parametersJson: Record<string, unknown>;
@@ -46,7 +48,8 @@ export type ScheduledTask = {
 export type CreateScheduledTaskInput = {
   name: string;
   deviceId: string;
-  catalogCommandId: string;
+  catalogCommandId?: string;
+  sourceActionPlanId?: string;
   parametersJson: Record<string, unknown>;
   calendarType: CalendarType;
   localDate: string;
@@ -54,6 +57,18 @@ export type CreateScheduledTaskInput = {
   timeZone: string;
   runAt: string;
   confirmed: true;
+};
+
+export type SchedulableAssistantPlan = {
+  id: string;
+  source: "ai";
+  deviceId: string;
+  actionType: string;
+  status: string;
+  riskLevel: string;
+  parametersJson: Record<string, unknown>;
+  createdAt: string;
+  device: { id: string; name: string; vendor: string; type: string; host: string; status: string };
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -75,6 +90,10 @@ export async function getScheduledTasks() {
 
 export async function getScheduledTaskHistory() {
   return request<{ runs: ScheduledTaskRun[] }>("/scheduled-tasks/history?limit=150").then((body) => body.runs);
+}
+
+export async function getSchedulableAssistantPlans() {
+  return request<{ plans: SchedulableAssistantPlan[] }>("/scheduled-tasks/assistant-plans").then((body) => body.plans);
 }
 
 export function createScheduledTask(input: CreateScheduledTaskInput) {

@@ -14,6 +14,7 @@ import { prisma } from "../db/prisma.js";
 import { findCatalogItem, COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
 import { getExecutionTemplate } from "../commands/execution/execution-template-registry.js";
 import { proposeActionPlan, quickExecuteActionPlan } from "./action-plan.service.js";
+import { copyActionPlanSecrets } from "./action-plan-secret.service.js";
 import { requiredExecutionPermissionForRisk } from "../security/authorization.js";
 import { hasPermission, type Role } from "../security/permissions.js";
 
@@ -128,6 +129,28 @@ function validateCalendar(input: Record<string, unknown>, runAt: Date) {
 
 async function resolveExecutable(input: Record<string, unknown>) {
   const deviceId = String(input.deviceId ?? "");
+  const sourceActionPlanId = String(input.sourceActionPlanId ?? "");
+  if (sourceActionPlanId) {
+    const sourcePlan = await prisma.actionPlan.findUnique({
+      where: { id: sourceActionPlanId },
+      include: { device: true },
+    });
+    if (!sourcePlan || sourcePlan.source !== "ai" || !sourcePlan.device) {
+      throw new ScheduledTaskError("ASSISTANT_PLAN_NOT_FOUND", "ActionPlan قابل زمان‌بندی دستیار پیدا نشد.", 404);
+    }
+    if (deviceId && sourcePlan.deviceId !== deviceId) {
+      throw new ScheduledTaskError("ASSISTANT_PLAN_DEVICE_MISMATCH", "دستگاه ActionPlan با دستگاه انتخاب‌شده یکسان نیست.", 409);
+    }
+    const parameters = asObject(sourcePlan.parametersJson);
+    const metadata = asObject(parameters.metadata);
+    if (metadata.executable !== true || String(metadata.executionSupport ?? parameters.executionSupport ?? "") !== "connector") {
+      throw new ScheduledTaskError("ASSISTANT_PLAN_NOT_EXECUTABLE", "این ActionPlan دستیار مسیر اجرایی تأییدشده ندارد.", 409);
+    }
+    if (["failed", "rejected", "executing"].includes(sourcePlan.status)) {
+      throw new ScheduledTaskError("ASSISTANT_PLAN_TERMINAL", "ActionPlan انتخاب‌شده در وضعیت قابل زمان‌بندی نیست.", 409);
+    }
+    return { kind: "assistant" as const, device: sourcePlan.device, sourcePlan, parameters };
+  }
   const catalogCommandId = String(input.catalogCommandId ?? "");
   const [device, item] = await Promise.all([
     deviceId ? prisma.device.findUnique({ where: { id: deviceId } }) : null,
@@ -150,7 +173,7 @@ async function resolveExecutable(input: Record<string, unknown>) {
   if (missing.length) {
     throw new ScheduledTaskError("SCHEDULE_PARAMETERS_REQUIRED", `پارامترهای لازم کامل نیست: ${missing.map((field) => field.labelFa).join("، ")}`, 422);
   }
-  return { device, item, parameters };
+  return { kind: "catalog" as const, device, item, parameters };
 }
 
 function assertActorCanExecute(actor: SchedulerActor, riskLevel: string) {
@@ -165,6 +188,7 @@ function assertActorCanExecute(actor: SchedulerActor, riskLevel: string) {
 
 const taskInclude = {
   device: { select: { id: true, name: true, vendor: true, type: true, host: true, status: true } },
+  sourceActionPlan: { select: { id: true, source: true, actionType: true, status: true, riskLevel: true, createdAt: true } },
   createdBy: { select: { id: true, username: true, displayName: true, role: true } },
   runs: {
     orderBy: { createdAt: "desc" as const },
@@ -198,6 +222,28 @@ export async function listScheduledTaskHistory(limit = 100) {
   });
 }
 
+export async function listSchedulableAssistantPlans(actor: SchedulerActor) {
+  if (actor.role !== "admin" && !actor.allowedSections.includes("actions")) {
+    throw new ScheduledTaskError("SCHEDULE_PERMISSION_REVOKED", "دسترسی بخش اقدامات برای این حساب فعال نیست.", 403);
+  }
+  const plans = await prisma.actionPlan.findMany({
+    where: {
+      source: "ai",
+      deviceId: { not: null },
+      status: { notIn: ["failed", "rejected", "executing"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { device: { select: { id: true, name: true, vendor: true, type: true, host: true, status: true } } },
+  });
+  return plans.filter((plan) => {
+    const parameters = asObject(plan.parametersJson);
+    const metadata = asObject(parameters.metadata);
+    return metadata.executable === true
+      && String(metadata.executionSupport ?? parameters.executionSupport ?? "") === "connector";
+  });
+}
+
 export async function createScheduledTask(input: Record<string, unknown>, actor: SchedulerActor) {
   if (input.confirmed !== true) throw new ScheduledTaskError("SCHEDULE_CONFIRMATION_REQUIRED", "تأیید صریح زمان‌بندی لازم است.", 428);
   const name = String(input.name ?? "").trim();
@@ -205,14 +251,16 @@ export async function createScheduledTask(input: Record<string, unknown>, actor:
   const runAt = parseRunAt(input.runAt);
   const calendar = validateCalendar(input, runAt);
   const resolved = await resolveExecutable(input);
-  assertActorCanExecute(actor, resolved.item.riskLevel);
+  const riskLevel = resolved.kind === "catalog" ? resolved.item.riskLevel : resolved.sourcePlan.riskLevel;
+  assertActorCanExecute(actor, riskLevel);
   return prisma.scheduledTask.create({
     data: {
       name,
       deviceId: resolved.device.id,
-      catalogCommandId: resolved.item.id,
-      actionType: resolved.item.actionType as ActionType,
-      riskLevel: resolved.item.riskLevel as AiRiskLevel,
+      catalogCommandId: resolved.kind === "catalog" ? resolved.item.id : null,
+      sourceActionPlanId: resolved.kind === "assistant" ? resolved.sourcePlan.id : null,
+      actionType: (resolved.kind === "catalog" ? resolved.item.actionType : resolved.sourcePlan.actionType) as ActionType,
+      riskLevel: riskLevel as AiRiskLevel,
       parametersJson: toJson(resolved.parameters),
       ...calendar,
       runAt,
@@ -221,8 +269,10 @@ export async function createScheduledTask(input: Record<string, unknown>, actor:
         confirmed: true,
         confirmedAt: new Date().toISOString(),
         confirmedBy: actor.id,
-        catalogVersion: COMMAND_CATALOG_VERSION,
-        riskLevel: resolved.item.riskLevel,
+        source: resolved.kind,
+        sourceActionPlanId: resolved.kind === "assistant" ? resolved.sourcePlan.id : null,
+        catalogVersion: resolved.kind === "catalog" ? COMMAND_CATALOG_VERSION : null,
+        riskLevel,
       }),
     },
     include: taskInclude,
@@ -368,27 +418,47 @@ export async function executeScheduledTask(id: string, trigger: ScheduledTaskTri
       throw new ScheduledTaskError("SCHEDULE_MISSED_WINDOW", "Scheduled execution window was missed.", 409);
     }
     const actor = await currentActor(task);
-    const item = findCatalogItem(task.catalogCommandId);
-    if (!item || !isEffectfulScheduledCommand(item) || !item.executionTemplateRef || !getExecutionTemplate(item.executionTemplateRef)) {
+    const item = task.catalogCommandId ? findCatalogItem(task.catalogCommandId) : null;
+    const sourcePlan = task.sourceActionPlanId
+      ? await prisma.actionPlan.findUnique({ where: { id: task.sourceActionPlanId } })
+      : null;
+    if (task.catalogCommandId && (!item || !isEffectfulScheduledCommand(item) || !item.executionTemplateRef || !getExecutionTemplate(item.executionTemplateRef))) {
       throw new ScheduledTaskError("SCHEDULE_COMMAND_CHANGED", "Scheduled catalog command is no longer executable.", 409);
     }
+    if (!item && (!sourcePlan || sourcePlan.source !== "ai" || sourcePlan.deviceId !== task.deviceId)) {
+      throw new ScheduledTaskError("SCHEDULE_SOURCE_CHANGED", "ActionPlan دستیار دیگر برای این دستگاه قابل استفاده نیست.", 409);
+    }
+    const sourceParameters = item ? planParameters(task, item) : {
+      ...asObject(task.parametersJson),
+      metadata: {
+        ...asObject(asObject(task.parametersJson).metadata),
+        source: "scheduled_ai_action_plan",
+        schedulerTaskId: task.id,
+        sourceActionPlanId: sourcePlan?.id,
+        previewGenerated: false,
+        executed: false,
+        connectorInvoked: false,
+        lastExecutionStatus: "not_started",
+      },
+    };
     const plan = await proposeActionPlan({
       forceNew: true,
       source: "system",
       requestedBy: `scheduled:${actor.username}`,
       deviceId: task.deviceId,
-      vendor: item.vendor,
-      actionType: item.actionType,
-      riskLevel: item.riskLevel,
-      parametersJson: planParameters(task, item),
+      vendor: item?.vendor,
+      actionType: item?.actionType ?? task.actionType,
+      riskLevel: item?.riskLevel ?? task.riskLevel,
+      parametersJson: sourceParameters,
     });
+    if (sourcePlan) await copyActionPlanSecrets(sourcePlan.id, plan.id);
     const executed = await quickExecuteActionPlan(plan.id, {
       intent: "execute",
       approvedBy: `scheduled:${actor.username}`,
       approvedByRole: actor.role,
       approvalConfirmation: "APPROVE",
       reason: `Scheduled task: ${task.name}`,
-      breakGlass: item.riskLevel === "critical",
+      breakGlass: task.riskLevel === "critical",
       actionPlanRevision: 1,
     });
     const parameters = asObject(executed?.parametersJson);
@@ -473,12 +543,13 @@ export async function recoverInterruptedScheduledTasks() {
 export async function deactivateNonEffectfulScheduledTasks() {
   const activeTasks = await prisma.scheduledTask.findMany({
     where: { status: { in: [ScheduledTaskStatus.scheduled, ScheduledTaskStatus.paused] } },
-    select: { id: true, catalogCommandId: true },
+    select: { id: true, catalogCommandId: true, sourceActionPlanId: true },
     take: 500,
   });
   const obsoleteIds = activeTasks
     .filter((task) => {
-      const item = findCatalogItem(task.catalogCommandId);
+      if (task.sourceActionPlanId) return false;
+      const item = task.catalogCommandId ? findCatalogItem(task.catalogCommandId) : null;
       return !item || !isEffectfulScheduledCommand(item);
     })
     .map((task) => task.id);

@@ -614,6 +614,7 @@ model ActionPlan {
   approvals      ActionApproval[]
   secrets        ActionPlanSecret[]
   scheduledTaskRuns ScheduledTaskRun[]
+  scheduledTasks ScheduledTask[] @relation("ScheduledTaskSourceActionPlan")
 
   @@index([source])
   @@index([deviceId])
@@ -879,7 +880,9 @@ model ScheduledTask {
   name              String
   deviceId          String
   device            Device                @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  catalogCommandId  String
+  catalogCommandId  String?
+  sourceActionPlanId String?
+  sourceActionPlan  ActionPlan?            @relation("ScheduledTaskSourceActionPlan", fields: [sourceActionPlanId], references: [id], onDelete: SetNull)
   actionType        ActionType
   riskLevel         AiRiskLevel
   parametersJson    Json
@@ -899,6 +902,7 @@ model ScheduledTask {
   runs              ScheduledTaskRun[]
 
   @@index([deviceId])
+  @@index([sourceActionPlanId])
   @@index([createdById])
   @@index([status, enabled, runAt])
   @@index([createdAt])
