@@ -85,8 +85,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const body = asObject(payload);
     const error = asObject(body.error);
-    throw new OnboardingApiError(String(error.message ?? body.detail ?? body.error ?? `Request failed (${response.status})`), {
-      code: typeof error.code === "string" ? error.code : undefined,
+    throw new OnboardingApiError(String(error.message ?? body.messageFa ?? body.message ?? body.detail ?? body.error ?? `Request failed (${response.status})`), {
+      code: typeof error.code === "string" ? error.code : typeof body.reasonCode === "string" ? body.reasonCode : undefined,
       status: response.status,
       detail: error.detail ?? body.detail,
       connectorInvoked: typeof error.connectorInvoked === "boolean" ? error.connectorInvoked : undefined,
@@ -121,6 +121,7 @@ export type DeviceWorkspace = {
   audit: Array<Record<string, unknown>>;
   capabilities: { platformKey?: string; connectorType?: string; capabilities?: unknown; facts?: unknown; detection?: unknown; warnings?: unknown; refreshedAt?: string; expiresAt?: string } | null;
   collections: Array<Record<string, unknown>>;
+  connections: Array<{ id: string; role: string; method: string; purposes: string[]; host: string | null; port: number | null; enabled: boolean; priority: number; status: string; lastTestAt: string | null; lastSuccessAt: string | null; lastError: string | null; settingsJson: Record<string, unknown> }>;
   charts: {
     healthScore: WorkspaceChartPoint[];
     connectorResults: WorkspaceChartPoint[];

@@ -63,12 +63,16 @@ export function CompanyManager({ companies, archived, selectedId, onSelect, onCh
         <div><span className="company-manager__icon"><Building2 size={20} /></span><div><h2 id="company-manager-title">شرکت‌ها و دارایی‌ها</h2><p>دارایی‌های هر شرکت کاملاً جدا نمایش داده می‌شوند.</p></div></div>
         <button type="button" className="primary-button" onClick={() => openEditor()}><Plus size={17} />شرکت جدید</button>
       </header>
+      <div className="company-ownership-flow" aria-label="ساختار مالکیت داده">
+        <span>حساب کاربری شما</span><b>←</b><span>شرکت انتخاب‌شده</span><b>←</b><span>دارایی و دستگاه‌ها</span>
+        <small>هر درخواست فقط داده‌های شرکت‌های متعلق به همین حساب را می‌بیند.</small>
+      </div>
       <div className="company-switcher" role="tablist" aria-label="انتخاب شرکت">
         {companies.map((company) => (
           <div key={company.id} className={`company-switcher__item${selectedId === company.id ? " is-selected" : ""}`}>
             <button type="button" className="company-switcher__select" role="tab" aria-selected={selectedId === company.id} onClick={() => onSelect(company.id)}>
-              <span><strong>{company.name}</strong><small dir="ltr">{company.code}</small></span>
-              <b>{company._count.assets} دارایی</b>
+              <span className="company-switcher__identity"><strong>{company.name}</strong><small dir="ltr">{company.code}</small>{selectedId === company.id ? <em><Check size={12} />شرکت فعال</em> : null}</span>
+              <span className="company-switcher__metrics"><b>{company._count.assets}<small>دارایی</small></b><b>{company._count.devices}<small>دستگاه</small></b></span>
             </button>
             <div className="company-switcher__actions">
               <button type="button" onClick={() => openEditor(company)} aria-label={`ویرایش ${company.name}`}><Edit3 size={14} /></button>

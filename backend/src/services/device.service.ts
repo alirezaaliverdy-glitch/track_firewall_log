@@ -9,6 +9,7 @@ import {
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
 import { prisma } from "../db/prisma.js";
+import { recordAndTestDeviceConnectionChannels, syncDefaultDeviceConnectionChannels } from "./device-connection-channel.service.js";
 
 const DEVICE_TYPES = new Set<string>(Object.values(DeviceType));
 const DEVICE_PROTOCOLS = new Set<string>(Object.values(DeviceProtocol));
@@ -337,6 +338,7 @@ export async function createDevice(rawInput: Record<string, unknown>, ownerId?: 
       }
     });
     await syncDeviceRecordToAsset(tx, created);
+    await syncDefaultDeviceConnectionChannels(tx, created);
     return created;
   });
 
@@ -370,6 +372,7 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
       }
     });
     await syncDeviceRecordToAsset(tx, updated);
+    await syncDefaultDeviceConnectionChannels(tx, updated);
     return updated;
   });
 
@@ -539,13 +542,16 @@ export async function testDeviceConnection(id: string, ownerId?: string) {
       }
     });
 
+    const channelState = await recordAndTestDeviceConnectionChannels({ ...device, ...(recoveredManagementPort ? { managementPort: recoveredManagementPort } : {}) }, result);
     return {
       ...persistedResult,
       status,
       message: result.message ?? (result.connected ? "SSH connection succeeded." : result.errorCode ?? "SSH connection failed."),
       latencyMs: Date.now() - started,
       checkedAt: statusCheck.checkedAt,
-      [statusKey]: result
+      [statusKey]: result,
+      connectionChannels: channelState.channels,
+      preferredDataChannel: channelState.preferredDataChannel
     };
   }
 
@@ -578,12 +584,24 @@ export async function testDeviceConnection(id: string, ownerId?: string) {
     }
   });
 
+  const channelState = await recordAndTestDeviceConnectionChannels(device, {
+    connected: result.status === DeviceStatus.online,
+    deviceId: device.id,
+    host: device.host,
+    port: device.managementPort,
+    stages: [{ name: "tcp_connect", status: result.status === DeviceStatus.online ? "ok" : "failed", message: result.message }],
+    warnings: [],
+    capabilities: { canConnect: result.status === DeviceStatus.online },
+    message: result.message
+  });
   return {
     deviceId: device.id,
     status: result.status,
     message: result.message,
     latencyMs: result.latencyMs,
-    checkedAt: statusCheck.checkedAt
+    checkedAt: statusCheck.checkedAt,
+    connectionChannels: channelState.channels,
+    preferredDataChannel: channelState.preferredDataChannel
   };
 }
 

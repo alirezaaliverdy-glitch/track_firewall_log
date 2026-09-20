@@ -54,15 +54,22 @@ export function installCsrfFetch() {
       return response;
     }
     const needsCsrf = MUTATION_METHODS.has(method) && !CSRF_EXEMPT_PATHS.has(pathname);
-    const requestInit = needsCsrf
-      ? await (async () => {
-          const token = await getCsrfToken(originalFetch);
-          const headers = new Headers(init.headers ?? (typeof input === "object" && "headers" in input ? input.headers : undefined));
-          headers.set("X-CSRF-Token", token);
-          return { ...init, method, headers };
-        })()
-      : init;
-    const response = await originalFetch(input, requestInit);
+    const withCsrf = async () => {
+      const token = await getCsrfToken(originalFetch);
+      const headers = new Headers(init.headers ?? (typeof input === "object" && "headers" in input ? input.headers : undefined));
+      headers.set("X-CSRF-Token", token);
+      return { ...init, method, headers };
+    };
+    let requestInit = needsCsrf ? await withCsrf() : init;
+    let response = await originalFetch(input, requestInit);
+    if (needsCsrf && response.status === 403) {
+      const reason = await response.clone().json().catch(() => null) as { reasonCode?: string } | null;
+      if (reason?.reasonCode === "CSRF_VALIDATION_FAILED") {
+        resetCsrfToken();
+        requestInit = await withCsrf();
+        response = await originalFetch(input, requestInit);
+      }
+    }
     if (response.status === 403) resetCsrfToken();
     if (response.status === 401 && pathname !== "/auth/login") announceUnauthorized();
     return response;

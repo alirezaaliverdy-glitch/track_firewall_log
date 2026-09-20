@@ -187,7 +187,7 @@ export async function getDeviceWorkspace(reference: string) {
   const assetId = directAsset?.id;
   const relatedRecords = { OR: [deviceId ? { deviceId } : null, assetId ? { assetId } : null].filter((item): item is { deviceId: string } | { assetId: string } => item !== null) };
   const tables = await optionalTables();
-  const [statusChecks, healthHistory, metricSamples, findings, actions, audit, capabilityCache, configBackup, collections] = await Promise.all([
+  const [statusChecks, healthHistory, metricSamples, findings, actions, audit, capabilityCache, configBackup, collections, connectionChannels] = await Promise.all([
     deviceId ? prisma.deviceStatusCheck.findMany({ where: { deviceId }, orderBy: { checkedAt: "desc" }, take: 240 }) : [],
     tables.has("HealthSnapshot") ? prisma.healthSnapshot.findMany({ where: { OR: [{ ...(deviceId ? { deviceId } : { deviceId: "__none__" }) }, { ...(assetId ? { assetId } : { assetId: "__none__" }) }] }, orderBy: { collectedAt: "desc" }, take: 240 }) : [],
     deviceId && tables.has("MetricSample") ? prisma.metricSample.findMany({ where: { deviceId }, orderBy: { timestamp: "desc" }, take: 500, select: { metricKey: true, value: true, unit: true, timestamp: true, source: true } }) : [],
@@ -196,7 +196,12 @@ export async function getDeviceWorkspace(reference: string) {
     deviceId ? prisma.auditLog.findMany({ where: { deviceId }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, action: true, dryRun: true, approvalStatus: true, createdAt: true } }) : [],
     deviceId && tables.has("DeviceCapabilityCache") ? prisma.deviceCapabilityCache.findFirst({ where: { deviceId }, orderBy: { refreshedAt: "desc" } }) : null,
     deviceId && tables.has("DeviceSnapshot") ? prisma.deviceSnapshot.findFirst({ where: { deviceId, snapshotType: { contains: "config", mode: "insensitive" } }, orderBy: { collectedAt: "desc" }, select: { collectedAt: true, snapshotType: true } }) : null,
-    tables.has("CollectionRun") ? prisma.collectionRun.findMany({ where: relatedRecords, orderBy: { startedAt: "desc" }, take: 100, select: { id: true, provider: true, status: true, startedAt: true, completedAt: true, durationMs: true, errorCode: true } }) : []
+    tables.has("CollectionRun") ? prisma.collectionRun.findMany({ where: relatedRecords, orderBy: { startedAt: "desc" }, take: 100, select: { id: true, provider: true, status: true, startedAt: true, completedAt: true, durationMs: true, errorCode: true } }) : [],
+    deviceId ? prisma.deviceConnectionChannel.findMany({
+      where: { deviceId },
+      orderBy: [{ priority: "asc" }, { role: "asc" }],
+      select: { id: true, role: true, method: true, purposes: true, host: true, port: true, enabled: true, priority: true, status: true, lastTestAt: true, lastSuccessAt: true, lastError: true, settingsJson: true }
+    }) : []
   ]);
   const health = healthHistory[0] ?? null;
   const severityCounts = findings.reduce<Record<string, number>>((counts, finding) => {
@@ -372,6 +377,7 @@ export async function getDeviceWorkspace(reference: string) {
       expiresAt: undefined
     } : null,
     collections,
+    connections: connectionChannels,
     charts,
     vendor: { key: vendorKey, sections: vendorSections },
     vendorDetails: vendorKey === "cisco" ? projectCiscoWorkspaceDetails(ciscoCollection) : null

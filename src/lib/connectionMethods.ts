@@ -24,6 +24,7 @@ export type VendorConnectionProfile = {
   vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
   strategy: string;
   strategyFa: string;
+  recommendedSecondary: ConnectionMethodKey;
   methods: VendorConnectionMethod[];
 };
 

@@ -63,7 +63,9 @@ services:
       # Keep the container database address isolated from a developer .env that points at localhost.
       # Production operators can still override the internal DSN explicitly with DOCKER_DATABASE_URL.
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://firewall_app@firewall-db:5432/firewall_log_analyzer}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost,http://127.0.0.1}
+      # The UI is exposed by main-nginx on port 80, while local Vite commonly uses 5173.
+      # Keep an operator supplied origin and also allow the two documented local entrypoints.
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173},http://localhost,http://127.0.0.1
       TRUST_PROXY: ${TRUST_PROXY:-true}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
       UPLOAD_DIR: /app/storage/uploads
@@ -117,15 +119,15 @@ services:
     restart: unless-stopped
 
   firewall-db:
-    image: postgres:18-alpine
+    image: postgres:16-alpine
     container_name: firewall-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-firewall_log_analyzer}
-      POSTGRES_USER: ${POSTGRES_USER:-firewall_app}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
     volumes:
-      - firewall_db_pg18_data:/var/lib/postgresql
+      - firewall_db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -134,7 +136,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  firewall_db_pg18_data:
+  firewall_db_data:
   firewall_uploads:
   firewall_bootstrap:
   firewall_telemetry:

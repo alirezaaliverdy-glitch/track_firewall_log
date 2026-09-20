@@ -8,6 +8,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DeviceVerificationPanel } from "@/features/assets/components/DeviceVerificationPanel";
+import { DeviceConnectionChannels } from "@/features/assets/components/DeviceConnectionChannels";
 import { CiscoAssetDashboard } from "@/features/assets/components/CiscoAssetDashboard";
 import { deleteDevice, testDeviceConnection, updateDevice, type DeviceInput } from "@/lib/devices";
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
@@ -169,7 +170,6 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const collection = asRecord(facts.collection);
   const healthFacts = asRecord(facts.health);
   const interfaces = asArray(facts.interfaces).length ? asArray(facts.interfaces) : asArray(facts.interfaceStatus).length ? asArray(facts.interfaceStatus) : asArray(capabilityMap.interfaces);
-  const inventoryStatus = collection.inventoryStatus ?? (Object.keys(collection).length ? "collected" : currentWorkspace.asset?.managedState ?? currentWorkspace.device?.status ?? "unknown");
   const capabilityStatus = collection.capabilityStatus ?? (capabilityList.length ? "available" : "unknown");
   const capabilitySummary = summarizeCapabilities(capabilityList, t, fallback);
   const healthSummary = summarizeHealth(healthFacts, fallback);
@@ -241,7 +241,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     const isCisco = currentWorkspace.vendor.key === "cisco";
     return <section className="device-overview-first">
       {isCisco ? <CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /> : null}
-      <article><h2>{t("workspace.cards.connection")}</h2><dl className="detail-list"><dt>{t("workspace.labels.connectionStatus")}</dt><dd>{statusLabel(overview.availability, t)}</dd><dt>{t("workspace.labels.verificationStatus")}</dt><dd>{statusLabel(overview.verificationStatus, t)}</dd>{currentWorkspace.capabilities ? <><dt>{t("workspace.labels.inventoryStatus")}</dt><dd>{capabilityLabel(inventoryStatus, t)}</dd></> : null}<dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? overview.lastContact, locale, fallback)}</dd></dl></article>
+      <DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} />
       <article><h2>{t("workspace.cards.identity")}</h2><dl className="detail-list"><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd>{optionalIdentity.map(([label, item]) => <div style={{ display: "contents" }} key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>
       {!isCisco && interfaces.length ? <article><h2>{t("workspace.cards.interfaces")}</h2><p>{interfaceSummary}</p><p>{isFa ? `${interfaceUpCount} فعال · ${interfaceDownCount} قطع` : `${interfaceUpCount} up · ${interfaceDownCount} down`}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{t("workspace.actions.refreshInterfaces")}</Link></article> : null}
       {!isCisco && healthSummary !== fallback ? <article><h2>{t("workspace.labels.healthSummary")}</h2><p dir="ltr">{healthSummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></article> : null}

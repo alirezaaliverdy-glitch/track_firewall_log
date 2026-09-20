@@ -10,6 +10,9 @@ test("connection catalog exposes an honest profile for every onboarded vendor", 
   for (const profile of profiles) {
     assert.ok(profile.methods.some((method) => method.selectable && method.readiness === "ready"), `${profile.vendor} needs an executable onboarding method`);
     assert.ok(profile.methods.every((method) => method.prerequisites.length === method.prerequisitesFa.length));
+    const secondary = profile.methods.find((method) => method.key === profile.recommendedSecondary);
+    assert.ok(secondary, `${profile.vendor} needs a documented secondary channel`);
+    assert.ok(secondary.purposes.some((purpose) => ["inventory", "telemetry", "events"].includes(purpose)), `${profile.vendor} secondary channel must add data value`);
   }
 });
 

@@ -8,6 +8,7 @@ import { prisma } from "../db/prisma.js";
 import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
 import { getDeviceById } from "./device.service.js";
 import { resolveCredentialById } from "./credential.service.js";
+import { getConnectionProfile, type ConnectionMethodKey } from "../vendors/connection-method.registry.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
 export class OnboardingCredentialInvalidError extends Error {}
@@ -559,6 +560,74 @@ function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
 }
 
+function managementMethodKey(draft: Draft): ConnectionMethodKey {
+  if (draft.connectionMethod !== "api") return "ssh";
+  return draft.vendor === "sophos" ? "xml_api" : "rest_api";
+}
+
+function connectionArchitecture(draft: Draft, verified: boolean) {
+  const profile = getConnectionProfile(draft.vendor);
+  const primaryKey = managementMethodKey(draft);
+  const primary = profile?.methods.find((item) => item.key === primaryKey);
+  const preferredSecondary = profile?.methods.find((item) => item.key === profile.recommendedSecondary && item.key !== primaryKey);
+  const secondary = preferredSecondary
+    ?? profile?.methods.find((item) => item.key !== primaryKey && item.readiness === "ready")
+    ?? profile?.methods.find((item) => item.key !== primaryKey);
+  return {
+    version: 1,
+    policy: "management_plus_observability",
+    channels: [
+      {
+        role: "management",
+        method: primaryKey,
+        purposes: primary?.purposes ?? ["control", "inventory"],
+        status: verified ? "verified" : "configured",
+        enabled: true,
+        readiness: primary?.readiness ?? "ready",
+        host: draft.host,
+        port: draft.managementPort
+      },
+      ...(secondary ? [{
+        role: "observability",
+        method: secondary.key,
+        purposes: secondary.purposes,
+        status: secondary.readiness === "ready" ? "available" : "setup_required",
+        enabled: secondary.readiness === "ready",
+        readiness: secondary.readiness,
+        host: secondary.purposes.includes("events") ? null : draft.host,
+        port: secondary.defaultPort,
+        prerequisites: secondary.prerequisites
+      }] : [])
+    ]
+  };
+}
+
+async function syncConnectionChannels(tx: Prisma.TransactionClient, deviceId: string, draft: Draft, verified: boolean) {
+  const architecture = connectionArchitecture(draft, verified);
+  for (const [index, channel] of architecture.channels.entries()) {
+    const isManagement = channel.role === "management";
+    const usesStoredCredential = isManagement || channel.readiness === "ready";
+    const timing = verified && isManagement ? { lastTestAt: new Date(), lastSuccessAt: new Date(), lastError: null } : {};
+    const data = {
+      method: channel.method,
+      purposes: channel.purposes,
+      host: channel.host,
+      port: channel.port,
+      credentialId: usesStoredCredential ? draft.credentialId || null : null,
+      enabled: channel.enabled,
+      priority: index + 1,
+      status: channel.status,
+      settingsJson: json({ readiness: channel.readiness, prerequisites: "prerequisites" in channel ? channel.prerequisites : [] }),
+      ...timing
+    };
+    await tx.deviceConnectionChannel.upsert({
+      where: { deviceId_role: { deviceId, role: channel.role } },
+      update: data,
+      create: { deviceId, role: channel.role, ...data }
+    });
+  }
+}
+
 function archivedInventory(value: unknown) {
   const capabilities = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const inventory = capabilities.inventory && typeof capabilities.inventory === "object" && !Array.isArray(capabilities.inventory) ? capabilities.inventory as Record<string, unknown> : {};
@@ -668,6 +737,7 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   touch(session, "saving", "save");
   const createdAt = now();
   const nextCapabilities: Record<string, unknown> = {
+    connectionArchitecture: connectionArchitecture(draft, false),
     onboarding: {
       sessionId: session.id,
       verificationStatus: "unverified",
@@ -704,6 +774,7 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       const device = target.deviceId
         ? await tx.device.update({ where: { id: target.deviceId }, data })
         : await tx.device.create({ data });
+      await syncConnectionChannels(tx, device.id, draft, false);
       const { asset } = await syncDeviceRecordToAsset(tx, device);
       let siteId: string | undefined;
       let locationId: string | undefined;
@@ -768,6 +839,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
   await assertOnboardingCompany(draft.companyId, ownerId);
 
   const capabilities: Record<string, unknown> = {
+    connectionArchitecture: connectionArchitecture(draft, true),
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),
     ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {})
@@ -799,6 +871,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
       const device = target.deviceId
         ? await tx.device.update({ where: { id: target.deviceId }, data })
         : await tx.device.create({ data });
+      await syncConnectionChannels(tx, device.id, draft, true);
       const { asset } = await syncDeviceRecordToAsset(tx, device);
       let siteId: string | undefined;
       let locationId: string | undefined;

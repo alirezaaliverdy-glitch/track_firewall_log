@@ -19,7 +19,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const text = await response.text();
   const body = text ? JSON.parse(text) as Record<string, unknown> : {};
-  if (!response.ok) throw new Error(String(body.error ?? `Company request failed (${response.status})`));
+  if (!response.ok) throw new Error(String(body.messageFa ?? body.message ?? body.reasonCode ?? body.error ?? `Company request failed (${response.status})`));
   return body as T;
 }
 

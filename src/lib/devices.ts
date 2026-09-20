@@ -78,6 +78,21 @@ export type ConnectionTestResult = {
   linuxStatus?: LinuxStatus;
   mikrotikStatus?: MikroTikStatus;
   fortigateStatus?: FortiGateStatus;
+  connectionChannels?: Array<{
+    id: string;
+    role: string;
+    method: string;
+    purposes: string[];
+    status: string;
+    connected: boolean | null;
+    tested: boolean;
+    message: string;
+    actionRequired: boolean;
+    lastTestAt: string | null;
+    lastSuccessAt: string | null;
+    errorCode?: string;
+  }>;
+  preferredDataChannel?: { id: string; method: string; role: string } | null;
 };
 
 export type DeviceConnectionStatus = {

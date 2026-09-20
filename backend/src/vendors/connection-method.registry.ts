@@ -24,6 +24,7 @@ export type VendorConnectionProfile = {
   vendor: VendorConnectionKey;
   strategy: string;
   strategyFa: string;
+  recommendedSecondary: ConnectionMethodKey;
   methods: VendorConnectionMethod[];
 };
 
@@ -32,6 +33,7 @@ const method = (value: VendorConnectionMethod) => value;
 const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   linux: {
     vendor: "linux",
+    recommendedSecondary: "agent",
     strategy: "Use SSH keys for control and bootstrap; use the agent or Syslog for continuous evidence.",
     strategyFa: "برای کنترل و راه‌اندازی از کلید SSH و برای شواهد پیوسته از Agent یا Syslog استفاده کنید.",
     methods: [
@@ -42,6 +44,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   cisco: {
     vendor: "cisco",
+    recommendedSecondary: "restconf",
     strategy: "Use SSH/CLI for broad IOS compatibility; add RESTCONF/NETCONF for structured IOS-XE data and gNMI for streaming telemetry.",
     strategyFa: "برای سازگاری گسترده IOS از SSH/CLI استفاده کنید؛ در IOS-XE برای داده ساخت‌یافته RESTCONF/NETCONF و برای تله‌متری پیوسته gNMI را فعال کنید.",
     methods: [
@@ -55,6 +58,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   mikrotik: {
     vendor: "mikrotik",
+    recommendedSecondary: "rest_api",
     strategy: "Use RouterOS REST over HTTPS for structured read-only inventory on v7; keep SSH for complete controlled changes and legacy RouterOS.",
     strategyFa: "در RouterOS 7 برای موجودی ساخت‌یافته از REST روی HTTPS و برای همه تغییرات کنترل‌شده یا نسخه‌های قدیمی از SSH استفاده کنید.",
     methods: [
@@ -66,6 +70,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   fortigate: {
     vendor: "fortigate",
+    recommendedSecondary: "syslog",
     strategy: "Use the REST API with a least-privilege token for automation, SSH for compatibility, and Syslog/SNMPv3 for telemetry.",
     strategyFa: "برای اتوماسیون از REST API با توکن حداقل‌دسترسی، برای سازگاری از SSH و برای پایش از Syslog/SNMPv3 استفاده کنید.",
     methods: [
@@ -77,6 +82,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   sophos: {
     vendor: "sophos",
+    recommendedSecondary: "syslog",
     strategy: "Use the supported firewall API for configuration and Syslog/SNMPv3 for operational evidence.",
     strategyFa: "برای تنظیمات از API رسمی فایروال و برای شواهد عملیاتی از Syslog/SNMPv3 استفاده کنید.",
     methods: [

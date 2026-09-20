@@ -143,6 +143,7 @@ model Device {
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   authProfiles             DeviceAuthProfile[]
+  connectionChannels       DeviceConnectionChannel[]
   deviceCapabilities       DeviceCapability[]
   deviceCapabilityCaches   DeviceCapabilityCache[]
   statusChecks             DeviceStatusCheck[]
@@ -172,6 +173,33 @@ model Device {
   @@index([credentialId])
   @@index([credentialRef])
   @@index([status])
+}
+
+model DeviceConnectionChannel {
+  id            String            @id @default(cuid())
+  deviceId      String
+  device        Device            @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  role          String
+  method        String
+  purposes      String[]          @default([])
+  host          String?
+  port          Int?
+  credentialId  String?
+  credential    DeviceCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  enabled       Boolean           @default(false)
+  priority      Int               @default(1)
+  status        String            @default("configured")
+  settingsJson  Json              @default("{}")
+  lastTestAt    DateTime?
+  lastSuccessAt DateTime?
+  lastError     String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([deviceId, role])
+  @@index([deviceId, enabled])
+  @@index([credentialId])
+  @@index([method, status])
 }
 
 model DeviceOnboardingSession {
@@ -501,6 +529,7 @@ model DeviceCredential {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   devices             Device[]
+  connectionChannels  DeviceConnectionChannel[]
 
   @@index([type])
   @@index([name])
