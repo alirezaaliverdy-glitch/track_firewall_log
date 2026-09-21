@@ -55,6 +55,7 @@ export type NetworkProbe = {
   packetLossPercent: number | null;
   attempts: number;
   successfulAttempts: number;
+  packets: Array<{ sequence: number; status: "reply" | "timeout"; bytes: number | null; address: string; ttl: number | null; timeMs: number | null }>;
   message: string;
   createdAt: string;
 };
@@ -101,4 +102,8 @@ export function runNetworkProbe(input: NetworkProbeInput) {
 
 export function listNetworkProbes() {
   return requestJson<{ probes: NetworkProbe[] }>("/diagnostics/network-probes");
+}
+
+export function clearNetworkProbes() {
+  return requestJson<{ deleted: number }>("/diagnostics/network-probes", { method: "DELETE" });
 }

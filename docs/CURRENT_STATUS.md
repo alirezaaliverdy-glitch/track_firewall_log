@@ -1434,3 +1434,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Added a dedicated Persian-first Network Lab for asset-aware ICMP ping and arbitrary host TCP port checks.
 - Probes execute inside the application backend without any third-party diagnostic provider, support private/LAN targets, and store user-scoped history in the existing audit log.
 - Added responsive desktop/mobile result cards, latency and packet-loss metrics, port presets, registered-asset selection, input validation, authorization, and the required iputils runtime package.
+
+## 2026-09-21 - Network Lab result and history refinement
+
+- Replaced the promotional Network Lab hero and manual refresh control with a compact operational layout.
+- Added per-packet ICMP evidence (sequence, address, bytes, latency, and TTL) in a terminal-style result panel.
+- Added authenticated, user-scoped history deletion with an explicit in-page confirmation step.

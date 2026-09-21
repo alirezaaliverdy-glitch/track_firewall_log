@@ -1531,3 +1531,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Implemented authenticated local ICMP/TCP probes, registered-asset ownership checks, persistent per-user history, a dedicated navigation tab, and responsive Persian UI.
 - The feature makes no external API request. Its reachability is the network reachability of the backend container/host.
+
+## 2026-09-21 - Refine Network Lab UX and packet evidence
+
+- Added per-packet ping parsing and terminal presentation, removed decorative copy and the redundant refresh action, and added user-scoped history clearing with confirmation.

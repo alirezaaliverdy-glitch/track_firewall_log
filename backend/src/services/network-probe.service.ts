@@ -6,6 +6,15 @@ import { prisma } from "../db/prisma.js";
 export type NetworkProbeKind = "icmp" | "tcp";
 export type NetworkProbeStatus = "reachable" | "unreachable" | "open" | "closed" | "timeout" | "error";
 
+export type NetworkProbePacket = {
+  sequence: number;
+  status: "reply" | "timeout";
+  bytes: number | null;
+  address: string;
+  ttl: number | null;
+  timeMs: number | null;
+};
+
 export type NetworkProbe = {
   id: string;
   kind: NetworkProbeKind;
@@ -24,12 +33,13 @@ export type NetworkProbe = {
   packetLossPercent: number | null;
   attempts: number;
   successfulAttempts: number;
+  packets: NetworkProbePacket[];
   message: string;
   createdAt: string;
 };
 
 type ProbeInput = { kind?: NetworkProbeKind; deviceId?: string; target?: string; port?: number; attempts?: number };
-type ExecutionResult = Pick<NetworkProbe, "status" | "reachable" | "latencyMs" | "minLatencyMs" | "maxLatencyMs" | "packetLossPercent" | "attempts" | "successfulAttempts" | "message">;
+type ExecutionResult = Pick<NetworkProbe, "status" | "reachable" | "latencyMs" | "minLatencyMs" | "maxLatencyMs" | "packetLossPercent" | "attempts" | "successfulAttempts" | "packets" | "message">;
 const HOSTNAME_RE = /^(?=.{1,253}$)(?!-)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
 export function normalizeProbeTarget(raw: string) {
@@ -58,12 +68,20 @@ function parsePingOutput(output: string, attempts: number) {
   const windowsAverage = output.match(/average\s*=\s*(\d+)ms/i);
   const receivedMatch = output.match(/(\d+)\s+(?:packets )?received/i) ?? output.match(/received\s*=\s*(\d+)/i);
   const successfulAttempts = receivedMatch ? Number(receivedMatch[1]) : packetLossPercent === null ? 0 : Math.max(0, Math.round(attempts * (100 - packetLossPercent) / 100));
+  const replies = new Map<number, NetworkProbePacket>();
+  const replyPattern = /(\d+)\s+bytes from\s+(.+?):?\s+(?:icmp_)?seq[= ](\d+)\s+ttl[= ](\d+)\s+time[=<]([\d.]+)\s*ms/gi;
+  for (const match of output.matchAll(replyPattern)) {
+    const sequence = Number(match[3]);
+    replies.set(sequence, { sequence, status: "reply", bytes: Number(match[1]), address: match[2].replace(/:$/, "").trim(), ttl: Number(match[4]), timeMs: Number(match[5]) });
+  }
+  const packets = Array.from({ length: attempts }, (_, index): NetworkProbePacket => replies.get(index + 1) ?? { sequence: index + 1, status: "timeout", bytes: null, address: "", ttl: null, timeMs: null });
   return {
     packetLossPercent,
     successfulAttempts,
     minLatencyMs: unixRtt ? Number(unixRtt[1]) : windowsAverage ? Number(windowsAverage[1]) : null,
     latencyMs: unixRtt ? Number(unixRtt[2]) : windowsAverage ? Number(windowsAverage[1]) : null,
-    maxLatencyMs: unixRtt ? Number(unixRtt[3]) : windowsAverage ? Number(windowsAverage[1]) : null
+    maxLatencyMs: unixRtt ? Number(unixRtt[3]) : windowsAverage ? Number(windowsAverage[1]) : null,
+    packets
   };
 }
 
@@ -80,7 +98,7 @@ async function runIcmp(target: string, attempts: number) {
       settled = true;
       if (timeout) clearTimeout(timeout);
       const parsed = parsePingOutput(output, attempts);
-      resolve({ status, reachable: status === "reachable", latencyMs: parsed.latencyMs ?? (status === "reachable" ? Date.now() - startedAt : null), minLatencyMs: parsed.minLatencyMs, maxLatencyMs: parsed.maxLatencyMs, packetLossPercent: parsed.packetLossPercent, attempts, successfulAttempts: parsed.successfulAttempts, message });
+      resolve({ status, reachable: status === "reachable", latencyMs: parsed.latencyMs ?? (status === "reachable" ? Date.now() - startedAt : null), minLatencyMs: parsed.minLatencyMs, maxLatencyMs: parsed.maxLatencyMs, packetLossPercent: parsed.packetLossPercent, attempts, successfulAttempts: parsed.successfulAttempts, packets: parsed.packets, message });
     };
     child.stdout.on("data", (chunk) => { output = `${output}${String(chunk)}`.slice(-16_000); });
     child.stderr.on("data", (chunk) => { output = `${output}${String(chunk)}`.slice(-16_000); });
@@ -99,7 +117,7 @@ async function runTcp(target: string, port: number) {
       if (settled) return;
       settled = true;
       socket.destroy();
-      resolve({ status, reachable: status === "open", latencyMs: status === "open" ? Date.now() - startedAt : null, minLatencyMs: null, maxLatencyMs: null, packetLossPercent: null, attempts: 1, successfulAttempts: status === "open" ? 1 : 0, message });
+      resolve({ status, reachable: status === "open", latencyMs: status === "open" ? Date.now() - startedAt : null, minLatencyMs: null, maxLatencyMs: null, packetLossPercent: null, attempts: 1, successfulAttempts: status === "open" ? 1 : 0, packets: [], message });
     };
     socket.setTimeout(5_000);
     socket.once("connect", () => finish("open", "TCP_PORT_OPEN"));
@@ -111,7 +129,7 @@ async function runTcp(target: string, port: number) {
 
 function normalizeRecord(record: { id: string; metadata: unknown; createdAt: Date }): NetworkProbe {
   const metadata = record.metadata as Omit<NetworkProbe, "id" | "createdAt">;
-  return { id: record.id, ...metadata, createdAt: record.createdAt.toISOString() };
+  return { id: record.id, ...metadata, packets: Array.isArray(metadata.packets) ? metadata.packets : [], createdAt: record.createdAt.toISOString() };
 }
 
 export async function runNetworkProbe(input: ProbeInput, user: { id: string; username: string }) {
@@ -131,6 +149,11 @@ export async function listNetworkProbes(username: string, limit = 30) {
   const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.trunc(limit), 1), 100) : 30;
   const records = await prisma.auditLog.findMany({ where: { action: "network_probe", targetType: "network_probe", actor: username }, orderBy: { createdAt: "desc" }, take: safeLimit });
   return records.map(normalizeRecord);
+}
+
+export async function clearNetworkProbes(username: string) {
+  const result = await prisma.auditLog.deleteMany({ where: { action: "network_probe", targetType: "network_probe", actor: username } });
+  return result.count;
 }
 
 export const networkProbeInternalsForTest = { normalizeProbeTarget, normalizeProbePort, parsePingOutput };
