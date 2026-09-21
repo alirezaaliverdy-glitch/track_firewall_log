@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, CheckCircle2, Clock3, Download, Eye, FileCode2, FileSpreadsheet, FileText, History, LoaderCircle, PencilLine, RefreshCw, ServerCog, X } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Clock3, Download, Eye, FileCode2, FileSpreadsheet, FileText, History, LoaderCircle, PencilLine, RefreshCw, ServerCog, Trash2, X } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { listCompanies, type Company } from "@/lib/companies";
-import { createCompanyStatusReport, downloadCompanyStatusReport, listCompanyStatusReportHistory, type CompanyStatusEquipment, type CompanyStatusReport, type ReportFormat, type ReportHistoryEntry } from "@/lib/reports";
+import { clearCompanyStatusReportHistory, createCompanyStatusReport, downloadCompanyStatusReport, listCompanyStatusReportHistory, type CompanyStatusEquipment, type CompanyStatusReport, type ReportFormat, type ReportHistoryEntry } from "@/lib/reports";
 import "./ReportsPage.css";
 
 const stateLabel = { active: "فعال", limited: "محدود", inactive: "غیرفعال" } as const;
@@ -22,6 +23,7 @@ function historyDate(value: string) {
 }
 
 export default function ReportsPage() {
+  const { user } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [report, setReport] = useState<CompanyStatusReport | null>(null);
@@ -33,6 +35,7 @@ export default function ReportsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [error, setError] = useState("");
 
   const loadHistory = useCallback(async (selectedCompanyId: string) => {
@@ -79,6 +82,18 @@ export default function ReportsPage() {
     catch (reason) { setError(reason instanceof Error ? reason.message : "دریافت فایل ناموفق بود"); }
     finally { setExporting(false); }
   };
+  const clearHistory = async () => {
+    if (!companyId || user?.role !== "admin") return false;
+    setClearingHistory(true); setError("");
+    try {
+      await clearCompanyStatusReportHistory(companyId);
+      setHistoryItems([]);
+      return true;
+    } catch {
+      setError("پاک‌کردن تاریخچه گزارش‌ها ناموفق بود");
+      return false;
+    } finally { setClearingHistory(false); }
+  };
 
   return <section className="reports-page" dir="rtl">
     <header className="reports-hero">
@@ -100,7 +115,7 @@ export default function ReportsPage() {
 
     {activeTab === "create"
       ? <CreateReportView report={report} loading={loading} format={format} exporting={exporting} onFormat={setFormat} onDownload={() => void download()} onPreview={() => setPreviewOpen(true)} onDismiss={() => { setReport(null); setPreviewOpen(false); }}/>
-      : <ReportHistory items={historyItems} loading={historyLoading}/>}
+      : <ReportHistory items={historyItems} loading={historyLoading} canClear={user?.role === "admin"} clearing={clearingHistory} onClear={clearHistory}/>}
 
     {report && previewOpen ? <ReportPreviewModal report={report} onClose={() => setPreviewOpen(false)} onUpdateReport={updateReport} onUpdateEquipment={updateEquipment}/> : null}
   </section>;
@@ -121,10 +136,14 @@ function CreateReportView({ report, loading, format, exporting, onFormat, onDown
   </section>;
 }
 
-function ReportHistory({ items, loading }: { items: ReportHistoryEntry[]; loading: boolean }) {
+function ReportHistory({ items, loading, canClear, clearing, onClear }: { items: ReportHistoryEntry[]; loading: boolean; canClear: boolean; clearing: boolean; onClear: () => Promise<boolean> }) {
+  const [confirmClear, setConfirmClear] = useState(false);
   if (loading) return <div className="reports-loading"><LoaderCircle className="spin"/> در حال دریافت تاریخچه…</div>;
   if (!items.length) return <div className="reports-empty reports-empty--history"><History/><h2>هنوز گزارشی ثبت نشده</h2><p>گزارش‌های ساخته‌شده برای این شرکت اینجا نمایش داده می‌شوند.</p></div>;
-  return <section className="reports-history"><header><div><h2>تاریخچه گزارش‌ها</h2><p>{items.length.toLocaleString("fa-IR")} گزارش اخیر این شرکت</p></div><History/></header><div className="reports-history__list">{items.map((item) => { const date = historyDate(item.createdAt); return <article key={item.id} className="history-row"><div className="history-row__user"><span>{item.actorDisplayName.trim().charAt(0).toUpperCase() || "U"}</span><div><strong>{item.actorDisplayName}</strong><small dir="ltr">@{item.actorUsername}</small></div></div><div className="history-row__report"><small>شماره گزارش</small><b dir="ltr">{item.reportNumber}</b></div><div className="history-row__date"><Clock3/><div><strong>{date.fa}</strong><small dir="ltr">{date.en} · {date.time}</small></div></div><div className="history-row__metrics"><span>{item.equipmentCount.toLocaleString("fa-IR")} تجهیز</span><b>{item.healthScore.toLocaleString("fa-IR")}% سلامت</b></div></article>; })}</div></section>;
+  return <>
+    <section className="reports-history"><header><div><h2>تاریخچه گزارش‌ها</h2><p>{items.length.toLocaleString("fa-IR")} گزارش اخیر این شرکت</p></div><div className="reports-history__actions">{canClear ? <button type="button" onClick={() => setConfirmClear(true)}><Trash2/> پاک‌کردن تاریخچه</button> : null}<History/></div></header><div className="reports-history__list">{items.map((item) => { const date = historyDate(item.createdAt); return <article key={item.id} className="history-row"><div className="history-row__user"><span>{item.actorDisplayName.trim().charAt(0).toUpperCase() || "U"}</span><div><strong>{item.actorDisplayName}</strong><small dir="ltr">@{item.actorUsername}</small></div></div><div className="history-row__report"><small>شماره گزارش</small><b dir="ltr">{item.reportNumber}</b></div><div className="history-row__date"><Clock3/><div><strong>{date.fa}</strong><small dir="ltr">{date.en} · {date.time}</small></div></div><div className="history-row__metrics"><span>{item.equipmentCount.toLocaleString("fa-IR")} تجهیز</span><b>{item.healthScore.toLocaleString("fa-IR")}% سلامت</b></div></article>; })}</div></section>
+    {confirmClear ? <div className="report-delete-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="report-delete-title"><section className="report-delete-dialog"><header><span><AlertTriangle/></span><div><h2 id="report-delete-title">تاریخچه این شرکت پاک شود؟</h2><p>همه سوابق گزارش‌گیری این شرکت حذف می‌شوند و امکان بازگردانی آن‌ها وجود ندارد.</p></div></header><div className="report-delete-dialog__notice">این عملیات فقط برای مدیر سامانه مجاز است. رویداد مدیریتی پاک‌سازی برای پیگیری امنیتی ثبت می‌شود.</div><footer><button type="button" className="report-delete-cancel" disabled={clearing} onClick={() => setConfirmClear(false)}>انصراف</button><button type="button" className="report-delete-confirm" disabled={clearing} onClick={() => void onClear().then((cleared) => { if (cleared) setConfirmClear(false); })}>{clearing ? <><LoaderCircle className="spin"/> در حال حذف…</> : <><Trash2/> بله، تاریخچه پاک شود</>}</button></footer></section></div> : null}
+  </>;
 }
 
 function ReportPreviewModal({ report, onClose, onUpdateReport, onUpdateEquipment }: { report: CompanyStatusReport; onClose: () => void; onUpdateReport: <K extends keyof CompanyStatusReport>(key: K, value: CompanyStatusReport[K]) => void; onUpdateEquipment: (id: string, patch: Partial<CompanyStatusEquipment>) => void }) {

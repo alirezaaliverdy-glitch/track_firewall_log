@@ -54,6 +54,40 @@ export async function reportRoutes(app: FastifyInstance) {
     } catch (error) { return failure(reply, error); }
   });
 
+  app.delete<{ Body: { companyId?: string; confirmation?: string } }>("/api/reports/company-status/history", async (request, reply) => {
+    try {
+      if (!request.authUser) throw new CompanyReportError("AUTH_REQUIRED", 401);
+      if (request.authUser.role !== "admin") throw new CompanyReportError("ADMIN_REQUIRED", 403);
+      if (request.body?.confirmation !== "DELETE REPORT HISTORY") throw new CompanyReportError("CONFIRMATION_REQUIRED", 400);
+      const companyId = String(request.body?.companyId ?? "").trim();
+      if (!companyId) throw new CompanyReportError("COMPANY_ID_REQUIRED", 400);
+      const company = await prisma.company.findFirst({
+        where: { id: companyId, ownerId: request.authUser.id, deletedAt: null },
+        select: { id: true, name: true, code: true }
+      });
+      if (!company) throw new CompanyReportError("COMPANY_NOT_FOUND", 404);
+
+      const deletedCount = await prisma.$transaction(async (tx) => {
+        const deleted = await tx.auditLog.deleteMany({
+          where: { action: "report.company_status.generate", targetType: "company", targetId: company.id }
+        });
+        await tx.auditLog.create({
+          data: {
+            actor: request.authUser!.username,
+            action: "report.company_status.history.clear",
+            targetType: "company",
+            targetId: company.id,
+            dryRun: false,
+            approvalStatus: "not_required",
+            metadata: { deletedCount: deleted.count, companyName: company.name, companyCode: company.code }
+          }
+        });
+        return deleted.count;
+      });
+      return { ok: true, deletedCount };
+    } catch (error) { return failure(reply, error); }
+  });
+
   app.post<{ Body: { companyId?: string; refresh?: boolean } }>("/api/reports/company-status", async (request, reply) => {
     try {
       if (!request.authUser) throw new CompanyReportError("AUTH_REQUIRED", 401);

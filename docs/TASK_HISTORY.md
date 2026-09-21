@@ -1551,3 +1551,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a company-owner-scoped history API and page tab using existing audit storage; every generated report records its operator, report number, timestamp, equipment count, and health score.
 - Removed redundant hero copy and reorganized company selection, generation, output format, download, preview, and dismissal into a clearer workflow.
 - Validated backend/frontend production builds, focused tests (5/5), authenticated-route protection, local page delivery, and all four canonical container health checks.
+
+## 2026-09-21 - Restrict report history clearing to administrators
+
+- Added a responsive clear-history action and irreversible confirmation dialog to the report history tab; non-admin users do not receive the control.
+- Added a protected DELETE endpoint requiring `users.manage`, an authenticated admin, exact confirmation, and ownership of the selected company.
+- Deleted records are limited to company-status generation entries for that company, while an independent audit event preserves evidence of the administrative cleanup.
+- Rebuilt backend/frontend images, passed all six focused report tests, and redeployed the local API/web/gateway against the existing database volume.

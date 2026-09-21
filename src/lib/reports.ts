@@ -22,6 +22,17 @@ export async function listCompanyStatusReportHistory(companyId: string, limit = 
   return ((await response.json()) as { history: ReportHistoryEntry[] }).history;
 }
 
+export async function clearCompanyStatusReportHistory(companyId: string) {
+  const response = await fetch(`${API_BASE_URL}/reports/company-status/history`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyId, confirmation: "DELETE REPORT HISTORY" })
+  });
+  if (!response.ok) throw new Error(await errorOf(response));
+  return (await response.json()) as { ok: true; deletedCount: number };
+}
+
 export async function downloadCompanyStatusReport(report: CompanyStatusReport, format: ReportFormat) {
   const response = await fetch(`${API_BASE_URL}/reports/company-status/export`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId: report.company.id, report, format }) });
   if (!response.ok) throw new Error(await errorOf(response));

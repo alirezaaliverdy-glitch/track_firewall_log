@@ -1455,3 +1455,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Added an owner-scoped report history backed by authenticated audit records. It shows the report creator, report number, Persian and Gregorian dates, Tehran time, equipment count, and recorded health score.
 - Simplified the report header and removed the redundant explanatory sentence. The create/history tabs and responsive layouts keep the page compact on desktop and mobile.
 - Backend and frontend production builds passed, focused report tests passed 5/5, the report route returned HTTP 200, the unauthenticated history endpoint returned HTTP 401, and database/API/web/main-Nginx containers are healthy.
+
+## 2026-09-21 - Administrator-only report history clearing
+
+- Added a clear-history control to the company report history view. It is rendered only for administrators and requires an explicit irreversible-action confirmation.
+- The DELETE endpoint independently enforces authentication, the admin role, `users.manage`, exact confirmation, and ownership of the selected company.
+- Only report-generation history for the selected company is removed. A separate administrative audit event records who cleared it and how many entries were deleted.
+- Backend/frontend production builds and focused report tests passed 6/6; the canonical local stack was rebuilt without modifying its database volume.
