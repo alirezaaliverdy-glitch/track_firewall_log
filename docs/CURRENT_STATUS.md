@@ -1448,3 +1448,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Linux server rows include real CPU and highest disk utilization when live telemetry or a valid health snapshot exists.
 - HTML and PDF share one embedded IRANYekan template and PDF output is constrained to two A4 pages. Excel contains a management summary and the complete equipment table.
 - Validation passed: backend TypeScript build, frontend production build, focused report tests 3/3, product-state tests 5/5, in-container Chromium PDF smoke (`%PDF`, 276218 bytes), local HTTP 200, and healthy database/API/web/main-Nginx containers.
+
+## 2026-09-21 - Report workspace history and preview UX
+
+- Replaced the permanently expanded inline report editor with a compact ready-state card and an explicit full-screen preview/editor that closes from its toolbar, backdrop, or Escape key.
+- Added an owner-scoped report history backed by authenticated audit records. It shows the report creator, report number, Persian and Gregorian dates, Tehran time, equipment count, and recorded health score.
+- Simplified the report header and removed the redundant explanatory sentence. The create/history tabs and responsive layouts keep the page compact on desktop and mobile.
+- Backend and frontend production builds passed, focused report tests passed 5/5, the report route returned HTTP 200, the unauthenticated history endpoint returned HTTP 401, and database/API/web/main-Nginx containers are healthy.

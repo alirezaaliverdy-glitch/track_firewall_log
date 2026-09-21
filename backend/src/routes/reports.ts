@@ -9,11 +9,56 @@ function failure(reply: { code: (status: number) => { send: (body: unknown) => u
 }
 
 export async function reportRoutes(app: FastifyInstance) {
+  app.get<{ Querystring: { companyId?: string; limit?: string } }>("/api/reports/company-status/history", async (request, reply) => {
+    try {
+      if (!request.authUser) throw new CompanyReportError("AUTH_REQUIRED", 401);
+      const companyId = String(request.query.companyId ?? "").trim();
+      if (!companyId) throw new CompanyReportError("COMPANY_ID_REQUIRED", 400);
+      const company = await prisma.company.findFirst({
+        where: { id: companyId, ownerId: request.authUser.id, deletedAt: null },
+        select: { id: true, name: true, code: true }
+      });
+      if (!company) throw new CompanyReportError("COMPANY_NOT_FOUND", 404);
+
+      const requestedLimit = Number.parseInt(String(request.query.limit ?? "30"), 10);
+      const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 30, 1), 100);
+      const records = await prisma.auditLog.findMany({
+        where: { action: "report.company_status.generate", targetType: "company", targetId: companyId },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { id: true, actor: true, metadata: true, createdAt: true }
+      });
+      const actors = [...new Set(records.map((item) => item.actor).filter((actor): actor is string => Boolean(actor)))];
+      const users = actors.length ? await prisma.appUser.findMany({
+        where: { username: { in: actors } },
+        select: { username: true, displayName: true }
+      }) : [];
+      const displayNames = new Map(users.map((user) => [user.username, user.displayName]));
+      const history = records.map((item) => {
+        const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+          ? item.metadata as Record<string, unknown>
+          : {};
+        const actorUsername = item.actor ?? "system";
+        return {
+          id: item.id,
+          actorUsername,
+          actorDisplayName: displayNames.get(actorUsername) ?? String(metadata.preparedBy ?? actorUsername),
+          createdAt: item.createdAt.toISOString(),
+          company,
+          reportNumber: String(metadata.reportNumber ?? "—"),
+          equipmentCount: Number(metadata.equipment ?? 0),
+          healthScore: Number(metadata.healthScore ?? 0)
+        };
+      });
+      return { history };
+    } catch (error) { return failure(reply, error); }
+  });
+
   app.post<{ Body: { companyId?: string; refresh?: boolean } }>("/api/reports/company-status", async (request, reply) => {
     try {
       if (!request.authUser) throw new CompanyReportError("AUTH_REQUIRED", 401);
       const report = await buildCompanyStatusReport(String(request.body?.companyId ?? ""), request.authUser, request.body?.refresh !== false);
-      void prisma.auditLog.create({ data: { actor: request.authUser.username, action: "report.company_status.generate", targetType: "company", targetId: report.company.id, dryRun: false, approvalStatus: "not_required", metadata: { equipment: report.summary.total, generatedAt: report.generatedAt } } }).catch(() => undefined);
+      await prisma.auditLog.create({ data: { actor: request.authUser.username, action: "report.company_status.generate", targetType: "company", targetId: report.company.id, dryRun: false, approvalStatus: "not_required", metadata: { equipment: report.summary.total, healthScore: report.summary.healthScore, generatedAt: report.generatedAt, reportNumber: report.reportNumber, preparedBy: report.preparedBy } } });
       return { report };
     } catch (error) { return failure(reply, error); }
   });

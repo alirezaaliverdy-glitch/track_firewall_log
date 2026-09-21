@@ -1543,3 +1543,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added dynamic per-vendor report sections, dual Persian/Gregorian dates, exact Tehran time, server CPU/disk fields, and user-editable metadata, locations, status, actions, and notes.
 - Added matching IRANYekan HTML/PDF and Excel exporters; PDF uses packaged Chromium and is limited to two A4 pages, while Excel retains the complete equipment list.
 - Rebuilt the canonical `docker-compose.firewall.yml` stack against its existing database volume and verified all four services healthy.
+
+## 2026-09-21 - Make report preview dismissible and add audit history
+
+- Changed report generation to leave a concise result card instead of a large editor permanently embedded below the form.
+- Added an accessible modal editor with explicit close controls, backdrop dismissal, Escape support, scroll isolation, and a full-screen mobile layout.
+- Added a company-owner-scoped history API and page tab using existing audit storage; every generated report records its operator, report number, timestamp, equipment count, and health score.
+- Removed redundant hero copy and reorganized company selection, generation, output format, download, preview, and dismissal into a clearer workflow.
+- Validated backend/frontend production builds, focused tests (5/5), authenticated-route protection, local page delivery, and all four canonical container health checks.
