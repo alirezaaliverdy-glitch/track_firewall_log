@@ -98,6 +98,7 @@ export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "DELETE", path: "/api/devices/:id", permission: "devices.manage" },
   { method: "POST", path: "/api/devices/:id/test-connection", permission: "devices.manage" },
   { method: "POST", path: "/api/diagnostics/sessions", permission: "devices.read" },
+  { method: "POST", path: "/api/diagnostics/network-probes", permission: "devices.read" },
   { method: "POST", path: "/api/diagnostics/nmap", permission: "devices.read" },
   { method: "POST", path: "/api/events/retention/run", permission: "security.policy.manage" },
   { method: "PATCH", path: "/api/incidents/:id", permission: "security.policy.manage" },

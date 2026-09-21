@@ -1,0 +1,58 @@
+.network-lab button { cursor: pointer; font: inherit; }
+.network-lab button:disabled { opacity: .55; cursor: wait; }
+.network-lab button:focus-visible, .network-lab input:focus-visible, .network-lab select:focus-visible { outline: 2px solid #38d9eb; outline-offset: 3px; }
+.network-lab__refresh, .network-lab__tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.network-lab__hero { display: flex; align-items: center; gap: 24px; padding: 28px; border: 1px solid var(--app-border); border-radius: 24px; background: linear-gradient(115deg, #102844, #07242a 70%); }
+.network-lab__hero h2 { font-size: 23px; margin: 10px 0; color: #e8f6ff; }
+.network-lab__hero p { color: #9bb6c6; line-height: 1.9; margin: 0; }
+.network-lab__hero span { color: #6de6ce; font-size: 13px; }
+.network-lab__hero aside { margin-inline-start: auto; display: grid; gap: 4px; min-width: 90px; color: #a8bbc8; }
+.network-lab__hero aside b { font-size: 27px; color: #7ee8ee; }
+.network-lab__radar { width: 100px; height: 100px; position: relative; flex-shrink: 0; display: grid; place-items: center; color: #66e9dd; }
+.network-lab__radar i { position: absolute; border: 1px solid #3de5cf30; border-radius: 50%; width: 100%; height: 100%; }
+.network-lab__radar i:nth-child(2) { width: 72%; height: 72%; }
+.network-lab__radar i:nth-child(3) { width: 45%; height: 45%; background: #3de5cf10; }
+.network-lab__grid { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr); gap: 22px; align-items: start; }
+.network-lab__card { background: var(--app-panel); border: 1px solid var(--app-border); border-radius: 22px; padding: 24px; min-width: 0; }
+.network-lab__card header { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; }
+.network-lab__card header > svg { color: #68dedf; flex-shrink: 0; }
+.network-lab__card h2 { font-size: 20px; margin: 0 0 6px; }
+.network-lab__card p, .network-lab__card small { color: var(--app-muted); line-height: 1.8; }
+.network-lab__card header p { margin: 0; font-size: 13px; }
+.network-lab__modes, .network-lab__tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-bottom: 20px; }
+.network-lab__modes button { display: flex; align-items: center; gap: 10px; text-align: start; padding: 17px 12px; }
+.network-lab__modes span, .network-lab__history button > span { display: grid; min-width: 0; }
+.network-lab__card button, .network-lab__refresh { border: 1px solid var(--app-border); background: #122a3a40; color: var(--app-text); border-radius: 12px; padding: 12px; }
+.network-lab__card button.active { border-color: #37c9d7; background: #1a79832b; color: #a8f5ed; }
+.network-lab__card label { display: grid; gap: 10px; margin: 22px 0; font-size: 14px; }
+.network-lab__card input, .network-lab__card select { width: 100%; min-width: 0; padding: 14px; min-height: 50px; border-radius: 12px; background: var(--app-bg); color: var(--app-text); border: 1px solid var(--app-border); font: inherit; }
+.network-lab__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.network-lab__chips button { min-width: 55px; }
+.network-lab__card .network-lab__run { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; background: linear-gradient(110deg,#12627e,#147f8c); border-color: #32b7ce; min-height: 54px; font-weight: 700; color: white; }
+.network-lab__error { padding: 14px; border: 1px solid #fb718560; border-radius: 12px; color: #ffa7b4 !important; overflow-wrap: anywhere; }
+.network-lab__empty { min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.network-lab__empty > svg { width: 64px; height: 64px; color: #38b8c0; }
+.network-lab__result-box { padding: 20px; border: 1px solid #4bd6ae60; border-radius: 18px; background: #2ac89908; }
+.network-lab__result-box.danger { border-color: #fb718560; background: #fb718508; }
+.network-lab__result-box.warning { border-color: #f6b73c60; }
+.network-lab__status { display: flex; gap: 14px; align-items: center; color: #79e6c7; }
+.network-lab__status > svg { width: 36px; height: 36px; }
+.network-lab__status span { display: grid; gap: 5px; }
+.network-lab__status b { font-size: 25px; }
+.danger .network-lab__status { color: #fda0af; }
+.warning .network-lab__status { color: #f4ce88; }
+.network-lab__target { display: grid; gap: 6px; padding: 24px 0; overflow-wrap: anywhere; }
+.network-lab__target span { color: var(--app-muted); font-size: 14px; }
+.network-lab__metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.network-lab__metrics article { padding: 12px 5px; background: #122a3a50; border-radius: 12px; text-align: center; display: grid; gap: 10px; }
+.network-lab__metrics article span { font-size: 11px; color: var(--app-muted); }
+.network-lab__metrics article b { direction: ltr; font-size: 16px; }
+.network-lab__history > div { display: grid; gap: 8px; }
+.network-lab__history button { display: grid; grid-template-columns: 10px minmax(100px,1fr) 50px 110px 90px minmax(120px,auto); gap: 14px; align-items: center; text-align: start; }
+.network-lab__history i { width: 8px; height: 8px; border-radius: 50%; background: #34d399; }
+.network-lab__history i.danger { background: #fb7185; }
+.network-lab__history i.warning { background: #f6b73c; }
+.network-lab__history em, .network-lab__history time { font-size: 12px; color: var(--app-muted); font-style: normal; }
+.network-lab__history strong { font-size: 13px; }
+@media (max-width: 1100px) { .network-lab__grid { grid-template-columns: 1fr; } .network-lab__history button { grid-template-columns: 10px 1fr 60px; } .network-lab__history time { grid-column: 2 / -1; } }
+@media (max-width: 600px) { .network-lab__hero { padding: 18px; flex-wrap: wrap; gap: 12px; } .network-lab__radar { width: 65px; height: 65px; } .network-lab__hero h2 { font-size: 20px; } .network-lab__hero aside { display: flex; align-items: center; gap: 12px; margin: 0; } .network-lab__card { padding: 16px; } .network-lab__modes button { flex-direction: column; align-items: start; } .network-lab__tabs button { font-size: 12px; } .network-lab__result-box { padding: 14px; } }

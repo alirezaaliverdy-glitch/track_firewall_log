@@ -1428,3 +1428,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Added a bounded, read-only RouterOS v7 REST-over-HTTPS connector for structured identity, resources, interfaces, addresses, routes, firewall, services, and log discovery. Effectful RouterOS actions remain on the controlled SSH path.
 - Live connector tests passed for the registered MikroTik SSH, Cisco SSH, and Linux SSH devices. Network probes confirmed that RouterOS REST was not enabled on the tested MikroTik and that NETCONF/gNMI were not exposed on the tested Cisco, so those paths were not falsely reported as verified.
 - Backend and frontend production Docker builds passed, the new connection-registry tests passed 3/3, and all four deployed containers remained healthy. The full legacy suite completed with 556/597 passing; the 41 failures are pre-existing contract/environment mismatches outside this feature.
+
+## 2026-09-21 - Local network diagnostics lab
+
+- Added a dedicated Persian-first Network Lab for asset-aware ICMP ping and arbitrary host TCP port checks.
+- Probes execute inside the application backend without any third-party diagnostic provider, support private/LAN targets, and store user-scoped history in the existing audit log.
+- Added responsive desktop/mobile result cards, latency and packet-loss metrics, port presets, registered-asset selection, input validation, authorization, and the required iputils runtime package.

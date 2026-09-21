@@ -1526,3 +1526,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Implemented and registered a read-only MikroTik RouterOS v7 REST connector with timeouts, response bounds, structured errors, stored-credential resolution, safe discovery, and explicit rejection of write operations.
 - Tested the live registered MikroTik, Cisco, and Linux devices through the application connector boundary; all three SSH connection/discovery checks succeeded without logging or persisting supplied secrets.
 - Built backend and frontend production images, passed the focused registry/connector tests, and kept the active API, web, database, and gateway containers healthy.
+
+## 2026-09-21 - Add an offline-capable Network Lab
+
+- Implemented authenticated local ICMP/TCP probes, registered-asset ownership checks, persistent per-user history, a dedicated navigation tab, and responsive Persian UI.
+- The feature makes no external API request. Its reachability is the network reachability of the backend container/host.

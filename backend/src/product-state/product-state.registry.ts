@@ -56,6 +56,7 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
 
   feature({ key: "assistant", titleFa: "دستیار هوشمند", titleEn: "AI Assistant", route: "/assistant", groupKey: "assistant", order: 10, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Proposal and guided-workflow paths work; provider availability remains environment-dependent." }),
 
+  feature({ key: "tools.network_lab", titleFa: "آزمایشگاه شبکه", titleEn: "Network lab", route: "/tools/network-lab", groupKey: "tools", order: 1, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Authenticated ICMP and TCP probes run locally from the backend and persist user-scoped evidence." }),
   feature({ key: "tools.overview", titleFa: "ابزارهای تشخیصی", titleEn: "Diagnostic tools", route: "/tools", groupKey: "tools", order: 5, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Check-Host-backed public DNS/HTTP/Ping/TCP sessions persist through AuditLog; Nmap and monitors remain gated." }),
   feature({ key: "tools.network_check", titleFa: "تست سریع شبکه", titleEn: "Network quick check", route: "/tools/network-check", groupKey: "tools", order: 6, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Public Check-Host-backed quick checks persist session evidence; private targets and Nmap remain policy-gated." }),
   feature({ key: "tools.domain_check", titleFa: "بررسی دامنه", titleEn: "Domain check", route: "/tools/domain-check", groupKey: "tools", order: 7, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Shares persisted Check-Host diagnostic session workflow." }),
@@ -80,6 +81,7 @@ const NAVIGATION_GROUPS = [
   { key: "security", titleFa: "امنیت", titleEn: "Security", iconKey: "security", mobilePrimary: true },
   { key: "monitoring", titleFa: "پایش", titleEn: "Monitoring", iconKey: "monitoring", mobilePrimary: false },
   { key: "actions", titleFa: "اقدامات", titleEn: "Actions", iconKey: "actions", mobilePrimary: true },
+  { key: "tools", titleFa: "آزمایشگاه شبکه", titleEn: "Network lab", iconKey: "tools", mobilePrimary: false },
   { key: "assistant", titleFa: "دستیار هوشمند", titleEn: "Assistant", iconKey: "assistant", mobilePrimary: false },
   { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", mobilePrimary: false },
   { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", mobilePrimary: false }
@@ -110,7 +112,7 @@ export function getProductNavigation(allowedGroups?: readonly string[]): Product
   validateProductState();
   const allowed = allowedGroups ? new Set([...allowedGroups, "settings"]) : null;
   return NAVIGATION_GROUPS.flatMap((group) => {
-    if (allowed && !allowed.has(group.key)) return [];
+    if (allowed && !allowed.has(group.key === "tools" ? "actions" : group.key)) return [];
     const features = PRODUCT_FEATURES.filter((item) => item.groupKey === group.key && item.navigationVisible).sort((a, b) => a.order - b.order);
     const landing = features[0];
     if (!landing?.route) return [];

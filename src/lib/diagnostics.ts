@@ -37,6 +37,36 @@ export type NmapScan = {
   createdAt: string;
 };
 
+export type NetworkProbe = {
+  id: string;
+  kind: "icmp" | "tcp";
+  source: "asset" | "custom";
+  target: string;
+  displayName: string;
+  deviceId: string | null;
+  companyName: string | null;
+  vendor: string | null;
+  port: number | null;
+  status: "reachable" | "unreachable" | "open" | "closed" | "timeout" | "error";
+  reachable: boolean;
+  latencyMs: number | null;
+  minLatencyMs: number | null;
+  maxLatencyMs: number | null;
+  packetLossPercent: number | null;
+  attempts: number;
+  successfulAttempts: number;
+  message: string;
+  createdAt: string;
+};
+
+export type NetworkProbeInput = {
+  kind: "icmp" | "tcp";
+  deviceId?: string;
+  target?: string;
+  port?: number;
+  attempts?: number;
+};
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -63,4 +93,12 @@ export function runNmapScan(target: string, profile: "host_discovery" | "quick_t
 
 export function listNmapScans() {
   return requestJson<{ scans: NmapScan[] }>("/diagnostics/nmap");
+}
+
+export function runNetworkProbe(input: NetworkProbeInput) {
+  return requestJson<{ probe: NetworkProbe }>("/diagnostics/network-probes", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listNetworkProbes() {
+  return requestJson<{ probes: NetworkProbe[] }>("/diagnostics/network-probes");
 }

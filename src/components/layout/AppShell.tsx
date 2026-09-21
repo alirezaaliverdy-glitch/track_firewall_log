@@ -16,6 +16,7 @@ import "./AppShellTopbar.css";
 import "./MobileShell.css";
 
 const navigationIcons = {
+  tools: Gauge,
   dashboard: LayoutDashboard,
   assets: Boxes,
   security: ShieldAlert,
@@ -28,10 +29,11 @@ const navigationIcons = {
 
 const navigationTones: Record<string, string> = {
   dashboard: "cyan", assets: "violet", security: "rose", monitoring: "emerald",
-  actions: "amber", assistant: "fuchsia", attackers: "red", settings: "sky"
+  actions: "amber", assistant: "fuchsia", attackers: "red", settings: "sky", tools: "cyan"
 };
 
 const fallbackNavigation: ProductNavigationGroup[] = [
+  { key: "tools", titleFa: "آزمایشگاه شبکه", titleEn: "Network lab", iconKey: "tools", route: "/tools/network-lab", mobilePrimary: false, items: [] },
   { key: "dashboard", titleFa: "داشبورد", titleEn: "Dashboard", iconKey: "dashboard", route: "/dashboard", mobilePrimary: true, items: [] },
   { key: "assets", titleFa: "دارایی‌ها", titleEn: "Assets", iconKey: "assets", route: "/assets", mobilePrimary: true, items: [] },
   { key: "security", titleFa: "امنیت", titleEn: "Security", iconKey: "security", route: "/security", mobilePrimary: false, items: [] },

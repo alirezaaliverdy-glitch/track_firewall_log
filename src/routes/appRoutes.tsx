@@ -29,6 +29,7 @@ const ActionConfigurePage = lazy(() => import("@/features/actions/pages/ActionCo
 const AssistantPage = lazy(() => import("@/features/assistant/pages/AssistantPage"));
 const AttackersPage = lazy(() => import("@/features/attackers/pages/AttackersPage"));
 const ToolsPage = lazy(() => import("@/features/tools/pages/ToolsPage"));
+const NetworkLabPage = lazy(() => import("@/features/tools/pages/NetworkLabPage"));
 const MonitoringPage = lazy(() => import("@/features/monitoring/pages/MonitoringPage"));
 const LinuxMonitoringPage = lazy(() => import("@/features/monitoring/pages/LinuxMonitoringPage"));
 const CiscoOverviewPage = lazy(() => import("@/features/vendors/cisco/pages/CiscoOverviewPage"));
@@ -79,6 +80,7 @@ export const appRoutes: AppRoute[] = [
   { path: "/actions/:actionId/configure", featureKey: "actions.configure", labelFa: "تنظیم ActionPlan", labelEn: "Configure ActionPlan", group: "actions", component: ActionConfigurePage },
   { path: "/actions/:actionId", featureKey: "actions.detail", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage },
   { path: "/assistant", featureKey: "assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", group: "assistant", component: AssistantPage },
+  { path: "/tools/network-lab", featureKey: "tools.network_lab", labelFa: "آزمایشگاه شبکه", labelEn: "Network lab", group: "tools", component: NetworkLabPage },
   { path: "/tools", featureKey: "tools.overview", labelFa: "ابزارهای تشخیصی", labelEn: "Diagnostic tools", group: "tools", component: ToolsPage },
   { path: "/tools/network-check", featureKey: "tools.network_check", labelFa: "تست سریع شبکه", labelEn: "Network quick check", group: "tools", component: ToolsPage },
   { path: "/tools/domain-check", featureKey: "tools.domain_check", labelFa: "بررسی دامنه", labelEn: "Domain check", group: "tools", component: ToolsPage },
