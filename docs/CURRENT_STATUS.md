@@ -1440,3 +1440,11 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Replaced the promotional Network Lab hero and manual refresh control with a compact operational layout.
 - Added per-packet ICMP evidence (sequence, address, bytes, latency, and TTL) in a terminal-style result panel.
 - Added authenticated, user-scoped history deletion with an explicit in-page confirmation step.
+## 2026-09-21 - Company equipment status reports
+
+- Added an authenticated, company-scoped reporting workspace at `/reports` with a simple company selector, live refresh, editable preview, and HTML/PDF/Excel download.
+- The backend now normalizes real connector evidence per vendor. Vendor sections and vendor-specific fields are dynamic; unavailable values are not fabricated. Every device records whether its result came from a live collection, the latest snapshot, or inventory only.
+- Reports include current Persian and Gregorian dates, exact Tehran time, a timestamped report number, editable author/action/note fields, and a deliberately blank physical-location field.
+- Linux server rows include real CPU and highest disk utilization when live telemetry or a valid health snapshot exists.
+- HTML and PDF share one embedded IRANYekan template and PDF output is constrained to two A4 pages. Excel contains a management summary and the complete equipment table.
+- Validation passed: backend TypeScript build, frontend production build, focused report tests 3/3, product-state tests 5/5, in-container Chromium PDF smoke (`%PDF`, 276218 bytes), local HTTP 200, and healthy database/API/web/main-Nginx containers.

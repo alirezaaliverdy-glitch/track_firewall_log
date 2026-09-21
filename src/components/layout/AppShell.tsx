@@ -1,4 +1,4 @@
-import { Bot, Boxes, ChevronDown, Crosshair, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, ShieldCheck, WifiOff, Wrench, X } from "lucide-react";
+import { Bot, Boxes, ChevronDown, Crosshair, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, ShieldCheck, WifiOff, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -17,6 +17,7 @@ import "./MobileShell.css";
 
 const navigationIcons = {
   tools: Gauge,
+  reports: FileBarChart2,
   dashboard: LayoutDashboard,
   assets: Boxes,
   security: ShieldAlert,
@@ -29,10 +30,11 @@ const navigationIcons = {
 
 const navigationTones: Record<string, string> = {
   dashboard: "cyan", assets: "violet", security: "rose", monitoring: "emerald",
-  actions: "amber", assistant: "fuchsia", attackers: "red", settings: "sky", tools: "cyan"
+  actions: "amber", assistant: "fuchsia", attackers: "red", settings: "sky", tools: "cyan", reports: "sky"
 };
 
 const fallbackNavigation: ProductNavigationGroup[] = [
+  { key: "reports", titleFa: "گزارش‌گیری", titleEn: "Reports", iconKey: "reports", route: "/reports", mobilePrimary: false, items: [] },
   { key: "tools", titleFa: "آزمایشگاه شبکه", titleEn: "Network lab", iconKey: "tools", route: "/tools/network-lab", mobilePrimary: false, items: [] },
   { key: "dashboard", titleFa: "داشبورد", titleEn: "Dashboard", iconKey: "dashboard", route: "/dashboard", mobilePrimary: true, items: [] },
   { key: "assets", titleFa: "دارایی‌ها", titleEn: "Assets", iconKey: "assets", route: "/assets", mobilePrimary: true, items: [] },

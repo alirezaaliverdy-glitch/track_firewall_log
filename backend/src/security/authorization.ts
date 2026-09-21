@@ -19,6 +19,8 @@ export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "PATCH", path: "/api/companies/:id", permission: "devices.manage" },
   { method: "DELETE", path: "/api/companies/:id", permission: "devices.manage" },
   { method: "POST", path: "/api/companies/:id/restore", permission: "devices.manage" },
+  { method: "POST", path: "/api/reports/company-status", permission: "devices.read" },
+  { method: "POST", path: "/api/reports/company-status/export", permission: "devices.read" },
   { method: "DELETE", path: "/api/admin/companies/:id/permanent", permission: "users.manage" },
   { method: "POST", path: "/api/security/attackers-allowlist", permission: "security.policy.manage" },
   { method: "DELETE", path: "/api/security/attackers-allowlist/:id", permission: "security.policy.manage" },

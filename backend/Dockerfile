@@ -11,13 +11,14 @@ RUN pnpm build
 
 FROM node:22-alpine
 WORKDIR /app
-RUN apk add --no-cache iputils \
+RUN apk add --no-cache iputils chromium fontconfig \
   && corepack enable
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 COPY prisma ./prisma
 COPY prisma.config.ts ./
+COPY assets ./assets
 COPY docker-entrypoint.sh /usr/local/bin/firewall-entrypoint
 COPY --from=build /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /tmp/generated-prisma-client
 RUN set -eu; client_dir="$(dirname "$(readlink -f node_modules/@prisma/client)")"; cp -a /tmp/generated-prisma-client "$client_dir/../.prisma"; rm -rf /tmp/generated-prisma-client

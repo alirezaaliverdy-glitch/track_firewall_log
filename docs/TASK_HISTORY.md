@@ -1535,3 +1535,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 ## 2026-09-21 - Refine Network Lab UX and packet evidence
 
 - Added per-packet ping parsing and terminal presentation, removed decorative copy and the redundant refresh action, and added user-scoped history clearing with confirmation.
+
+## 2026-09-21 - Add editable company status reporting
+
+- Added a dedicated report tab and token-protected, owner-scoped report APIs.
+- Collected current connector status with bounded fallbacks to timestamped snapshots and inventory, then normalized Linux, FortiGate, MikroTik, Sophos, Cisco/generic evidence without synthetic values.
+- Added dynamic per-vendor report sections, dual Persian/Gregorian dates, exact Tehran time, server CPU/disk fields, and user-editable metadata, locations, status, actions, and notes.
+- Added matching IRANYekan HTML/PDF and Excel exporters; PDF uses packaged Chromium and is limited to two A4 pages, while Excel retains the complete equipment list.
+- Rebuilt the canonical `docker-compose.firewall.yml` stack against its existing database volume and verified all four services healthy.
