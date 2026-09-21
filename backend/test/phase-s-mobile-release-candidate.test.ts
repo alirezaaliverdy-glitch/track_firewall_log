@@ -72,6 +72,20 @@ test("Phase S GitHub Actions uploads debug APK and unsigned release AAB artifact
   assert.doesNotMatch(workflow, /environment:/);
 });
 
+test("Web and PWA gateways preserve same-origin mutations without weakening API CSRF", () => {
+  const nginx = read("nginx.firewall-main.conf");
+  const caddy = read("Caddyfile.production");
+  const securityPlugin = read("backend/src/plugins/security.plugin.ts");
+
+  assert.match(nginx, /location \/firewall-api\/[^}]*proxy_set_header Origin "";/s);
+  assert.match(caddy, /@api path_regexp api \^\/firewall-api/);
+  assert.match(caddy, /handle @api/);
+  assert.match(caddy, /header_up -Origin/);
+  assert.match(securityPlugin, /CSRF_VALIDATION_FAILED/);
+  assert.match(securityPlugin, /validateCsrfToken/);
+  assert.match(securityPlugin, /ORIGIN_NOT_ALLOWED/);
+});
+
 test("Phase S M10 acceptance document defines alpha beta gates and iOS macOS work", () => {
   const doc = read("docs/mobile-local/PHASE_S_M10_RELEASE_CANDIDATE.md");
   assert.match(doc, /M10 Acceptance Gates/);
