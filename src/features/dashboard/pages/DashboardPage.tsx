@@ -60,6 +60,7 @@ import "./DashboardCommandCenter.css";
 
 type MetricRow = { metricKey?: unknown; value?: unknown };
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
+type AttentionItem = { id: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone };
 
 const EMPTY_EVENT_SUMMARY: EventsSummary = {
   totalEvents: 0,
@@ -121,6 +122,24 @@ function metricValue(snapshot: LinuxHealthSnapshot | null, key: string) {
 function hasResourceMetrics(snapshot: LinuxHealthSnapshot | null) {
   const keys = new Set(metrics(snapshot).map((item) => item.metricKey));
   return ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent"].every((key) => keys.has(key));
+}
+
+function snapshotWarnings(snapshot: LinuxHealthSnapshot | null) {
+  return Array.isArray(snapshot?.warningsJson)
+    ? snapshot.warningsJson.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function linuxAttentionReason(device: LinuxMonitoringDevice, isFa: boolean) {
+  const snapshot = device.latestHealth;
+  const warning = snapshotWarnings(snapshot)[0];
+  if (warning) return warning;
+  const state = device.healthState ?? snapshot?.state ?? "unknown";
+  if (state === "offline") return copy(isFa, "ارتباط با سرور برقرار نیست؛ ابتدا مسیر شبکه و اعتبارنامه را بررسی کنید.", "The server is unreachable; check its network path and credential first.");
+  if (state === "stale") return copy(isFa, "داده سلامت منقضی شده است؛ یک جمع‌آوری جدید اجرا کنید.", "Health data is stale; run a new collection.");
+  if (state === "critical") return snapshot?.summary || copy(isFa, "یکی از شاخص‌های سلامت از محدوده بحرانی عبور کرده است.", "A health metric crossed its critical threshold.");
+  if (state === "warning") return snapshot?.summary || copy(isFa, "یکی از شاخص‌های سلامت نیازمند بازبینی است.", "A health metric needs review.");
+  return copy(isFa, "هنوز Snapshot معتبر سلامت برای این سرور ثبت نشده است.", "No valid health snapshot has been recorded for this server yet.");
 }
 
 function needsHealthCollection(device: LinuxMonitoringDevice) {
@@ -354,6 +373,52 @@ export default function DashboardPage() {
     return rank[stateTone(a.healthState ?? a.latestHealth?.state ?? "unknown")] - rank[stateTone(b.healthState ?? b.latestHealth?.state ?? "unknown")];
   }).slice(0, 3), [linux]);
 
+  const attentionItems = useMemo<AttentionItem[]>(() => {
+    const items: AttentionItem[] = [];
+    const linuxIds = new Set<string>();
+    for (const device of linux?.devices ?? []) {
+      const state = device.healthState ?? device.latestHealth?.state ?? "unknown";
+      if (stateTone(state) === "good") continue;
+      linuxIds.add(device.id);
+      items.push({
+        id: `linux-${device.id}`,
+        title: device.name,
+        reason: linuxAttentionReason(device, isFa),
+        detail: `${stateLabel(state, isFa)} · ${shortDate(device.latestHealth?.collectedAt, language, copy(isFa, "بدون داده سلامت", "No health data"))}`,
+        route: `/monitoring/linux/${device.id}`,
+        tone: stateTone(state),
+      });
+    }
+    for (const asset of assets.assets) {
+      if (stateTone(asset.healthState) === "good" || (asset.device?.id && linuxIds.has(asset.device.id))) continue;
+      const state = asset.healthState || "unknown";
+      items.push({
+        id: `asset-${asset.id}`,
+        title: asset.name,
+        reason: state === "offline"
+          ? copy(isFa, "آخرین بررسی اتصال ناموفق بوده است؛ اتصال مدیریت و اعتبارنامه را آزمایش کنید.", "The latest connection check failed; test the management channel and credential.")
+          : state === "error"
+            ? copy(isFa, "جمع‌آوری یا اتصال دستگاه با خطا تمام شده است؛ جزئیات آخرین بررسی را باز کنید.", "Device collection or connection failed; open the latest check details.")
+            : copy(isFa, "وضعیت معتبر و تازه‌ای از این تجهیز در دسترس نیست؛ جمع‌آوری جدید لازم است.", "No fresh, verified state is available; a new collection is required."),
+        detail: `${vendorName(asset)} · ${shortDate(asset.lastSeenAt, language, copy(isFa, "بدون تماس موفق", "No successful contact"))}`,
+        route: asset.device?.id ? `/assets/devices/${asset.device.id}` : "/assets",
+        tone: stateTone(state),
+      });
+    }
+    for (const collector of monitoring?.collectors.devices ?? []) {
+      if (!collector.lastErrorCode || collector.consecutiveFailures < 1) continue;
+      items.push({
+        id: `collector-${collector.deviceId}`,
+        title: collector.deviceName,
+        reason: copy(isFa, `جمع‌آورنده ${collector.sourceType} با خطای ${collector.lastErrorCode} متوقف شده است.`, `${collector.sourceType} collector failed with ${collector.lastErrorCode}.`),
+        detail: copy(isFa, `${number(collector.consecutiveFailures, language)} خطای متوالی`, `${number(collector.consecutiveFailures, language)} consecutive failures`),
+        route: `/assets/devices/${collector.deviceId}`,
+        tone: "danger",
+      });
+    }
+    return items.slice(0, 8);
+  }, [assets.assets, isFa, language, linux, monitoring]);
+
   const dailyChecks = [
     { label: copy(isFa, "وضعیت تجهیزات", "Device health"), ok: assets.stats.needsReview === 0, value: `${number(assets.stats.online, language)} / ${number(assets.stats.total, language)}` },
     { label: copy(isFa, "موتور تشخیص", "Detection engine"), ok: Boolean(monitoring?.running), value: monitoring?.running ? copy(isFa, "فعال", "Running") : copy(isFa, "متوقف", "Stopped") },
@@ -379,7 +444,7 @@ export default function DashboardPage() {
   return (
     <section className="page-stack dashboard-command-center">
       <header className="command-center-header">
-        <div><span><Activity size={15} />{copy(isFa, "مرکز فرمان زنده", "Live command center")}</span><h1>{copy(isFa, "داشبورد عملیات امنیت", "Security Operations Dashboard")}</h1><p>{copy(isFa, "سلامت تجهیزات، روند هشدارها، رخدادهای شبکه و اقدام‌های کنترل‌شده در یک نمای واقعی.", "Real equipment health, alert trends, network events and controlled actions in one view.")}</p></div>
+        <div><span><Activity size={15} />{copy(isFa, "مرکز فرمان زنده", "Live command center")}</span><h1>{copy(isFa, "داشبورد عملیات امنیت", "Security Operations Dashboard")}</h1></div>
         <div className="command-center-header__tools"><span><i className={activityError ? "is-danger" : ""} />{activityError ? copy(isFa, "بخشی از داده‌ها در دسترس نیست", "Some data is unavailable") : copy(isFa, "داده عملیاتی متصل", "Operational data connected")}</span><small>{copy(isFa, "آخرین به‌روزرسانی", "Updated")}: {shortDate(activity?.generatedAt, language, "—")}</small><button type="button" onClick={refreshAll} disabled={dataRefreshing || linuxRefreshing}><RefreshCw size={16} className={dataRefreshing ? "is-spinning" : undefined} />{copy(isFa, "تازه‌سازی", "Refresh")}</button></div>
       </header>
 
@@ -387,7 +452,7 @@ export default function DashboardPage() {
         <div className="command-primary-workspace">
       <div className="command-overview-grid">
         <article className={`command-panel daily-check-panel command-panel--${dailyHealthy ? "good" : overallTone}`}>
-          <header><span className="command-panel__icon"><ShieldCheck /></span><div><h2>{copy(isFa, "بررسی روزانه امنیت", "Daily security check")}</h2><p>{copy(isFa, "خلاصه زنده سرویس‌های کلیدی", "Live summary of critical services")}</p></div><em>{dailyHealthy ? copy(isFa, "سالم", "Healthy") : copy(isFa, "نیازمند توجه", "Attention")}</em></header>
+          <header><span className="command-panel__icon"><ShieldCheck /></span><div><h2>{copy(isFa, "بررسی روزانه امنیت", "Daily security check")}</h2><p>{copy(isFa, "خلاصه زنده سرویس‌های کلیدی", "Live summary of critical services")}</p></div>{dailyHealthy ? <em>{copy(isFa, "سالم", "Healthy")}</em> : <a className="daily-check-panel__attention-link" href="#dashboard-attention">{copy(isFa, "مشاهده علت‌ها", "See causes")}<ArrowUpLeft size={14} /></a>}</header>
           <ul>{dailyChecks.map((item) => <li key={item.label}><span><i className={item.ok ? "is-ok" : "is-alert"}>{item.ok ? <Check /> : <CircleAlert />}</i>{item.label}</span><b className={item.ok ? "is-ok" : "is-alert"}>{item.value}</b></li>)}</ul>
           <footer><Clock3 size={14} />{copy(isFa, "چرخه پایش", "Monitoring cycle")}: {shortDate(monitoring?.lastCycleAt, language, copy(isFa, "ثبت نشده", "Not recorded"))}</footer>
         </article>
@@ -406,6 +471,15 @@ export default function DashboardPage() {
           <dl><div><dt><i className="is-critical" />{copy(isFa, "بحرانی", "Critical")}</dt><dd>{number(criticalFindings, language)}</dd></div><div><dt><i className="is-high" />{copy(isFa, "مهم", "High")}</dt><dd>{number(highFindings, language)}</dd></div><div><dt><i className="is-info" />{copy(isFa, "سایر", "Other")}</dt><dd>{number(Math.max(0, openFindings.length - criticalFindings - highFindings), language)}</dd></div></dl>
         </article>
       </div>
+
+      {attentionItems.length ? <article id="dashboard-attention" className="command-panel dashboard-attention-panel">
+        <header className="command-panel-heading"><div><span className="command-panel__icon"><CircleAlert /></span><div><h2>{copy(isFa, "علت‌های نیازمند توجه", "Attention causes")}</h2><p>{copy(isFa, "علت ثبت‌شده، زمان آخرین داده و مسیر بررسی هر تجهیز", "Recorded cause, latest evidence time, and review path for each device")}</p></div></div><span>{number(attentionItems.length, language)} {copy(isFa, "مورد", "items")}</span></header>
+        <div className="dashboard-attention-list">{attentionItems.map((item) => <Link key={item.id} to={item.route} className={`dashboard-attention-item is-${item.tone}`}>
+          <span className="dashboard-attention-item__state"><CircleAlert /></span>
+          <span><strong>{item.title}</strong><small>{item.reason}</small><em>{item.detail}</em></span>
+          <b>{copy(isFa, "بررسی و رفع", "Review and resolve")}<ArrowUpLeft /></b>
+        </Link>)}</div>
+      </article> : null}
 
       <article className="command-panel alert-trend-panel">
         <header className="command-panel-heading"><div><span className="command-panel__icon"><Activity /></span><div><h2>{copy(isFa, "روند هشدارها", "Alert trend")}</h2><p>{copy(isFa, "یافته‌های باز بر اساس آخرین مشاهده در ۲۴ ساعت گذشته", "Open findings by last-seen time over 24 hours")}</p></div></div><Link to="/security/findings">{copy(isFa, "همه یافته‌ها", "All findings")}<ArrowUpLeft size={14} /></Link></header>

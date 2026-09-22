@@ -450,3 +450,82 @@
   .dashboard-command-center *::before,
   .dashboard-command-center *::after { animation: none !important; transition: none !important; }
 }
+
+/* Dashboard readability and actionable attention center. */
+.dashboard-command-center { font-size: 1rem; }
+.command-center-header > div:first-child > span { font-size: .82rem; }
+.command-center-header__tools > span,
+.command-center-header__tools button,
+.command-linux-section header button { font-size: .78rem; }
+.command-center-header__tools small { font-size: .72rem; }
+.command-panel h2 { font-size: 1rem; }
+.command-panel p { font-size: .78rem; }
+.command-panel-heading > a { font-size: .76rem; }
+.daily-check-panel li,
+.device-count-panel li,
+.device-count-panel__value span { font-size: .76rem; }
+.daily-check-panel li b { font-size: .75rem; }
+.daily-check-panel > footer { font-size: .7rem; }
+.daily-check-panel > header em,
+.daily-check-panel__attention-link { font-size: .72rem; }
+.alert-count-panel > span,
+.alert-count-panel dt,
+.alert-trend-legend { font-size: .7rem; }
+.alert-count-panel dd { font-size: .82rem; }
+.device-status-table__head,
+.device-status-table__row { font-size: .72rem; }
+.device-status-table__row b { font-size: .8rem; }
+.device-status-table__row small,
+.device-status-table__row em { font-size: .68rem; }
+.top-traffic-panel li { font-size: .72rem; }
+.top-traffic-panel__identity b { font-size: .82rem; }
+.top-traffic-panel__identity small,
+.top-traffic-panel__meter > small,
+.top-traffic-panel li > strong small,
+.top-traffic-panel > footer { font-size: .66rem; }
+.latest-findings-panel li a,
+.operator-priority-grid strong,
+.command-action-list a { font-size: .76rem; }
+.latest-findings-panel li span,
+.latest-findings-panel li time,
+.operator-priority-grid small,
+.command-action-list span,
+.command-action-list time { font-size: .68rem; }
+.command-section-heading > div:first-child > span,
+.command-section-heading p,
+.command-section-heading > div:last-child > a,
+.command-warning { font-size: .72rem; }
+.linux-health-dial span,
+.linux-health-dial em,
+.linux-resource-chart dt b { font-size: .66rem; }
+.linux-health-dial strong small,
+.linux-resource-chart dt strong { font-size: .7rem; }
+
+.daily-check-panel__attention-link { position:relative;z-index:2;display:inline-flex;align-items:center;gap:5px;margin-inline-start:auto;border:1px solid rgba(255,159,67,.25);border-radius:999px;background:rgba(255,159,67,.09);padding:7px 10px;color:#ffca8d;font-weight:850;white-space:nowrap; }
+.daily-check-panel__attention-link:hover { border-color:rgba(255,183,103,.48);background:rgba(255,159,67,.14); }
+.daily-check-panel__attention-link svg { width:14px;height:14px; }
+.dashboard-attention-panel { scroll-margin-top:18px; }
+.dashboard-attention-panel>.command-panel-heading>span { border:1px solid rgba(255,159,67,.22);border-radius:999px;background:rgba(255,159,67,.07);padding:6px 10px;color:#ffc27f;font-size:.74rem;font-weight:800; }
+.dashboard-attention-list { position:relative;z-index:2;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:0 19px 18px; }
+.dashboard-attention-item { display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:11px;min-width:0;border:1px solid rgba(255,159,67,.18);border-radius:13px;background:rgba(255,159,67,.045);padding:12px;color:inherit; }
+.dashboard-attention-item:hover { transform:translateY(-1px);border-color:rgba(255,180,93,.4);background:rgba(255,159,67,.075); }
+.dashboard-attention-item.is-danger { border-color:rgba(251,93,119,.2);background:rgba(251,93,119,.045); }
+.dashboard-attention-item__state { display:grid;width:38px;height:38px;place-items:center;border-radius:11px;background:rgba(255,159,67,.1);color:#ffb66d; }
+.dashboard-attention-item.is-danger .dashboard-attention-item__state { background:rgba(251,93,119,.1);color:#ff8297; }
+.dashboard-attention-item__state svg { width:19px; }
+.dashboard-attention-item>span:nth-child(2) { display:grid;min-width:0;gap:4px; }
+.dashboard-attention-item strong { overflow:hidden;color:#e8f3f7;font-size:.84rem;text-overflow:ellipsis;white-space:nowrap; }
+.dashboard-attention-item small { color:#9bb0bc;font-size:.74rem;line-height:1.75; }
+.dashboard-attention-item em { color:#657f8e;font-size:.68rem;font-style:normal; }
+.dashboard-attention-item>b { display:inline-flex;align-items:center;gap:5px;color:#74d6df;font-size:.72rem;white-space:nowrap; }
+.dashboard-attention-item>b svg { width:14px; }
+
+@media (max-width: 860px) {
+  .dashboard-attention-list { grid-template-columns:1fr; }
+}
+
+@media (max-width: 520px) {
+  .dashboard-attention-list { padding-inline:14px; }
+  .dashboard-attention-item { grid-template-columns:34px minmax(0,1fr); }
+  .dashboard-attention-item>b { grid-column:2; }
+}

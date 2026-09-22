@@ -1468,3 +1468,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Increased the shared application type scale by one controlled step so body text, labels, controls, headings, and navigation are easier to read without disrupting the established hierarchy.
 - Raised the smallest mobile shell, bottom-navigation, account-context, report-history, and confirmation text independently where the shared scale could not reach hard-coded labels.
 - Form controls now inherit the surrounding readable size consistently. The compact report export canvas remains unchanged to preserve its two-page HTML/PDF layout.
+
+## 2026-09-22 - Readable dashboard and actionable health attention
+
+- Removed the redundant dashboard subtitle and raised the dashboard-specific type floor for cards, tables, charts, device states, traffic, findings, and Linux telemetry labels.
+- The daily-check warning now opens an attention center that identifies each affected device, shows the real snapshot warning or connection/collection state, includes evidence recency, and links directly to the relevant diagnostic view.
+- Collector failures are surfaced with their stored error code and consecutive-failure count instead of being hidden behind a generic attention badge.

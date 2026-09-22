@@ -1564,3 +1564,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Increased shared typography tokens and the default application body size while preserving responsive spacing and hierarchy.
 - Enlarged undersized mobile navigation, brand metadata, workspace context, report-history, and destructive-confirmation labels.
 - Kept report export typography isolated so existing HTML/PDF pagination remains stable, and added a source contract test for the readability floor.
+
+## 2026-09-22 - Make dashboard warnings explainable
+
+- Increased dashboard-only typography for operational cards, device tables, charts, traffic, findings, and telemetry without enlarging the report export canvas.
+- Removed the requested introductory sentence and made the daily attention state navigate to a concise cause list.
+- Derived each cause from real Linux warnings, health freshness/state, asset connectivity, or collector failure evidence and linked it to the correct device diagnostic screen.
