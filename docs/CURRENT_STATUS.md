@@ -1462,3 +1462,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - The DELETE endpoint independently enforces authentication, the admin role, `users.manage`, exact confirmation, and ownership of the selected company.
 - Only report-generation history for the selected company is removed. A separate administrative audit event records who cleared it and how many entries were deleted.
 - Backend/frontend production builds and focused report tests passed 6/6; the canonical local stack was rebuilt without modifying its database volume.
+
+## 2026-09-22 - Application typography readability
+
+- Increased the shared application type scale by one controlled step so body text, labels, controls, headings, and navigation are easier to read without disrupting the established hierarchy.
+- Raised the smallest mobile shell, bottom-navigation, account-context, report-history, and confirmation text independently where the shared scale could not reach hard-coded labels.
+- Form controls now inherit the surrounding readable size consistently. The compact report export canvas remains unchanged to preserve its two-page HTML/PDF layout.

@@ -156,6 +156,7 @@
   option,
   optgroup {
     font-family: var(--font-ui);
+    font-size: inherit;
   }
   code,
   pre,

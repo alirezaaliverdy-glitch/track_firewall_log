@@ -1558,3 +1558,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a protected DELETE endpoint requiring `users.manage`, an authenticated admin, exact confirmation, and ownership of the selected company.
 - Deleted records are limited to company-status generation entries for that company, while an independent audit event preserves evidence of the administrative cleanup.
 - Rebuilt backend/frontend images, passed all six focused report tests, and redeployed the local API/web/gateway against the existing database volume.
+
+## 2026-09-22 - Improve application typography readability
+
+- Increased shared typography tokens and the default application body size while preserving responsive spacing and hierarchy.
+- Enlarged undersized mobile navigation, brand metadata, workspace context, report-history, and destructive-confirmation labels.
+- Kept report export typography isolated so existing HTML/PDF pagination remains stable, and added a source contract test for the readability floor.
