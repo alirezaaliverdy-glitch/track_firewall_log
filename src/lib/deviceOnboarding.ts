@@ -132,6 +132,13 @@ export type DeviceWorkspace = {
     recentChanges: Array<{ timestamp: string; label: string }>;
   };
   vendor: { key: string; sections: Array<{ key: string; titleFa: string; titleEn: string; state: "available" | "no_data"; capabilityState?: string; reason: string | null; requirement: string; nextAction: string }> };
+  vendorOverview: {
+    vendorKey: string;
+    collectedAt: string | null;
+    source: "verified_connector";
+    summary: Array<{ key: string; labelFa: string; labelEn: string; value: string }>;
+    sections: Array<{ key: string; titleFa: string; titleEn: string; count: number; items: Array<{ title: string; fields: Array<{ key: string; value: string }> }> }>;
+  };
   vendorDetails: Record<string, unknown> | null;
 };
 

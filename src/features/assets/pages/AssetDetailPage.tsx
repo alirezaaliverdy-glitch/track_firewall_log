@@ -13,7 +13,10 @@ import { CiscoAssetDashboard } from "@/features/assets/components/CiscoAssetDash
 import { deleteDevice, testDeviceConnection, updateDevice, type DeviceInput } from "@/lib/devices";
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
 import { refreshDeviceVendorCapabilities } from "@/lib/vendors";
+import { refreshLinuxMonitoringDevice } from "@/lib/linuxMonitoring";
+import { Activity, AlertTriangle, ArrowUpLeft, CheckCircle2, Clock3, Database, Gauge, Network, RefreshCw, Server, ShieldCheck } from "lucide-react";
 import "./AssetDetailPage.css";
+import "./AssetDetailOverview.css";
 import "../components/CiscoAssetDashboard.css";
 
 const sections = [
@@ -69,20 +72,10 @@ function capabilityLabel(status: unknown, t: TFunction) {
 
 function stateTone(status: unknown): "good" | "warning" | "danger" | "neutral" {
   const key = String(status ?? "unknown").toLowerCase();
-  if (["supported", "read_only", "write_supported", "available", "collected", "verified", "online", "connected"].includes(key)) return "good";
+  if (["supported", "read_only", "write_supported", "available", "collected", "verified", "online", "connected", "healthy"].includes(key)) return "good";
   if (["failed", "command_failed", "offline"].includes(key)) return "danger";
   if (["partial", "parser_partial", "requires_privilege", "not_configured", "unknown"].includes(key)) return "warning";
   return "neutral";
-}
-
-function summarizeCapabilities(items: Record<string, unknown>[], t: TFunction, fallback: string) {
-  if (!items.length) return fallback;
-  const counts = items.reduce<Record<string, number>>((all, item) => {
-    const state = String(item.state ?? item.capabilityState ?? "unknown");
-    all[state] = (all[state] ?? 0) + 1;
-    return all;
-  }, {});
-  return Object.entries(counts).map(([state, count]) => `${capabilityLabel(state, t)}: ${count}`).join(" · ");
 }
 
 function summarizeHealth(health: Record<string, unknown>, fallback: string) {
@@ -171,9 +164,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const healthFacts = asRecord(facts.health);
   const interfaces = asArray(facts.interfaces).length ? asArray(facts.interfaces) : asArray(facts.interfaceStatus).length ? asArray(facts.interfaceStatus) : asArray(capabilityMap.interfaces);
   const capabilityStatus = collection.capabilityStatus ?? (capabilityList.length ? "available" : "unknown");
-  const capabilitySummary = summarizeCapabilities(capabilityList, t, fallback);
   const healthSummary = summarizeHealth(healthFacts, fallback);
-  const interfaceSummary = interfaces.length ? t("workspace.values.interfaces", { count: interfaces.length }) : fallback;
   const interfaceStates = interfaces.map((item) => interfaceState(asRecord(item)));
   const interfaceUpCount = interfaceStates.filter((item) => item.operational === "up").length;
   const interfaceDownCount = interfaceStates.filter((item) => item.operational === "down").length;
@@ -206,6 +197,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
       } else {
         const result = await testDeviceConnection(workspace.device.id);
         if (result.connected !== true) throw new Error(result.message || t("onboarding.errors.connectionFailed"));
+        if (currentWorkspace.vendor.key === "linux") await refreshLinuxMonitoringDevice(workspace.device.id);
       }
       await load();
     } catch (failure) {
@@ -239,14 +231,50 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
       [t("workspace.labels.uptime"), facts.uptime]
     ] as Array<[string, unknown]>).filter(([, item]) => item !== null && item !== undefined && item !== "");
     const isCisco = currentWorkspace.vendor.key === "cisco";
-    return <section className="device-overview-first">
-      {isCisco ? <CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /> : null}
+    const vendorOverview = currentWorkspace.vendorOverview;
+    const latestFailedCollection = currentWorkspace.collections.find((item) => ["failed", "error"].includes(String(item.status).toLowerCase()));
+    const latestFailedCheck = currentWorkspace.statusChecks.find((item) => ["failed", "offline", "error"].includes(String(item.status).toLowerCase()));
+    const diagnosticReasons = Array.from(new Set([
+      ...asArray(asRecord(currentWorkspace.health ?? {}).warningsJson).map(String),
+      ...asArray(currentWorkspace.capabilities?.warnings).map(String),
+      latestFailedCollection?.errorCode ? `${isFa ? "خطای جمع‌آوری" : "Collection error"}: ${String(latestFailedCollection.errorCode)}` : "",
+      latestFailedCheck?.message ? String(latestFailedCheck.message) : ""
+    ].map((item) => item.trim()).filter(Boolean)));
+    const needsAttention = !["healthy", "online"].includes(String(overview.healthState).toLowerCase()) || diagnosticReasons.length > 0;
+    const openFindings = currentWorkspace.findings.filter((item) => !["resolved", "closed", "false_positive"].includes(String(item.status ?? "open")));
+    const dataTime = vendorOverview.collectedAt ?? overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt;
+    return <section className="asset-device-overview">
+      <section className={`asset-device-overview__hero is-${stateTone(overview.healthState)}`}>
+        <div className="asset-device-overview__identity"><span><Server aria-hidden="true" /></span><div><small>{isFa ? "نمای کلی تجهیز" : "Device overview"}</small><h2>{overview.name}</h2><p dir="ltr">{overview.vendor} · {overview.platform} · {value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</p></div></div>
+        <div className="asset-device-overview__live"><span><i />{verifiedDevice ? (isFa ? "اتصال تأییدشده" : "Verified connection") : (isFa ? "اتصال نیازمند بررسی" : "Connection needs review")}</span><small><Clock3 />{date(dataTime, locale, isFa ? "هنوز جمع‌آوری نشده" : "Not collected yet")}</small><button type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? <RefreshCw className="is-spinning" /> : <RefreshCw />}{collecting ? (isFa ? "در حال جمع‌آوری" : "Collecting") : (isFa ? "جمع‌آوری جدید" : "Collect now")}</button></div>
+      </section>
+
+      {needsAttention ? <section className="asset-diagnostic-callout"><AlertTriangle aria-hidden="true" /><div><strong>{isFa ? "چرا این تجهیز نیازمند توجه است؟" : "Why does this device need attention?"}</strong>{diagnosticReasons.length ? <ul>{diagnosticReasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}</ul> : <p>{value(asRecord(currentWorkspace.health ?? {}).summary, isFa ? "وضعیت سلامت یا تازگی داده نیازمند بررسی است. یک جمع‌آوری جدید اجرا کنید." : "Health state or evidence freshness needs review. Run a new collection.")}</p>}<small>{isFa ? "جمع‌آوری جدید را اجرا کنید؛ اگر خطا باقی ماند، کانال اتصال و زمان آخرین موفقیت را بررسی کنید." : "Run a new collection; if the issue remains, review the channel and its last success time."}</small></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات سلامت" : "Health details"}<ArrowUpLeft /></Link></section> : null}
+
+      <section className="asset-overview-kpis" aria-label={isFa ? "خلاصه وضعیت" : "Status summary"}>
+        <article><span><ShieldCheck /></span><div><small>{isFa ? "وضعیت اتصال" : "Connection"}</small><strong>{statusLabel(overview.availability, t)}</strong></div></article>
+        <article><span><Gauge /></span><div><small>{isFa ? "امتیاز سلامت" : "Health score"}</small><strong>{overview.healthScore === null ? "—" : `${overview.healthScore}%`}</strong></div></article>
+        <article><span><AlertTriangle /></span><div><small>{isFa ? "یافته باز" : "Open findings"}</small><strong>{openFindings.length.toLocaleString(locale)}</strong></div></article>
+        <article><span><Activity /></span><div><small>{isFa ? "اقدام در انتظار" : "Pending actions"}</small><strong>{overview.pendingActions.toLocaleString(locale)}</strong></div></article>
+        <article><span><Database /></span><div><small>{isFa ? "منبع داده" : "Data source"}</small><strong>{vendorOverview.sections.length ? (isFa ? "Connector واقعی" : "Verified connector") : (isFa ? "فقط موجودی" : "Inventory only")}</strong></div></article>
+      </section>
+
       <DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} />
-      <article><h2>{t("workspace.cards.identity")}</h2><dl className="detail-list"><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd>{optionalIdentity.map(([label, item]) => <div style={{ display: "contents" }} key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>
-      {!isCisco && interfaces.length ? <article><h2>{t("workspace.cards.interfaces")}</h2><p>{interfaceSummary}</p><p>{isFa ? `${interfaceUpCount} فعال · ${interfaceDownCount} قطع` : `${interfaceUpCount} up · ${interfaceDownCount} down`}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{t("workspace.actions.refreshInterfaces")}</Link></article> : null}
-      {!isCisco && healthSummary !== fallback ? <article><h2>{t("workspace.labels.healthSummary")}</h2><p dir="ltr">{healthSummary}</p><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></article> : null}
-      {!isCisco && capabilityList.length ? <article><h2>{t("workspace.labels.capabilitySummary")}</h2><p>{capabilitySummary}</p></article> : null}
-      <article><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p><div className="button-row"><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link>{isCisco ? <Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link> : null}</div></article>
+
+      <section className="asset-overview-main-grid">
+        <article className="asset-identity-card"><header><span><Server /></span><div><small>{isFa ? "هویت و مدیریت" : "Identity and management"}</small><h3>{t("workspace.cards.identity")}</h3></div></header><dl><div><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd></div><div><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd></div><div><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd></div>{optionalIdentity.map(([label, item]) => <div key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>
+        <article className="asset-health-card"><header><span><CheckCircle2 /></span><div><small>{isFa ? "سلامت و پوشش" : "Health and coverage"}</small><h3>{isFa ? "وضعیت قابل اقدام" : "Actionable status"}</h3></div></header><dl><div><dt>{t("workspace.labels.healthState")}</dt><dd>{statusLabel(overview.healthState, t)}</dd></div><div><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(dataTime, locale, fallback)}</dd></div><div><dt>{isFa ? "دامنه‌های خوانده‌شده" : "Collected domains"}</dt><dd>{vendorOverview.sections.length.toLocaleString(locale)}</dd></div><div><dt>{isFa ? "اینترفیس" : "Interfaces"}</dt><dd>{interfaces.length.toLocaleString(locale)}</dd></div></dl>{healthSummary !== fallback ? <p dir="ltr">{healthSummary}</p> : null}</article>
+      </section>
+
+      <section className="asset-vendor-overview">
+        <header><div><span><Network /></span><div><small>{isFa ? "اطلاعات واقعی و نرمال‌شده" : "Verified normalized data"}</small><h2>{isFa ? `نمای کامل ${overview.vendor}` : `${overview.vendor} overview`}</h2><p>{isFa ? "اطلاعاتی که آخرین Connector موفق از دستگاه خوانده است." : "Information read by the latest successful connector collection."}</p></div></div><time><Clock3 />{date(dataTime, locale, fallback)}</time></header>
+        {vendorOverview.summary.length ? <div className="asset-vendor-facts">{vendorOverview.summary.map((item) => <article key={item.key}><small>{isFa ? item.labelFa : item.labelEn}</small><strong dir="auto">{item.value}</strong></article>)}</div> : null}
+        {vendorOverview.sections.length ? <div className="asset-vendor-sections">{vendorOverview.sections.map((vendorSection, index) => <details key={vendorSection.key} open={index === 0}><summary><span>{isFa ? vendorSection.titleFa : vendorSection.titleEn}</span><b>{vendorSection.count.toLocaleString(locale)}</b></summary><div>{vendorSection.items.map((item, itemIndex) => <article key={`${vendorSection.key}-${itemIndex}`}><strong dir="auto">{item.title}</strong>{item.fields.length ? <dl>{item.fields.map((field) => <div key={field.key}><dt>{field.key}</dt><dd dir="auto">{field.value}</dd></div>)}</dl> : null}</article>)}</div></details>)}</div> : <div className="asset-vendor-empty"><Database /><strong>{isFa ? "هنوز داده جامع وندور جمع‌آوری نشده است" : "No comprehensive vendor data yet"}</strong><p>{isFa ? "«جمع‌آوری جدید» را بزنید تا اطلاعات واقعی از دستگاه خوانده شود." : "Use Collect now to read verified data from the device."}</p></div>}
+      </section>
+
+      {isCisco && currentWorkspace.vendorDetails ? <details className="asset-cisco-expanded"><summary>{isFa ? "نمای تخصصی Cisco" : "Cisco technical view"}</summary><CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={dataTime} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /></details> : null}
+
+      <section className="asset-overview-actions"><div><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p></div><div><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link>{interfaces.length ? <Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{isFa ? "مشاهده اینترفیس‌ها" : "View interfaces"}</Link> : null}{isCisco ? <Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link> : null}</div></section>
       <AdvancedWorkspaceDetails />
     </section>;
   }
@@ -266,7 +294,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   })();
 
   return (
-    <section className="page-stack">
+    <section className="page-stack asset-detail-page">
       <PageHeader title={overview.name} eyebrow={t("workspace.eyebrow")} description={`${overview.vendor} / ${overview.platform}`} actions={<><Link className="secondary-link" to="/assets/devices">{t("workspace.backToDevices")}</Link>{workspace.device && <button className="secondary-button" type="button" onClick={startEditing}>{t("workspace.editDevice")}</button>}<Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.setupConnection")}</Link>{workspace.device && <button className="danger-button" type="button" onClick={() => { setDeleteOpen(true); setDeleteName(""); }}>{t("workspace.deleteDevice")}</button>}</>} />
       {editing && workspace.device && <section className="content-panel device-edit-panel" aria-label={t("workspace.edit.aria")}><header><div><p className="operator-eyebrow">{t("workspace.edit.eyebrow")}</p><h2>{t("workspace.edit.title")}</h2></div><button className="secondary-button" type="button" onClick={() => setEditing(false)}>{t("workspace.actions.closeEdit")}</button></header><div className="device-edit-grid"><label>{t("workspace.labels.name")}<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label>{t("workspace.labels.managementAddress")}<input value={form.host} onChange={(event) => setForm({ ...form, host: event.target.value })} required dir="ltr" /></label><label>{t("onboarding.fields.port")}<input type="number" min="1" max="65535" value={form.managementPort} onChange={(event) => setForm({ ...form, managementPort: event.target.value })} required /></label><label>{t("workspace.labels.protocol")}<select value={form.protocol} onChange={(event) => setForm({ ...form, protocol: event.target.value })}><option value="ssh">SSH</option><option value="api">API</option><option value="syslog">Syslog</option><option value="agent">Agent</option></select></label><label>{t("workspace.labels.environment")}<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })}><option value="lab">Lab</option><option value="production">Production</option><option value="staging">Staging</option></select></label><label>{t("workspace.labels.tags")}<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="linux, edge" /></label></div><div className="button-row"><button className="primary-button" type="button" disabled={saving || !form.name.trim() || !form.host.trim()} onClick={() => void saveDevice()}>{saving ? t("common.saving") : t("common.saveChanges")}</button><button className="secondary-button" type="button" disabled={saving} onClick={() => setEditing(false)}>{t("common.cancel")}</button></div></section>}
       {deleteOpen && workspace.device && <section className="destructive-confirm" role="alertdialog" aria-label={t("workspace.delete.aria")}><strong>{t("workspace.delete.title", { name: workspace.device.name })}</strong><p>{t("workspace.delete.body")}</p><label>{t("workspace.labels.name")}<input value={deleteName} onChange={(event) => setDeleteName(event.target.value)} autoComplete="off" /></label><div className="button-row"><button className="danger-button" type="button" disabled={saving || deleteName.trim() !== workspace.device.name} onClick={() => void removeDevice()}>{saving ? t("common.deleting") : t("workspace.actions.confirmDelete")}</button><button className="secondary-button" type="button" disabled={saving} onClick={() => setDeleteOpen(false)}>{t("common.cancel")}</button></div></section>}

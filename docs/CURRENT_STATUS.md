@@ -1474,3 +1474,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Removed the redundant dashboard subtitle and raised the dashboard-specific type floor for cards, tables, charts, device states, traffic, findings, and Linux telemetry labels.
 - The daily-check warning now opens an attention center that identifies each affected device, shows the real snapshot warning or connection/collection state, includes evidence recency, and links directly to the relevant diagnostic view.
 - Collector failures are surfaced with their stored error code and consecutive-failure count instead of being hidden behind a generic attention badge.
+
+## 2026-09-22 - Unified vendor device overview
+
+- Rebuilt the first device-detail view as an evidence-first workspace with readable KPIs, an explicit cause panel for attention states, connection channels, device identity, health, and next actions.
+- Added one normalized, bounded, secret-safe vendor projection for Cisco, MikroTik, FortiGate, Sophos, and Linux while preserving each connector's real interfaces, routes, firewall/policy, services, inventory, and platform facts.
+- A manual collection now invokes the registered connector; Linux also refreshes its health snapshot. The full-width interface layout and mobile breakpoints remove the narrow, overlapping device view.

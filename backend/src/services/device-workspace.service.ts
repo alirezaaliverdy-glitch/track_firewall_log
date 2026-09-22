@@ -25,6 +25,74 @@ function timestamp(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const SENSITIVE_FIELD = /password|secret|token|credential|private.?key|api.?key|stdout|stderr|raw/i;
+
+function safeOverviewText(value: unknown, limit = 360) {
+  return String(value ?? "")
+    .replace(/(password|token|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
+function overviewItems(value: unknown) {
+  const source = Array.isArray(value) ? value : typeof value === "string" ? value.split(/\r?\n/) : value ? [value] : [];
+  return source.slice(0, 64).map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return { title: safeOverviewText(entry) || `#${index + 1}`, fields: [] as Array<{ key: string; value: string }> };
+    }
+    const row = entry as Record<string, unknown>;
+    const titleKey = ["name", "defaultName", "interface", "id", "address", "hostname", "ruleName", "serviceName", "chain", "dstAddress"].find((key) => row[key] !== null && row[key] !== undefined && row[key] !== "");
+    const title = safeOverviewText(titleKey ? row[titleKey] : `#${index + 1}`, 120);
+    const fields = Object.entries(row)
+      .filter(([key, item]) => key !== titleKey && !SENSITIVE_FIELD.test(key) && ["string", "number", "boolean"].includes(typeof item) && item !== "")
+      .slice(0, 8)
+      .map(([key, item]) => ({ key: safeOverviewText(key, 60), value: safeOverviewText(item, 180) }));
+    return { title, fields };
+  }).filter((item) => item.title.length > 0);
+}
+
+function vendorSection(key: string, titleFa: string, titleEn: string, value: unknown) {
+  const items = overviewItems(value);
+  return { key, titleFa, titleEn, count: items.length, items };
+}
+
+export function projectVendorOverview(vendorKey: string, factsValue: unknown, refreshedAt: unknown) {
+  const facts = asObject(factsValue);
+  const healthFacts = asObject(facts.health);
+  const fact = (key: string, labelFa: string, labelEn: string, source: unknown = facts[key]) => source === null || source === undefined || source === "" ? null : { key, labelFa, labelEn, value: safeOverviewText(source, 180) };
+  const compact = <T>(items: Array<T | null>) => items.filter((item): item is T => item !== null);
+  const base = {
+    vendorKey,
+    collectedAt: timestamp(refreshedAt) !== null ? new Date(timestamp(refreshedAt)!).toISOString() : null,
+    source: "verified_connector" as const,
+    summary: [] as Array<{ key: string; labelFa: string; labelEn: string; value: string }>,
+    sections: [] as Array<ReturnType<typeof vendorSection>>
+  };
+
+  if (vendorKey === "mikrotik") return { ...base,
+    summary: compact([fact("hostname", "نام دستگاه", "Identity"), fact("version", "نسخه RouterOS", "RouterOS version"), fact("uptime", "زمان فعالیت", "Uptime"), fact("architecture", "معماری", "Architecture"), fact("cpuLoad", "بار CPU", "CPU load", healthFacts.cpuLoad), fact("memoryFree", "حافظه آزاد", "Free memory", healthFacts.memoryFree)]),
+    sections: [vendorSection("interfaces", "اینترفیس‌ها", "Interfaces", facts.interfaces), vendorSection("addresses", "آدرس‌های IP", "IP addresses", facts.ipAddresses), vendorSection("routing", "مسیرها", "Routes", facts.routes), vendorSection("firewall", "قوانین فایروال", "Firewall rules", facts.firewallFilterRules), vendorSection("nat", "قوانین NAT", "NAT rules", facts.natRules), vendorSection("services", "سرویس‌ها", "Services", facts.services), vendorSection("logs", "رویدادهای اخیر", "Recent events", facts.recentLogs)].filter((item) => item.count > 0)
+  };
+  if (vendorKey === "fortigate") return { ...base,
+    summary: compact([fact("hostname", "نام دستگاه", "Hostname"), fact("model", "مدل", "Model"), fact("serialNumber", "سریال", "Serial"), fact("version", "نسخه FortiOS", "FortiOS version"), fact("vdomMode", "حالت VDOM", "VDOM mode"), fact("currentVdom", "VDOM فعال", "Current VDOM")]),
+    sections: [vendorSection("zones", "Zoneها", "Zones", facts.zones), vendorSection("interfaces", "اینترفیس‌ها", "Interfaces", facts.interfaces), vendorSection("firewall", "Policyهای فایروال", "Firewall policies", facts.policies), vendorSection("routing", "مسیرها", "Routes", facts.routes), vendorSection("objects", "آبجکت‌های آدرس", "Address objects", facts.addressObjects), vendorSection("services", "سرویس‌ها", "Services", facts.services), vendorSection("ha", "وضعیت HA", "HA status", facts.haStatus)].filter((item) => item.count > 0)
+  };
+  if (vendorKey === "sophos") return { ...base,
+    summary: compact([fact("product", "محصول", "Product"), fact("apiVersion", "نسخه API", "API version")]),
+    sections: [vendorSection("interfaces", "اینترفیس‌ها", "Interfaces", facts.interfaces), vendorSection("zones", "ناحیه‌ها", "Zones", facts.zones), vendorSection("gateways", "Gatewayها", "Gateways", facts.gateways), vendorSection("firewall", "قوانین فایروال", "Firewall rules", facts.firewallRules), vendorSection("hosts", "میزبان‌های IP", "IP hosts", facts.ipHosts), vendorSection("services", "سرویس‌ها", "Services", facts.services), vendorSection("vpn", "اتصال‌های VPN", "VPN connections", facts.vpnConnections)].filter((item) => item.count > 0)
+  };
+  if (vendorKey === "linux") return { ...base,
+    summary: compact([fact("hostname", "نام میزبان", "Hostname"), fact("version", "سیستم‌عامل", "Operating system"), fact("firewallStatus", "فایروال میزبان", "Host firewall"), fact("sshServiceStatus", "سرویس SSH", "SSH service"), fact("currentSshPort", "پورت SSH", "SSH port")]),
+    sections: [vendorSection("ports", "پورت‌های شنونده", "Listening ports", facts.listeningPorts), vendorSection("warnings", "هشدارهای جمع‌آوری", "Collection warnings", facts.warnings)].filter((item) => item.count > 0)
+  };
+  const network = asObject(facts.network);
+  return { ...base,
+    summary: compact([fact("hostname", "نام دستگاه", "Hostname"), fact("model", "مدل", "Model"), fact("serialNumber", "سریال", "Serial"), fact("iosVersion", "نسخه نرم‌افزار", "Software version"), fact("uptime", "زمان فعالیت", "Uptime")]),
+    sections: [vendorSection("inventory", "موجودی سخت‌افزار", "Hardware inventory", facts.inventory), vendorSection("interfaces", "اینترفیس‌ها", "Interfaces", facts.interfaces), vendorSection("switchports", "پورت‌های سوئیچ", "Switchports", facts.switchports), vendorSection("vlans", "VLANها", "VLANs", asObject(network.vlans).entries), vendorSection("routing", "مسیریابی", "Routing", network.routes), vendorSection("security", "سرویس‌های امنیتی", "Security services", facts.securityServices)].filter((item) => item.count > 0)
+  };
+}
+
 export function resolveWorkspaceConnectionState(
   latestStatus: { status: string; checkedAt: Date | string } | null | undefined,
   persistedStatus: string | null | undefined,
@@ -69,6 +137,12 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
         uptime: data.uptime ?? null,
         architecture: data.architecture ?? null,
         interfaces: collectedRows(data.interfaces),
+        ipAddresses: data.ipAddresses ?? [],
+        routes: data.routes ?? [],
+        firewallFilterRules: data.firewallFilterRules ?? [],
+        natRules: data.natRules ?? [],
+        services: data.services ?? [],
+        recentLogs: data.recentLogs ?? [],
         health: { cpuLoad: data.cpuLoad ?? null, memoryFree: data.memoryFree ?? null },
         collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
       },
@@ -97,6 +171,14 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
         serialNumber: data.serial ?? null,
         version: data.version ?? null,
         interfaces: collectedRows(data.interfaces),
+        zones: data.zones ?? [],
+        policies: data.policies ?? [],
+        routes: data.routes ?? [],
+        addressObjects: data.addressObjects ?? [],
+        services: data.services ?? [],
+        haStatus: data.haStatus ?? [],
+        vdomMode: data.vdomMode ?? null,
+        currentVdom: data.currentVdom ?? null,
         collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
       },
       capabilities: capabilityList,
@@ -152,6 +234,8 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
       listeningPorts: status.listeningPorts ?? null,
       firewallStatus: status.ufwStatus ?? null,
       sshServiceStatus: status.sshServiceStatus ?? null,
+      currentSshPort: status.currentSshPort ?? null,
+      warnings: asArray(status.warnings),
       collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
     },
     capabilities: capabilityList,
@@ -380,6 +464,7 @@ export async function getDeviceWorkspace(reference: string) {
     connections: connectionChannels,
     charts,
     vendor: { key: vendorKey, sections: vendorSections },
+    vendorOverview: projectVendorOverview(vendorKey, workspaceFacts, liveProjection?.refreshedAt ?? capabilityCache?.refreshedAt ?? ciscoCollection.collectedAt ?? latestSuccessfulCollection),
     vendorDetails: vendorKey === "cisco" ? projectCiscoWorkspaceDetails(ciscoCollection) : null
   };
 }

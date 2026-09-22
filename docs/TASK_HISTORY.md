@@ -1570,3 +1570,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Increased dashboard-only typography for operational cards, device tables, charts, traffic, findings, and telemetry without enlarging the report export canvas.
 - Removed the requested introductory sentence and made the daily attention state navigate to a concise cause list.
 - Derived each cause from real Linux warnings, health freshness/state, asset connectivity, or collector failure evidence and linked it to the correct device diagnostic screen.
+
+## 2026-09-22 - Rebuild the cross-vendor asset workspace
+
+- Added a normalized backend overview that projects only collected vendor evidence and redacts sensitive/raw fields before it reaches the UI.
+- Replaced the fragmented asset landing view with readable status cards, exact stored warning/error causes, collection freshness, expandable vendor domains, and direct remediation links.
+- Wired refresh to the real vendor connection path and Linux monitoring collector, fixed interface cards to use the full content width, and added responsive layouts for smaller screens.
