@@ -41,9 +41,15 @@ test("connected email page shows a compact identity instead of a disabled passwo
   assert.match(page, /اجرای تست وندورها/);
   assert.match(page, /recipients, enabled: emailEnabled/);
   assert.match(page, /افزودن ایمیل جدید/);
-  assert.match(page, /ثبت حساب جدید/);
+  assert.match(page, /اتصال حساب دیگر/);
   assert.match(page, /toggleRecipient\(recipient\.email/);
-  assert.match(page, /دریافت می‌کند/);
+  assert.match(page, /دریافت هشدار/);
+  assert.match(page, /email-sender-modal/);
+  assert.match(page, /ذخیره فقط پس از ورود موفق به Gmail انجام می‌شود/);
+  assert.match(page, /اتصال به‌عنوان فرستنده/);
+  assert.match(page, /فرستنده تأییدشده/);
+  assert.match(page, /فقط گیرنده؛ بدون نیاز به App Password/);
+  assert.match(page, /editSender\(recipient\.email\)/);
   assert.match(page, /delivery\.recipientEmail/);
   assert.match(page, /دلیل ارسال/);
   assert.match(page, /delivery\.reason\.titleFa/);

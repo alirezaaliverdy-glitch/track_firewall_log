@@ -1507,3 +1507,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Registered recipients now have a durable receive/pause preference. Pausing an address keeps it registered but removes it from real alert and test delivery; re-enabling it resumes delivery without re-entering the address.
 - The backend returns both the registered recipient catalog and the active delivery list. A backward-compatible database migration stores opt-outs separately while preserving all existing addresses and the legacy active-recipient API field.
 - Focused email/detection tests passed 16/16. A database-backed smoke test confirmed that a disabled address persists and is excluded from active delivery, then restored the original configuration. Backend/frontend production builds and the local deployment are healthy.
+
+## 2026-09-23 - Verified Gmail onboarding and calmer email UI
+
+- Separated the two email roles throughout the page: registering an address creates a recipient only, while a sender is marked verified only after its Gmail App Password passes real SMTP authentication.
+- Added a focused sender-connection dialog with a direct Google App Password step, prefilled promotion from any recipient, explicit verification feedback, and an option to choose whether the sender also receives alerts.
+- Replaced saturated full-card status colors with neutral surfaces and reserved color for small, meaningful state indicators. Recipient rows now clearly show `recipient only` or `verified sender` and remain responsive on mobile.
+- The production frontend image built successfully, 16 focused email/detection tests passed, UTF-8 validation passed across 694 files, and the refreshed local email-alert route and API both return HTTP 200.

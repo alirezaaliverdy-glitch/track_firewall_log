@@ -1605,3 +1605,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added persisted receive/pause controls for every registered recipient, active/registered counts, and delivery/test controls that operate only on enabled recipients.
 - Added a non-destructive Prisma migration for disabled-recipient addresses, kept backward compatibility for existing API consumers, and verified persistence with a database smoke test that restored the original configuration.
 - Passed the backend and frontend production builds plus 16 focused detection/email UI tests, then redeployed the canonical local API and web containers.
+
+## 2026-09-23 - Clarify recipient registration and Gmail verification
+
+- Removed the misleading visual implication that every registered recipient has an App Password. Each address now has an explicit recipient-only or SMTP-verified-sender role.
+- Added a step-by-step Gmail connection modal. Selecting “connect as sender” from a recipient preloads that address, opens Google App Password setup, and saves the sender only after successful SMTP authentication.
+- Added the choice to receive alerts at the sender address independently from using it as the sender, and retained the previous verified account until a replacement verifies successfully.
+- Calmed the page palette, reduced decorative status emphasis, rebuilt the local frontend container, and passed focused tests plus UTF-8 and live route checks.
