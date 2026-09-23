@@ -1486,3 +1486,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Confirmed the local UI and API are healthy; the phone failure was caused by a DHCP address change from the retired `192.168.70.194` address to the active network address, combined with the Windows Public profile blocking unsolicited inbound traffic.
 - Added an administrator-elevated, idempotent LAN helper that permits only TCP/80 from `LocalSubnet`, verifies the app response, and prints the current mobile URL.
 - Updated the Persian and English deployment instructions to clone the current `main` branch and use the root zero-configuration production Compose stack.
+## 2026-09-23 - Unified real-time vendor connectivity sensor
+
+- Added a backend-owned five-second connectivity sensor for every active device. SSH is only online after a real SSH banner, HTTPS/API channels require a TLS handshake, plain endpoints require TCP acceptance, and passive agent/syslog channels require fresh evidence instead of inheriting an old success forever.
+- Added anti-flap state transitions: the first failure is degraded/error and the second consecutive failure is offline. Recovery returns to online on the next verified probe.
+- Device, linked Asset, management ConnectionChannel, status history, and transition audit are updated together. A one-minute heartbeat preserves current evidence while bounded UI polling refreshes assets, dashboard, Linux monitoring, and device workspaces every five seconds without running expensive collectors.
+- Stale workspace evidence now becomes unknown instead of allowing an old collection to override a newer connectivity failure.
+- Local verification marked disconnected Linux 115 and 116 offline with `SSH_BANNER_TIMEOUT`; the local MikroTik and Cisco endpoints were also correctly offline from the current host network. API, web, database, and gateway containers are healthy.

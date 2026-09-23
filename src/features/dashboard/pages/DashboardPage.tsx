@@ -337,10 +337,20 @@ export default function DashboardPage() {
     setDataRefreshing(false);
   }, []);
 
-  useEffect(() => { void loadLinuxHealth(); }, [loadLinuxHealth]);
+  useEffect(() => {
+    void loadLinuxHealth();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void getLinuxMonitoringSummary().then((value) => { setLinux(value); setLinuxError(false); }).catch(() => setLinuxError(true));
+      }
+    }, 5_000);
+    return () => window.clearInterval(interval);
+  }, [loadLinuxHealth]);
   useEffect(() => {
     void loadOperationalData();
-    const interval = window.setInterval(() => void loadOperationalData(), 60_000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadOperationalData();
+    }, 10_000);
     return () => window.clearInterval(interval);
   }, [loadOperationalData]);
 

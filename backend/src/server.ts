@@ -3,6 +3,7 @@ import { shutdownDatabase } from "./db/prisma.js";
 import { buildApp } from "./app.js";
 import { startSecurityMonitor, stopSecurityMonitor } from "./services/security-monitor.service.js";
 import { startScheduledTaskWorker, stopScheduledTaskWorker } from "./services/scheduled-task-worker.service.js";
+import { startDeviceConnectivitySensor, stopDeviceConnectivitySensor } from "./services/device-connectivity-sensor.service.js";
 
 let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -10,6 +11,7 @@ async function shutdown(signal: NodeJS.Signals) {
   try {
     app?.log.info({ signal }, "Shutting down");
     await stopSecurityMonitor();
+    await stopDeviceConnectivitySensor();
     await stopScheduledTaskWorker();
     await app?.close();
     await shutdownDatabase();
@@ -27,6 +29,7 @@ try {
   app = await buildApp();
   await app.listen({ port: env.port, host: "0.0.0.0" });
   startSecurityMonitor(app.log);
+  startDeviceConnectivitySensor(app.log);
   await startScheduledTaskWorker(app.log);
 } catch (error) {
   const message = error instanceof Error ? error.message : "Backend startup failed.";

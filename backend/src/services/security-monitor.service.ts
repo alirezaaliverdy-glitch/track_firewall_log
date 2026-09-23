@@ -5,6 +5,7 @@ import { reconcileCollectorStates, runCollectorOnce } from "./collector.service.
 import { retryFailedSecurityAlertDeliveries } from "./security-alert-email.service.js";
 import { effectiveCollectorIntervalSeconds, isCollectorDue } from "./security-monitor-schedule.js";
 import { getDetectionDispatcherStatus, scheduleSecurityDetection, wasDetectionRecentlyCompleted } from "./security-detection-dispatcher.service.js";
+import { getDeviceConnectivitySensorStatus } from "./device-connectivity-sensor.service.js";
 
 type MonitorLogger = {
   info(payload: unknown, message?: string): void;
@@ -180,6 +181,7 @@ export async function getSecurityMonitorStatus() {
     },
     detection: { enabledRules, lastRun: runtime.lastDetection },
     dispatcher: getDetectionDispatcherStatus(),
+    connectivity: getDeviceConnectivitySensorStatus(),
     email: { enabledChannels: alertChannels, pendingRetries, lastRetry: runtime.lastEmailRetry }
   };
 }

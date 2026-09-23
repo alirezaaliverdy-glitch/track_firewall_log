@@ -12,6 +12,8 @@
 
 `Backend Product State registry -> validated feature readiness -> read-only Product State API -> generated desktop/mobile navigation`
 
+`Unified connectivity sensor (SSH banner | TLS handshake | TCP | passive evidence) -> anti-flap state -> Device + Asset + ConnectionChannel + StatusCheck -> live UI refresh`
+
 Creation is permissive; execution is controlled. Preview never implies execution, and success requires `connectorInvoked=true`.
 
 Task 17.2B adds a hard resolver guard before generic/manual fallback: clearly multi-step operational creation requests must route to `guided_workflow` when a blueprint exists. The guard covers VPN, VDOM, Zone, Policy/Rule, VIP/NAT/Port Forward, Interface/VLAN/Subinterface, and Route/Gateway creation phrases in Persian and English. If no selected device exists, the resolver still returns `guided_workflow`; `/api/action-sessions/start` creates a pending session and the wizard's first step is `device_selection`. These requests must not create `vendor=unknown`, `custom_vendor_action`, `generic_security_action`, `unsupported_vendor`, or any normal ActionPlan before wizard completion.
@@ -25,6 +27,7 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 | Product state | Versioned feature, navigation, vendor, and integration truth with fail-closed validation | `backend/src/product-state/`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented |
 | Auth | Session login/logout and route protection | `backend/src/services/auth.service.ts`, `routes/auth.ts` | `/api/auth/*` | Implemented |
 | Devices | Device inventory, discovery, capabilities | `services/device.service.ts`, `routes/devices.ts` | `/api/devices/*` | Implemented |
+| Device connectivity | Five-second protocol-aware reachability, anti-flap state, synchronized device/asset/channel evidence | `services/device-connectivity-sensor.service.ts` | Included in `/api/security/monitoring/status` | Implemented |
 | Vendor capabilities | Vendor/platform/capability registry and discovery cache | `vendors/`, `routes/vendors.ts`, `routes/devices.ts` | `/api/vendors/*`, `/api/devices/:id/capabilities` | Task 18.2A foundation |
 | Asset intelligence | Unified asset inventory, topology, and source sync | `assets/asset-intelligence.service.ts`, `routes/assets.ts` | `/api/assets/*`, `/api/integrations/netbox/*` | Minimum milestone implemented |
 | Credentials | Encrypted credential references | `services/credential*.ts`, `routes/credentials.ts` | `/api/credentials/*` | Implemented |

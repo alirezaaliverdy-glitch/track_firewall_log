@@ -113,6 +113,24 @@ export type SecurityMonitoringStatus = {
   };
   detection: { enabledRules: number; lastRun: { rulesEvaluated: number; eventsEvaluated: number; findingsCreated: number; findingsUpdated: number } | null };
   dispatcher: { strategy: "event_debounce_with_incremental_fallback"; debounceMs: number; maxConcurrency: number; active: number; pending: number; completed: number; failed: number };
+  connectivity: {
+    enabled: boolean;
+    running: boolean;
+    cycleRunning: boolean;
+    intervalSeconds: number;
+    timeoutMs: number;
+    offlineThreshold: number;
+    startedAt: string | null;
+    lastCycleAt: string | null;
+    lastErrorCode: string | null;
+    checked: number;
+    online: number;
+    degraded: number;
+    offline: number;
+    unknown: number;
+    transitions: number;
+    devices: Array<{ deviceId: string; consecutiveFailures: number; status: string; checkedAt: string; lastSuccessAt: string | null; latencyMs: number | null; code: string }>;
+  };
   email: { enabledChannels: number; pendingRetries: number; lastRetry: { attempted: number; sent: number; failed: number } | null };
 };
 

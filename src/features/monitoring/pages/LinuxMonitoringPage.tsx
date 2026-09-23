@@ -131,7 +131,13 @@ export default function LinuxMonitoringPage({ params }: { params?: Record<string
     catch (cause) { setError(cause instanceof Error ? cause.message : "دریافت اطلاعات پایش انجام نشد."); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
   useEffect(() => {
     if (!selectedId) { setHistory([]); return; }
     let active = true; setHistoryLoading(true);

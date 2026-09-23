@@ -28,9 +28,11 @@ function timestamp(value: unknown) {
 const SENSITIVE_FIELD = /password|secret|token|credential|private.?key|api.?key|stdout|stderr|raw/i;
 
 function safeOverviewText(value: unknown, limit = 360) {
-  return String(value ?? "")
-    .replace(/(password|token|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "$1=[REDACTED]")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+  const redacted = String(value ?? "")
+    .replace(/(password|token|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "$1=[REDACTED]");
+  return Array.from(redacted)
+    .map((character) => character.charCodeAt(0) < 32 ? " " : character)
+    .join("")
     .trim()
     .slice(0, limit);
 }
@@ -96,13 +98,24 @@ export function projectVendorOverview(vendorKey: string, factsValue: unknown, re
 export function resolveWorkspaceConnectionState(
   latestStatus: { status: string; checkedAt: Date | string } | null | undefined,
   persistedStatus: string | null | undefined,
-  successfulEvidence: unknown[]
+  successfulEvidence: unknown[],
+  staleAfterMs = 90_000
 ) {
   const latestSuccessAt = successfulEvidence
     .map(timestamp)
     .filter((value): value is number => value !== null)
     .sort((left, right) => right - left)[0] ?? null;
   const latestCheckAt = timestamp(latestStatus?.checkedAt);
+  if (latestStatus && latestCheckAt !== null) {
+    if (Date.now() - latestCheckAt > staleAfterMs) {
+      return { availability: "unknown", verificationStatus: "needs_review", lastContact: latestStatus.checkedAt };
+    }
+    return {
+      availability: latestStatus.status,
+      verificationStatus: latestStatus.status === "online" ? "verified" : "needs_review",
+      lastContact: latestStatus.checkedAt
+    };
+  }
   if (latestSuccessAt !== null && (latestCheckAt === null || latestSuccessAt >= latestCheckAt)) {
     return { availability: "online", verificationStatus: "verified", lastContact: new Date(latestSuccessAt) };
   }

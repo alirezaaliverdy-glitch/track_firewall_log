@@ -1582,3 +1582,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Diagnosed the local mobile outage as a host-network issue rather than a web/API failure: the saved LAN IP was stale and the active iPhone hotspot adapter used the Windows Public firewall profile.
 - Added a self-elevating local-network helper with a narrowly scoped firewall rule and live URL/HTTP verification.
 - Replaced the stale snapshot-branch clone example with `main`, then validated the root production Compose configuration and remote branch head.
+
+## 2026-09-23 - Add unified real-time vendor connectivity sensing
+
+- Replaced persisted-last-success availability with an independent protocol-aware sensor that runs every five seconds for all active devices.
+- Verified SSH banners and API TLS handshakes, added two-sample offline confirmation and immediate recovery, and synchronized Device, Asset, connection-channel, status-check, and audit state.
+- Added sensor runtime telemetry to the existing security-monitoring status endpoint and explicit production/local Compose controls.
+- Added silent five-second UI refresh for assets, Linux monitoring, and device workspaces plus ten-second operational dashboard refresh.
+- Passed backend/frontend production image builds, targeted frontend/backend lint, eight focused connectivity/workspace tests, both Compose validations, local HTTP health checks, and live database verification of Linux 115/116 offline status.

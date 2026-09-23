@@ -45,6 +45,7 @@ import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.servi
 import { registerSecurityPlugin } from "./plugins/security.plugin.js";
 import { stopSecurityMonitor } from "./services/security-monitor.service.js";
 import { stopScheduledTaskWorker } from "./services/scheduled-task-worker.service.js";
+import { stopDeviceConnectivitySensor } from "./services/device-connectivity-sensor.service.js";
 import { NATIVE_APP_ORIGINS } from "./security/session-transport.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
@@ -141,6 +142,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
 
   app.addHook("onClose", async () => {
     await stopSecurityMonitor();
+    await stopDeviceConnectivitySensor();
     await stopScheduledTaskWorker();
     stopAllLinuxLogStreams();
   });

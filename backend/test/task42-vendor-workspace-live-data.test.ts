@@ -2,20 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { liveVendorProjection, resolveWorkspaceConnectionState } from "../src/services/device-workspace.service.js";
 
-test("a newer verified Cisco collection overrides an older failed SSH status", () => {
+test("stale status and collection evidence cannot keep a device online forever", () => {
   const state = resolveWorkspaceConnectionState(
     { status: "error", checkedAt: "2026-09-08T07:21:30.000Z" },
     "online",
     ["2026-09-08T09:38:24.000Z"]
   );
-  assert.equal(state.availability, "online");
-  assert.equal(state.verificationStatus, "verified");
-  assert.equal(new Date(state.lastContact!).toISOString(), "2026-09-08T09:38:24.000Z");
+  assert.equal(state.availability, "unknown");
+  assert.equal(state.verificationStatus, "needs_review");
 });
 
 test("a newer connection failure remains visible instead of being hidden by old inventory", () => {
+  const checkedAt = new Date().toISOString();
   const state = resolveWorkspaceConnectionState(
-    { status: "error", checkedAt: "2026-09-08T10:00:00.000Z" },
+    { status: "error", checkedAt },
     "online",
     ["2026-09-08T09:38:24.000Z"]
   );

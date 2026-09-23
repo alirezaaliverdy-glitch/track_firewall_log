@@ -148,7 +148,13 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const [deleteName, setDeleteName] = useState("");
   const [form, setForm] = useState({ name: "", host: "", managementPort: "22", protocol: "ssh", environment: "lab", tags: "" });
   const load = useCallback(() => getDeviceWorkspace(reference).then((nextWorkspace) => { setWorkspace(nextWorkspace); setError(""); }).catch((failure: Error) => setError(failure.message)), [reference]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && !editing && !deleteOpen) void load();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [deleteOpen, editing, load]);
   if (!workspace && !error) return <LoadingState />;
   if (error || !workspace) return <ErrorState message={error || t("workspace.notFound")} onRetry={load} />;
 
