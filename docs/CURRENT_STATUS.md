@@ -1493,3 +1493,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Device, linked Asset, management ConnectionChannel, status history, and transition audit are updated together. A one-minute heartbeat preserves current evidence while bounded UI polling refreshes assets, dashboard, Linux monitoring, and device workspaces every five seconds without running expensive collectors.
 - Stale workspace evidence now becomes unknown instead of allowing an old collection to override a newer connectivity failure.
 - Local verification marked disconnected Linux 115 and 116 offline with `SSH_BANNER_TIMEOUT`; the local MikroTik and Cisco endpoints were also correctly offline from the current host network. API, web, database, and gateway containers are healthy.
+
+## 2026-09-23 - Usable Gmail sender and recipient management
+
+- The email-alert page now keeps Google App Password access and an explicit sender-replacement flow available even while a Gmail account is connected. The existing sender remains active until the replacement credentials pass SMTP verification.
+- Adding or removing a recipient now persists immediately through the authenticated settings API instead of requiring a second, easy-to-miss save action. Removing the last recipient safely disables automatic delivery.
+- Automatic high/critical alert delivery was enabled for the configured local channel. A controlled end-to-end test fed five independently identified Linux authentication failures through the real detection engine; it created one Finding and recorded a successful Gmail delivery to the configured recipient with no SMTP error. Synthetic source events were removed and the test Finding was resolved.
+- The frontend production image built successfully and the refreshed local web container serves the updated PWA through the canonical Nginx route.

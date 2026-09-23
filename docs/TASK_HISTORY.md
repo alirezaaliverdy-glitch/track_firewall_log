@@ -1590,3 +1590,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added sensor runtime telemetry to the existing security-monitoring status endpoint and explicit production/local Compose controls.
 - Added silent five-second UI refresh for assets, Linux monitoring, and device workspaces plus ten-second operational dashboard refresh.
 - Passed backend/frontend production image builds, targeted frontend/backend lint, eight focused connectivity/workspace tests, both Compose validations, local HTTP health checks, and live database verification of Linux 115/116 offline status.
+
+## 2026-09-23 - Repair Gmail account and recipient setup
+
+- Exposed Google App Password access and an atomic sender-change editor while retaining the verified sender until the replacement succeeds.
+- Changed recipient add/remove controls to persist immediately, return clear success/failure feedback, and disable automatic delivery if the last recipient is removed.
+- Enabled the configured high/critical channel and verified the real `Linux: repeated authentication failures` pipeline with five distinct synthetic authentication failures. Detection created one Finding and SMTP delivery completed with status `sent`; test events were then cleaned up and the Finding marked resolved.
+- Built and deployed the production frontend image and verified the canonical local route and container health.

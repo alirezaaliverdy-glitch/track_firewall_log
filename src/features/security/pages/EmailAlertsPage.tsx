@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Clock3, ExternalLink, Eye, EyeOff, Inbox, KeyRound, Mail, Plus, RefreshCw, Send, ShieldCheck, Unplug, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Clock3, ExternalLink, Eye, EyeOff, Inbox, KeyRound, Mail, Pencil, Plus, RefreshCw, Send, ShieldCheck, Unplug, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityEmailAlertSettings, testSecurityEmailAlert, testSecurityVendorEmails, updateSecurityEmailAlertSettings, type SecurityEmailAlertSettings } from "@/lib/platform";
@@ -48,7 +48,8 @@ export default function EmailAlertsPage() {
   const [senderEmail, setSenderEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
   const [showAppPassword, setShowAppPassword] = useState(false);
-  const [busy, setBusy] = useState<"connect" | "disconnect" | "save" | "test" | "vendors" | "">("");
+  const [senderEditorOpen, setSenderEditorOpen] = useState(false);
+  const [busy, setBusy] = useState<"connect" | "disconnect" | "recipient" | "save" | "test" | "vendors" | "">("");
   const [message, setMessage] = useState("");
   const [historyFilter, setHistoryFilter] = useState<"all" | "sent" | "queued" | "blocked">("all");
 
@@ -94,7 +95,26 @@ export default function EmailAlertsPage() {
     finally { setBusy(""); }
   }
 
-  function addRecipient() {
+  async function persistRecipients(nextRecipients: string[], successMessage: string) {
+    setBusy("recipient");
+    setMessage("");
+    try {
+      const enabled = emailEnabled && nextRecipients.length > 0;
+      const value = await updateSecurityEmailAlertSettings({ recipientEmails: nextRecipients, enabled, minimumSeverity });
+      setEmail(value);
+      setRecipients(value.recipientEmails);
+      setEmailEnabled(value.enabled);
+      setMessage(successMessage);
+      return true;
+    } catch (reason) {
+      setMessage(emailFailure(reason, isFa));
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function addRecipient() {
     const value = recipientDraft.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
       setMessage(isFa ? "یک آدرس ایمیل معتبر وارد کنید." : "Enter a valid email address.");
@@ -108,9 +128,12 @@ export default function EmailAlertsPage() {
       setMessage(isFa ? "حداکثر ۱۰ گیرنده قابل ثبت است." : "You can register up to 10 recipients.");
       return;
     }
-    setRecipients((current) => [...current, value]);
-    setRecipientDraft("");
-    setMessage(isFa ? "گیرنده اضافه شد؛ برای اعمال تغییر، تنظیمات را ذخیره کنید." : "Recipient added; save settings to apply the change.");
+    const saved = await persistRecipients([...recipients, value], isFa ? "گیرنده جدید ثبت شد." : "The new recipient was saved.");
+    if (saved) setRecipientDraft("");
+  }
+
+  async function removeRecipient(address: string) {
+    await persistRecipients(recipients.filter((item) => item !== address), isFa ? "گیرنده حذف شد." : "The recipient was removed.");
   }
 
   async function testEmail() {
@@ -136,6 +159,7 @@ export default function EmailAlertsPage() {
     try {
       const value = await connectGmailSecuritySender({ senderEmail, appPassword });
       setEmail(value); setSenderEmail(value.sender.email ?? senderEmail); setRecipients(value.recipientEmails); setAppPassword("");
+      setSenderEditorOpen(false);
       setMessage(isFa ? "اتصال Gmail تأیید و ذخیره شد." : "Gmail connection verified and saved.");
     } catch (reason) { setMessage(emailFailure(reason, isFa)); }
     finally { setBusy(""); }
@@ -145,10 +169,18 @@ export default function EmailAlertsPage() {
     setBusy("disconnect"); setMessage("");
     try {
       const value = await disconnectGmailSecuritySender();
-      setEmail(value); setSenderEmail(""); setAppPassword(""); setEmailEnabled(false);
+      setEmail(value); setSenderEmail(""); setAppPassword(""); setEmailEnabled(false); setSenderEditorOpen(true);
       setMessage(isFa ? "اتصال Gmail حذف و ارسال خودکار غیرفعال شد." : "Gmail disconnected and automatic delivery disabled.");
     } catch (reason) { setMessage(emailFailure(reason, isFa)); }
     finally { setBusy(""); }
+  }
+
+  function editSender() {
+    setSenderEmail(email?.sender.email ?? "");
+    setAppPassword("");
+    setShowAppPassword(false);
+    setSenderEditorOpen(true);
+    setMessage("");
   }
 
   if (loading) return <LoadingState />;
@@ -182,18 +214,26 @@ export default function EmailAlertsPage() {
     <div className="email-alerts-primary-grid">
     <section className={`gmail-connection ${email?.sender.connected ? "is-connected" : ""}`}>
       <header><span><KeyRound size={22} /></span><div><h2>{isFa ? "حساب فرستنده" : "Sender account"}</h2><p>{email?.sender.connected ? (isFa ? "حساب Gmail تأیید شده و App Password به‌صورت رمزنگاری‌شده نگهداری می‌شود." : "Gmail is verified and the App Password is stored encrypted.") : (isFa ? "یک App Password شانزده‌کاراکتری از Google بسازید و اتصال را یک‌بار تأیید کنید." : "Create a 16-character Google App Password and verify the connection once.")}</p></div><strong>{email?.sender.connected ? (isFa ? "متصل" : "Connected") : (isFa ? "متصل نیست" : "Not connected")}</strong></header>
-      {email?.sender.connected ? <div className="gmail-connection__connected"><div><CheckCircle2 size={19} /><span><small>{isFa ? "فرستنده فعال" : "Active sender"}</small><strong dir="ltr">{email.sender.email}</strong></span></div><button type="button" className="is-danger" onClick={() => void disconnectGmail()} disabled={Boolean(busy)}><Unplug size={16} />{busy === "disconnect" ? (isFa ? "در حال حذف…" : "Disconnecting…") : (isFa ? "حذف اتصال" : "Disconnect")}</button></div> : <>
-        <ol className="gmail-connection__steps"><li>{isFa ? "تأیید دومرحله‌ای Google را فعال کنید." : "Enable Google 2-Step Verification."}</li><li>{isFa ? "برای Mini-SOAR یک App Password بسازید." : "Create an App Password for Mini-SOAR."}</li><li>{isFa ? "کد را وارد کنید و اتصال را بررسی کنید." : "Enter the code and verify the connection."}</li></ol>
-        <a className="gmail-connection__google-link" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer"><ExternalLink size={15} />{isFa ? "بازکردن App passwords گوگل" : "Open Google App Passwords"}</a>
-        <div className="gmail-connection__form"><label><span>{isFa ? "ایمیل فرستنده" : "Sender email"}</span><input type="email" dir="ltr" autoComplete="username" value={senderEmail} onChange={(event) => setSenderEmail(event.target.value)} placeholder="name@gmail.com" disabled={Boolean(busy)} /></label><label><span>{isFa ? "App Password گوگل" : "Google App Password"}</span><div className="gmail-connection__secret"><input type={showAppPassword ? "text" : "password"} dir="ltr" autoComplete="new-password" value={appPassword} onChange={(event) => setAppPassword(event.target.value)} placeholder="xxxx xxxx xxxx xxxx" disabled={Boolean(busy)} /><button type="button" aria-label={showAppPassword ? (isFa ? "مخفی‌کردن رمز" : "Hide password") : (isFa ? "نمایش رمز" : "Show password")} onClick={() => setShowAppPassword((value) => !value)}>{showAppPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label><button type="button" onClick={() => void connectGmail()} disabled={Boolean(busy) || !senderEmail.trim() || appPassword.replace(/\s+/g, "").length !== 16}><CheckCircle2 size={16} />{busy === "connect" ? (isFa ? "در حال بررسی…" : "Verifying…") : (isFa ? "اتصال و بررسی" : "Connect and verify")}</button></div>
-      </>}
+      {email?.sender.connected ? <div className="gmail-connection__connected">
+        <div><CheckCircle2 size={19} /><span><small>{isFa ? "فرستنده فعال" : "Active sender"}</small><strong dir="ltr">{email.sender.email}</strong></span></div>
+        <div className="gmail-connection__connected-actions">
+          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer"><ExternalLink size={15} />{isFa ? "App Password" : "App Password"}</a>
+          <button type="button" onClick={editSender} disabled={Boolean(busy)}><Pencil size={16} />{isFa ? "تغییر فرستنده" : "Change sender"}</button>
+          <button type="button" className="is-danger" onClick={() => void disconnectGmail()} disabled={Boolean(busy)}><Unplug size={16} />{busy === "disconnect" ? (isFa ? "در حال حذف…" : "Disconnecting…") : (isFa ? "حذف اتصال" : "Disconnect")}</button>
+        </div>
+      </div> : null}
+      {!email?.sender.connected || senderEditorOpen ? <div className="gmail-connection__editor">
+        {email?.sender.connected ? <p className="gmail-connection__replacement-note"><ShieldCheck size={17} />{isFa ? "حساب فعلی تا تأیید موفق حساب جدید فعال می‌ماند." : "The current sender remains active until the new account is verified."}</p> : <ol className="gmail-connection__steps"><li>{isFa ? "تأیید دومرحله‌ای Google را فعال کنید." : "Enable Google 2-Step Verification."}</li><li>{isFa ? "برای Mini-SOAR یک App Password بسازید." : "Create an App Password for Mini-SOAR."}</li><li>{isFa ? "کد را وارد کنید و اتصال را بررسی کنید." : "Enter the code and verify the connection."}</li></ol>}
+        <a className="gmail-connection__google-link" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer"><ExternalLink size={15} />{isFa ? "ساخت App Password در حساب گوگل" : "Create an App Password in Google"}</a>
+        <div className="gmail-connection__form"><label><span>{isFa ? "ایمیل فرستنده جدید" : "New sender email"}</span><input type="email" dir="ltr" autoComplete="username" value={senderEmail} onChange={(event) => setSenderEmail(event.target.value)} placeholder="name@gmail.com" disabled={Boolean(busy)} /></label><label><span>{isFa ? "App Password گوگل" : "Google App Password"}</span><div className="gmail-connection__secret"><input type={showAppPassword ? "text" : "password"} dir="ltr" autoComplete="new-password" value={appPassword} onChange={(event) => setAppPassword(event.target.value)} placeholder="xxxx xxxx xxxx xxxx" disabled={Boolean(busy)} /><button type="button" aria-label={showAppPassword ? (isFa ? "مخفی‌کردن رمز" : "Hide password") : (isFa ? "نمایش رمز" : "Show password")} onClick={() => setShowAppPassword((value) => !value)}>{showAppPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label><div className="gmail-connection__form-actions"><button type="button" onClick={() => void connectGmail()} disabled={Boolean(busy) || !senderEmail.trim() || appPassword.replace(/\s+/g, "").length !== 16}><CheckCircle2 size={16} />{busy === "connect" ? (isFa ? "در حال بررسی…" : "Verifying…") : email?.sender.connected ? (isFa ? "تأیید و جایگزینی" : "Verify and replace") : (isFa ? "اتصال و بررسی" : "Connect and verify")}</button>{email?.sender.connected ? <button type="button" className="is-secondary" onClick={() => { setSenderEditorOpen(false); setAppPassword(""); setSenderEmail(email.sender.email ?? ""); }} disabled={Boolean(busy)}>{isFa ? "انصراف" : "Cancel"}</button> : null}</div></div>
+      </div> : null}
     </section>
 
     <section className="security-alert-email email-alerts-settings">
       <div className="security-alert-email__intro"><span><Mail size={22} /></span><div><h2>{isFa ? "گیرنده‌های هشدار" : "Alert recipients"}</h2><p>{isFa ? "یک یا چند ایمیل اضافه کنید. هر هشدار برای تمام گیرنده‌های ثبت‌شده ارسال و جداگانه پیگیری می‌شود." : "Add one or more addresses. Every alert is sent and tracked separately for each registered recipient."}</p></div></div>
       <div className="email-recipient-manager">
-        <label><span>{isFa ? "افزودن ایمیل جدید" : "Add another email"}</span><div><input type="email" dir="ltr" value={recipientDraft} onChange={(event) => setRecipientDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addRecipient(); } }} placeholder={senderEmail || "security@example.com"} /><button type="button" onClick={addRecipient} disabled={!recipientDraft.trim() || recipients.length >= 10}><Plus size={17} />{isFa ? "افزودن" : "Add"}</button></div></label>
-        <div className="email-recipient-list" aria-label={isFa ? "گیرنده‌های ثبت‌شده" : "Registered recipients"}>{recipients.length ? recipients.map((address, index) => <article key={address}><span><Mail size={16} /><span><small>{isFa ? `گیرنده ${index + 1}` : `Recipient ${index + 1}`}</small><strong dir="ltr">{address}</strong></span></span><button type="button" onClick={() => setRecipients((current) => current.filter((item) => item !== address))} aria-label={isFa ? `حذف ${address}` : `Remove ${address}`}><X size={16} /></button></article>) : <div className="email-recipient-list__empty"><Inbox size={20} /><span>{isFa ? "هنوز گیرنده‌ای اضافه نشده است." : "No recipient has been added yet."}</span></div>}</div>
+        <label><span>{isFa ? "افزودن ایمیل جدید" : "Add another email"}</span><div><input type="email" dir="ltr" value={recipientDraft} onChange={(event) => setRecipientDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addRecipient(); } }} placeholder={senderEmail || "security@example.com"} disabled={Boolean(busy)} /><button type="button" onClick={() => void addRecipient()} disabled={Boolean(busy) || !recipientDraft.trim() || recipients.length >= 10}><Plus size={17} />{busy === "recipient" ? (isFa ? "ثبت…" : "Saving…") : (isFa ? "افزودن" : "Add")}</button></div></label>
+        <div className="email-recipient-list" aria-label={isFa ? "گیرنده‌های ثبت‌شده" : "Registered recipients"}>{recipients.length ? recipients.map((address, index) => <article key={address}><span><Mail size={16} /><span><small>{isFa ? `گیرنده ${index + 1}` : `Recipient ${index + 1}`}</small><strong dir="ltr">{address}</strong></span></span><button type="button" onClick={() => void removeRecipient(address)} disabled={Boolean(busy)} aria-label={isFa ? `حذف ${address}` : `Remove ${address}`}><X size={16} /></button></article>) : <div className="email-recipient-list__empty"><Inbox size={20} /><span>{isFa ? "هنوز گیرنده‌ای اضافه نشده است." : "No recipient has been added yet."}</span></div>}</div>
       </div>
       <div className="security-alert-email__form email-alerts-options"><label><span>{isFa ? "سطح هشدار" : "Alert level"}</span><select value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value)}><option value="high">{isFa ? "مهم و بحرانی" : "High and critical"}</option><option value="critical">{isFa ? "فقط بحرانی" : "Critical only"}</option></select></label><label className="security-alert-email__toggle"><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} disabled={!email?.smtpConfigured} /><span>{isFa ? "ارسال خودکار فعال باشد" : "Enable automatic alerts"}</span></label></div>
       <div className="email-alerts-actions"><button type="button" onClick={() => void saveEmail()} disabled={Boolean(busy) || (emailEnabled && (!email?.smtpConfigured || !recipients.length))}><CheckCircle2 size={16} />{busy === "save" ? (isFa ? "در حال ذخیره…" : "Saving…") : (isFa ? "ذخیره تنظیمات" : "Save settings")}</button><button type="button" className="is-secondary" onClick={() => void testEmail()} disabled={Boolean(busy) || !email?.smtpConfigured || !recipients.length}><Send size={16} />{busy === "test" ? (isFa ? "در حال ارسال…" : "Sending…") : (isFa ? "ارسال تست به همه" : "Test all recipients")}</button></div>
