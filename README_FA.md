@@ -10,7 +10,7 @@
 
 ## نصب و اجرا
 
-    git clone --depth 1 --branch latest-safe-snapshot --single-branch https://github.com/alirezaaliverdy-glitch/track_firewall_log.git
+    git clone --depth 1 --branch main --single-branch https://github.com/alirezaaliverdy-glitch/track_firewall_log.git
     cd track_firewall_log
     docker compose up -d
 

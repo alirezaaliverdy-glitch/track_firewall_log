@@ -1576,3 +1576,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a normalized backend overview that projects only collected vendor evidence and redacts sensitive/raw fields before it reaches the UI.
 - Replaced the fragmented asset landing view with readable status cards, exact stored warning/error causes, collection freshness, expandable vendor domains, and direct remediation links.
 - Wired refresh to the real vendor connection path and Linux monitoring collector, fixed interface cards to use the full content width, and added responsive layouts for smaller screens.
+
+## 2026-09-23 - Repair mobile reachability and deployment guidance
+
+- Diagnosed the local mobile outage as a host-network issue rather than a web/API failure: the saved LAN IP was stale and the active iPhone hotspot adapter used the Windows Public firewall profile.
+- Added a self-elevating local-network helper with a narrowly scoped firewall rule and live URL/HTTP verification.
+- Replaced the stale snapshot-branch clone example with `main`, then validated the root production Compose configuration and remote branch head.

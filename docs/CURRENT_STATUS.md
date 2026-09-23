@@ -1480,3 +1480,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Rebuilt the first device-detail view as an evidence-first workspace with readable KPIs, an explicit cause panel for attention states, connection channels, device identity, health, and next actions.
 - Added one normalized, bounded, secret-safe vendor projection for Cisco, MikroTik, FortiGate, Sophos, and Linux while preserving each connector's real interfaces, routes, firewall/policy, services, inventory, and platform facts.
 - A manual collection now invokes the registered connector; Linux also refreshes its health snapshot. The full-width interface layout and mobile breakpoints remove the narrow, overlapping device view.
+
+## 2026-09-23 - Stable mobile access and production clone path
+
+- Confirmed the local UI and API are healthy; the phone failure was caused by a DHCP address change from the retired `192.168.70.194` address to the active network address, combined with the Windows Public profile blocking unsolicited inbound traffic.
+- Added an administrator-elevated, idempotent LAN helper that permits only TCP/80 from `LocalSubnet`, verifies the app response, and prints the current mobile URL.
+- Updated the Persian and English deployment instructions to clone the current `main` branch and use the root zero-configuration production Compose stack.

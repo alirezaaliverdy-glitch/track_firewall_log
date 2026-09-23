@@ -6,6 +6,12 @@ The root docker-compose.yml is the supported clone-and-run production entrypoint
 
     docker compose up -d
 
+Clone the current production branch with:
+
+    git clone --depth 1 --branch main --single-branch https://github.com/alirezaaliverdy-glitch/track_firewall_log.git
+    cd track_firewall_log
+    docker compose up -d --build
+
 It builds the frontend and backend from the checked-out commit, starts PostgreSQL, runs Prisma migrations and the idempotent bootstrap seed, then exposes the application through Caddy on HTTP/HTTPS. No .env file is required for this default path.
 
 The secrets-init one-shot service creates strong random PostgreSQL, session, and credential-encryption secrets in the private firewall_runtime_secrets volume. Existing non-empty secrets are preserved across restarts. PostgreSQL, the API, and the web container are not published directly; only the Caddy gateway exposes ports 80 and 443.
@@ -27,6 +33,14 @@ The default gateway uses Caddy's internal CA so an IP-only deployment can start 
 - Networks: PostgreSQL and the API are restricted to the internal backend network. Only Caddy publishes host ports.
 
 Every long-running service has a health check. Compose waits for the database, API, and frontend readiness before the gateway starts.
+
+## Local phone access on Windows
+
+The browser address must use the computer's current LAN address; an old DHCP address will stop working after the network changes. Run the following helper once from the repository. It requests Windows administrator approval, opens only TCP port 80 to `LocalSubnet`, verifies HTTP 200, and prints the current phone URL:
+
+    powershell -ExecutionPolicy Bypass -File scripts/deploy/enable-mobile-lan-access.ps1
+
+The phone and computer must be on the same network. For PWA installation and access across different networks, use the production HTTPS gateway or a private HTTPS overlay such as an administrator-enabled Tailscale Serve endpoint.
 
 ## Environment separation
 
