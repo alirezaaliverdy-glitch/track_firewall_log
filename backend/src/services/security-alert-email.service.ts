@@ -6,17 +6,26 @@ import { PRIORITY_EMAIL_RULE_LABELS_FA } from "../security/vendor-detection-rule
 import { decryptSecret, encryptSecret } from "./credential-crypto.service.js";
 import { sendSmtpMail, verifySmtpConnection, type SmtpConfig } from "./smtp-client.js";
 import { gmailSmtpConfig, normalizeGmailAppPassword } from "./gmail-smtp.js";
-import { normalizeSecurityAlertRecipients } from "./security-email-recipients.js";
+import { normalizeSecurityAlertRecipientPreferences, normalizeSecurityAlertRecipients } from "./security-email-recipients.js";
 import { isRetryableSecurityEmailError, nextSecurityEmailRetryAt } from "./security-email-retry.js";
 
 const LEGACY_CHANNEL_ID = "primary-email";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
 
-function channelRecipients(channel: SecurityAlertChannel) {
+function registeredChannelRecipients(channel: SecurityAlertChannel) {
   const recipients = normalizeSecurityAlertRecipients(channel.recipientEmails);
   if (channel.recipientEmail && !recipients.includes(channel.recipientEmail.toLowerCase())) recipients.unshift(channel.recipientEmail.toLowerCase());
   return recipients;
+}
+
+function channelRecipientPreferences(channel: SecurityAlertChannel) {
+  const disabled = new Set(normalizeSecurityAlertRecipients(channel.disabledRecipientEmails));
+  return registeredChannelRecipients(channel).map((email) => ({ email, enabled: !disabled.has(email) }));
+}
+
+function channelRecipients(channel: SecurityAlertChannel) {
+  return channelRecipientPreferences(channel).filter((recipient) => recipient.enabled).map((recipient) => recipient.email);
 }
 
 function serverSmtpConfig(): SmtpConfig | null {
@@ -103,6 +112,7 @@ export async function getSecurityEmailAlertSettings(userId?: string) {
     enabled: channel.enabled,
     recipientEmail: channel.recipientEmail,
     recipientEmails: channelRecipients(channel),
+    recipients: channelRecipientPreferences(channel),
     minimumSeverity: channel.minimumSeverity,
     smtpConfigured: Boolean(personalGmail ?? serverSmtp),
     sender: {
@@ -137,16 +147,21 @@ export async function getSecurityEmailAlertSettings(userId?: string) {
   };
 }
 
-export async function updateSecurityEmailAlertSettings(input: { recipientEmail?: unknown; recipientEmails?: unknown; enabled?: unknown; minimumSeverity?: unknown }, userId?: string) {
-  const recipientEmails = normalizeSecurityAlertRecipients(input.recipientEmails ?? input.recipientEmail);
-  const recipientEmail = recipientEmails[0] ?? null;
+export async function updateSecurityEmailAlertSettings(input: { recipientEmail?: unknown; recipientEmails?: unknown; recipients?: unknown; enabled?: unknown; minimumSeverity?: unknown }, userId?: string) {
+  const preferences = input.recipients !== undefined
+    ? normalizeSecurityAlertRecipientPreferences(input.recipients)
+    : normalizeSecurityAlertRecipients(input.recipientEmails ?? input.recipientEmail).map((email) => ({ email, enabled: true }));
+  const recipientEmails = preferences.map((recipient) => recipient.email);
+  const activeRecipientEmails = preferences.filter((recipient) => recipient.enabled).map((recipient) => recipient.email);
+  const disabledRecipientEmails = preferences.filter((recipient) => !recipient.enabled).map((recipient) => recipient.email);
+  const recipientEmail = activeRecipientEmails[0] ?? null;
   const minimumSeverity = String(input.minimumSeverity ?? "high").toLowerCase();
   if (!["high", "critical"].includes(minimumSeverity)) throw new Error("INVALID_MINIMUM_SEVERITY");
   const enabled = input.enabled === true;
-  if (enabled && !recipientEmails.length) throw new Error("RECIPIENT_EMAIL_REQUIRED");
+  if (enabled && !activeRecipientEmails.length) throw new Error("RECIPIENT_EMAIL_REQUIRED");
   const channel = await getOrCreateChannel(userId);
   if (enabled && !hasChannelSmtpConfig(channel)) throw new Error("EMAIL_SENDER_NOT_CONNECTED");
-  await prisma.securityAlertChannel.update({ where: { id: channel.id }, data: { recipientEmail, recipientEmails, enabled, minimumSeverity, lastErrorCode: null } });
+  await prisma.securityAlertChannel.update({ where: { id: channel.id }, data: { recipientEmail, recipientEmails, disabledRecipientEmails, enabled, minimumSeverity, lastErrorCode: null } });
   return getSecurityEmailAlertSettings(userId);
 }
 
@@ -156,7 +171,7 @@ export async function connectGmailSecuritySender(input: { senderEmail?: unknown;
   const appPassword = normalizeGmailAppPassword(input.appPassword);
   if (!env.credentialEncryptionKey) throw new Error("SECRET_ENCRYPTION_NOT_CONFIGURED");
   const channel = await getOrCreateChannel(userId);
-  const existingRecipients = channelRecipients(channel);
+  const existingRecipients = registeredChannelRecipients(channel);
   const testedAt = new Date();
   try {
     await verifySmtpConnection(gmailSmtpConfig(senderEmail, appPassword));
@@ -170,7 +185,7 @@ export async function connectGmailSecuritySender(input: { senderEmail?: unknown;
         senderTestedAt: testedAt,
         senderTestStatus: "succeeded",
         lastErrorCode: null,
-        ...(existingRecipients.length ? {} : { recipientEmail: senderEmail, recipientEmails: [senderEmail] })
+        ...(existingRecipients.length ? {} : { recipientEmail: senderEmail, recipientEmails: [senderEmail], disabledRecipientEmails: [] })
       }
     });
     return getSecurityEmailAlertSettings(userId);

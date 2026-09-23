@@ -937,6 +937,7 @@ model SecurityAlertChannel {
   enabled         Boolean  @default(false)
   recipientEmail  String?
   recipientEmails String[] @default([])
+  disabledRecipientEmails String[] @default([])
   minimumSeverity String   @default("high")
   senderProvider  String?
   senderEmail     String?

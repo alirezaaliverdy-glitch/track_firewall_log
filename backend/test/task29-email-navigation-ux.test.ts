@@ -38,9 +38,12 @@ test("connected email page shows a compact identity instead of a disabled passwo
   assert.match(page, /gmail-connection__connected/);
   assert.match(page, /email-alerts-summary/);
   assert.match(page, /email\?\.sender\.connected \? <div className="gmail-connection__connected"/);
-  assert.match(page, /تست هر ۵ وندور/);
-  assert.match(page, /recipientEmails: recipients/);
+  assert.match(page, /اجرای تست وندورها/);
+  assert.match(page, /recipients, enabled: emailEnabled/);
   assert.match(page, /افزودن ایمیل جدید/);
+  assert.match(page, /ثبت حساب جدید/);
+  assert.match(page, /toggleRecipient\(recipient\.email/);
+  assert.match(page, /دریافت می‌کند/);
   assert.match(page, /delivery\.recipientEmail/);
   assert.match(page, /دلیل ارسال/);
   assert.match(page, /delivery\.reason\.titleFa/);

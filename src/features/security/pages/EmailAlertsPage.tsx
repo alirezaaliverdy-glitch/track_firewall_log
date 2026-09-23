@@ -18,6 +18,14 @@ function deliveryEventCount(metadata: unknown) {
   return Number.isFinite(value) ? value : 0;
 }
 
+type RecipientPreference = { email: string; enabled: boolean };
+
+function settingsRecipients(value: SecurityEmailAlertSettings): RecipientPreference[] {
+  return value.recipients?.length
+    ? value.recipients
+    : value.recipientEmails.map((email) => ({ email, enabled: true }));
+}
+
 function emailFailure(reason: unknown, isFa: boolean) {
   const code = reason instanceof Error ? reason.message : String(reason);
   const messages: Record<string, [string, string]> = {
@@ -41,7 +49,7 @@ export default function EmailAlertsPage() {
   const isFa = (i18n.resolvedLanguage ?? i18n.language).startsWith("fa");
   const [email, setEmail] = useState<SecurityEmailAlertSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [recipients, setRecipients] = useState<string[]>([]);
+  const [recipients, setRecipients] = useState<RecipientPreference[]>([]);
   const [recipientDraft, setRecipientDraft] = useState("");
   const [minimumSeverity, setMinimumSeverity] = useState("high");
   const [emailEnabled, setEmailEnabled] = useState(false);
@@ -54,12 +62,13 @@ export default function EmailAlertsPage() {
   const [historyFilter, setHistoryFilter] = useState<"all" | "sent" | "queued" | "blocked">("all");
 
   const pendingDeliveries = useMemo(() => email?.deliveries.filter((item) => item.status === "pending" || item.status === "failed").length ?? 0, [email]);
+  const activeRecipientCount = useMemo(() => recipients.filter((recipient) => recipient.enabled).length, [recipients]);
 
   async function loadSettings(syncForm = false) {
     const value = await getSecurityEmailAlertSettings();
     setEmail(value);
     if (syncForm) {
-      setRecipients(value.recipientEmails?.length ? value.recipientEmails : value.recipientEmail ? [value.recipientEmail] : []);
+      setRecipients(settingsRecipients(value));
       setSenderEmail(value.sender.email ?? "");
       setMinimumSeverity(value.minimumSeverity);
       setEmailEnabled(value.enabled);
@@ -73,7 +82,7 @@ export default function EmailAlertsPage() {
       .then((value) => {
         if (!mounted) return;
         setEmail(value);
-        setRecipients(value.recipientEmails?.length ? value.recipientEmails : value.recipientEmail ? [value.recipientEmail] : []);
+        setRecipients(settingsRecipients(value));
         setSenderEmail(value.sender.email ?? "");
         setMinimumSeverity(value.minimumSeverity);
         setEmailEnabled(value.enabled);
@@ -87,22 +96,23 @@ export default function EmailAlertsPage() {
   async function saveEmail() {
     setBusy("save"); setMessage("");
     try {
-      const value = await updateSecurityEmailAlertSettings({ recipientEmails: recipients, enabled: emailEnabled, minimumSeverity });
+      const value = await updateSecurityEmailAlertSettings({ recipients, enabled: emailEnabled, minimumSeverity });
       setEmail(value);
-      setRecipients(value.recipientEmails);
+      setRecipients(settingsRecipients(value));
+      setEmailEnabled(value.enabled);
       setMessage(isFa ? "تنظیمات اعلان ذخیره شد." : "Alert settings saved.");
     } catch (reason) { setMessage(emailFailure(reason, isFa)); }
     finally { setBusy(""); }
   }
 
-  async function persistRecipients(nextRecipients: string[], successMessage: string) {
+  async function persistRecipients(nextRecipients: RecipientPreference[], successMessage: string) {
     setBusy("recipient");
     setMessage("");
     try {
-      const enabled = emailEnabled && nextRecipients.length > 0;
-      const value = await updateSecurityEmailAlertSettings({ recipientEmails: nextRecipients, enabled, minimumSeverity });
+      const enabled = emailEnabled && nextRecipients.some((recipient) => recipient.enabled);
+      const value = await updateSecurityEmailAlertSettings({ recipients: nextRecipients, enabled, minimumSeverity });
       setEmail(value);
-      setRecipients(value.recipientEmails);
+      setRecipients(settingsRecipients(value));
       setEmailEnabled(value.enabled);
       setMessage(successMessage);
       return true;
@@ -120,7 +130,7 @@ export default function EmailAlertsPage() {
       setMessage(isFa ? "یک آدرس ایمیل معتبر وارد کنید." : "Enter a valid email address.");
       return;
     }
-    if (recipients.includes(value)) {
+    if (recipients.some((recipient) => recipient.email === value)) {
       setMessage(isFa ? "این ایمیل قبلاً در فهرست گیرنده‌ها ثبت شده است." : "This recipient is already in the list.");
       return;
     }
@@ -128,12 +138,19 @@ export default function EmailAlertsPage() {
       setMessage(isFa ? "حداکثر ۱۰ گیرنده قابل ثبت است." : "You can register up to 10 recipients.");
       return;
     }
-    const saved = await persistRecipients([...recipients, value], isFa ? "گیرنده جدید ثبت شد." : "The new recipient was saved.");
+    const saved = await persistRecipients([...recipients, { email: value, enabled: true }], isFa ? "گیرنده جدید ثبت و فعال شد." : "The new recipient was saved and enabled.");
     if (saved) setRecipientDraft("");
   }
 
   async function removeRecipient(address: string) {
-    await persistRecipients(recipients.filter((item) => item !== address), isFa ? "گیرنده حذف شد." : "The recipient was removed.");
+    await persistRecipients(recipients.filter((item) => item.email !== address), isFa ? "گیرنده حذف شد." : "The recipient was removed.");
+  }
+
+  async function toggleRecipient(address: string, enabled: boolean) {
+    await persistRecipients(
+      recipients.map((recipient) => recipient.email === address ? { ...recipient, enabled } : recipient),
+      enabled ? (isFa ? "ارسال هشدار برای این ایمیل فعال شد." : "Alerts were enabled for this address.") : (isFa ? "ارسال هشدار برای این ایمیل متوقف شد." : "Alerts were paused for this address.")
+    );
   }
 
   async function testEmail() {
@@ -158,7 +175,7 @@ export default function EmailAlertsPage() {
     setBusy("connect"); setMessage("");
     try {
       const value = await connectGmailSecuritySender({ senderEmail, appPassword });
-      setEmail(value); setSenderEmail(value.sender.email ?? senderEmail); setRecipients(value.recipientEmails); setAppPassword("");
+      setEmail(value); setSenderEmail(value.sender.email ?? senderEmail); setRecipients(settingsRecipients(value)); setAppPassword("");
       setSenderEditorOpen(false);
       setMessage(isFa ? "اتصال Gmail تأیید و ذخیره شد." : "Gmail connection verified and saved.");
     } catch (reason) { setMessage(emailFailure(reason, isFa)); }
@@ -201,14 +218,14 @@ export default function EmailAlertsPage() {
 
     <section className="email-alerts-summary" aria-label={isFa ? "خلاصه وضعیت ایمیل" : "Email status summary"}>
       <article className={email?.sender.connected ? "is-ready" : "is-warning"}><KeyRound size={20} /><span><small>{isFa ? "اتصال Gmail" : "Gmail"}</small><strong>{email?.sender.connected ? (isFa ? "متصل" : "Connected") : (isFa ? "نیازمند اتصال" : "Not connected")}</strong></span></article>
-      <article className={email?.enabled ? "is-ready" : "is-muted"}><ShieldCheck size={20} /><span><small>{isFa ? "ارسال خودکار" : "Automatic alerts"}</small><strong>{email?.enabled ? (isFa ? `فعال برای ${recipients.length.toLocaleString("fa-IR")} گیرنده` : `Enabled for ${recipients.length} recipient${recipients.length === 1 ? "" : "s"}`) : (isFa ? "غیرفعال" : "Disabled")}</strong></span></article>
+      <article className={email?.enabled ? "is-ready" : "is-muted"}><ShieldCheck size={20} /><span><small>{isFa ? "ارسال خودکار" : "Automatic alerts"}</small><strong>{email?.enabled ? (isFa ? `فعال برای ${activeRecipientCount.toLocaleString("fa-IR")} گیرنده` : `Enabled for ${activeRecipientCount} recipient${activeRecipientCount === 1 ? "" : "s"}`) : (isFa ? "غیرفعال" : "Disabled")}</strong></span></article>
       <article className={pendingDeliveries ? "is-warning" : "is-ready"}><BellRing size={20} /><span><small>{isFa ? "در صف ارسال" : "Queued"}</small><strong>{pendingDeliveries.toLocaleString(isFa ? "fa-IR" : "en-US")}</strong></span></article>
     </section>
 
     <ol className="email-setup-progress" aria-label={isFa ? "مراحل آماده‌سازی اعلان ایمیلی" : "Email alert setup progress"}>
       <li className={email?.sender.connected ? "is-complete" : "is-current"}><span>{email?.sender.connected ? <CheckCircle2 /> : "۱"}</span><div><strong>{isFa ? "اتصال فرستنده" : "Connect sender"}</strong><small>{email?.sender.connected ? (isFa ? "تأیید شده" : "Verified") : (isFa ? "Gmail را متصل کنید" : "Connect Gmail")}</small></div></li>
-      <li className={recipients.length ? "is-complete" : email?.sender.connected ? "is-current" : ""}><span>{recipients.length ? <CheckCircle2 /> : "۲"}</span><div><strong>{isFa ? "گیرندگان" : "Recipients"}</strong><small>{recipients.length ? (isFa ? `${recipients.length.toLocaleString("fa-IR")} آدرس آماده` : `${recipients.length} ready`) : (isFa ? "حداقل یک آدرس" : "Add at least one")}</small></div></li>
-      <li className={email?.enabled ? "is-complete" : recipients.length ? "is-current" : ""}><span>{email?.enabled ? <CheckCircle2 /> : "۳"}</span><div><strong>{isFa ? "فعال‌سازی" : "Activate"}</strong><small>{email?.enabled ? (isFa ? "ارسال خودکار فعال" : "Automatic delivery on") : (isFa ? "ذخیره و تست کنید" : "Save and test")}</small></div></li>
+      <li className={recipients.length ? "is-complete" : email?.sender.connected ? "is-current" : ""}><span>{recipients.length ? <CheckCircle2 /> : "۲"}</span><div><strong>{isFa ? "گیرندگان" : "Recipients"}</strong><small>{recipients.length ? (isFa ? `${activeRecipientCount.toLocaleString("fa-IR")} فعال از ${recipients.length.toLocaleString("fa-IR")}` : `${activeRecipientCount} active of ${recipients.length}`) : (isFa ? "حداقل یک آدرس" : "Add at least one")}</small></div></li>
+      <li className={email?.enabled ? "is-complete" : activeRecipientCount ? "is-current" : ""}><span>{email?.enabled ? <CheckCircle2 /> : "۳"}</span><div><strong>{isFa ? "فعال‌سازی" : "Activate"}</strong><small>{email?.enabled ? (isFa ? "ارسال خودکار فعال" : "Automatic delivery on") : (isFa ? "ذخیره و تست کنید" : "Save and test")}</small></div></li>
     </ol>
 
     <div className="email-alerts-primary-grid">
@@ -217,8 +234,8 @@ export default function EmailAlertsPage() {
       {email?.sender.connected ? <div className="gmail-connection__connected">
         <div><CheckCircle2 size={19} /><span><small>{isFa ? "فرستنده فعال" : "Active sender"}</small><strong dir="ltr">{email.sender.email}</strong></span></div>
         <div className="gmail-connection__connected-actions">
-          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer"><ExternalLink size={15} />{isFa ? "App Password" : "App Password"}</a>
-          <button type="button" onClick={editSender} disabled={Boolean(busy)}><Pencil size={16} />{isFa ? "تغییر فرستنده" : "Change sender"}</button>
+          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer"><ExternalLink size={15} />{isFa ? "ساخت App Password" : "Create App Password"}</a>
+          <button type="button" onClick={editSender} disabled={Boolean(busy)}><Pencil size={16} />{isFa ? "ثبت حساب جدید" : "Connect new account"}</button>
           <button type="button" className="is-danger" onClick={() => void disconnectGmail()} disabled={Boolean(busy)}><Unplug size={16} />{busy === "disconnect" ? (isFa ? "در حال حذف…" : "Disconnecting…") : (isFa ? "حذف اتصال" : "Disconnect")}</button>
         </div>
       </div> : null}
@@ -230,14 +247,14 @@ export default function EmailAlertsPage() {
     </section>
 
     <section className="security-alert-email email-alerts-settings">
-      <div className="security-alert-email__intro"><span><Mail size={22} /></span><div><h2>{isFa ? "گیرنده‌های هشدار" : "Alert recipients"}</h2><p>{isFa ? "یک یا چند ایمیل اضافه کنید. هر هشدار برای تمام گیرنده‌های ثبت‌شده ارسال و جداگانه پیگیری می‌شود." : "Add one or more addresses. Every alert is sent and tracked separately for each registered recipient."}</p></div></div>
+      <div className="security-alert-email__intro"><span><Mail size={22} /></span><div><h2>{isFa ? "گیرنده‌های هشدار" : "Alert recipients"}</h2><p>{isFa ? "ایمیل‌ها را ثبت کنید و برای هرکدام مشخص کنید هشدار دریافت کند یا نه." : "Register addresses and choose which ones should receive alerts."}</p></div></div>
       <div className="email-recipient-manager">
         <label><span>{isFa ? "افزودن ایمیل جدید" : "Add another email"}</span><div><input type="email" dir="ltr" value={recipientDraft} onChange={(event) => setRecipientDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addRecipient(); } }} placeholder={senderEmail || "security@example.com"} disabled={Boolean(busy)} /><button type="button" onClick={() => void addRecipient()} disabled={Boolean(busy) || !recipientDraft.trim() || recipients.length >= 10}><Plus size={17} />{busy === "recipient" ? (isFa ? "ثبت…" : "Saving…") : (isFa ? "افزودن" : "Add")}</button></div></label>
-        <div className="email-recipient-list" aria-label={isFa ? "گیرنده‌های ثبت‌شده" : "Registered recipients"}>{recipients.length ? recipients.map((address, index) => <article key={address}><span><Mail size={16} /><span><small>{isFa ? `گیرنده ${index + 1}` : `Recipient ${index + 1}`}</small><strong dir="ltr">{address}</strong></span></span><button type="button" onClick={() => void removeRecipient(address)} disabled={Boolean(busy)} aria-label={isFa ? `حذف ${address}` : `Remove ${address}`}><X size={16} /></button></article>) : <div className="email-recipient-list__empty"><Inbox size={20} /><span>{isFa ? "هنوز گیرنده‌ای اضافه نشده است." : "No recipient has been added yet."}</span></div>}</div>
+        <div className="email-recipient-list" aria-label={isFa ? "گیرنده‌های ثبت‌شده" : "Registered recipients"}>{recipients.length ? recipients.map((recipient, index) => <article key={recipient.email} className={recipient.enabled ? "is-enabled" : "is-paused"}><span><Mail size={16} /><span><small>{isFa ? `گیرنده ${index + 1}` : `Recipient ${index + 1}`}</small><strong dir="ltr">{recipient.email}</strong></span></span><div className="email-recipient-list__controls"><label className="email-recipient-toggle"><input type="checkbox" checked={recipient.enabled} onChange={(event) => void toggleRecipient(recipient.email, event.target.checked)} disabled={Boolean(busy)} /><span>{recipient.enabled ? (isFa ? "دریافت می‌کند" : "Receiving") : (isFa ? "متوقف" : "Paused")}</span></label><button type="button" onClick={() => void removeRecipient(recipient.email)} disabled={Boolean(busy)} aria-label={isFa ? `حذف ${recipient.email}` : `Remove ${recipient.email}`}><X size={16} /></button></div></article>) : <div className="email-recipient-list__empty"><Inbox size={20} /><span>{isFa ? "هنوز گیرنده‌ای اضافه نشده است." : "No recipient has been added yet."}</span></div>}</div>
       </div>
-      <div className="security-alert-email__form email-alerts-options"><label><span>{isFa ? "سطح هشدار" : "Alert level"}</span><select value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value)}><option value="high">{isFa ? "مهم و بحرانی" : "High and critical"}</option><option value="critical">{isFa ? "فقط بحرانی" : "Critical only"}</option></select></label><label className="security-alert-email__toggle"><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} disabled={!email?.smtpConfigured} /><span>{isFa ? "ارسال خودکار فعال باشد" : "Enable automatic alerts"}</span></label></div>
-      <div className="email-alerts-actions"><button type="button" onClick={() => void saveEmail()} disabled={Boolean(busy) || (emailEnabled && (!email?.smtpConfigured || !recipients.length))}><CheckCircle2 size={16} />{busy === "save" ? (isFa ? "در حال ذخیره…" : "Saving…") : (isFa ? "ذخیره تنظیمات" : "Save settings")}</button><button type="button" className="is-secondary" onClick={() => void testEmail()} disabled={Boolean(busy) || !email?.smtpConfigured || !recipients.length}><Send size={16} />{busy === "test" ? (isFa ? "در حال ارسال…" : "Sending…") : (isFa ? "ارسال تست به همه" : "Test all recipients")}</button></div>
-      <details className="email-alerts-advanced"><summary>{isFa ? "آزمایش پیشرفته قالب وندورها" : "Advanced vendor template test"}</summary><p>{isFa ? "برای بررسی قالب اختصاصی هر وندور، پنج ایمیل آزمایشی جداگانه ارسال می‌شود." : "Sends five separate messages to validate each vendor-specific template."}</p><button type="button" onClick={() => void testVendors()} disabled={Boolean(busy) || !email?.smtpConfigured || !recipients.length}><Send size={16} />{busy === "vendors" ? (isFa ? "در حال ارسال ۵ تست…" : "Sending 5 tests…") : (isFa ? "اجرای تست وندورها" : "Run vendor tests")}</button></details>
+      <div className="security-alert-email__form email-alerts-options"><label><span>{isFa ? "سطح هشدار" : "Alert level"}</span><select value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value)}><option value="high">{isFa ? "مهم و بحرانی" : "High and critical"}</option><option value="critical">{isFa ? "فقط بحرانی" : "Critical only"}</option></select></label><label className="security-alert-email__toggle"><input type="checkbox" checked={emailEnabled} onChange={(event) => setEmailEnabled(event.target.checked)} disabled={!email?.smtpConfigured || !activeRecipientCount} /><span>{isFa ? "ارسال خودکار فعال باشد" : "Enable automatic alerts"}</span></label></div>
+      <div className="email-alerts-actions"><button type="button" onClick={() => void saveEmail()} disabled={Boolean(busy) || (emailEnabled && (!email?.smtpConfigured || !activeRecipientCount))}><CheckCircle2 size={16} />{busy === "save" ? (isFa ? "در حال ذخیره…" : "Saving…") : (isFa ? "ذخیره تنظیمات" : "Save settings")}</button><button type="button" className="is-secondary" onClick={() => void testEmail()} disabled={Boolean(busy) || !email?.smtpConfigured || !activeRecipientCount}><Send size={16} />{busy === "test" ? (isFa ? "در حال ارسال…" : "Sending…") : (isFa ? `ارسال تست به ${activeRecipientCount.toLocaleString("fa-IR")} ایمیل فعال` : `Test ${activeRecipientCount} active recipient${activeRecipientCount === 1 ? "" : "s"}`)}</button></div>
+      <details className="email-alerts-advanced"><summary>{isFa ? "آزمایش پیشرفته قالب وندورها" : "Advanced vendor template test"}</summary><p>{isFa ? "برای بررسی قالب اختصاصی هر وندور، پنج ایمیل آزمایشی جداگانه فقط برای گیرنده‌های فعال ارسال می‌شود." : "Sends five vendor template tests only to active recipients."}</p><button type="button" onClick={() => void testVendors()} disabled={Boolean(busy) || !email?.smtpConfigured || !activeRecipientCount}><Send size={16} />{busy === "vendors" ? (isFa ? "در حال ارسال ۵ تست…" : "Sending 5 tests…") : (isFa ? "اجرای تست وندورها" : "Run vendor tests")}</button></details>
       <div className={`security-alert-email__health ${email?.smtpConfigured ? "is-ready" : "is-warning"}`}><BellRing size={17} /><span>{email?.smtpConfigured ? (isFa ? "فرستنده آماده است. وضعیت ارسال‌های واقعی پایین صفحه نمایش داده می‌شود." : "The sender is ready. Real delivery status appears below.") : (isFa ? "ابتدا حساب Gmail را متصل کنید." : "Connect Gmail first.")}</span></div>
       {message ? <p className="security-rules-inline-status" role="status">{message}</p> : null}
     </section>

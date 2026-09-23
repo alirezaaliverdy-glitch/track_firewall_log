@@ -121,7 +121,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/security/alerts/email", async (request) => getSecurityEmailAlertSettings(request.authUser?.id));
 
-  app.put<{ Body: { recipientEmail?: unknown; recipientEmails?: unknown; enabled?: unknown; minimumSeverity?: unknown } }>("/api/security/alerts/email", async (request, reply) => {
+  app.put<{ Body: { recipientEmail?: unknown; recipientEmails?: unknown; recipients?: unknown; enabled?: unknown; minimumSeverity?: unknown } }>("/api/security/alerts/email", async (request, reply) => {
     if (request.authUser && request.authUser.role !== "admin") return reply.code(403).send({ error: "ADMIN_REQUIRED" });
     try { return await updateSecurityEmailAlertSettings(request.body ?? {}, request.authUser?.id); }
     catch (error) {

@@ -1597,3 +1597,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Changed recipient add/remove controls to persist immediately, return clear success/failure feedback, and disable automatic delivery if the last recipient is removed.
 - Enabled the configured high/critical channel and verified the real `Linux: repeated authentication failures` pipeline with five distinct synthetic authentication failures. Detection created one Finding and SMTP delivery completed with status `sent`; test events were then cleaned up and the Finding marked resolved.
 - Built and deployed the production frontend image and verified the canonical local route and container health.
+
+## 2026-09-23 - Add per-recipient email delivery choices
+
+- Replaced the overflowing connected-sender controls with a compact, natural-height card and responsive two-column action layout.
+- Added a clear “connect new account” flow that keeps the current Gmail sender active until the new App Password is verified.
+- Added persisted receive/pause controls for every registered recipient, active/registered counts, and delivery/test controls that operate only on enabled recipients.
+- Added a non-destructive Prisma migration for disabled-recipient addresses, kept backward compatibility for existing API consumers, and verified persistence with a database smoke test that restored the original configuration.
+- Passed the backend and frontend production builds plus 16 focused detection/email UI tests, then redeployed the canonical local API and web containers.

@@ -1500,3 +1500,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Adding or removing a recipient now persists immediately through the authenticated settings API instead of requiring a second, easy-to-miss save action. Removing the last recipient safely disables automatic delivery.
 - Automatic high/critical alert delivery was enabled for the configured local channel. A controlled end-to-end test fed five independently identified Linux authentication failures through the real detection engine; it created one Finding and recorded a successful Gmail delivery to the configured recipient with no SMTP error. Synthetic source events were removed and the test Finding was resolved.
 - The frontend production image built successfully and the refreshed local web container serves the updated PWA through the canonical Nginx route.
+
+## 2026-09-23 - Per-recipient email routing and compact sender UI
+
+- Reworked the sender card so it uses its natural height and cannot overflow into the recipient column. The verified sender identity is shown separately from a responsive action grid for creating an App Password, connecting a new Gmail account, or disconnecting the current account.
+- Registered recipients now have a durable receive/pause preference. Pausing an address keeps it registered but removes it from real alert and test delivery; re-enabling it resumes delivery without re-entering the address.
+- The backend returns both the registered recipient catalog and the active delivery list. A backward-compatible database migration stores opt-outs separately while preserving all existing addresses and the legacy active-recipient API field.
+- Focused email/detection tests passed 16/16. A database-backed smoke test confirmed that a disabled address persists and is excluded from active delivery, then restored the original configuration. Backend/frontend production builds and the local deployment are healthy.

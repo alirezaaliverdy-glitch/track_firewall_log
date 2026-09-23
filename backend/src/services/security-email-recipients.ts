@@ -8,3 +8,18 @@ export function normalizeSecurityAlertRecipients(input: unknown) {
   if (recipients.some((email) => !EMAIL_PATTERN.test(email))) throw new Error("INVALID_RECIPIENT_EMAIL");
   return recipients;
 }
+
+export type SecurityAlertRecipientPreference = { email: string; enabled: boolean };
+
+export function normalizeSecurityAlertRecipientPreferences(input: unknown): SecurityAlertRecipientPreference[] {
+  if (!Array.isArray(input)) return [];
+  const rawEmails = input.map((item) => item && typeof item === "object" ? (item as Record<string, unknown>).email : item);
+  const emails = normalizeSecurityAlertRecipients(rawEmails);
+  const enabledByEmail = new Map<string, boolean>();
+  for (const item of input) {
+    const email = String(item && typeof item === "object" ? (item as Record<string, unknown>).email ?? "" : item).trim().toLowerCase();
+    if (!email) continue;
+    enabledByEmail.set(email, item && typeof item === "object" ? (item as Record<string, unknown>).enabled !== false : true);
+  }
+  return emails.map((email) => ({ email, enabled: enabledByEmail.get(email) !== false }));
+}

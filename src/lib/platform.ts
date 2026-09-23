@@ -62,6 +62,7 @@ export type SecurityEmailAlertSettings = {
   enabled: boolean;
   recipientEmail: string | null;
   recipientEmails: string[];
+  recipients?: Array<{ email: string; enabled: boolean }>;
   minimumSeverity: "low" | "medium" | "high" | "critical";
   smtpConfigured: boolean;
   sender: {
@@ -328,7 +329,7 @@ export const setDetectionRuleEnabled = (id: string, enabled: boolean) => request
 export const runSecurityDetections = () => request<{ rulesEvaluated: number; eventsEvaluated: number; findingsCreated: number; findingsUpdated: number }>("/security/detections/run", { method: "POST", body: JSON.stringify({}) });
 export const getSecurityMonitoringStatus = () => request<SecurityMonitoringStatus>("/security/monitoring/status");
 export const getSecurityEmailAlertSettings = () => request<SecurityEmailAlertSettings>("/security/alerts/email");
-export const updateSecurityEmailAlertSettings = (body: { recipientEmails: string[]; enabled: boolean; minimumSeverity: string }) => request<SecurityEmailAlertSettings>("/security/alerts/email", { method: "PUT", body: JSON.stringify(body) });
+export const updateSecurityEmailAlertSettings = (body: { recipients: Array<{ email: string; enabled: boolean }>; enabled: boolean; minimumSeverity: string }) => request<SecurityEmailAlertSettings>("/security/alerts/email", { method: "PUT", body: JSON.stringify(body) });
 export const connectGmailSecuritySender = (body: { senderEmail: string; appPassword: string }) => request<SecurityEmailAlertSettings>("/security/alerts/email/gmail", { method: "PUT", body: JSON.stringify(body) });
 export const disconnectGmailSecuritySender = () => request<SecurityEmailAlertSettings>("/security/alerts/email/gmail", { method: "DELETE" });
 export const testSecurityEmailAlert = () => request<{ ok: boolean }>("/security/alerts/email/test", { method: "POST", body: JSON.stringify({}) });

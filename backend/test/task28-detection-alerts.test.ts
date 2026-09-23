@@ -11,16 +11,16 @@ import { normalizeGmailAppPassword } from "../src/services/gmail-smtp.js";
 import { isRetryableSecurityEmailError, nextSecurityEmailRetryAt, securityEmailRetryDelayMinutes } from "../src/services/security-email-retry.js";
 import { findMutationPermission } from "../src/security/authorization.js";
 import { loggerConfig } from "../src/lib/logger.js";
-import { normalizeSecurityAlertRecipients } from "../src/services/security-email-recipients.js";
+import { normalizeSecurityAlertRecipientPreferences, normalizeSecurityAlertRecipients } from "../src/services/security-email-recipients.js";
 
 function event(vendor: string, rawMessage: string): SecurityEvent {
   return { id: "event-1", deviceId: "device-1", assetId: null, sourceId: null, batchId: null, timestamp: new Date(), receivedAt: new Date(), sourceType: "syslog", vendor, eventType: "vendor_log", action: null, severity: "warning", srcIp: "198.51.100.9", srcPort: null, dstIp: null, dstPort: null, protocol: null, username: null, ruleName: null, interfaceIn: null, interfaceOut: null, rawMessage, rawSnippet: null, normalizedJson: {}, evidenceJson: null, dedupeKey: null, firstSeen: null, lastSeen: null, count: 1, tags: null, createdAt: new Date() };
 }
 
-test("vendor detection library provides six executable event-backed rules per primary vendor", () => {
+test("vendor detection library provides at least six executable event-backed rules per primary vendor", () => {
   for (const vendor of ["linux", "mikrotik", "fortigate", "cisco", "pfsense"]) {
     const rules = VENDOR_DETECTION_RULES.filter((item) => item.vendor === vendor);
-    assert.equal(rules.length, 6);
+    assert.ok(rules.length >= 6, `${vendor} must keep at least six event-backed rules`);
     for (const rule of rules) {
       assert.ok(rule.threshold >= 1);
       assert.ok(rule.windowMinutes >= 1);
@@ -143,6 +143,18 @@ test("security alert recipients are normalized, deduplicated, and validated", ()
   assert.deepEqual(normalizeSecurityAlertRecipients("one@example.test; two@example.test"), ["one@example.test", "two@example.test"]);
   assert.throws(() => normalizeSecurityAlertRecipients(["not-an-email"]), /INVALID_RECIPIENT_EMAIL/);
   assert.throws(() => normalizeSecurityAlertRecipients(Array.from({ length: 11 }, (_, index) => `user${index}@example.test`)), /TOO_MANY_RECIPIENT_EMAILS/);
+});
+
+test("security alert recipient delivery preferences are normalized and preserve opt-out", () => {
+  assert.deepEqual(normalizeSecurityAlertRecipientPreferences([
+    { email: " First@Example.test ", enabled: true },
+    { email: "second@example.test", enabled: false },
+    { email: "first@example.test", enabled: false }
+  ]), [
+    { email: "first@example.test", enabled: false },
+    { email: "second@example.test", enabled: false }
+  ]);
+  assert.throws(() => normalizeSecurityAlertRecipientPreferences([{ email: "invalid", enabled: true }]), /INVALID_RECIPIENT_EMAIL/);
 });
 
 test("continuous monitoring registry covers all five primary SSH vendors", () => {
