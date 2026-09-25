@@ -74,6 +74,7 @@ const DISCOVERY_COMMANDS = [
 
 const OPTIONAL_COMMANDS = [
   "get system ha status",
+  "diagnose netlink interface list",
   "execute log filter reset",
   "execute log filter view-lines 500",
   "execute log display"
@@ -338,6 +339,7 @@ function discoveryFrom(results: Record<string, ExecResult>): FortiGateDiscovery 
   const dnsOutput = results["get system dns"]?.stdout ?? "";
   const interfaceDetails = parseInterfaceDetails(interfacesOutput);
   const vdomMode = /Virtual domain configuration:\s*(enable|multiple)/i.test(status) ? "enabled" : /Virtual domain configuration:\s*disable/i.test(status) ? "disabled" : "unknown";
+  const optionalNumber = (value: string | undefined) => value === undefined ? undefined : Number(value);
   return {
     version,
     model: matchStatus(status, "Version")?.split(" v")?.[0]?.trim(),
@@ -346,9 +348,15 @@ function discoveryFrom(results: Record<string, ExecResult>): FortiGateDiscovery 
     operationMode: matchStatus(status, "Current HA mode") ?? matchStatus(status, "Operation Mode"),
     systemTime: matchStatus(status, "System time"),
     licenseStatus: matchStatus(status, "License Status") ?? matchStatus(status, "License Status Validation"),
-    cpuUsage: Number(performance.match(/CPU states:\s*(\d+)%\s*user/i)?.[1] ?? performance.match(/CPU.*?(\d+)%/i)?.[1] ?? NaN) || undefined,
-    memoryUsage: Number(performance.match(/Memory:\s*(\d+)%/i)?.[1] ?? NaN) || undefined,
-    sessionCount: Number(performance.match(/Average network usage:.*?sessions\s+(\d+)/i)?.[1] ?? performance.match(/sessions?\s*[:=]\s*(\d+)/i)?.[1] ?? NaN) || undefined,
+    cpuUsage: optionalNumber(performance.match(/CPU states:\s*(\d+)%\s*user/i)?.[1] ?? performance.match(/CPU.*?(\d+)%/i)?.[1]),
+    memoryUsage: optionalNumber(performance.match(/Memory:\s*(\d+)%/i)?.[1]),
+    interfaceCounters: Array.from((results["diagnose netlink interface list"]?.stdout ?? "").matchAll(/(?:^|\n)if=([^\s]+)[\s\S]*?\bstat:\s*([^\n]+)/g)).flatMap((match) => {
+      const rxBytes = Number(match[2].match(/\brxb=(\d+)/)?.[1]);
+      const txBytes = Number(match[2].match(/\btxb=(\d+)/)?.[1]);
+      return Number.isSafeInteger(rxBytes) && Number.isSafeInteger(txBytes) && rxBytes >= 0 && txBytes >= 0
+        ? [{ name: match[1], rxBytes, txBytes }] : [];
+    }),
+    sessionCount: optionalNumber(performance.match(/Average network usage:.*?sessions\s+(\d+)/i)?.[1] ?? performance.match(/sessions?\s*[:=]\s*(\d+)/i)?.[1]),
     vdomMode,
     currentVdom: status.match(/Current virtual domain:\s*(.+)$/im)?.[1]?.trim(),
     zones: parseEditNames(results["show system zone"]?.stdout ?? ""),

@@ -122,6 +122,8 @@ export type DeviceWorkspace = {
   capabilities: { platformKey?: string; connectorType?: string; capabilities?: unknown; facts?: unknown; detection?: unknown; warnings?: unknown; refreshedAt?: string; expiresAt?: string } | null;
   collections: Array<Record<string, unknown>>;
   connections: Array<{ id: string; role: string; method: string; purposes: string[]; host: string | null; port: number | null; enabled: boolean; priority: number; status: string; lastTestAt: string | null; lastSuccessAt: string | null; lastError: string | null; settingsJson: Record<string, unknown> }>;
+  sensors: Array<{ key: string; titleFa: string; titleEn: string; value: string | number; unit: string | null; measuredAt: string | null; source: string; state: string }>;
+  traffic: { interface: string | null; method: "device_5m_average" | "counter_delta"; rx: WorkspaceChartPoint[]; tx: WorkspaceChartPoint[] };
   charts: {
     healthScore: WorkspaceChartPoint[];
     connectorResults: WorkspaceChartPoint[];

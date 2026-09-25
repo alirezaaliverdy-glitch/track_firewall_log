@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { buildDeviceTrafficSeries } from "./device-traffic-series.js";
 import { mergeCiscoWorkspaceInterfaces, projectCiscoWorkspaceDetails, safeCiscoDetail } from "./device-workspace-cisco.js";
 
 const PENDING_ACTION_STATES = ["proposed", "validation_failed", "dry_run_ready", "pending_approval", "approved", "executing", "rollback_pending"] as const;
@@ -287,7 +288,7 @@ export async function getDeviceWorkspace(reference: string) {
   const [statusChecks, healthHistory, metricSamples, findings, actions, audit, capabilityCache, configBackup, collections, connectionChannels] = await Promise.all([
     deviceId ? prisma.deviceStatusCheck.findMany({ where: { deviceId }, orderBy: { checkedAt: "desc" }, take: 240 }) : [],
     tables.has("HealthSnapshot") ? prisma.healthSnapshot.findMany({ where: { OR: [{ ...(deviceId ? { deviceId } : { deviceId: "__none__" }) }, { ...(assetId ? { assetId } : { assetId: "__none__" }) }] }, orderBy: { collectedAt: "desc" }, take: 240 }) : [],
-    deviceId && tables.has("MetricSample") ? prisma.metricSample.findMany({ where: { deviceId }, orderBy: { timestamp: "desc" }, take: 500, select: { metricKey: true, value: true, unit: true, timestamp: true, source: true } }) : [],
+    deviceId && tables.has("MetricSample") ? prisma.metricSample.findMany({ where: { deviceId }, orderBy: { timestamp: "desc" }, take: 500, select: { metricKey: true, value: true, unit: true, timestamp: true, source: true, labelsJson: true } }) : [],
     prisma.finding.findMany({ where: relatedRecords, orderBy: { lastSeen: "desc" }, take: 250 }),
     prisma.actionPlan.findMany({ where: relatedRecords, orderBy: { updatedAt: "desc" }, take: 100, select: { id: true, actionType: true, status: true, riskLevel: true, createdAt: true, updatedAt: true } }),
     deviceId ? prisma.auditLog.findMany({ where: { deviceId }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, action: true, dryRun: true, approvalStatus: true, createdAt: true } }) : [],
@@ -315,11 +316,12 @@ export async function getDeviceWorkspace(reference: string) {
     healthScore: healthHistory.map((item) => point(item.collectedAt, item.score, item.state)).reverse(),
     connectorResults: collections.map((item) => point(item.completedAt ?? item.startedAt, successfulCollection(item.status) ? 1 : 0, item.status)).reverse(),
     availability: statusChecks.map((item) => point(item.checkedAt, item.status === "online" ? 1 : item.status === "offline" || item.status === "error" ? 0 : 0.5, item.status)).reverse(),
-    resources: metricSamples.filter((item) => /cpu|memory|mem|load/i.test(item.metricKey)).map((item) => ({ timestamp: item.timestamp, value: item.value, label: item.metricKey, unit: item.unit })).reverse(),
+    resources: metricSamples.filter((item) => /cpu|memory|mem|load|disk|swap|sessions|interfaces\.(?:up|down)|vpn\.active/i.test(item.metricKey)).map((item) => ({ timestamp: item.timestamp, value: item.value, label: item.metricKey, unit: item.unit })).reverse(),
     findings: findings.map((item) => point(item.lastSeen, item.count, item.severity)).reverse(),
     actions: actions.map((item) => point(item.updatedAt, item.status === "succeeded" ? 1 : item.status === "failed" ? 0 : 0.5, item.status)).reverse(),
     recentChanges: audit.map((item) => ({ timestamp: item.createdAt, label: item.action })).reverse()
   };
+  const traffic = buildDeviceTrafficSeries(metricSamples);
   const normalizedVendor = String(device?.vendor ?? device?.type ?? directAsset?.vendor?.slug ?? "unknown").toLowerCase();
   const vendorKey = normalizedVendor.includes("cisco") ? "cisco"
     : normalizedVendor.includes("mikrotik") ? "mikrotik"
@@ -364,6 +366,59 @@ export async function getDeviceWorkspace(reference: string) {
   const workspaceCapabilityList = liveProjection?.capabilities ?? (Array.isArray(capabilityCache?.capabilitiesJson)
     ? capabilityCache.capabilitiesJson.map((item) => asObject(item))
     : Object.entries(ciscoCapabilityGroups).map(([domain, state]) => ({ domain, key: String(domain).toLowerCase(), state, mode: state === "read_only" ? "read" : "capability" })));
+  const factHealth = asObject(asObject(workspaceFacts).health);
+  const sensorTimestampValue = liveProjection?.refreshedAt ?? capabilityCache?.refreshedAt ?? ciscoCollection.collectedAt ?? null;
+  const sensorTimestamp = typeof sensorTimestampValue === "string" || sensorTimestampValue instanceof Date ? sensorTimestampValue : null;
+  const sensorReadings: Array<{ key: string; titleFa: string; titleEn: string; value: string | number; unit: string | null; measuredAt: Date | string | null; source: string; state: string }> = [];
+  const addSensor = (key: string, titleFa: string, titleEn: string, value: unknown, unit: string | null, measuredAt: Date | string | null, source: string, state = "ok") => {
+    if (value === null || value === undefined || value === "") return;
+    if (typeof value !== "string" && typeof value !== "number") return;
+    sensorReadings.push({ key, titleFa, titleEn, value: typeof value === "string" ? safeOverviewText(value, 100) : value, unit, measuredAt, source, state });
+  };
+  if (latestStatus) addSensor("reachability", "دسترسی", "Reachability", latestStatus.status, null, latestStatus.checkedAt, "connectivity", latestStatus.status === "online" ? "ok" : "attention");
+  const managementChannel = connectionChannels.find((channel) => channel.role === "management");
+  if (managementChannel) addSensor("management", "اتصال مدیریتی", "Management", managementChannel.status, null, managementChannel.lastTestAt, managementChannel.method, managementChannel.status === "verified" ? "ok" : "attention");
+  if (health) {
+    addSensor("health.state", "وضعیت سلامت", "Health state", health.state, null, health.collectedAt, "health_snapshot", health.state === "healthy" ? "ok" : "attention");
+    addSensor("health.score", "امتیاز سلامت", "Health score", health.score, "%", health.collectedAt, "health_snapshot", health.state === "healthy" ? "ok" : "attention");
+  }
+  const latestMetrics = new Map<string, typeof metricSamples[number]>();
+  for (const metric of metricSamples) if (!latestMetrics.has(metric.metricKey)) latestMetrics.set(metric.metricKey, metric);
+  const metricLabels: Record<string, [string, string]> = {
+    "cpu.usage_percent": ["مصرف CPU", "CPU usage"],
+    "memory.usage_percent": ["مصرف حافظه", "Memory usage"],
+    "disk.usage_percent": ["مصرف دیسک", "Disk usage"],
+    "swap.usage_percent": ["مصرف Swap", "Swap usage"],
+    "cpu.load_1m": ["بار CPU", "CPU load"],
+    "services.failed_count": ["سرویس‌های ناموفق", "Failed services"],
+    "ports.listening_count": ["پورت‌های شنونده", "Listening ports"],
+    "firewall.enabled": ["فایروال میزبان", "Host firewall"]
+  };
+  for (const [key, metric] of latestMetrics) {
+    const labels = metricLabels[key];
+    if (labels) addSensor(key, labels[0], labels[1], metric.value, metric.unit ?? null, metric.timestamp, metric.source,
+      /^(cpu|memory|disk|swap)\.usage_percent$/.test(key) && metric.value >= 85 ? "attention" : "ok");
+  }
+  if (!latestMetrics.has("cpu.usage_percent")) addSensor("vendor.cpu", "بار CPU", "CPU load", factHealth.cpuLoad ?? asObject(factHealth.cpu).fiveSeconds ?? asObject(factHealth.cpu).oneMinute, null, sensorTimestamp, "vendor_connector");
+  if (!latestMetrics.has("memory.usage_percent")) addSensor("vendor.memory", "حافظه آزاد", "Free memory", factHealth.memoryFree ?? asObject(factHealth.memory).usedPercent, null, sensorTimestamp, "vendor_connector");
+  const factInterfaces = asArray(asObject(workspaceFacts).interfaces);
+  if (factInterfaces.length) {
+    addSensor("interfaces.total", "اینترفیس‌ها", "Interfaces", factInterfaces.length, "count", sensorTimestamp, "vendor_connector");
+    const down = factInterfaces.filter((item) => /^(down|disabled|notconnect)$/i.test(String(asObject(item).operationalStatus ?? asObject(item).status ?? asObject(item).state ?? ""))).length;
+    addSensor("interfaces.down", "لینک‌های قطع", "Links down", down, "count", sensorTimestamp, "vendor_connector", down ? "attention" : "ok");
+  }
+  for (const [key, titleFa, titleEn] of [
+    ["vpnConnections", "اتصال‌های VPN", "VPN connections"],
+    ["gateways", "درگاه‌ها", "Gateways"],
+    ["routes", "مسیرها", "Routes"],
+    ["policies", "قوانین فایروال", "Firewall policies"],
+    ["services", "سرویس‌ها", "Services"]
+  ]) {
+    const entries = asObject(workspaceFacts)[key];
+    if (Array.isArray(entries)) addSensor(`vendor.${key}`, titleFa, titleEn, entries.length, "count", sensorTimestamp, "vendor_connector");
+  }
+  const newestCollection = collections[0];
+  if (newestCollection) addSensor("collection", "جمع‌آوری", "Collection", newestCollection.status, null, newestCollection.completedAt ?? newestCollection.startedAt, newestCollection.provider, successfulCollection(newestCollection.status) ? "ok" : "attention");
   const section = (key: string, titleFa: string, titleEn: string, hasData: boolean, requirement: string, nextAction: string) => ({ key, titleFa, titleEn, state: hasData ? "available" : "no_data", reason: hasData ? null : "No verified collection has been stored for this capability.", requirement, nextAction });
   const ciscoSection = (key: string, group: string, titleFa: string, titleEn: string) => {
     const capabilityState = String(ciscoCapabilityGroups[group] ?? "unknown");
@@ -475,7 +530,9 @@ export async function getDeviceWorkspace(reference: string) {
     } : null,
     collections,
     connections: connectionChannels,
+    sensors: sensorReadings,
     charts,
+    traffic,
     vendor: { key: vendorKey, sections: vendorSections },
     vendorOverview: projectVendorOverview(vendorKey, workspaceFacts, liveProjection?.refreshedAt ?? capabilityCache?.refreshedAt ?? ciscoCollection.collectedAt ?? latestSuccessfulCollection),
     vendorDetails: vendorKey === "cisco" ? projectCiscoWorkspaceDetails(ciscoCollection) : null

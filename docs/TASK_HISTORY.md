@@ -1612,3 +1612,26 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a step-by-step Gmail connection modal. Selecting “connect as sender” from a recipient preloads that address, opens Google App Password setup, and saves the sender only after successful SMTP authentication.
 - Added the choice to receive alerts at the sender address independently from using it as the sender, and retained the previous verified account until a replacement verifies successfully.
 - Calmed the page palette, reduced decorative status emphasis, rebuilt the local frontend container, and passed focused tests plus UTF-8 and live route checks.
+
+## 2026-09-24 - Stabilize Linux reconnect detection and Agent truthfulness
+
+- Confirmed that device `116` and its management channel both store `185.89.22.116:22022`; no fallback to port 22 is used by the unified sensor.
+- Separated the SSH probe cadence from the global sensor tick, increased the banner timeout, preserved two-sample offline confirmation, and made authenticated collector/health success authoritative recovery evidence.
+- Added a bounded post-recovery refresh for Linux health and event collection so current CPU, disk, services, ports, firewall, and security events are collected after connectivity returns.
+- Corrected SSH pull ingestion that had been labeled as Agent evidence. The standalone Agent is not shipped in this repository, so unequipped Agent channels now report `setup_required` instead of `receiving`.
+- Built and deployed the backend production image, passed the six focused connectivity tests, validated local/firewall/production/staging Compose files, and confirmed the local API container is healthy.
+- A live host TCP test and an authenticated collection both failed against `185.89.22.116:22022`; the server remains truthfully offline until its UFW/sshd path accepts the application host again.
+## 2026-09-25 - Vendor-aware overview trends
+
+- Researched official Linux, MikroTik, Fortinet, Cisco and Sophos sources before selecting supported traffic and health metrics; documented source limitations in `docs/VENDOR_METRIC_CHARTS.md`.
+- Added persisted authenticated vendor measurements and calculated Mbps only from consecutive real interface counters. Cisco's built-in five-minute rates remain labeled as measured rates; unsupported Sophos throughput is not invented.
+- Reduced the asset overview to three principal trend cards and folded advanced inventory, connection channels and full sensor details into accessible expandable sections.
+- Added regression tests for elapsed-time rate calculation, counter reset, missing values, and Cisco five-minute parsing. Both production images build; focused tests pass 10/10.
+
+## 2026-09-25 - Share SSH monitoring sessions and clarify asset health
+
+- Added a per-device authenticated SSH monitoring session with keepalive, automatic close detection, and bounded reconnect backoff. The sensor reuses an active session instead of opening a fresh TCP/SSH connection on every cycle.
+- Stopped the scheduled event collector from repeatedly attempting devices already marked offline; recovery still triggers a verified sensor refresh.
+- Normalized real readings for reachability, management, health, CPU, memory, disk, service/port counts, interface state, and the vendor domains actually returned by a connector.
+- Added a responsive sensor summary to the bottom of every device overview, labelled stale data, and linked the operator to collection, connection settings, monitoring history, and actions.
+- Separated resource trend lines by measurement and translated common SSH timeout/authentication failures into actionable Persian descriptions.

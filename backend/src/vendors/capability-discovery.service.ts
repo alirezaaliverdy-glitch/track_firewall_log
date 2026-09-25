@@ -1,5 +1,6 @@
 import { DeviceStatus, type Device, type Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { recordCiscoMetricSamples } from "../services/vendor-metric-samples.service.js";
 import { CAPABILITY_REGISTRY, getCapabilitiesForVendor } from "./capability.registry.js";
 import { getPlatformsForVendor } from "./platform.registry.js";
 import { getVendor, VENDOR_REGISTRY } from "./vendor.registry.js";
@@ -131,6 +132,7 @@ async function collectCiscoLive(device: Device) {
       });
       return nextDevice;
     });
+    await recordCiscoMetricSamples(device.id, outputs);
     return { device: updated, detection, collection, outputs, warnings: result.warnings };
   } catch (error) {
     const diagnostic = error instanceof CiscoConnectorError ? error.toDiagnostic() : null;

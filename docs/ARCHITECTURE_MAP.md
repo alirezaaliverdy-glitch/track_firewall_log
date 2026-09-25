@@ -12,7 +12,7 @@
 
 `Backend Product State registry -> validated feature readiness -> read-only Product State API -> generated desktop/mobile navigation`
 
-`Unified connectivity sensor (SSH banner | TLS handshake | TCP | passive evidence) -> anti-flap state -> Device + Asset + ConnectionChannel + StatusCheck -> live UI refresh`
+`Unified connectivity sensor (authenticated SSH session + keepalive | TLS handshake | TCP | fresh passive evidence) -> anti-flap state -> authenticated recovery refresh -> Device + Asset + ConnectionChannel + StatusCheck -> timestamped workspace sensors -> live UI refresh`
 
 Creation is permissive; execution is controlled. Preview never implies execution, and success requires `connectorInvoked=true`.
 
@@ -27,7 +27,7 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 | Product state | Versioned feature, navigation, vendor, and integration truth with fail-closed validation | `backend/src/product-state/`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented |
 | Auth | Session login/logout and route protection | `backend/src/services/auth.service.ts`, `routes/auth.ts` | `/api/auth/*` | Implemented |
 | Devices | Device inventory, discovery, capabilities | `services/device.service.ts`, `routes/devices.ts` | `/api/devices/*` | Implemented |
-| Device connectivity | Five-second protocol-aware reachability, anti-flap state, synchronized device/asset/channel evidence | `services/device-connectivity-sensor.service.ts` | Included in `/api/security/monitoring/status` | Implemented |
+| Device connectivity | Five-second orchestration, reusable authenticated SSH keepalive session on the registered port, bounded reconnect, anti-flap state, and synchronized device/asset/channel data | `services/device-connectivity-sensor.service.ts`, `services/ssh-monitor-session.service.ts` | Included in `/api/security/monitoring/status` | Implemented |
 | Vendor capabilities | Vendor/platform/capability registry and discovery cache | `vendors/`, `routes/vendors.ts`, `routes/devices.ts` | `/api/vendors/*`, `/api/devices/:id/capabilities` | Task 18.2A foundation |
 | Asset intelligence | Unified asset inventory, topology, and source sync | `assets/asset-intelligence.service.ts`, `routes/assets.ts` | `/api/assets/*`, `/api/integrations/netbox/*` | Minimum milestone implemented |
 | Credentials | Encrypted credential references | `services/credential*.ts`, `routes/credentials.ts` | `/api/credentials/*` | Implemented |

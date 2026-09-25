@@ -3,6 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { collectLinuxServerOverview, parseLinuxServerOverview } from "../../telemetry/linux/linux-telemetry.service.js";
 import { parseLinuxHealthOutput } from "./linux-health.parser.js";
 import { scoreLinuxHealth } from "./linux-health-score.js";
+import { recordVerifiedDeviceConnectivity } from "../../services/device-connectivity-sensor.service.js";
 
 function json(value: unknown): Prisma.InputJsonValue { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; }
 function stateFromOverview(status: string) { return status === "healthy" ? "healthy" : status === "critical" ? "critical" : status === "warning" ? "warning" : "unknown"; }
@@ -64,6 +65,15 @@ export function metricsFromOverview(overview: ReturnType<typeof parseLinuxServer
   metrics.push({ metricKey: "ports.listening_count", value: overview.listeningPorts.length, unit: "count" });
   metrics.push({ metricKey: "firewall.enabled", value: overview.services.some((service) => ["ufw", "firewalld"].includes(service.name) && service.state === "active") ? 1 : 0, unit: "boolean" });
   metrics.push({ metricKey: "processes.count", value: overview.topProcesses.length, unit: "count" });
+  const primaryInterface = overview.network.interfaces.find((item) =>
+    item.ips.length > 0 && /^(?:en|eth|bond|wlan|wl)/i.test(item.name) && item.rxBytes !== undefined && item.txBytes !== undefined
+  ) ?? overview.network.interfaces.find((item) => item.ips.length > 0 && item.rxBytes !== undefined && item.txBytes !== undefined);
+  if (primaryInterface) {
+    const labels = { interface: primaryInterface.name };
+    metrics.push({ metricKey: "network.rx_bytes", value: primaryInterface.rxBytes!, unit: "bytes", labels });
+    metrics.push({ metricKey: "network.tx_bytes", value: primaryInterface.txBytes!, unit: "bytes", labels });
+    if (primaryInterface.errors !== undefined) metrics.push({ metricKey: "network.errors", value: primaryInterface.errors, unit: "count", labels });
+  }
   return metrics;
 }
 
@@ -140,7 +150,14 @@ export async function refreshLinuxHealth(deviceId: string) {
     const score = scoreLinuxHealth(metrics, overview.warnings);
     await prisma.metricSample.createMany({ data: metrics.map((metric) => ({ deviceId, metricKey: metric.metricKey, value: metric.value, unit: metric.unit, source: "linux-ssh", labelsJson: json(metric.labels ?? {}), collectionRunId: run.id })) });
     const snapshot = await prisma.healthSnapshot.create({ data: { deviceId, score: score.score, state: stateFromOverview(overview.health.status), summary: overview.health.summary, metricsJson: json(metrics), warningsJson: json(overview.warnings), staleAt: new Date(Date.now() + 15 * 60 * 1000), collectionRunId: run.id } });
-    await prisma.collectionRun.update({ where: { id: run.id }, data: { status: "completed", completedAt: new Date(), durationMs: Date.now() - started, metricsJson: json(metrics), warningsJson: json(overview.warnings) } });
+    const completedAt = new Date();
+    await prisma.collectionRun.update({ where: { id: run.id }, data: { status: "completed", completedAt, durationMs: Date.now() - started, metricsJson: json(metrics), warningsJson: json(overview.warnings) } });
+    await recordVerifiedDeviceConnectivity(
+      deviceId,
+      "LINUX_HEALTH_COLLECTION_VERIFIED",
+      "Linux health sensors completed an authenticated collection.",
+      completedAt.getTime() - started
+    );
     return { snapshot, overview, metrics, collectionRunId: run.id };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Linux collection failed";

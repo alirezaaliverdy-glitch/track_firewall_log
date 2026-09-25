@@ -165,6 +165,13 @@ async function discover(device: Device, warnings: DeviceConnectionTestResult["wa
     uptime: String(resource.uptime ?? "") || undefined,
     cpuLoad: String(resource["cpu-load"] ?? "") || undefined,
     memoryFree: String(resource["free-memory"] ?? "") || undefined,
+    interfaceCounters: rows(interfacesValue).flatMap((item) => {
+      const name = String(item.name ?? "").trim();
+      const rxBytes = Number(item["rx-byte"]);
+      const txBytes = Number(item["tx-byte"]);
+      return name && Number.isSafeInteger(rxBytes) && Number.isSafeInteger(txBytes) && rxBytes >= 0 && txBytes >= 0
+        ? [{ name, rxBytes, txBytes }] : [];
+    }),
     interfaces: lineRows(interfacesValue),
     ipAddresses: lineRows(addressesValue),
     routes: lineRows(routesValue),

@@ -1,3 +1,28 @@
+## 2026-09-25 - Compact vendor-aware charts in device overview
+
+- The device overview now prioritizes three readable charts: current reachability history, actual per-interface RX/TX traffic, and an available vendor-specific operational metric. 24-hour and 7-day range controls are explicit.
+- Authenticated collections store timestamped MikroTik and FortiGate interface byte counters, Cisco IOS XE five-minute interface rates, and Sophos interface/VPN counts. Linux health collection stores actual interface counters from its existing read-only command. Missing traffic evidence remains empty rather than fabricated.
+- Cumulative byte counters are converted to Mbps only across valid consecutive samples; counter resets and implausible sampling intervals are ignored. The interface name and last sample time accompany the chart.
+- Full connection channels, technical inventory, and the sensor grid are collapsed by default, keeping the overview concise on mobile. The connection badge follows current reachability, and old failures do not remain the latest diagnosis after recovery.
+- Backend and frontend production Docker builds succeeded; focused vendor-trend and connectivity tests passed 10/10. The active `docker-compose.firewall.yml` stack was rebuilt locally, all four containers are healthy, and both `/firewall/` and `/firewall/api/health` return HTTP 200.
+
+## 2026-09-25 - Persistent SSH monitoring and readable cross-vendor sensors
+
+- SSH monitoring now holds one authenticated session per registered device with protocol keepalives. A dropped session is detected through SSH close/error and reconnects with bounded exponential delay; routine sensor cycles do not open new SSH sockets while that session is healthy.
+- The security collector skips devices already marked offline, avoiding a separate failed SSH attempt every collection interval. After recovery, authenticated health and event collection still refresh current evidence.
+- The device workspace API now exposes timestamped, source-labelled sensor readings from actual status checks, management channel checks, health snapshots, metric samples, and collected vendor facts. Missing data is omitted and old samples are explicitly marked stale by the UI.
+- Every device overview now includes a compact sensor panel with direct links to connection settings, fresh collection, monitoring history, and device actions. Monitoring charts no longer combine CPU and memory in one line; available CPU, memory, disk, and CPU load series are plotted separately.
+- Backend and frontend production image builds pass. Local deployment/health verification follows below.
+
+## 2026-09-24 - Stabilize Linux reconnect detection and correct Agent readiness
+
+- The connectivity sensor uses each device's registered management channel and port; Linux server `116` is probed on SSH port `22022`, not the default port `22`.
+- SSH banner probes now run on a separate ten-second cadence with an eight-second response window, while two consecutive failures remain required before an offline transition. This avoids the five-second connection churn that can trigger UFW `LIMIT` or sshd unauthenticated-connection throttles.
+- A successful authenticated Linux health or log collection is now authoritative online evidence. Recovery immediately marks the Device, Asset, and management channel online, then refreshes Linux health and the event collector so the UI receives current sensor data.
+- SSH pull collectors are recorded as API/pull evidence rather than as a standalone Agent. Existing unequipped Agent channels are reset to `setup_required`; the product does not claim that an Agent is installed or receiving data.
+- The local API image was rebuilt and deployed healthy. The focused sensor suite passes 6/6 and all four Compose variants validate with their required deployment variables supplied.
+- Live verification from both the Windows host and the API container currently cannot establish TCP/SSH to `185.89.22.116:22022`; the stored server evidence shows UFW `22022/tcp LIMIT`. The application therefore correctly keeps server `116` offline instead of reporting a false recovery.
+
 ## 2026-09-16 - Real-data security command dashboard
 
 - Rebuilt the authenticated dashboard in the landing showcase visual language while keeping every operational value connected to the existing backend APIs.

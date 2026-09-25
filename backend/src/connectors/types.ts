@@ -137,6 +137,7 @@ export type MikroTikDiscovery = {
   uptime?: string;
   cpuLoad?: string;
   memoryFree?: string;
+  interfaceCounters?: Array<{ name: string; rxBytes: number; txBytes: number }>;
   interfaces: string[];
   ipAddresses: string[];
   routes: string[];
@@ -159,6 +160,7 @@ export type FortiGateDiscovery = {
   licenseStatus?: string;
   cpuUsage?: number;
   memoryUsage?: number;
+  interfaceCounters?: Array<{ name: string; rxBytes: number; txBytes: number }>;
   sessionCount?: number;
   vdomMode?: "enabled" | "disabled" | "unknown";
   currentVdom?: string;

@@ -169,6 +169,8 @@ function parseProcesses(section = ""): LinuxServerOverview["topProcesses"] {
 function parseNetwork(section = ""): LinuxServerOverview["network"] {
   const interfaces = new Map<string, { name: string; ips: string[]; rxBytes?: number; txBytes?: number; errors?: number }>();
   const networkLines = lines(section, 300);
+  let currentInterface = "";
+  let counterDirection: "rx" | "tx" | null = null;
   for (const line of networkLines) {
     const ipLine = line.match(/^\d+:\s+([^:\s]+)\s+inet6?\s+([^\s]+)/);
     if (ipLine) {
@@ -177,7 +179,23 @@ function parseNetwork(section = ""): LinuxServerOverview["network"] {
       interfaces.set(entry.name, entry);
     }
     const link = line.match(/^\d+:\s+([^:]+):/);
-    if (link && !interfaces.has(link[1])) interfaces.set(link[1], { name: link[1], ips: [] });
+    if (link) {
+      currentInterface = link[1];
+      counterDirection = null;
+      if (!interfaces.has(link[1])) interfaces.set(link[1], { name: link[1], ips: [] });
+    }
+    if (/^RX:\s+bytes\b/i.test(line)) { counterDirection = "rx"; continue; }
+    if (/^TX:\s+bytes\b/i.test(line)) { counterDirection = "tx"; continue; }
+    if (counterDirection && currentInterface && /^\d+(?:\s+\d+){3,}/.test(line)) {
+      const columns = line.split(/\s+/).map(Number);
+      const entry = interfaces.get(currentInterface);
+      if (entry && Number.isSafeInteger(columns[0]) && columns[0] >= 0) {
+        if (counterDirection === "rx") entry.rxBytes = columns[0];
+        else entry.txBytes = columns[0];
+        entry.errors = (entry.errors ?? 0) + (Number.isSafeInteger(columns[2]) ? columns[2] : 0);
+      }
+      counterDirection = null;
+    }
   }
   const values = Array.from(interfaces.values()).filter((item) => item.name !== "lo").slice(0, 20);
   return { interfaces: values, summary: values.length ? `${values.length} network interfaces detected` : "Network interface data is unavailable" };

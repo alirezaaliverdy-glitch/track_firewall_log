@@ -108,6 +108,15 @@ function statusLabel(status: unknown, t: TFunction) {
   return known[valueText] ?? valueText;
 }
 
+function diagnosticLabel(message: string, isFa: boolean, port?: number) {
+  if (!isFa) return message;
+  if (/SSH_(BANNER|HANDSHAKE)_TIMEOUT/.test(message)) return `SSH روی پورت ${port ?? 22} به‌موقع پاسخ نداده؛ محدودیت فایروال یا وضعیت سرویس را بررسی کنید.`;
+  if (/SSH_AUTH_FAILED/.test(message)) return "ارتباط شبکه برقرار است اما اعتبارنامه SSH پذیرفته نشده است.";
+  if (/SSH_SESSION_CLOSED/.test(message)) return "نشست پایش SSH قطع شده و برنامه در حال اتصال مجدد است.";
+  if (/SSH_RECONNECT_BACKOFF/.test(message)) return "برنامه برای جلوگیری از محدودشدن توسط سرور، اتصال مجدد را با فاصله انجام می‌دهد.";
+  return message;
+}
+
 function interfaceState(row: Record<string, unknown>) {
   const operational = String(row.operationalStatus ?? row.protocolStatus ?? row.status ?? row.state ?? "unknown").toLowerCase();
   const administrative = String(row.administrativeStatus ?? row.adminStatus ?? "unknown").toLowerCase();
@@ -127,7 +136,22 @@ function TrendChart({ title, points, empty, binary = false, locale }: { title: s
   const spread = Math.max(1, max - min);
   const polyline = points.map((item, index) => `${points.length === 1 ? width / 2 : index * width / (points.length - 1)},${height - 12 - ((item.value - min) / spread) * (height - 24)}`).join(" ");
   const latest = points.at(-1);
-  return <article className="workspace-chart"><div><h3>{title}</h3><span>{latest?.value}{latest?.unit ?? ""}</span></div><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}><polyline points={polyline} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /></svg><p>{latest?.label ?? date(latest?.timestamp, locale, empty)}</p></article>;
+  const reading = binary
+    ? latest?.value === 1 ? (locale.startsWith("fa") ? "برقرار" : "Available") : latest?.value === 0 ? (locale.startsWith("fa") ? "قطع" : "Unavailable") : (locale.startsWith("fa") ? "نامشخص" : "Unknown")
+    : `${latest?.value.toLocaleString(locale)}${latest?.unit === "percent" ? "%" : latest?.unit && latest.unit !== "count" ? ` ${latest.unit}` : ""}`;
+  return <article className="workspace-chart"><div><h3>{title}</h3><span>{reading}</span></div><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}><polyline points={polyline} fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" /></svg><p>{date(latest?.timestamp, locale, empty)}</p></article>;
+}
+
+function TrafficTrendChart({ rx, tx, interfaceName, method, locale, isFa }: { rx: WorkspaceChartPoint[]; tx: WorkspaceChartPoint[]; interfaceName: string | null; method: string; locale: string; isFa: boolean }) {
+  const points = [...rx, ...tx];
+  const latest = points.reduce<WorkspaceChartPoint | null>((current, item) => !current || new Date(item.timestamp).getTime() > new Date(current.timestamp).getTime() ? item : current, null);
+  const hasTrend = rx.length >= 2 || tx.length >= 2;
+  const max = Math.max(0.01, ...points.map((item) => item.value));
+  const path = (series: WorkspaceChartPoint[]) => series.map((item, index) => `${series.length === 1 ? 180 : index * 360 / (series.length - 1)},${84 - item.value / max * 68}`).join(" ");
+  return <article className="asset-traffic-chart">
+    <header><div><small>{isFa ? "اینترفیس" : "Interface"} <b dir="ltr">{interfaceName ?? "—"}</b></small><h3>{isFa ? "ترافیک عبوری" : "Network traffic"}</h3></div><span>{isFa ? "Mbps" : "Mbps"}</span></header>
+    {hasTrend ? <><svg viewBox="0 0 360 90" role="img" aria-label={isFa ? "روند ترافیک دریافتی و ارسالی" : "Received and transmitted traffic trend"}><polyline points={path(rx)} fill="none" stroke="#69c9d5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><polyline points={path(tx)} fill="none" stroke="#ac9bdc" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg><div className="asset-traffic-chart__legend"><span><i />{isFa ? "دریافت" : "Receive"} <b>{rx.at(-1)?.value.toLocaleString(locale) ?? "—"}</b></span><span><i />{isFa ? "ارسال" : "Transmit"} <b>{tx.at(-1)?.value.toLocaleString(locale) ?? "—"}</b></span></div><time>{method === "device_5m_average" ? (isFa ? "میانگین ۵ دقیقه‌ای دستگاه" : "Device 5-minute average") + " · " : ""}{date(latest?.timestamp, locale, "—")}</time></> : <p>{points.length ? (isFa ? `نمونهٔ اول ثبت شد (${latest?.value.toLocaleString(locale)} Mbps). برای رسم روند، یک نمونهٔ دیگر لازم است.` : `First sample recorded (${latest?.value.toLocaleString(locale)} Mbps). One more is needed for a trend.`) : (isFa ? "هنوز شمارندهٔ معتبر ترافیک دریافت نشده است." : "No verified traffic counters yet.")}</p>}
+  </article>;
 }
 
 export default function AssetDetailPage({ params }: RouteComponentProps) {
@@ -194,6 +218,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     finally { setSaving(false); }
   };
 
+  const supportsVendorCollection = ["cisco", "linux", "mikrotik", "fortigate", "sophos"].includes(currentWorkspace.vendor.key);
   const collectLiveData = async () => {
     if (!workspace.device) return;
     setCollecting(true); setError("");
@@ -226,6 +251,67 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     return <details className="content-panel overview-advanced"><summary>{t("workspace.advanced.title")}</summary><dl className="detail-list"><dt>{t("workspace.labels.connector")}</dt><dd dir="ltr">{value(overview.connectorType, fallback)}</dd>{capabilityList.length ? <><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd></> : null}{currentWorkspace.collections.length ? <><dt>{t("workspace.labels.collectionHistory")}</dt><dd>{String(currentWorkspace.collections.length)}</dd></> : null}{overview.lastSuccessfulCollection || currentWorkspace.capabilities?.refreshedAt ? <><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt, locale, fallback)}</dd></> : null}</dl><div className="button-row"><button className="secondary-button" type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? t("common.loading") : t("workspace.actions.collectData")}</button><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></div>{currentWorkspace.vendor.sections.length ? <section><h3>{t("workspace.advanced.vendorSections")}</h3>{currentWorkspace.vendor.sections.map((item) => { const state = item.capabilityState ?? item.state; return <div className="list-row" key={item.key}><span>{isFa ? item.titleFa : item.titleEn}</span><StatusBadge value={capabilityLabel(state, t)} tone={stateTone(state)} /></div>; })}</section> : null}{hasDiagnostics ? <details><summary>{t("workspace.advanced.rawDiagnostics")}</summary><pre dir="ltr">{JSON.stringify({ platform: overview.platform, warnings, capabilities: capabilityList }, null, 2)}</pre></details> : null}</details>;
   }
 
+  function SensorReadings() {
+    const readings = currentWorkspace.sensors ?? [];
+    const now = Date.now();
+    const connectionOffline = readings.some((item) => item.key === "reachability" && ["offline", "error", "degraded"].includes(String(item.value).toLowerCase()));
+    const sensorValue = (reading: typeof readings[number]) => {
+      if (reading.key === "firewall.enabled") return Number(reading.value) === 1 ? (isFa ? "فعال" : "Enabled") : (isFa ? "غیرفعال" : "Disabled");
+      const statuses: Record<string, string> = isFa
+        ? { online: "آنلاین", offline: "آفلاین", verified: "تأییدشده", completed: "موفق", failed: "ناموفق", error: "خطا", degraded: "ناپایدار" }
+        : { online: "Online", offline: "Offline", verified: "Verified", completed: "Completed", failed: "Failed", error: "Error", degraded: "Degraded" };
+      Object.assign(statuses, isFa
+        ? { warning: "نیازمند توجه", healthy: "سالم", critical: "بحرانی", available: "در دسترس", configured: "تنظیم‌شده" }
+        : { warning: "Needs attention", healthy: "Healthy", critical: "Critical", available: "Available", configured: "Configured" });
+      if (typeof reading.value === "string") return statuses[reading.value.toLowerCase()] ?? reading.value;
+      return `${reading.value.toLocaleString(locale)}${reading.unit === "percent" ? "%" : reading.unit && reading.unit !== "count" && reading.unit !== "boolean" ? ` ${reading.unit}` : ""}`;
+    };
+    return <section className="asset-sensor-panel" aria-label={isFa ? "سنسورهای تجهیز" : "Device sensors"}>
+      <header><div><span className="asset-sensor-panel__icon"><Activity aria-hidden="true" /></span><div><small>{isFa ? "بر پایه داده واقعی" : "Measured evidence"}</small><h2>{isFa ? "وضعیت و سنسورها" : "Status and sensors"}</h2></div></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "تاریخچه پایش" : "Monitoring history"}<ArrowUpLeft aria-hidden="true" /></Link></header>
+      {readings.length ? <div className="asset-sensor-grid">{readings.map((reading) => {
+        const measured = reading.measuredAt ? new Date(reading.measuredAt).getTime() : Number.NaN;
+        const maxAge = ["reachability", "management"].includes(reading.key) ? 90_000 : 15 * 60_000;
+        const stale = !Number.isFinite(measured) || now - measured > maxAge || (connectionOffline && !["reachability", "management"].includes(reading.key));
+        return <article className={`asset-sensor is-${stale ? "stale" : reading.state === "attention" ? "attention" : "ok"}`} key={reading.key}>
+          <div><span className="asset-sensor__dot" aria-hidden="true" /><small>{isFa ? reading.titleFa : reading.titleEn}</small></div>
+          <strong dir="auto">{sensorValue(reading)}</strong>
+          <time dateTime={reading.measuredAt ?? undefined}>{stale ? (isFa ? "داده قدیمی" : "Stale data") : (isFa ? "به‌روز" : "Current")} · {date(reading.measuredAt, locale, fallback)}</time>
+        </article>;
+      })}</div> : <div className="asset-sensor-empty"><Database aria-hidden="true" /><p>{isFa ? "هنوز نمونه معتبری ثبت نشده است. اتصال را بررسی و جمع‌آوری جدید اجرا کنید." : "No verified samples yet. Check the connection and collect data."}</p></div>}
+      <footer><Link className="secondary-link" to={`/assets/devices/${deviceId}/setup`}>{isFa ? "بررسی اتصال" : "Check connection"}</Link><button className="secondary-button" type="button" disabled={collecting || !currentWorkspace.device} onClick={() => void collectLiveData()}>{collecting ? (isFa ? "در حال بررسی…" : "Checking…") : supportsVendorCollection ? (isFa ? "جمع‌آوری تازه" : "Collect now") : (isFa ? "تست اتصال" : "Test connection")}</button><Link className="primary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}`}>{isFa ? "اقدامات این تجهیز" : "Device actions"}</Link></footer>
+    </section>;
+  }
+
+  function OverviewTrends() {
+    const vendor = currentWorkspace.vendor.key;
+    const preferred = vendor === "fortigate"
+      ? ["sessions.count", "memory.usage_percent", "cpu.usage_percent"]
+      : vendor === "sophos"
+        ? ["interfaces.up_count", "vpn.active_count"]
+        : vendor === "linux"
+          ? ["cpu.usage_percent", "disk.usage_percent", "memory.usage_percent"]
+          : ["cpu.usage_percent", "memory.usage_percent"];
+    const labels: Record<string, [string, string]> = {
+      "cpu.usage_percent": ["مصرف CPU", "CPU usage"],
+      "disk.usage_percent": ["مصرف دیسک", "Disk usage"],
+      "memory.usage_percent": ["مصرف حافظه", "Memory usage"],
+      "sessions.count": ["نشست‌های فعال", "Active sessions"],
+      "interfaces.up_count": ["لینک‌های فعال", "Active links"],
+      "vpn.active_count": ["VPN فعال", "Active VPN"]
+    };
+    const metric = preferred.map((key) => ({ key, points: chart(currentWorkspace.charts.resources.filter((item) => item.label === key)) })).find((item) => item.points.length >= 1);
+    const traffic = currentWorkspace.traffic ?? { interface: null, method: "counter_delta", rx: [], tx: [] };
+    const available = chart(currentWorkspace.charts.availability);
+    return <section className="asset-overview-trends" aria-label={isFa ? "روند وضعیت دارایی" : "Asset status trends"}>
+      <header><div><small>{isFa ? "داده‌های ثبت‌شده" : "Recorded measurements"}</small><h2>{isFa ? "روند وضعیت" : "Status trends"}</h2></div><div className="asset-overview-trends__tools"><div role="group" aria-label={isFa ? "بازه زمانی" : "Time range"}><button type="button" aria-pressed={timeRange === "24h"} onClick={() => setTimeRange("24h")}>{isFa ? "۲۴ ساعت" : "24h"}</button><button type="button" aria-pressed={timeRange === "7d"} onClick={() => setTimeRange("7d")}>{isFa ? "۷ روز" : "7d"}</button></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات پایش" : "Monitoring details"}<ArrowUpLeft aria-hidden="true" /></Link></div></header>
+      <div className="asset-overview-trends__grid">
+        <TrendChart title={isFa ? "دسترسی دستگاه" : "Device availability"} points={available} empty={isFa ? "هنوز بررسی اتصالی ثبت نشده است." : "No connection checks recorded yet."} binary locale={locale} />
+        <TrafficTrendChart rx={chart(traffic.rx)} tx={chart(traffic.tx)} interfaceName={traffic.interface} method={traffic.method} locale={locale} isFa={isFa} />
+        {metric ? <TrendChart title={labels[metric.key][isFa ? 0 : 1]} points={metric.points} empty="" locale={locale} /> : <article className="workspace-chart is-empty"><h3>{isFa ? "شاخص اختصاصی وندور" : "Vendor metric"}</h3><p>{isFa ? "با نخستین جمع‌آوری معتبر نمایش داده می‌شود." : "Shown after the first verified collection."}</p></article>}
+      </div>
+    </section>;
+  }
+
   function OverviewFirstViewport() {
     const setupPath = `/assets/devices/${deviceId}/setup`;
     const nextPath = verifiedDevice ? `/actions?deviceId=${encodeURIComponent(deviceId)}` : setupPath;
@@ -238,13 +324,15 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     ] as Array<[string, unknown]>).filter(([, item]) => item !== null && item !== undefined && item !== "");
     const isCisco = currentWorkspace.vendor.key === "cisco";
     const vendorOverview = currentWorkspace.vendorOverview;
-    const latestFailedCollection = currentWorkspace.collections.find((item) => ["failed", "error"].includes(String(item.status).toLowerCase()));
-    const latestFailedCheck = currentWorkspace.statusChecks.find((item) => ["failed", "offline", "error"].includes(String(item.status).toLowerCase()));
+    const latestCollection = currentWorkspace.collections[0];
+    const latestFailedCollection = latestCollection && ["failed", "error"].includes(String(latestCollection.status).toLowerCase()) ? latestCollection : null;
+    const latestCheck = currentWorkspace.statusChecks[0];
+    const latestFailedCheck = latestCheck && ["failed", "offline", "error"].includes(String(latestCheck.status).toLowerCase()) ? latestCheck : null;
     const diagnosticReasons = Array.from(new Set([
       ...asArray(asRecord(currentWorkspace.health ?? {}).warningsJson).map(String),
       ...asArray(currentWorkspace.capabilities?.warnings).map(String),
       latestFailedCollection?.errorCode ? `${isFa ? "خطای جمع‌آوری" : "Collection error"}: ${String(latestFailedCollection.errorCode)}` : "",
-      latestFailedCheck?.message ? String(latestFailedCheck.message) : ""
+      latestFailedCheck?.message ? diagnosticLabel(String(latestFailedCheck.message), isFa, currentWorkspace.device?.managementPort) : ""
     ].map((item) => item.trim()).filter(Boolean)));
     const needsAttention = !["healthy", "online"].includes(String(overview.healthState).toLowerCase()) || diagnosticReasons.length > 0;
     const openFindings = currentWorkspace.findings.filter((item) => !["resolved", "closed", "false_positive"].includes(String(item.status ?? "open")));
@@ -252,7 +340,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     return <section className="asset-device-overview">
       <section className={`asset-device-overview__hero is-${stateTone(overview.healthState)}`}>
         <div className="asset-device-overview__identity"><span><Server aria-hidden="true" /></span><div><small>{isFa ? "نمای کلی تجهیز" : "Device overview"}</small><h2>{overview.name}</h2><p dir="ltr">{overview.vendor} · {overview.platform} · {value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</p></div></div>
-        <div className="asset-device-overview__live"><span><i />{verifiedDevice ? (isFa ? "اتصال تأییدشده" : "Verified connection") : (isFa ? "اتصال نیازمند بررسی" : "Connection needs review")}</span><small><Clock3 />{date(dataTime, locale, isFa ? "هنوز جمع‌آوری نشده" : "Not collected yet")}</small><button type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? <RefreshCw className="is-spinning" /> : <RefreshCw />}{collecting ? (isFa ? "در حال جمع‌آوری" : "Collecting") : (isFa ? "جمع‌آوری جدید" : "Collect now")}</button></div>
+        <div className={`asset-device-overview__live is-${overview.availability}`}><span><i />{statusLabel(overview.availability, t)}</span><small><Clock3 />{date(dataTime, locale, isFa ? "هنوز جمع‌آوری نشده" : "Not collected yet")}</small><button type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? <RefreshCw className="is-spinning" /> : <RefreshCw />}{collecting ? (isFa ? "در حال بررسی" : "Checking") : supportsVendorCollection ? (isFa ? "جمع‌آوری جدید" : "Collect now") : (isFa ? "تست اتصال" : "Test connection")}</button></div>
       </section>
 
       {needsAttention ? <section className="asset-diagnostic-callout"><AlertTriangle aria-hidden="true" /><div><strong>{isFa ? "چرا این تجهیز نیازمند توجه است؟" : "Why does this device need attention?"}</strong>{diagnosticReasons.length ? <ul>{diagnosticReasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}</ul> : <p>{value(asRecord(currentWorkspace.health ?? {}).summary, isFa ? "وضعیت سلامت یا تازگی داده نیازمند بررسی است. یک جمع‌آوری جدید اجرا کنید." : "Health state or evidence freshness needs review. Run a new collection.")}</p>}<small>{isFa ? "جمع‌آوری جدید را اجرا کنید؛ اگر خطا باقی ماند، کانال اتصال و زمان آخرین موفقیت را بررسی کنید." : "Run a new collection; if the issue remains, review the channel and its last success time."}</small></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات سلامت" : "Health details"}<ArrowUpLeft /></Link></section> : null}
@@ -262,10 +350,11 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
         <article><span><Gauge /></span><div><small>{isFa ? "امتیاز سلامت" : "Health score"}</small><strong>{overview.healthScore === null ? "—" : `${overview.healthScore}%`}</strong></div></article>
         <article><span><AlertTriangle /></span><div><small>{isFa ? "یافته باز" : "Open findings"}</small><strong>{openFindings.length.toLocaleString(locale)}</strong></div></article>
         <article><span><Activity /></span><div><small>{isFa ? "اقدام در انتظار" : "Pending actions"}</small><strong>{overview.pendingActions.toLocaleString(locale)}</strong></div></article>
-        <article><span><Database /></span><div><small>{isFa ? "منبع داده" : "Data source"}</small><strong>{vendorOverview.sections.length ? (isFa ? "Connector واقعی" : "Verified connector") : (isFa ? "فقط موجودی" : "Inventory only")}</strong></div></article>
       </section>
 
-      <DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} />
+      <OverviewTrends />
+
+      <details className="asset-overview-technical"><summary>{isFa ? "مسیرهای اتصال دستگاه" : "Device connection channels"}</summary><DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} /></details>
 
       <section className="asset-overview-main-grid">
         <article className="asset-identity-card"><header><span><Server /></span><div><small>{isFa ? "هویت و مدیریت" : "Identity and management"}</small><h3>{t("workspace.cards.identity")}</h3></div></header><dl><div><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd></div><div><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd></div><div><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd></div>{optionalIdentity.map(([label, item]) => <div key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>
@@ -275,11 +364,12 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
       <section className="asset-vendor-overview">
         <header><div><span><Network /></span><div><small>{isFa ? "اطلاعات واقعی و نرمال‌شده" : "Verified normalized data"}</small><h2>{isFa ? `نمای کامل ${overview.vendor}` : `${overview.vendor} overview`}</h2><p>{isFa ? "اطلاعاتی که آخرین Connector موفق از دستگاه خوانده است." : "Information read by the latest successful connector collection."}</p></div></div><time><Clock3 />{date(dataTime, locale, fallback)}</time></header>
         {vendorOverview.summary.length ? <div className="asset-vendor-facts">{vendorOverview.summary.map((item) => <article key={item.key}><small>{isFa ? item.labelFa : item.labelEn}</small><strong dir="auto">{item.value}</strong></article>)}</div> : null}
-        {vendorOverview.sections.length ? <div className="asset-vendor-sections">{vendorOverview.sections.map((vendorSection, index) => <details key={vendorSection.key} open={index === 0}><summary><span>{isFa ? vendorSection.titleFa : vendorSection.titleEn}</span><b>{vendorSection.count.toLocaleString(locale)}</b></summary><div>{vendorSection.items.map((item, itemIndex) => <article key={`${vendorSection.key}-${itemIndex}`}><strong dir="auto">{item.title}</strong>{item.fields.length ? <dl>{item.fields.map((field) => <div key={field.key}><dt>{field.key}</dt><dd dir="auto">{field.value}</dd></div>)}</dl> : null}</article>)}</div></details>)}</div> : <div className="asset-vendor-empty"><Database /><strong>{isFa ? "هنوز داده جامع وندور جمع‌آوری نشده است" : "No comprehensive vendor data yet"}</strong><p>{isFa ? "«جمع‌آوری جدید» را بزنید تا اطلاعات واقعی از دستگاه خوانده شود." : "Use Collect now to read verified data from the device."}</p></div>}
+        {vendorOverview.sections.length ? <details className="asset-vendor-more"><summary>{isFa ? "مشاهدهٔ اطلاعات تخصصی" : "Show technical inventory"}</summary><div className="asset-vendor-sections">{vendorOverview.sections.map((vendorSection) => <details key={vendorSection.key}><summary><span>{isFa ? vendorSection.titleFa : vendorSection.titleEn}</span><b>{vendorSection.count.toLocaleString(locale)}</b></summary><div>{vendorSection.items.map((item, itemIndex) => <article key={`${vendorSection.key}-${itemIndex}`}><strong dir="auto">{item.title}</strong>{item.fields.length ? <dl>{item.fields.map((field) => <div key={field.key}><dt>{field.key}</dt><dd dir="auto">{field.value}</dd></div>)}</dl> : null}</article>)}</div></details>)}</div></details> : <div className="asset-vendor-empty"><Database /><strong>{isFa ? "هنوز داده جامع وندور جمع‌آوری نشده است" : "No comprehensive vendor data yet"}</strong><p>{isFa ? "برای دیدن جزئیات، یک‌بار اطلاعات دستگاه را جمع‌آوری کنید." : "Collect device data to see details."}</p></div>}
       </section>
 
       {isCisco && currentWorkspace.vendorDetails ? <details className="asset-cisco-expanded"><summary>{isFa ? "نمای تخصصی Cisco" : "Cisco technical view"}</summary><CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={dataTime} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /></details> : null}
 
+      <details className="asset-overview-technical"><summary>{isFa ? "همهٔ سنسورها و زمان اندازه‌گیری" : "All sensors and measurement times"}</summary><SensorReadings /></details>
       <section className="asset-overview-actions"><div><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p></div><div><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link>{interfaces.length ? <Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{isFa ? "مشاهده اینترفیس‌ها" : "View interfaces"}</Link> : null}{isCisco ? <Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link> : null}</div></section>
       <AdvancedWorkspaceDetails />
     </section>;
@@ -287,7 +377,9 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
   function WorkspaceCharts() {
     const changes = currentWorkspace.charts.recentChanges.filter((item) => new Date(item.timestamp).getTime() >= since);
-    return <section className="workspace-analytics" aria-label={t("workspace.chart.ranges")}><div className="workspace-range"><span>{t("workspace.chart.ranges")}</span>{(Object.keys(rangeHours) as TimeRange[]).map((item) => <button type="button" key={item} aria-pressed={timeRange === item} onClick={() => setTimeRange(item)}>{item}</button>)}</div><div className="workspace-chart-grid"><TrendChart title={t("workspace.chart.health")} points={chart(currentWorkspace.charts.healthScore)} empty={t("workspace.empty.verifiedData")} locale={locale} /><TrendChart title={t("workspace.chart.connector")} points={chart(currentWorkspace.charts.connectorResults)} empty={t("workspace.empty.verifiedData")} binary locale={locale} /><TrendChart title={t("workspace.chart.availability")} points={chart(currentWorkspace.charts.availability)} empty={t("workspace.empty.verifiedData")} binary locale={locale} /><TrendChart title={t("workspace.chart.resources")} points={chart(currentWorkspace.charts.resources)} empty={t("workspace.empty.verifiedData")} locale={locale} /><TrendChart title={t("workspace.chart.findings")} points={chart(currentWorkspace.charts.findings)} empty={t("workspace.empty.verifiedData")} locale={locale} /><TrendChart title={t("workspace.chart.actions")} points={chart(currentWorkspace.charts.actions)} empty={t("workspace.empty.verifiedData")} binary locale={locale} /></div><div className="content-panel"><h2>{t("workspace.chart.changes")}</h2>{changes.length ? changes.slice(-8).reverse().map((item) => <div className="list-row" key={`${item.timestamp}-${item.label}`}>{item.label}<span>{date(item.timestamp, locale, fallback)}</span></div>) : <p>{t("workspace.empty.verifiedData")}</p>}</div></section>;
+    const resourceLabels: Record<string, [string, string]> = { "cpu.usage_percent": ["مصرف CPU", "CPU usage"], "memory.usage_percent": ["مصرف حافظه", "Memory usage"], "disk.usage_percent": ["مصرف دیسک", "Disk usage"], "cpu.load_1m": ["بار CPU", "CPU load"] };
+    const resources = Object.entries(resourceLabels).map(([key, labels]) => ({ key, title: labels[isFa ? 0 : 1], points: chart(currentWorkspace.charts.resources.filter((item) => item.label === key)) })).filter((item) => item.points.length);
+    return <section className="workspace-analytics" aria-label={t("workspace.chart.ranges")}><div className="workspace-range"><span>{t("workspace.chart.ranges")}</span>{(Object.keys(rangeHours) as TimeRange[]).map((item) => <button type="button" key={item} aria-pressed={timeRange === item} onClick={() => setTimeRange(item)}>{item}</button>)}</div><div className="workspace-chart-grid"><TrendChart title={t("workspace.chart.health")} points={chart(currentWorkspace.charts.healthScore)} empty={t("workspace.empty.verifiedData")} locale={locale} /><TrendChart title={t("workspace.chart.availability")} points={chart(currentWorkspace.charts.availability)} empty={t("workspace.empty.verifiedData")} binary locale={locale} />{resources.map((item) => <TrendChart key={item.key} title={item.title} points={item.points} empty={t("workspace.empty.verifiedData")} locale={locale} />)}</div><div className="content-panel"><h2>{t("workspace.chart.changes")}</h2>{changes.length ? changes.slice(-8).reverse().map((item) => <div className="list-row" key={`${item.timestamp}-${item.label}`}>{item.label}<span>{date(item.timestamp, locale, fallback)}</span></div>) : <p>{t("workspace.empty.verifiedData")}</p>}</div></section>;
   }
 
   const content = (() => {
@@ -295,7 +387,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     if (section === "interfaces") return <div className="content-grid"><section className="content-panel cisco-interface-panel"><header><div><h2>{t("workspace.interfaces.title")}</h2><p>{isFa ? `${interfaces.length} اینترفیس؛ ${interfaceUpCount} لینک فعال و ${interfaceDownCount} لینک قطع` : `${interfaces.length} interfaces; ${interfaceUpCount} links up and ${interfaceDownCount} links down`}</p></div><Link className="secondary-link" to={`/assets/topology?deviceId=${encodeURIComponent(deviceId)}`}>{isFa ? "نمای گرافیکی پورت‌ها" : "Graphical port view"}</Link></header>{interfaces.length ? <div className="cisco-interface-list">{interfaces.slice(0, 128).map((item, index) => { const row = asRecord(item); const state = interfaceState(row); const address = row.ipAddress ?? asArray(row.ipAddresses)[0]; const portMeta = [row.vlan ? `VLAN ${row.vlan}` : "", row.speed ? `${row.speed} Mbps` : "", row.duplex ? String(row.duplex) : ""].filter(Boolean).join(" · "); return <article className={`cisco-interface-row is-${state.operational}`} key={String(row.name ?? row.interface ?? index)}><i aria-hidden="true" /><div><strong dir="ltr">{value(row.name ?? row.interface ?? row.id, fallback)}</strong><small>{value(row.description, isFa ? "بدون توضیح" : "No description")}</small><small dir="ltr">{value(address, isFa ? "بدون IP" : "No IP")}</small>{portMeta ? <small dir="ltr">{portMeta}</small> : null}</div><span><small>{isFa ? "لینک" : "Link"}</small><b>{state.operational === "up" ? (isFa ? "فعال" : "Up") : state.operational === "down" ? (isFa ? "قطع" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span><span><small>{isFa ? "مدیریتی" : "Admin"}</small><b>{state.administrative === "up" ? (isFa ? "روشن" : "Up") : state.administrative === "down" ? (isFa ? "خاموش" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span></article>; })}</div> : <p>{t("workspace.empty.interfaces")}</p>}</section><AdvancedWorkspaceDetails /></div>;
     if (section === "configuration") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.configuration.title")}</h2><dl className="detail-list"><dt>{t("workspace.labels.configState")}</dt><dd>{value(overview.configBackup.state, fallback)}</dd><dt>{t("workspace.labels.lastBackup")}</dt><dd>{date(overview.configBackup.collectedAt, locale, fallback)}</dd></dl></section><section className="content-panel"><h2>{t("workspace.configuration.connectionTitle")}</h2><p>{t("workspace.values.credentialReference")}</p><dl className="detail-list"><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(currentWorkspace.device?.host ?? overview.managementIp, fallback)}</dd><dt>{t("workspace.labels.protocol")}</dt><dd>{value(currentWorkspace.device?.protocol, fallback)}</dd><dt>{t("workspace.labels.environment")}</dt><dd>{value(currentWorkspace.device?.environment, fallback)}</dd></dl><Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.actions.openSetup")}</Link></section></div>;
     if (section === "actions") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.actions.title")}</h2>{currentWorkspace.actions.length ? currentWorkspace.actions.map((item) => <Link className="list-row" key={String(item.id)} to={`/actions/${item.id}`}>{value(item.actionType, fallback)}<span>{value(item.status, fallback)}</span></Link>) : <p>{t("workspace.empty.actions")}</p>}<Link className="primary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}`}>{t("workspace.actions.reviewOrCreate")}</Link></section><section className="content-panel"><h2>{t("workspace.chart.findings")}</h2>{currentWorkspace.findings.length ? currentWorkspace.findings.map((item) => <div className="list-row" key={String(item.id)}>{value(item.title, fallback)}<span>{value(item.severity, fallback)}</span></div>) : <p>{t("workspace.empty.findings")}</p>}</section></div>;
-    if (section === "monitoring") return <><div className="content-grid"><section className="content-panel"><h2>{t("workspace.monitoring.title")}</h2><dl className="detail-list"><dt>{t("workspace.labels.healthScore")}</dt><dd>{value(overview.healthScore, fallback)}</dd><dt>{t("workspace.labels.healthState")}</dt><dd>{value(overview.healthState, fallback)}</dd><dt>{t("workspace.labels.lastContact")}</dt><dd>{date(overview.lastContact, locale, fallback)}</dd><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection, locale, fallback)}</dd></dl></section><section className="content-panel"><h2>{t("workspace.cards.connection")}</h2>{currentWorkspace.statusChecks.length ? currentWorkspace.statusChecks.slice(0, 10).map((item) => <div className="list-row" key={String(item.id)}>{value(item.status, fallback)}<span>{date(item.checkedAt, locale, fallback)}</span></div>) : <p>{t("workspace.empty.statusChecks")}</p>}</section></div>{workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}<WorkspaceCharts /></>;
+    if (section === "monitoring") return <><SensorReadings />{workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}<WorkspaceCharts /></>;
     return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.history.auditTitle")}</h2>{currentWorkspace.audit.length ? currentWorkspace.audit.map((item) => <div className="list-row" key={String(item.id)}>{value(item.action, fallback)}<span>{date(item.createdAt, locale, fallback)}</span></div>) : <p>{t("workspace.empty.audit")}</p>}</section><section className="content-panel"><h2>{t("workspace.history.collectionTitle")}</h2>{currentWorkspace.collections.length ? currentWorkspace.collections.map((item) => <div className="list-row" key={String(item.id)}>{value(item.provider, fallback)}<span>{value(item.status, fallback)}</span></div>) : <p>{t("workspace.empty.collections")}</p>}</section></div>;
   })();
 

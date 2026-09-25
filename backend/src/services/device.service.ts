@@ -10,6 +10,7 @@ import { selectDeviceConnector } from "../connectors/connector-registry.service.
 import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
 import { prisma } from "../db/prisma.js";
 import { recordAndTestDeviceConnectionChannels, syncDefaultDeviceConnectionChannels } from "./device-connection-channel.service.js";
+import { recordVendorMetricSamples } from "./vendor-metric-samples.service.js";
 
 const DEVICE_TYPES = new Set<string>(Object.values(DeviceType));
 const DEVICE_PROTOCOLS = new Set<string>(Object.values(DeviceProtocol));
@@ -543,6 +544,7 @@ export async function testDeviceConnection(id: string, ownerId?: string) {
     });
 
     const channelState = await recordAndTestDeviceConnectionChannels({ ...device, ...(recoveredManagementPort ? { managementPort: recoveredManagementPort } : {}) }, result);
+    await recordVendorMetricSamples(device.id, result);
     return {
       ...persistedResult,
       status,
