@@ -3,6 +3,7 @@ import tls from "node:tls";
 import { DeviceProtocol, DeviceStatus, EventSourceType, type Device, type DeviceConnectionChannel } from "@prisma/client";
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
+import { closeSshMonitorSessions, probeSshMonitorSession } from "./ssh-monitor-session.service.js";
 
 type SensorLogger = {
   info(payload: unknown, message?: string): void;
@@ -46,8 +47,11 @@ const runtime = {
 };
 
 const deviceStates = new Map<string, SensorDeviceState>();
+const verifiedUntil = new Map<string, number>();
+const recoveryRefreshes = new Map<string, Promise<void>>();
 let timer: NodeJS.Timeout | null = null;
 let cyclePromise: Promise<void> | null = null;
+const VERIFIED_COLLECTION_GRACE_MS = 20_000;
 
 function bounded(value: string, limit = 240) {
   return Array.from(value)
@@ -94,6 +98,19 @@ export function probeMode(protocol: DeviceProtocol, method: string, port: number
     return port === 80 || port === 8080 ? "tcp_connect" : "tls_handshake";
   }
   return "tcp_connect";
+}
+
+function managementChannel(device: SensorDevice) {
+  return device.connectionChannels.find((channel) => channel.role === "management" && channel.enabled)
+    ?? device.connectionChannels.find((channel) => channel.role === "management");
+}
+
+export function probeIntervalSeconds(device: Pick<SensorDevice, "protocol" | "connectionChannels">) {
+  const management = managementChannel(device as SensorDevice);
+  const method = management?.method ?? device.protocol;
+  return method === "ssh" || device.protocol === DeviceProtocol.ssh
+    ? Math.max(env.deviceConnectivityIntervalSeconds, env.deviceConnectivitySshIntervalSeconds)
+    : env.deviceConnectivityIntervalSeconds;
 }
 
 function tcpProbe(host: string, port: number, timeoutMs: number): Promise<ProbeResult> {
@@ -176,20 +193,75 @@ async function passiveProbe(deviceId: string, method: string): Promise<ProbeResu
 }
 
 export async function probeDeviceConnectivity(device: SensorDevice): Promise<ProbeResult> {
-  const management = device.connectionChannels.find((channel) => channel.role === "management" && channel.enabled)
-    ?? device.connectionChannels.find((channel) => channel.role === "management");
+  const management = managementChannel(device);
   const host = management?.host ?? device.host;
   const port = management?.port ?? device.managementPort;
   const method = management?.method ?? device.protocol;
   if (method === "agent" || method === "syslog") return passiveProbe(device.id, method);
   const mode = probeMode(device.protocol, method, port);
-  if (mode === "ssh_banner") return sshBannerProbe(host, port, env.deviceConnectivityTimeoutMs);
+  if (mode === "ssh_banner") {
+    const session = await probeSshMonitorSession(device, host, port);
+    if (session) return { ...session, status: session.reachable ? DeviceStatus.online : DeviceStatus.error, mode: "ssh_banner" };
+    return sshBannerProbe(host, port, env.deviceConnectivityTimeoutMs);
+  }
   if (mode === "tls_handshake") return tlsProbe(host, port, env.deviceConnectivityTimeoutMs);
   return tcpProbe(host, port, env.deviceConnectivityTimeoutMs);
 }
 
-async function persistProbe(device: SensorDevice, result: ProbeResult, now: Date) {
+async function reconcileUnavailableAgentChannel(device: SensorDevice, now: Date) {
+  const channel = device.connectionChannels.find((item) => item.role === "observability" && item.method === "agent");
+  if (!channel) return;
+  const settings = channel.settingsJson && typeof channel.settingsJson === "object" && !Array.isArray(channel.settingsJson)
+    ? channel.settingsJson as Record<string, unknown>
+    : {};
+  if (settings.readiness === "ready") return;
+  if (channel.status === "setup_required" && !channel.enabled && !channel.lastSuccessAt && settings.agentAvailable === false) return;
+  const message = "Agent مستقل هنوز در این نسخه ارائه نشده است؛ پایش فعال از مسیر SSH تأییدشده انجام می‌شود.";
+  await prisma.deviceConnectionChannel.update({
+    where: { id: channel.id },
+    data: {
+      enabled: false,
+      status: "setup_required",
+      lastTestAt: now,
+      lastSuccessAt: null,
+      lastError: message,
+      settingsJson: {
+        ...settings,
+        readiness: "setup_required",
+        agentAvailable: false,
+        prerequisites: ["Standalone agent package and enrollment are not available in this release"],
+        prerequisitesFa: ["بسته نصب و ثبت Agent مستقل در این نسخه ارائه نشده است"]
+      }
+    }
+  });
+}
+
+function queueRecoveryRefresh(device: SensorDevice, logger?: SensorLogger) {
+  if (recoveryRefreshes.has(device.id)) return;
+  const task = (async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    try {
+      if (device.type === "linux_edge" || /linux|ubuntu|debian|centos|rhel/i.test(`${device.vendor} ${device.type}`)) {
+        const { refreshLinuxHealth } = await import("../monitoring/linux/linux-health.service.js");
+        await refreshLinuxHealth(device.id);
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
+      const { runCollectorOnce } = await import("./collector.service.js");
+      await runCollectorOnce(device.id);
+      logger?.info({ deviceId: device.id }, "Recovered device sensors refreshed");
+    } catch (error) {
+      logger?.warn({ deviceId: device.id, code: errorCode(error) }, "Recovered device refresh did not complete");
+    }
+  })().finally(() => recoveryRefreshes.delete(device.id));
+  recoveryRefreshes.set(device.id, task);
+}
+
+async function persistProbe(device: SensorDevice, originalResult: ProbeResult, now: Date, logger?: SensorLogger, refreshOnRecovery = true) {
   const previous = deviceStates.get(device.id);
+  const graceActive = !originalResult.reachable && (verifiedUntil.get(device.id) ?? 0) > now.getTime();
+  const result = graceActive
+    ? { reachable: true, status: DeviceStatus.online, code: "RECENT_COLLECTION_VERIFIED", message: "A recent authenticated collection verified the device connection.", latencyMs: originalResult.latencyMs, mode: originalResult.mode }
+    : originalResult;
   const consecutiveFailures = result.reachable ? 0 : (previous?.consecutiveFailures ?? 0) + 1;
   const nextStatus = result.status === DeviceStatus.unknown
     ? DeviceStatus.unknown
@@ -225,6 +297,28 @@ async function persistProbe(device: SensorDevice, result: ProbeResult, now: Date
     } })] : [])
   ]);
   if (transition) runtime.transitions += 1;
+  if (refreshOnRecovery && nextStatus === DeviceStatus.online && previous?.status !== DeviceStatus.online && device.status !== DeviceStatus.online) {
+    queueRecoveryRefresh(device, logger);
+  }
+}
+
+export async function recordVerifiedDeviceConnectivity(deviceId: string, code: string, message: string, latencyMs = 0) {
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    include: { connectionChannels: { orderBy: [{ priority: "asc" }, { role: "asc" }] } }
+  });
+  if (!device) return false;
+  const now = new Date();
+  verifiedUntil.set(deviceId, now.getTime() + VERIFIED_COLLECTION_GRACE_MS);
+  await persistProbe(device, {
+    reachable: true,
+    status: DeviceStatus.online,
+    code: bounded(code, 60) || "AUTHENTICATED_COLLECTION_VERIFIED",
+    message: bounded(message),
+    latencyMs: Math.max(0, Math.round(latencyMs)),
+    mode: probeMode(device.protocol, managementChannel(device)?.method ?? device.protocol, managementChannel(device)?.port ?? device.managementPort)
+  }, now, undefined, false);
+  return true;
 }
 
 export async function runDeviceConnectivityCycle(logger?: SensorLogger) {
@@ -240,8 +334,18 @@ export async function runDeviceConnectivityCycle(logger?: SensorLogger) {
       const batch = devices.slice(offset, offset + 10);
       await Promise.all(batch.map(async (device) => {
         try {
+          const now = new Date();
+          await reconcileUnavailableAgentChannel(device, now);
+          const previous = deviceStates.get(device.id);
+          if (previous && now.getTime() - previous.checkedAt.getTime() < probeIntervalSeconds(device) * 1000) {
+            if (previous.status === DeviceStatus.online) counters.online += 1;
+            else if (previous.status === DeviceStatus.offline) counters.offline += 1;
+            else if (previous.status === DeviceStatus.error) counters.degraded += 1;
+            else counters.unknown += 1;
+            return;
+          }
           const result = await probeDeviceConnectivity(device);
-          await persistProbe(device, result, new Date());
+          await persistProbe(device, result, new Date(), logger);
           const status = deviceStates.get(device.id)?.status ?? DeviceStatus.unknown;
           if (status === DeviceStatus.online) counters.online += 1;
           else if (status === DeviceStatus.offline) counters.offline += 1;
@@ -278,7 +382,7 @@ export function startDeviceConnectivitySensor(logger?: SensorLogger) {
   if (runtime.running || !env.deviceConnectivitySensorEnabled) return;
   runtime.running = true;
   runtime.startedAt = new Date();
-  logger?.info({ intervalSeconds: env.deviceConnectivityIntervalSeconds, timeoutMs: env.deviceConnectivityTimeoutMs, offlineThreshold: env.deviceConnectivityOfflineThreshold }, "Unified device connectivity sensor started");
+  logger?.info({ intervalSeconds: env.deviceConnectivityIntervalSeconds, sshIntervalSeconds: env.deviceConnectivitySshIntervalSeconds, timeoutMs: env.deviceConnectivityTimeoutMs, offlineThreshold: env.deviceConnectivityOfflineThreshold }, "Unified device connectivity sensor started");
   void triggerCycle(logger);
   timer = setInterval(() => { void triggerCycle(logger); }, Math.max(1, env.deviceConnectivityIntervalSeconds) * 1000);
   timer.unref();
@@ -289,6 +393,7 @@ export async function stopDeviceConnectivitySensor() {
   if (timer) clearInterval(timer);
   timer = null;
   await cyclePromise;
+  closeSshMonitorSessions();
 }
 
 export function getDeviceConnectivitySensorStatus() {
@@ -297,6 +402,7 @@ export function getDeviceConnectivitySensorStatus() {
     running: runtime.running,
     cycleRunning: runtime.cycleRunning,
     intervalSeconds: env.deviceConnectivityIntervalSeconds,
+    sshIntervalSeconds: env.deviceConnectivitySshIntervalSeconds,
     timeoutMs: env.deviceConnectivityTimeoutMs,
     offlineThreshold: env.deviceConnectivityOfflineThreshold,
     startedAt: runtime.startedAt,

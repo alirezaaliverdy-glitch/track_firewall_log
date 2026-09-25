@@ -3,6 +3,7 @@ import { Client, type ConnectConfig } from "ssh2";
 import { DeviceProtocol, DeviceType, type Device } from "@prisma/client";
 import { resolveCredentialById, resolveCredentialByName, type ResolvedDeviceCredential } from "../services/credential.service.js";
 import type { CollectedLogLine, CollectorRunResult, CollectorSourceType, DeviceCollector } from "./types.js";
+import { env } from "../config/env.js";
 
 const LINUX_SOURCE_TYPES: CollectorSourceType[] = ["linux_ssh", "linux_ufw", "linux_kernel"];
 
@@ -57,7 +58,7 @@ function connectConfig(device: Device, credential: EnvSshCredential): ConnectCon
     host: device.host,
     port: device.managementPort,
     username: credential.username,
-    readyTimeout: 8000
+    readyTimeout: env.sshHandshakeTimeoutMs
   };
   if (credential.password) config.password = credential.password;
   if (credential.privateKey) config.privateKey = credential.privateKey;

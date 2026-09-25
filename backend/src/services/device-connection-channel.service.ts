@@ -9,6 +9,7 @@ import { selectDeviceConnector } from "../connectors/connector-registry.service.
 import type { DeviceConnectionTestResult } from "../connectors/types.js";
 import { prisma } from "../db/prisma.js";
 import { getConnectionProfile, type ConnectionMethodKey, type VendorConnectionKey } from "../vendors/connection-method.registry.js";
+import { env } from "../config/env.js";
 
 type ConnectionChannelResult = {
   id: string;
@@ -106,7 +107,13 @@ export async function syncDefaultDeviceConnectionChannels(tx: Prisma.Transaction
       port: secondary.defaultPort,
       credentialId: pullChannel ? device.credentialId : null,
       priority: 2,
-      settingsJson: json({ readiness: secondary.readiness, prerequisites: secondary.prerequisites, prerequisitesFa: secondary.prerequisitesFa, managedBy: "vendor_profile" })
+      settingsJson: json({ readiness: secondary.readiness, prerequisites: secondary.prerequisites, prerequisitesFa: secondary.prerequisitesFa, managedBy: "vendor_profile" }),
+      ...(secondary.key === "agent" ? {
+        enabled: false,
+        status: "setup_required",
+        lastSuccessAt: null,
+        lastError: (secondary.prerequisitesFa ?? secondary.prerequisites)?.join("؛ ") ?? "Standalone agent enrollment is not available."
+      } : {})
     },
     create: {
       deviceId: device.id,
@@ -130,18 +137,28 @@ async function passiveEvidence(deviceId: string, method: "syslog" | "agent") {
     prisma.eventSource.findFirst({ where: { deviceId, type: sourceType }, orderBy: { lastSeenAt: "desc" }, select: { lastSeenAt: true } }),
     prisma.securityEvent.findFirst({ where: { deviceId, sourceType: { contains: method, mode: "insensitive" } }, orderBy: { receivedAt: "desc" }, select: { receivedAt: true } })
   ]);
-  return source?.lastSeenAt ?? event?.receivedAt ?? null;
+  const evidenceAt = source?.lastSeenAt ?? event?.receivedAt ?? null;
+  const freshnessMs = Math.max(60, env.deviceConnectivityIntervalSeconds * 3) * 1000;
+  return evidenceAt && Date.now() - evidenceAt.getTime() <= freshnessMs ? evidenceAt : null;
 }
 
 async function testSecondaryChannel(device: Device, channel: DeviceConnectionChannel): Promise<ConnectionChannelResult> {
   const testedAt = new Date();
-  if (channel.method === "syslog" || channel.method === "agent") {
+  if (channel.method === "agent") {
+    const message = "بسته مستقل Agent هنوز ارائه نشده است؛ پایش فعال فعلاً از مسیر SSH تأییدشده انجام می‌شود.";
+    await prisma.deviceConnectionChannel.update({
+      where: { id: channel.id },
+      data: { enabled: false, status: "setup_required", lastTestAt: testedAt, lastSuccessAt: null, lastError: message }
+    });
+    return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status: "setup_required", connected: null, tested: false, message, actionRequired: true, lastTestAt: testedAt.toISOString(), lastSuccessAt: null };
+  }
+  if (channel.method === "syslog") {
     const evidenceAt = await passiveEvidence(device.id, channel.method);
     const connected = Boolean(evidenceAt);
     const status = connected ? "receiving" : "waiting_data";
     const message = connected
       ? `Inbound ${channel.method} data was received successfully.`
-      : `${channel.method === "agent" ? "Agent enrollment" : "Remote Syslog forwarding"} must be completed on the device; this push channel cannot be tested like SSH.`;
+      : "Remote Syslog forwarding must be completed on the device; this push channel cannot be tested like SSH.";
     await prisma.deviceConnectionChannel.update({
       where: { id: channel.id },
       data: { enabled: connected, status, lastTestAt: testedAt, lastSuccessAt: evidenceAt, lastError: connected ? null : message }

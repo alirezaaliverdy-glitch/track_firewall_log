@@ -4,7 +4,7 @@ The application separates the management/control connection from event and telem
 
 | Vendor | Management path available now | Recommended companion channels | Notes |
 | --- | --- | --- | --- |
-| Linux | SSH with a private key | Agent, Syslog over TLS | SSH is used for bootstrap, read-only discovery, and controlled operations. |
+| Linux | SSH with a private key | Syslog over TLS; standalone Agent is not shipped yet | SSH currently provides bootstrap, read-only discovery, controlled operations, active health collection, and verified recovery evidence. |
 | Cisco IOS / IOS-XE | SSH/CLI | RESTCONF or NETCONF on supported IOS-XE, gNMI, SNMPv3, Syslog | The current connector keeps broad IOS compatibility. Model-driven channels must first be enabled on the device. |
 | MikroTik RouterOS | SSH/CLI; HTTPS REST inventory on RouterOS 7 | SNMPv3, remote Syslog | REST is intentionally read-only in this release. Controlled changes remain on the existing SSH connector. |
 | FortiGate | SSH/CLI | REST API token (planned connector), SNMPv3, Syslog over TLS | API tokens must use least privilege and trusted hosts. |
@@ -15,6 +15,7 @@ The application separates the management/control connection from event and telem
 - Credentials are referenced from the encrypted credential store; onboarding payloads reject plaintext secrets.
 - Discovery and connection tests execute read-only requests.
 - A telemetry method is never presented as a management method.
+- An Agent channel is only `receiving` after a separately shipped and enrolled agent produces a fresh heartbeat. This repository currently has no installable Agent package or enrollment endpoint, so Linux Agent remains `setup_required` and SSH is the active monitoring path.
 - RouterOS REST uses HTTPS. Certificate verification can be enforced with the stored `mikrotikTlsVerify` capability; deployments should install a trusted certificate before production use.
 - Write actions continue through the existing allowlisted command/action plans, approval, audit, and rollback contracts.
 

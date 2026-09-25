@@ -51,7 +51,7 @@ async function runDueCollectors(logger?: MonitorLogger) {
   const states = await prisma.eventCollectorState.findMany({ where: { enabled: true }, include: { device: true } });
   const due = states.filter((state) => {
     const collector = selectCollector(state.device);
-    return collector?.stateSourceType === state.sourceType && isCollectorDue(state);
+    return state.device.status !== "offline" && collector?.stateSourceType === state.sourceType && isCollectorDue(state);
   });
   for (let offset = 0; offset < due.length; offset += 3) {
     const batch = due.slice(offset, offset + 3);

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import net from "node:net";
 import test from "node:test";
 import { DeviceProtocol, DeviceStatus } from "@prisma/client";
-import { deriveConnectivityStatus, probeDeviceConnectivity, probeMode } from "../src/services/device-connectivity-sensor.service.js";
+import { deriveConnectivityStatus, probeDeviceConnectivity, probeIntervalSeconds, probeMode } from "../src/services/device-connectivity-sensor.service.js";
 
 test("connectivity state becomes degraded once and offline at the configured threshold", () => {
   assert.equal(deriveConnectivityStatus(true, 0, 2), DeviceStatus.online);
@@ -15,6 +15,11 @@ test("vendor probes verify the service layer instead of treating every open port
   assert.equal(probeMode(DeviceProtocol.ssh, "ssh", 22), "ssh_banner");
   assert.equal(probeMode(DeviceProtocol.api, "rest_api", 443), "tls_handshake");
   assert.equal(probeMode(DeviceProtocol.api, "rest_api", 80), "tcp_connect");
+});
+
+test("SSH probes use a throttled cadence so the sensor does not trigger server rate limits", () => {
+  const interval = probeIntervalSeconds({ protocol: DeviceProtocol.ssh, connectionChannels: [] });
+  assert.ok(interval >= 10);
 });
 
 test("SSH reachability requires a real service banner", async () => {
@@ -44,6 +49,16 @@ test("runtime, compose and live UI refresh are wired to the unified sensor", () 
   const workspace = readFileSync(new URL("../../src/features/assets/pages/AssetDetailPage.tsx", import.meta.url), "utf8");
   assert.match(server, /startDeviceConnectivitySensor/);
   assert.match(compose, /DEVICE_CONNECTIVITY_INTERVAL_SECONDS/);
+  assert.match(compose, /DEVICE_CONNECTIVITY_SSH_INTERVAL_SECONDS/);
   assert.match(assets, /5_000/);
   assert.match(workspace, /5_000/);
+});
+
+test("pull collectors are not presented as an installed standalone agent", () => {
+  const ingestion = readFileSync(new URL("../src/services/event-ingestion.service.ts", import.meta.url), "utf8");
+  const channels = readFileSync(new URL("../src/services/device-connection-channel.service.ts", import.meta.url), "utf8");
+  assert.match(ingestion, /EventSourceType\.api/);
+  assert.doesNotMatch(ingestion, /type:\s*EventSourceType\.agent/);
+  assert.match(channels, /channel\.method === "agent"/);
+  assert.match(channels, /status: "setup_required"/);
 });

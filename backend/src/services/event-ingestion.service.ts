@@ -317,7 +317,7 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
     update: { status: EventSourceStatus.active, lastSeenAt: new Date() },
     create: {
       name: `${result.collectorName} ${result.deviceId}`,
-      type: EventSourceType.agent,
+      type: EventSourceType.api,
       deviceId: result.deviceId,
       status: EventSourceStatus.active,
       lastSeenAt: new Date()
@@ -419,14 +419,14 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
 
 async function findOrCreateSourceId(deviceId: string) {
   const existing = await prisma.eventSource.findFirst({
-    where: { deviceId, type: EventSourceType.agent },
+    where: { deviceId, type: EventSourceType.api },
     select: { id: true }
   });
   if (existing) return existing.id;
   const created = await prisma.eventSource.create({
     data: {
       name: `Device log collector ${deviceId}`,
-      type: EventSourceType.agent,
+      type: EventSourceType.api,
       deviceId,
       status: EventSourceStatus.active,
       lastSeenAt: new Date()

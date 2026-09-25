@@ -3,6 +3,7 @@ import { selectCollector } from "../collectors/collector-registry.service.js";
 import { ingestCollectorRun } from "./event-ingestion.service.js";
 import { buildIncidentsFromRecentEvents } from "./incident-builder.service.js";
 import { env } from "../config/env.js";
+import { recordVerifiedDeviceConnectivity } from "./device-connectivity-sensor.service.js";
 
 function fallbackSince() {
   return new Date(Date.now() - 15 * 60 * 1000);
@@ -97,6 +98,7 @@ export async function runCollectorOnce(deviceId: string) {
 
   const state = await ensureState(deviceId, collector.stateSourceType);
   const since = state.lastCollectedAt ?? fallbackSince();
+  const startedAt = Date.now();
 
   try {
     const run = await collector.runOnce(device, since);
@@ -112,6 +114,12 @@ export async function runCollectorOnce(deviceId: string) {
         consecutiveIdleRuns: ingestion.inserted + ingestion.updated === 0 ? { increment: 1 } : 0
       }
     });
+    await recordVerifiedDeviceConnectivity(
+      deviceId,
+      "AUTHENTICATED_COLLECTOR_VERIFIED",
+      `${collector.name} completed an authenticated collection.`,
+      Math.max(0, Date.now() - startedAt)
+    );
     return {
       deviceId,
       collector: collector.name,

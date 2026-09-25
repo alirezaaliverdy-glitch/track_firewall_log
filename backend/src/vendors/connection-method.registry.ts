@@ -33,12 +33,12 @@ const method = (value: VendorConnectionMethod) => value;
 const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   linux: {
     vendor: "linux",
-    recommendedSecondary: "agent",
-    strategy: "Use SSH keys for control and bootstrap; use the agent or Syslog for continuous evidence.",
-    strategyFa: "برای کنترل و راه‌اندازی از کلید SSH و برای شواهد پیوسته از Agent یا Syslog استفاده کنید.",
+    recommendedSecondary: "syslog",
+    strategy: "Use SSH keys for control, active health collection, and bootstrap; use Syslog over TLS for continuous events.",
+    strategyFa: "برای کنترل، جمع‌آوری فعال سلامت و راه‌اندازی از کلید SSH و برای رخدادهای پیوسته از Syslog امن استفاده کنید.",
     methods: [
       method({ key: "ssh", title: "SSH", titleFa: "SSH امن", summary: "Full administrative control and read-only discovery.", summaryFa: "کنترل مدیریتی و کشف خواندنی با پشتیبانی کلید خصوصی.", purposes: ["control", "inventory"], readiness: "ready", recommended: true, selectable: true, secure: true, defaultPort: 22, credential: "private_key", prerequisites: ["Reachable SSH service", "Least-privilege sudo account"], prerequisitesFa: ["دسترسی شبکه به سرویس SSH", "حساب sudo با حداقل سطح دسترسی"] }),
-      method({ key: "agent", title: "Agent", titleFa: "عامل پایش", summary: "Continuous metrics and security telemetry.", summaryFa: "ارسال پیوسته متریک‌ها و داده‌های امنیتی.", purposes: ["telemetry", "events"], readiness: "setup_required", recommended: true, selectable: false, secure: true, defaultPort: null, credential: "api_token", prerequisites: ["Install and enroll the application agent"], prerequisitesFa: ["نصب و ثبت عامل برنامه روی سرور"] }),
+      method({ key: "agent", title: "Agent", titleFa: "عامل پایش", summary: "Continuous metrics and security telemetry.", summaryFa: "ارسال پیوسته متریک‌ها و داده‌های امنیتی.", purposes: ["telemetry", "events"], readiness: "setup_required", recommended: true, selectable: false, secure: true, defaultPort: null, credential: "api_token", prerequisites: ["The standalone agent package is not shipped yet; use the verified SSH collector for active monitoring"], prerequisitesFa: ["بسته مستقل Agent هنوز ارائه نشده است؛ پایش فعال فعلاً از مسیر SSH تأییدشده انجام می‌شود"] }),
       method({ key: "syslog", title: "Syslog over TLS", titleFa: "Syslog امن", summary: "Agentless security and system event stream.", summaryFa: "ارسال رخدادهای امنیتی و سیستمی بدون عامل.", purposes: ["events"], readiness: "setup_required", recommended: false, selectable: false, secure: true, defaultPort: 6514, credential: "certificate", prerequisites: ["Configure rsyslog/syslog-ng TLS forwarding"], prerequisitesFa: ["تنظیم ارسال TLS در rsyslog یا syslog-ng"] })
     ]
   },
