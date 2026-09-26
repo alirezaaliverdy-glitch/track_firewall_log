@@ -28,18 +28,31 @@ try {
   await send("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await send("Page.navigate",{url:"http://main-nginx/firewall/backups"});
   let ready=false;
-  for(let i=0;i<100;i++){ await sleep(200); ready=await evaluate("Boolean(document.querySelector('.backup-page select option[value]:not([value=\"\" ])'))"); if(ready)break; }
+  for(let i=0;i<100;i++){ await sleep(200); ready=await evaluate("document.querySelector('.backup-device-field select')?.options.length > 1"); if(ready)break; }
   if(!ready) throw new Error("Backup page failed to load devices");
   await evaluate("(()=>{const s=document.querySelector('.backup-device-field select');s.value=([...s.options].find(o=>o.textContent.includes('mikrotik'))??s.options[1]).value;s.dispatchEvent(new Event('change',{bubbles:true}));})()");
   await sleep(500);
+  if (!await evaluate("Boolean(document.querySelector('.backup-scope'))")) throw new Error("Device selection did not show vendor scope");
+  for(let i=0;i<100;i++){ await sleep(100); if(await evaluate("Boolean(document.querySelector('.backup-audit-meta'))"))break; }
+  if(!await evaluate("Boolean(document.querySelector('.backup-audit-meta time[datetime]'))")) throw new Error("History has no actor or exact time");
   for (const [width,height,label] of [[390,844,"mobile"],[1440,1000,"desktop"]]) {
     await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<600});
     await sleep(300);
     const result=await evaluate(`(() => {const page=document.querySelector('.backup-page');const panel=page.getBoundingClientRect();return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,visible:panel.width>0,overflows:[...page.querySelectorAll('input,select,button')].filter(el=>{const r=el.getBoundingClientRect();return r.left<0||r.right>innerWidth+1}).length}})()`);
     if(!result.visible||result.scrollWidth>width+1||result.overflows) throw new Error("Layout overflow: "+JSON.stringify(result));
     console.log(JSON.stringify({viewport:label,...result}));
-    if(label==="mobile"){const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile("/tmp/backups-mobile.png",Buffer.from(shot.data,"base64"));}
+    if(label==="mobile"){
+      const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile("/tmp/backups-mobile.png",Buffer.from(shot.data,"base64"));
+      await evaluate("document.querySelector('.backup-history-filters').scrollIntoView({block:'start'})");
+      await sleep(200);
+      const historyShot=await send("Page.captureScreenshot",{format:"png"});await writeFile("/tmp/backups-history-mobile.png",Buffer.from(historyShot.data,"base64"));
+      await evaluate("window.scrollTo(0,0)");
+    }
   }
+  await evaluate("(()=>{const select=document.querySelector('.backup-history-filters select:last-of-type'); const filters=document.querySelectorAll('.backup-history-filters select'); const action=filters[filters.length-1]; action.value='failed';action.dispatchEvent(new Event('change',{bubbles:true}));})()");
+  await sleep(800);
+  if(!await evaluate("[...document.querySelectorAll('.backup-event-status')].every(element=>element.classList.contains('failed'))")) throw new Error("History failure filter did not apply");
+  console.log(JSON.stringify({stage:"history-ui",actorAndTime:true,failureFilter:true}));
 } finally {
   socket?.close(); browser.kill("SIGTERM"); await sleep(300);
   await prisma.authSession.deleteMany({where:{id:session.id}});

@@ -3,11 +3,15 @@ import { Archive, Download, Loader2, ShieldCheck, Search } from "lucide-react";
 import { apiRequest } from "@/lib/apiTransport";
 import { Link } from "react-router-dom";
 import "./BackupsPage.css";
+import BackupHistory, { backupTime } from "./BackupHistory";
 type Profile = { title: string; extension: string; scope: string; supported: boolean };
 type Target = { id: string; name: string; vendor: string; host: string; company: { id: string; name: string } | null; profile: Profile };
-type Record = { id: string; deviceId: string; deviceName: string; vendor: string; filename: string; bytes: number; scope: string; title: string; actor: string; createdAt: string; sha256: string };
+type Record = { id: string; deviceId: string; deviceName: string; companyName: string; host: string; vendor: string; filename: string; bytes: number; scope: string; title: string; actor: string; actorName: string; createdAt: string; sha256: string };
 type Data = { devices: Target[]; history: Record[] };
 const errors: { [key: string]: string } = {
+  BACKUP_PERMISSION_DENIED: "حساب اتصال اجازه خواندن تمام تنظیمات را ندارد. برای لینوکس، حساب مجاز یا sudo اعتبارنامه با مجوز محدود و بدون درخواست رمز لازم است؛ فایل ناقص ذخیره نشد.",
+  BACKUP_SUDO_REQUIRED: "اجرای sudo به مجوز یا ورود رمز نیاز دارد. مجوز محدود بک‌آپ را روی سرور بررسی کنید؛ برنامه نمی‌تواند رمز sudo را تعاملی وارد کند.",
+  BACKUP_SOURCE_CHANGED: "حین دریافت، فایل تنظیمات تغییر کرده است؛ برای جلوگیری از بک‌آپ ناقص، فایل ذخیره نشد. دوباره تلاش کنید.",
   SSH_HANDSHAKE_TIMEOUT: "دستگاه پاسخ SSH نمی‌دهد. IP، پورت ثبت‌شده و اجازه اتصال از سرور برنامه را بررسی کنید.",
   SSH_AUTH_FAILED: "احراز هویت دستگاه ناموفق بود. اعتبارنامه اتصال را بررسی کنید.",
   SSH_RECONNECT_BACKOFF: "اتصال قبلی ناموفق بوده؛ کمی بعد دوباره تلاش کنید.",
@@ -50,10 +54,12 @@ export default function BackupsPage() {
   const [downloading, setDownloading] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [view, setView] = useState<"activity" | "files">("activity");
+  const [revision, setRevision] = useState(0);
   const companies = useMemo(() => Array.from(new Map(data.devices.filter(d => d.company).map(d => [d.company!.id, d.company!])).values()), [data.devices]);
   const devices = data.devices.filter(d => (!company || d.company?.id === company) && `${d.name} ${d.host} ${d.vendor}`.toLowerCase().includes(query.toLowerCase()));
   const selected = data.devices.find(d => d.id === deviceId);
-  const history = data.history.filter(r => (!company || data.devices.find(d => d.id === r.deviceId)?.company?.id === company) && (!deviceId || r.deviceId === deviceId));
+  const history = data.history;
   async function load() {
     const response = await checked(await apiRequest("/backups"));
     const result = await response.json() as Data; setData(result);
@@ -72,9 +78,9 @@ export default function BackupsPage() {
       setData(current => ({ ...current, history: [record, ...current.history].slice(0, 100) }));
       setNotice("بک‌آپ ذخیره شد. برای دریافت فایل، دکمه دانلود را بزنید.");
     } catch (e) { setError(e instanceof Error ? e.message : "بک‌آپ انجام نشد."); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setRevision(value => value + 1); }
   }
-  async function download(record: Record) {
+  async function download(record: { id: string; filename: string }) {
     setDownloading(record.id); setError("");
     try {
       const response = await checked(await apiRequest(`/backups/${encodeURIComponent(record.id)}/download`));
@@ -82,7 +88,7 @@ export default function BackupsPage() {
       const anchor = document.createElement("a"); anchor.href = url; anchor.download = record.filename;
       document.body.appendChild(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) { setError(e instanceof Error ? e.message : "دریافت فایل انجام نشد."); }
-    finally { setDownloading(""); }
+    finally { setDownloading(""); setRevision(value => value + 1); }
   }
   return <main className="backup-page" dir="rtl">
     <header className="backup-heading"><span className="backup-icon"><Archive size={28} /></span><div><h1>بک‌آپ تجهیزات</h1><p>تنظیمات دستگاه‌ها، در یک جای امن</p></div></header>
@@ -98,11 +104,13 @@ export default function BackupsPage() {
       {selected && <div className="backup-scope"><div><strong>{selected.profile.title}</strong>{selected.profile.extension && <span className="backup-format" dir="ltr">.{selected.profile.extension}</span>}</div><p>{selected.profile.scope}</p><small>فایل می‌تواند شامل کلید و رمز باشد؛ پس از دریافت در محل امن نگهداری کنید.</small><Link to={`/assets/devices/${selected.id}/setup`}>تنظیم اتصال دستگاه</Link></div>}
       <footer className="backup-create-footer"><span><ShieldCheck size={18} />ذخیره رمزنگاری‌شده · بدون تغییر تنظیمات دستگاه</span><button className="backup-primary" onClick={() => void create()} disabled={!selected?.profile.supported || busy || loading}>{busy ? <Loader2 className="backup-spin" size={18} /> : <Archive size={18} />}{busy ? "در حال دریافت از دستگاه…" : "گرفتن بک‌آپ"}</button></footer>
     </section>
-    <section className="backup-panel"><div className="backup-history-heading"><h2>فایل‌های بک‌آپ</h2><span>{history.length.toLocaleString("fa-IR")} فایل</span></div>
+    <div className="backup-view-tabs" role="group" aria-label="نمای بک‌آپ"><button aria-pressed={view === "activity"} onClick={() => setView("activity")}>تاریخچه عملیات</button><button aria-pressed={view === "files"} onClick={() => setView("files")}>فایل‌های ذخیره‌شده</button></div>
+    {view === "activity" ? <BackupHistory companies={companies} explain={code => errors[code] ?? "دریافت بک‌آپ کامل نشد؛ اتصال و مجوز حساب دستگاه را بررسی کنید."} onDownload={download} downloading={downloading} revision={revision} /> :
+    <section className="backup-panel"><div className="backup-history-heading"><h2>آخرین فایل‌های بک‌آپ</h2><span>{history.length.toLocaleString("fa-IR")} فایل</span></div>
       {loading ? <p role="status">در حال بارگذاری…</p> : !history.length ? <div className="backup-empty"><Archive size={32} /><p>هنوز بک‌آپی برای این انتخاب ندارید.</p></div> : <div className="backup-history">{history.map(r => <article className="backup-record" key={r.id}>
-        <span className="backup-file-icon"><Archive size={22} /></span><div className="backup-record-info"><h3>{r.deviceName}<span dir="ltr">{r.vendor}</span></h3><p>{r.title}</p><div className="backup-record-meta"><time dateTime={r.createdAt}>{new Date(r.createdAt).toLocaleString("fa-IR", { timeZone: "Asia/Tehran", dateStyle: "medium", timeStyle: "short" })}</time><span>توسط {r.actor}</span><span dir="ltr">{(r.bytes / 1024).toFixed(1)} KB</span></div><details><summary>مشخصات فایل</summary><p>{r.scope}</p><code dir="ltr">{r.filename}</code><code dir="ltr">SHA-256: {r.sha256}</code></details></div>
+        <span className="backup-file-icon"><Archive size={22} /></span><div className="backup-record-info"><h3>{r.deviceName}<span dir="ltr">{r.vendor}</span></h3><p>{r.companyName} · {r.title}</p><div className="backup-record-meta"><time dateTime={r.createdAt}>{backupTime(r.createdAt)} · تهران</time><span>توسط {r.actorName || r.actor}</span><span dir="ltr">{(r.bytes / 1024).toFixed(1)} KB</span></div><details><summary>مشخصات فایل</summary><p>{r.scope}</p><code dir="ltr">{r.filename}</code><code dir="ltr">SHA-256: {r.sha256}</code></details></div>
         <button className="backup-download" disabled={Boolean(downloading)} onClick={() => void download(r)} aria-label={`دریافت بک‌آپ ${r.deviceName}`}>{downloading === r.id ? <Loader2 className="backup-spin" size={18} /> : <Download size={18} />}دریافت فایل</button>
       </article>)}</div>}
-    </section>
+    </section>}
   </main>;
 }

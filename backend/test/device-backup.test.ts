@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import Fastify from "fastify";
 import type { Client } from "ssh2";
 import { backupProfile, validateBackup, backupFilename } from "../src/backups/backup-profiles.js";
-import { readBackupCommand } from "../src/backups/backup-collector.js";
+import { readBackupCommand, backupSshTarget } from "../src/backups/backup-collector.js";
 import { readFortigateConfig } from "../src/backups/fortigate-scp.js";
 import { backupRoutes } from "../src/routes/backups.js";
 import { backupMetadata, createBackup, downloadBackup, BACKUP_SNAPSHOT_TYPE } from "../src/backups/device-backup.service.js";
@@ -38,7 +38,15 @@ test("complete configs pass, truncated and CLI error output fail", () => {
   assert.throws(() => validateBackup(backupProfile("mikrotik"), Buffer.from("/ip address\n#error exporting")));
 });
 test("Linux archive must be valid gzip and have complete tar ending", () => {
-  validateBackup(backupProfile("linux"), gzipSync(Buffer.alloc(1024)));
+  const tar = Buffer.alloc(1536);
+  tar.write("etc/", 0); tar.write("00000000000", 124); tar[156] = 53;
+  tar.fill(32, 148, 156);
+  const sum = tar.subarray(0, 512).reduce((total, byte) => total + byte, 0);
+  tar.write(sum.toString(8).padStart(6, "0") + "\0 ", 148);
+  validateBackup(backupProfile("linux"), gzipSync(tar));
+  assert.throws(() => validateBackup(backupProfile("linux"), gzipSync(Buffer.alloc(1024))));
+  const corrupt = Buffer.from(tar); corrupt[10] = 1;
+  assert.throws(() => validateBackup(backupProfile("linux"), gzipSync(corrupt)), /BACKUP_INVALID_ARCHIVE/);
   assert.throws(() => validateBackup(backupProfile("linux"), Buffer.from([31,139,0])));
   assert.throws(() => validateBackup(backupProfile("linux"), gzipSync(Buffer.from("incomplete"))));
 });
@@ -83,7 +91,7 @@ test("anonymous and viewer users cannot list, create or download backups", async
     const app = Fastify();
     if (role) app.addHook("preHandler", async request => { request.authUser = { id: "owner", username: "viewer", displayName: "Viewer", role: "viewer", allowedSections: ["assets"] } as any; });
     await app.register(backupRoutes);
-    for (const [method,url,payload] of [["GET","/api/backups",undefined],["POST","/api/backups",{deviceId:"d1"}],["GET","/api/backups/b1/download",undefined]] as const) {
+    for (const [method,url,payload] of [["GET","/api/backups",undefined],["GET","/api/backups/activity",undefined],["POST","/api/backups",{deviceId:"d1"}],["GET","/api/backups/b1/download",undefined]] as const) {
       const response = await app.inject({ method, url, payload });
       assert.equal(response.statusCode, role ? 403 : 401);
     }
@@ -131,7 +139,10 @@ test("failed collection keeps diagnosis, audits no secrets and saves no artifact
   replace(t, prisma, "$transaction", async () => { throw new Error("Must not persist failed output"); });
   await assert.rejects(createBackup("d1","owner","admin", async () => { throw new SharedSshConnectionError("SSH_HANDSHAKE_TIMEOUT","secret device diagnostic"); }), /SSH_HANDSHAKE_TIMEOUT/);
   assert.equal(audit.action, "device.backup.failed");
-  assert.deepEqual(audit.metadata, {code:"SSH_HANDSHAKE_TIMEOUT"});
+  assert.equal(audit.metadata.code, "SSH_HANDSHAKE_TIMEOUT");
+  assert.equal(audit.metadata.actorId, "owner");
+  assert.equal(audit.metadata.actorName, "admin");
+  assert.ok(audit.metadata.durationMs >= 0);
   assert.ok(!JSON.stringify(audit).includes("secret"));
 });
 test("duplicate backup jobs are rejected and lock is released after failure", async t => {
@@ -148,4 +159,66 @@ test("duplicate backup jobs are rejected and lock is released after failure", as
 test("non-owned backup returns not found before decrypting", async t => {
   replace(t, prisma.deviceSnapshot,"findFirst",async(query:any)=>{assert.equal(query.where.device.company.ownerId,"other-owner");return null;});
   await assert.rejects(downloadBackup("b1","other-owner","operator"), /BACKUP_NOT_FOUND/);
+});
+
+test("backup permission diagnostics are specific but never expose stderr paths", async () => {
+  for (const [stderr, code] of [
+    ["tar: etc/private-key: Cannot open: Permission denied", "BACKUP_PERMISSION_DENIED"],
+    ["sudo: a password is required", "BACKUP_SUDO_REQUIRED"],
+    ["tar: etc/config: file changed as we read it", "BACKUP_SOURCE_CHANGED"]
+  ]) {
+    const client = { exec: (_command: string, callback: Function) => {
+      const channel = new Channel();
+      callback(null, channel);
+      queueMicrotask(() => { channel.stderr.emit("data", Buffer.from(stderr)); channel.emit("close", 2); });
+    } } as unknown as Client;
+    await assert.rejects(readBackupCommand(client, "fixed-command"), error => {
+      assert.equal((error as any).code, code);
+      assert.ok(!(error as Error).message.includes("etc/"));
+      return true;
+    });
+  }
+});
+
+test("every SSH vendor uses the enabled management channel port and credential", () => {
+  for (const vendor of ["cisco", "mikrotik", "linux", "fortigate", "pfsense"]) {
+    const device = { id: "d1", vendor, protocol: "ssh", host: "old-host", managementPort: 22, credentialId: "old" } as any;
+    const channels = [
+      { role: "observability", method: "ssh", enabled: true, priority: 0, host: "other", port: 2222, credentialId: "other" },
+      { role: "management", method: "ssh", enabled: true, priority: 1, host: "registered", port: 22022, credentialId: "registered-credential" }
+    ] as any;
+    const target = backupSshTarget(device, channels);
+    assert.equal(target.managementPort, 22022);
+    assert.equal(target.credentialId, "registered-credential");
+    assert.equal(target.host, "registered");
+    assert.throws(() => backupSshTarget(device, [{ ...channels[1], enabled: false }]), /BACKUP_SSH_REQUIRED/);
+    assert.equal(backupSshTarget(device, []), device);
+  }
+});
+
+test("backup activity is paginated, owner scoped and excludes private output", async t => {
+  const app = Fastify();
+  app.decorateRequest("authUser", null);
+  app.addHook("preHandler", async request => { (request as any).authUser = { id: "owner", username: "admin", displayName: "Administrator", role: "admin" }; });
+  replace(t, prisma.auditLog, "count", async (query: any) => { assert.equal(query.where.device.company.ownerId, "owner"); return 25; });
+  replace(t, prisma.auditLog, "findMany", async (query: any) => {
+    assert.equal(query.where.device.company.ownerId, "owner");
+    assert.equal(query.skip, 20); assert.equal(query.take, 20);
+    assert.equal(query.where.action, "device.backup.failed");
+    return [{ id: "a1", deviceId: "d1", actor: "admin", action: "device.backup.failed", targetId: "d1",
+      createdAt: new Date("2026-09-26T09:00:01Z"), device: { name: "116", host: "test-host", vendor: "linux", company: { name: "Company" } },
+      metadata: { actorName: "Administrator", code: "SSH_AUTH_FAILED", encrypted: "never expose", password: "never expose" } }];
+  });
+  replace(t, prisma, "$transaction", async (queries: any[]) => Promise.all(queries));
+  await backupRoutes(app);
+  const response = await app.inject("/api/backups/activity?page=2&action=failed&search=116");
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+  assert.equal(body.total, 25); assert.equal(body.items[0].actorName, "Administrator");
+  assert.equal(body.items[0].backupId, null);
+  assert.equal(body.items[0].code, "SSH_AUTH_FAILED");
+  assert.equal(body.items[0].createdAt, "2026-09-26T09:00:01.000Z");
+  assert.ok(!response.body.includes("never expose"));
+  assert.equal((await app.inject("/api/backups/activity?page=0")).statusCode, 400);
+  await app.close();
 });

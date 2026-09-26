@@ -1,4 +1,4 @@
-import type { Device } from "@prisma/client";
+import type { Device, DeviceConnectionChannel } from "@prisma/client";
 import type { Client, ClientChannel } from "ssh2";
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
@@ -26,26 +26,44 @@ export function readBackupCommand(client: Client, command: string): Promise<Buff
       if (error) return finish(new BackupError("BACKUP_CHANNEL_FAILED", 502));
       channel = stream;
       if (settled) { stream.close(); return; }
-      let stderr = false;
+      let stderr = "";
       stream.on("data", (chunk: Buffer) => {
+        if (settled) return;
         const bytes = Buffer.from(chunk); size += bytes.length;
         if (size > 20 * 1024 * 1024) return finish(new BackupError("BACKUP_TOO_LARGE", 413));
         chunks.push(bytes);
       });
-      stream.stderr.on("data", () => { stderr = true; });
+      stream.stderr.on("data", (chunk: Buffer) => {
+        if (!settled && stderr.length < 8192) stderr += String(chunk).slice(0, 8192 - stderr.length);
+      });
       stream.on("error", () => finish(new BackupError("BACKUP_CHANNEL_FAILED", 502)));
-      stream.on("close", (code: number | undefined) => finish(code !== 0 || stderr ? new BackupError("BACKUP_COMMAND_FAILED", 502) : undefined));
+      stream.on("close", (code: number | undefined) => {
+        if (code === 0 && !stderr) return finish();
+        // Classify locally; raw paths, configuration and stderr never leave this function.
+        const reason = /password is required|terminal is required|not allowed to execute/i.test(stderr) ? "BACKUP_SUDO_REQUIRED"
+          : /permission denied|operation not permitted/i.test(stderr) ? "BACKUP_PERMISSION_DENIED"
+          : /file changed as we read|file removed before we read/i.test(stderr) ? "BACKUP_SOURCE_CHANGED"
+          : "BACKUP_COMMAND_FAILED";
+        finish(new BackupError(reason, 502));
+      });
     });
   });
 }
+export function backupSshTarget(device: Device, channels: DeviceConnectionChannel[]) {
+  const ssh = channels.filter(channel => channel.enabled && channel.method === "ssh")
+    .sort((a, b) => Number(b.role === "management") - Number(a.role === "management") || a.priority - b.priority)[0];
+  if (ssh) return { ...device, protocol: "ssh" as const, host: ssh.host ?? device.host,
+    managementPort: ssh.port ?? device.managementPort, credentialId: ssh.credentialId ?? device.credentialId };
+  // Never bypass a deliberately disabled registered management path.
+  if (device.protocol !== "ssh" || channels.some(channel => channel.role === "management" && channel.method === "ssh")) {
+    throw new BackupError("BACKUP_SSH_REQUIRED");
+  }
+  return device;
+}
 export async function collectDeviceBackup(device: Device) {
   const profile = backupProfile(device.vendor, device.type);
-  let sshDevice = device;
-  if (device.protocol !== "ssh") {
-    const channel = await prisma.deviceConnectionChannel.findFirst({ where: { deviceId: device.id, enabled: true, method: "ssh" }, orderBy: { priority: "asc" } });
-    if (!channel?.port) throw new BackupError("BACKUP_SSH_REQUIRED");
-    sshDevice = { ...device, protocol: "ssh", host: channel.host ?? device.host, managementPort: channel.port, credentialId: channel.credentialId ?? device.credentialId };
-  }
+  const channels = await prisma.deviceConnectionChannel.findMany({ where: { deviceId: device.id }, orderBy: { priority: "asc" } });
+  const sshDevice = backupSshTarget(device, channels);
   if (profile.key === "cisco") {
     const result = await ciscoIosXeSshConnector.runCliCommands(sshDevice, [{ commandId: "backup-running-config", command: "show running-config", strict: true, write: false, redactOutput: false }]);
     return Buffer.from(result.results[0]?.stdout ?? "", "utf8");

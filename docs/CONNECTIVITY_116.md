@@ -16,3 +16,6 @@ online manually. Reachable service and authorized management are distinct.
 
 Verification: seven isolated connectivity regression tests passed, including
 repeated authentication rejection, real service banners and recovery to online.
+
+Update: the user confirmed that server 116 connectivity recovered. The original
+diagnosis above records the earlier failure; it is not a claim about current status.

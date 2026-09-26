@@ -42,6 +42,24 @@
 .backup-message.error{border:1px solid #764e54;background:#261b24;color:#f1b4bd}
 .backup-message.success{border:1px solid #3d6057;background:#152a25;color:#bbdcd0}
 .backup-spin{animation:backup-rotate 1s linear infinite}
+.backup-view-tabs{display:flex;gap:8px;flex-wrap:wrap;padding:6px;border:1px solid #273c49;border-radius:16px;width:fit-content;max-width:100%;background:#0b1a25}
+.backup-view-tabs button{border-color:transparent;background:transparent;color:#a4b6c2}
+.backup-view-tabs button[aria-pressed=true]{background:#233b4b;color:#eef4f8;border-color:#3b5363}
+.backup-history-heading h2{display:flex;align-items:center;gap:10px}
+.backup-history-filters{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin:0 0 22px}
+.backup-history-filters label{display:grid;gap:8px;min-width:0;color:#a5b7c4;font-size:.95rem}
+.backup-event-title{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.backup-event-status{font-size:.85rem;padding:3px 10px;border:1px solid #3d515f;border-radius:8px;color:#b7c9d5;background:#142633}
+.backup-event-status.create{color:#b3d4c5;border-color:#3a544c;background:#152922}
+.backup-event-status.failed{color:#dfb8af;border-color:#604941;background:#2b231f}
+.backup-audit-meta{display:flex;justify-content:space-between;gap:8px 20px;flex-wrap:wrap;color:#b0c1cd;font-size:.92rem;margin:10px 0}
+.backup-audit-meta strong{color:#e0e8ed;font-weight:600}
+.backup-audit-meta>span{display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
+.backup-failure-reason{padding:10px 12px;border-inline-start:3px solid #866658;background:#211e1c;color:#d7c1b7;border-radius:6px;font-size:.94rem}
+.backup-artifact-name{overflow-wrap:anywhere}
+.backup-duration{color:#9bafbd;font-size:.86rem}
+.backup-pagination{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:22px;font-size:.92rem;flex-wrap:wrap}
+@media(max-width:760px){.backup-history-filters{grid-template-columns:1fr}.backup-event-title{align-items:flex-start}.backup-audit-meta{flex-direction:column}.backup-history-heading{align-items:baseline}.backup-history-heading h2{font-size:1.1rem}.backup-view-tabs{width:100%;box-sizing:border-box}.backup-view-tabs button{flex:1;padding:10px 8px}.backup-pagination{gap:8px}}
 @keyframes backup-rotate{to{transform:rotate(360deg)}}
 @media(max-width:640px){.backup-page{padding:16px 12px;gap:18px}.backup-panel{padding:18px 14px}.backup-fields{grid-template-columns:1fr}.backup-create-footer{align-items:stretch;flex-direction:column}.backup-record{flex-wrap:wrap;gap:12px}.backup-file-icon{width:42px;height:42px;border-radius:12px}.backup-download{width:100%}.backup-record-info{flex-basis:calc(100% - 54px)}}
 @media(prefers-reduced-motion:reduce){.backup-spin{animation:none}}

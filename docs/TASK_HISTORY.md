@@ -1,3 +1,9 @@
+## 2026-09-26 - Diagnose 116 and improve vendor backup history
+
+- Connectivity correction is independently committed: e510e88. Live SSH service on 22022 answered, but stored credentials failed authentication; error is no longer falsely escalated to offline. No vendor credentials, ports or firewall policies were changed.
+- Enhanced all implemented backup transports to respect enabled registered management channels, and strengthened Linux archive integrity validation. Added actor-aware paginated audit history, failure reasons and separate file/history views.
+- Tested isolated regressions, real Cisco/MikroTik collection and download hashes, Linux failure handling and mobile/desktop UI controls. After the user confirmed116 recovery, SSH authenticated but /etc collection exited with permission denied; the saved credential has sudo disabled. Added distinct sanitized permission/sudo/source-change errors. No live FortiGate/pfSense was available; automatic Sophos backup is not claimed.
+
 ## 2026-09-26 - Add vendor-aware backups tab
 
 - Built company/device selection, a vendor-specific scope preview and downloadable history with user, Tehran time, size and SHA-256. Files are encrypted at rest and owned-company access is enforced for creation, listing and download.

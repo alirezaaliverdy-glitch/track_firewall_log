@@ -27,6 +27,11 @@ try {
     console.log(JSON.stringify({ vendor: device.vendor, status: file.status, bytes: content.length, hashVerified: verified }));
     if (!verified) throw new Error("Download integrity failed");
   }
+  const historyResponse = await fetch("http://127.0.0.1:4000/api/backups/activity?page=1", { headers });
+  if (!historyResponse.ok) throw new Error("Backup history status " + historyResponse.status);
+  const history = await historyResponse.json();
+  if (history.items.some(item => "encrypted" in item || !item.createdAt || !item.actorName)) throw new Error("Invalid or unsafe history");
+  console.log(JSON.stringify({ stage: "activity", total: history.total, items: history.items.length, actions: [...new Set(history.items.map(item => item.action))] }));
 } finally {
   await prisma.authSession.deleteMany({ where: { id: session.id } });
   await prisma.$disconnect();

@@ -1,3 +1,11 @@
+## 2026-09-26 - Backup history and server 116 diagnosis
+
+- Earlier, server 116 answered SSH on port 22022 but rejected its saved credential. The sensor now retains authentication failure as degraded rather than offline, honors management-channel credentials and immediately persists changed diagnostic codes. The user subsequently confirmed recovery; an authenticated backup diagnostic succeeded in opening SSH.
+- Backups use the enabled management SSH channel host, port and credential for all five implemented vendor profiles. A deliberately disabled SSH management path is not silently bypassed. Linux tar validation now rejects empty/corrupt archives, checks header checksums and complete termination.
+- Added owned-company, paginated audit history for successful backups, failed attempts and downloads; stored historical actor/display name, device, company, timing and duration without secret content. UI separates history from files with independent search/company/outcome filters, second-accurate Tehran timestamps and restrained responsive colors.
+- Verification: 17 backup tests, seven connectivity tests and five product-state tests passed. Live Cisco and MikroTik downloads passed SHA-256 verification. After 116 recovered, its Linux backup failed because its non-sudo account cannot read all of /etc; no partial artifact was saved. Permission, sudo and source-changing errors now have safe distinct diagnostics. FortiGate/pfSense have automated transport tests, but no live devices were available; Sophos remains explicitly unsupported.
+- API/web builds and local deployments passed. Four local services are healthy; mobile 390px and desktop 1440px layouts and real history controls were tested. Existing database volumes and lab execution settings were preserved.
+
 ## 2026-09-26 - Vendor configuration backups
 
 - Added the /backups tab with company/device selection, clear vendor-specific backup scope, encrypted history and authenticated file downloads. The interface uses the application font and restrained colors, and is verified at 390px mobile and 1440px desktop widths without horizontal overflow.
