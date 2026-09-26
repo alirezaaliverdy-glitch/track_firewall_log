@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
+import { SharedSshConnectionError, withSharedSsh } from "../services/shared-ssh-session.service.js";
 import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { env } from "../config/env.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
@@ -295,27 +296,12 @@ async function withSsh<T>(device: Device, callback: (client: Client, credential:
 }
 
 async function withSshWithCredential<T>(device: Device, credential: SshCredential, callback: (client: Client) => Promise<T>) {
-  const client = new Client();
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      client.end();
-      fn();
-    };
-
-    client.once("ready", () => {
-      callback(client)
-        .then((value) => finish(() => resolve(value)))
-        .catch((error) => finish(() => reject(error)));
-    });
-    client.on("error", (error) => finish(() => reject(mapSshError(error))));
-    client.once("timeout", () => finish(() => reject(new ConnectorError("SSH_HANDSHAKE_TIMEOUT", "SSH handshake timed out.", 504))));
-    client.connect(connectConfig(device, credential));
-  });
+  try {
+    return await withSharedSsh(device.id, connectConfig(device, credential), callback);
+  } catch (error) {
+    if (error instanceof SharedSshConnectionError) throw new ConnectorError(error.code, error.message, error.code === "SSH_AUTH_FAILED" ? 401 : 502);
+    throw error;
+  }
 }
 
 function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeoutMs): Promise<ExecResult> {

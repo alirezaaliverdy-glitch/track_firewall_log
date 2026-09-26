@@ -1,4 +1,4 @@
-import { Client, type ConnectConfig } from "ssh2";
+import type { ConnectConfig } from "ssh2";
 import { DeviceProtocol, DeviceType, type Device } from "@prisma/client";
 import { env } from "../config/env.js";
 import { collectFortiGateRecentLogs } from "../connectors/fortigate-ssh.connector.js";
@@ -8,6 +8,7 @@ import {
   isCiscoIosXeSshCandidate
 } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
+import { withSharedSsh } from "../services/shared-ssh-session.service.js";
 import type { CollectedLogLine, CollectorSourceType, DeviceCollector } from "./types.js";
 import { parseVendorLogTimestamp } from "./vendor-log-parser.js";
 
@@ -50,38 +51,31 @@ async function collectPfSenseLogs(device: Device) {
   if (credential.passphrase) config.passphrase = credential.passphrase;
   const command = "tail -n 500 /var/log/system.log /var/log/auth.log /var/log/filter.log /var/log/openvpn.log /var/log/ipsec.log 2>/dev/null";
 
-  return new Promise<string[]>((resolve, reject) => {
-    const client = new Client();
+  return withSharedSsh(device.id, config, (client) => new Promise<string[]>((resolve, reject) => {
     let settled = false;
     const finish = (error?: Error, lines: string[] = []) => {
       if (settled) return;
       settled = true;
-      client.end();
       if (error) reject(error);
       else resolve(lines);
     };
-    client.once("ready", () => {
-      client.exec(command, (error, stream) => {
-        if (error) return finish(new Error("PFSENSE_LOG_COMMAND_FAILED"));
-        let stdout = "";
-        let stderr = "";
-        const timer = setTimeout(() => {
-          stream.close();
-          finish(new Error("PFSENSE_LOG_COMMAND_TIMEOUT"));
-        }, env.sshCommandTimeoutMs);
-        stream.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
-        stream.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
-        stream.on("close", (exitCode: number | null) => {
-          clearTimeout(timer);
-          if (exitCode !== 0 && !stdout.trim()) return finish(new Error(stderr.trim() ? "PFSENSE_LOG_COMMAND_FAILED" : "PFSENSE_LOGS_UNAVAILABLE"));
-          finish(undefined, stdout.split(/\r?\n/));
-        });
+    client.exec(command, (error, stream) => {
+      if (error) return finish(new Error("PFSENSE_LOG_COMMAND_FAILED"));
+      let stdout = "";
+      let stderr = "";
+      const timer = setTimeout(() => {
+        stream.close();
+        finish(new Error("PFSENSE_LOG_COMMAND_TIMEOUT"));
+      }, env.sshCommandTimeoutMs);
+      stream.on("data", (chunk: Buffer) => { stdout += chunk.toString("utf8"); });
+      stream.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
+      stream.on("close", (exitCode: number | null) => {
+        clearTimeout(timer);
+        if (exitCode !== 0 && !stdout.trim()) return finish(new Error(stderr.trim() ? "PFSENSE_LOG_COMMAND_FAILED" : "PFSENSE_LOGS_UNAVAILABLE"));
+        finish(undefined, stdout.split(/\r?\n/));
       });
     });
-    client.on("error", () => finish(new Error("PFSENSE_SSH_CONNECTION_FAILED")));
-    client.once("timeout", () => finish(new Error("PFSENSE_SSH_TIMEOUT")));
-    client.connect(config);
-  });
+  }));
 }
 
 function result(device: Device, vendor: "mikrotik" | "fortigate" | "cisco" | "pfsense", name: string, sourceType: CollectorSourceType, command: string, lines: string[], startedAt: Date) {

@@ -4,6 +4,7 @@ import { DeviceProtocol, DeviceType, type Device } from "@prisma/client";
 import { resolveCredentialById, resolveCredentialByName, type ResolvedDeviceCredential } from "../services/credential.service.js";
 import type { CollectedLogLine, CollectorRunResult, CollectorSourceType, DeviceCollector } from "./types.js";
 import { env } from "../config/env.js";
+import { withSharedSsh } from "../services/shared-ssh-session.service.js";
 
 const LINUX_SOURCE_TYPES: CollectorSourceType[] = ["linux_ssh", "linux_ufw", "linux_kernel"];
 
@@ -69,25 +70,7 @@ function connectConfig(device: Device, credential: EnvSshCredential): ConnectCon
 
 async function withSsh<T>(device: Device, callback: (client: Client, credential: EnvSshCredential) => Promise<T>) {
   const credential = await resolveCredential(device);
-  const client = new Client();
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      client.end();
-      fn();
-    };
-    client.once("ready", () => {
-      callback(client, credential)
-        .then((value) => finish(() => resolve(value)))
-        .catch((error) => finish(() => reject(error)));
-    });
-    client.on("error", (error) => finish(() => reject(error)));
-    client.once("timeout", () => finish(() => reject(new Error("SSH_CONNECTION_FAILED"))));
-    client.connect(connectConfig(device, credential));
-  });
+  return withSharedSsh(device.id, connectConfig(device, credential), (client) => callback(client, credential));
 }
 
 function exec(client: Client, command: string, timeoutMs = 15000): Promise<ExecResult> {

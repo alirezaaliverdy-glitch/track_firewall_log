@@ -1,4 +1,5 @@
 import https from "node:https";
+import { vendorHttpsAgent } from "../services/shared-https-agent.service.js";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import type {
@@ -85,6 +86,7 @@ async function requestJson(device: Device, path: string) {
     const request = https.request({
       hostname: device.host,
       port: device.managementPort,
+      agent: vendorHttpsAgent(boolCapability(device, "mikrotikTlsVerify")),
       path,
       method: "GET",
       timeout: REQUEST_TIMEOUT_MS,

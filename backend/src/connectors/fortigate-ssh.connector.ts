@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
+import { SharedSshConnectionError, withSharedSsh } from "../services/shared-ssh-session.service.js";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
 import { fortiGateSupportedActions } from "../actions/fortigate-action-catalog.js";
 import { env } from "../config/env.js";
@@ -171,22 +172,12 @@ function tcpConnect(host: string, port: number) {
 }
 
 async function withSshWithCredential<T>(device: Device, credential: FortiGateCredential, callback: (client: Client) => Promise<T>) {
-  const client = new Client();
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      client.end();
-      fn();
-    };
-    client.once("ready", () => {
-      callback(client).then((value) => finish(() => resolve(value))).catch((error) => finish(() => reject(error)));
-    });
-    client.on("error", (error) => finish(() => reject(mapSshError(error))));
-    client.once("timeout", () => finish(() => reject(new FortiGateConnectorError("FORTIGATE_SSH_HANDSHAKE_TIMEOUT", "FortiGate SSH handshake timed out.", 504))));
-    client.connect(connectConfig(device, credential));
-  });
+  try {
+    return await withSharedSsh(device.id, connectConfig(device, credential), callback);
+  } catch (error) {
+    if (error instanceof SharedSshConnectionError) throw new FortiGateConnectorError(error.code, error.message, error.code === "SSH_AUTH_FAILED" ? 401 : 502);
+    throw error;
+  }
 }
 
 function sanitizeOutput(value: string) {
@@ -278,7 +269,6 @@ function lines(value: string, limit?: number) {
 
 export async function collectFortiGateRecentLogs(device: Device) {
   const credential = await getCredential(device);
-  await tcpConnect(device.host, device.managementPort);
   return withSshWithCredential(device, credential, async (client) => {
     // FortiOS keeps log filters in the administrator session. Reset stale UI/CLI
     // filters and request a bounded page so every poll sees all recent categories

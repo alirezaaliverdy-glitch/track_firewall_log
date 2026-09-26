@@ -1,4 +1,5 @@
 import https from "node:https";
+import { vendorHttpsAgent } from "../services/shared-https-agent.service.js";
 import net from "node:net";
 import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
@@ -116,6 +117,7 @@ async function postXml(device: Device, bodyXml: string) {
     const request = https.request({
       hostname: device.host,
       port: device.managementPort,
+      agent: vendorHttpsAgent(tlsVerification(device)),
       path: "/webconsole/APIController",
       method: "POST",
       rejectUnauthorized: tlsVerification(device),

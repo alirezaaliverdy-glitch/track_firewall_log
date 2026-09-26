@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
+import { SharedSshConnectionError, withSharedSsh } from "../services/shared-ssh-session.service.js";
 import { ActionType, DeviceProtocol, DeviceType, type ActionPlan, type Device } from "@prisma/client";
 import { mikroTikSupportedActions, validateMikroTikAction } from "../actions/mikrotik-action-catalog.js";
 import { env } from "../config/env.js";
@@ -158,26 +159,12 @@ function tcpConnect(host: string, port: number) {
 }
 
 async function withSshWithCredential<T>(device: Device, credential: MikroTikCredential, callback: (client: Client) => Promise<T>) {
-  const client = new Client();
-
-  return new Promise<T>((resolve, reject) => {
-    let settled = false;
-    const finish = (fn: () => void) => {
-      if (settled) return;
-      settled = true;
-      client.end();
-      fn();
-    };
-
-    client.once("ready", () => {
-      callback(client)
-        .then((value) => finish(() => resolve(value)))
-        .catch((error) => finish(() => reject(error)));
-    });
-    client.on("error", (error) => finish(() => reject(mapSshError(error))));
-    client.once("timeout", () => finish(() => reject(new MikroTikConnectorError("MIKROTIK_SSH_HANDSHAKE_TIMEOUT", "MikroTik SSH handshake timed out.", 504))));
-    client.connect(connectConfig(device, credential));
-  });
+  try {
+    return await withSharedSsh(device.id, connectConfig(device, credential), callback);
+  } catch (error) {
+    if (error instanceof SharedSshConnectionError) throw new MikroTikConnectorError(error.code, error.message, error.code === "SSH_AUTH_FAILED" ? 401 : 502);
+    throw error;
+  }
 }
 
 function assertReadOnlyCommand(command: string) {
@@ -283,7 +270,6 @@ async function recoverMikroTikManagementPort(device: Device) {
 
 export async function collectMikroTikRecentLogs(device: Device) {
   const credential = await getCredential(device);
-  await tcpConnect(device.host, device.managementPort);
   return withSshWithCredential(device, credential, async (client) => {
     const result = await exec(client, "/log print without-paging");
     if (result.exitCode !== 0) {

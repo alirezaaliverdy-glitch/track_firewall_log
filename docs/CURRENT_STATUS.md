@@ -1,3 +1,10 @@
+## 2026-09-26 - Shared vendor connection lifecycle
+
+- Replaced sensor-only SSH pooling with a bounded shared SSH transport for the sensor and Linux, MikroTik, FortiGate, and pfSense connectors/collectors. Normal cycles reuse an authenticated session instead of opening one SSH socket per collector or action.
+- Added serialized operations, SSH keepalives, idle expiry, bounded pool size, and exponential reconnect backoff. Authentication, timeout, refusal, and network-unreachable outcomes are separated.
+- Added bounded HTTPS keep-alive pooling for MikroTik REST and Sophos XML API; removed redundant TCP preflights from recurring MikroTik/FortiGate log collection. Cisco interactive sessions and Linux streams intentionally remain dedicated.
+- Backend production build, 14 focused sensor/pool tests, and 21 vendor regression tests pass. A real local SSH server proves one transport is reused, auth rejection is backed off, and a silent peer cannot stall the sensor. The active local Compose stack was rebuilt; all four containers are healthy and the API health route returns HTTP 200.
+
 ## 2026-09-25 - Compact vendor-aware charts in device overview
 
 - The device overview now prioritizes three readable charts: current reachability history, actual per-interface RX/TX traffic, and an available vendor-specific operational metric. 24-hour and 7-day range controls are explicit.

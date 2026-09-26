@@ -19,6 +19,14 @@ The application separates the management/control connection from event and telem
 - RouterOS REST uses HTTPS. Certificate verification can be enforced with the stored `mikrotikTlsVerify` capability; deployments should install a trusted certificate before production use.
 - Write actions continue through the existing allowlisted command/action plans, approval, audit, and rollback contracts.
 
+## Connection reuse (2026-09-26)
+
+- The connectivity sensor, Linux/MikroTik/FortiGate management connectors, and Linux/MikroTik/FortiGate/pfSense log collectors share an authenticated SSH transport for the same device, endpoint, and credential. Operations are serialized on that transport; SSH keepalives detect closure, and bounded backoff prevents repeated authentication attempts during outages.
+- The shared pool limits simultaneous sessions to 128, evicts an idle entry before admitting another device, and closes entries after ten idle minutes. A changed endpoint/credential does not interrupt an in-flight operation. On shutdown, the pool is closed.
+- MikroTik REST and Sophos XML API use bounded HTTPS keep-alive agents (two sockets per origin, one idle socket). An HTTP socket is not reported as an authenticated vendor session.
+- Cisco IOS-XE interactive CLI and long-lived Linux telemetry streams retain dedicated connections: both have stateful shell/stream semantics and are not safe to multiplex through the read/action transport without a separate lifecycle design. Cisco already batches commands within one interactive run.
+- A reachable TCP port is not equivalent to successful authentication. Network timeout, SSH authentication failure, and command failure remain separate outcomes. The pool cannot fix routing, firewall, or credential problems; never label a device online based only on a stale cached connection.
+
 ## Official references
 
 - MikroTik RouterOS REST API: https://help.mikrotik.com/docs/spaces/ROS/pages/47579162/REST%2BAPI

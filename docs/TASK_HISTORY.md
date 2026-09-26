@@ -1,3 +1,10 @@
+## 2026-09-26 - Optimize vendor connection reuse
+
+- Unified recurring SSH sensor, collection, and management traffic onto shared per-endpoint sessions for Linux, MikroTik, FortiGate, and pfSense, with bounded concurrency and reconnect behavior.
+- Reused HTTPS sockets for API vendors without misrepresenting HTTP as a permanent authenticated session.
+- Preserved Cisco's interactive CLI and Linux streaming lifecycle, which require dedicated transports.
+- Validated with a backend production build, 14 focused tests, and 21 vendor regression tests; the deployed local API and all four active Compose containers are healthy.
+
 ## 2026-09-16 - Rebuild dashboard as a live security command center
 
 - Replaced the previous hero-heavy dashboard with a compact Persian-first command board inspired by the approved landing visual: daily security status, equipment, alerts, alert trend, device table, event-port activity, findings, operator priorities, execution trail, and Linux telemetry.
