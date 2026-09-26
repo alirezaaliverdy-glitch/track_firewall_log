@@ -4,6 +4,7 @@ import { isMikroTikAction, validateMikroTikAction } from "../actions/mikrotik-ac
 import { evaluateFortiGatePolicy } from "./fortigate-policy-guard.service.js";
 import { evaluateMikroTikExpertPolicy } from "./mikrotik-policy-guard.service.js";
 import { prisma } from "../db/prisma.js";
+import { validateRestorePolicy } from "../backups/restore-policy.js";
 import { getActionCatalogEntry, validateCatalogParameters } from "../actions/action-catalog.js";
 import { EXPECTED_FORMATS, validateCanonicalFieldShapes, validationError, type StructuredValidationError } from "../actions/action-validators.js";
 import { normalizeIntent } from "../actions/intent-normalizer.js";
@@ -213,6 +214,7 @@ function finish(input: Omit<ValidationResult, "valid" | "missingFields" | "polic
 }
 
 export async function validateActionPlan(plan: ActionPlan): Promise<ValidationResult> {
+  if (asObject(plan.parametersJson).source === "backup_restore") return validateRestorePolicy(plan);
   const errors: string[] = [];
   const warnings: string[] = [];
   const originalParameters = asObject(plan.parametersJson);

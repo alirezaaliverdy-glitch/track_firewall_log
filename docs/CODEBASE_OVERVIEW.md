@@ -81,6 +81,14 @@ The old platform panel remains available but the routed experience is now page-b
 - Linux health observability: `backend/src/monitoring/linux/`, `backend/src/routes/linux-health.ts`, and migration `backend/prisma/migrations/20260712192000_task18_2a_vendor_linux_observability/`.
 - Frontend surfaces: `src/features/vendors/cisco/pages/CiscoOverviewPage.tsx`, `src/features/monitoring/pages/LinuxMonitoringPage.tsx`, `src/lib/vendors.ts`, and `src/lib/linuxMonitoring.ts`.
 
+## Vendor backup restore pointers (2026-09-26)
+
+- UI: `src/features/backups/pages/BackupRestore.tsx` and `BackupRestore.css`, embedded as the third Backups tab. Multipart requests preserve the browser boundary in `src/lib/apiTransport.ts`.
+- API: `backend/src/routes/backup-restores.ts`; admin execution/upload/delete, owned-company read access, existing CSRF/mutation authorization.
+- Storage/validation: `backend/src/backups/restore-vault.service.ts`, `restore-profiles.ts` and `restore-policy.ts`.
+- Controlled jobs: `restore-plan.service.ts`, `restore-connector.ts`, `restore-transfer.ts` and fixed `linux-restore-script.ts`. No schema migration or raw AI command execution.
+- Tests: `backend/test/backup-restore.test.ts`, `linux-restore-receiver.test.ts`; safe smoke scripts `backend/scripts/smoke-backup-restore.mjs` and `smoke-backup-ui.mjs`.
+
 ## Milestone 19A Code Pointers
 
 - Contract: `backend/src/product-state/product-state.types.ts` and `product-state.registry.ts`.

@@ -1,0 +1,35 @@
+.backup-restore{display:grid;gap:24px;min-width:0}
+.restore-upload{margin:20px 0;display:grid;gap:10px;padding:16px;background:#0e202c;border:1px dashed #3c515f;border-radius:14px}
+.restore-upload label{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.restore-upload small{color:#9db0bc}
+.restore-upload>div{display:flex;gap:12px;align-items:center}
+.restore-upload input{flex:1}
+.restore-upload input::file-selector-button{font:inherit;color:#d4e2eb;background:#233b4b;border:0;padding:6px 10px;border-radius:6px;margin-inline-end:10px}
+.restore-files{display:grid;gap:10px;max-height:480px;overflow:auto;margin-top:20px;padding:3px}
+.restore-file{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #2b3e4b;border-radius:14px;padding:14px;background:#0e1e29;min-width:0}
+.restore-file.selected{border-color:#7294a9;background:#152a39}
+.restore-file>label{display:flex;gap:12px;align-items:flex-start;cursor:pointer;min-width:0;flex:1}
+.restore-file>label>span{display:grid;gap:4px;min-width:0}
+.backup-restore .restore-radio,.backup-restore .restore-etc-confirm input{width:20px;min-width:20px;height:20px;min-height:20px;margin:4px 0;accent-color:#8eafc0;flex:none}
+.backup-restore code{display:block;font-size:.88rem;white-space:normal;overflow-wrap:anywhere;color:#b3c6d2}
+.backup-restore small{color:#a0b2be;font-size:.86rem}
+.restore-file-actions{display:flex;gap:6px;flex:none}
+.restore-file-actions button{padding:10px;min-width:44px}
+.restore-preview-footer{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:20px;flex-wrap:wrap}
+.restore-preview-footer>span{color:#a3b5c2}
+.restore-job{display:grid;grid-template-columns:1fr 1fr;gap:20px;border:1px solid #2b3e4b;border-radius:14px;padding:18px;background:#0d1d28}
+.restore-job>div{min-width:0}
+.restore-job p{color:#a6b8c4;font-size:.91rem;margin:6px 0}
+.restore-job button{margin:10px 0 0 8px}
+.restore-state{font-size:.95rem;color:#c5d6e2;font-weight:600}
+.restore-confirm{width:min(620px,calc(100vw - 32px))}
+.restore-confirm header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.restore-confirm header h2{margin:0}
+.restore-confirm dl{display:grid;grid-template-columns:auto 1fr;gap:12px;margin:22px 0}
+.restore-confirm dt{color:#95aebb}
+.restore-confirm dd{margin:0;overflow-wrap:anywhere;min-width:0}
+.restore-warning{border-inline-start:3px solid #8b7764;padding:12px;background:#252522;border-radius:8px;color:#d4c9bc!important}
+.restore-etc-confirm{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid #62584c;border-radius:10px;color:#ddcdbb}
+.restore-confirm details{margin-top:18px;color:#a8bdca;font-size:.9rem}
+.restore-confirm details code{margin-top:10px}
+@media(max-width:760px){.restore-upload>div{flex-direction:column;align-items:stretch}.restore-file{align-items:flex-start;flex-wrap:wrap}.restore-file-actions{margin-inline-start:auto}.restore-job{grid-template-columns:1fr;gap:10px}.restore-preview-footer{align-items:stretch;flex-direction:column}.restore-confirm dl{grid-template-columns:1fr;gap:6px}.restore-confirm dd{margin-bottom:8px}}

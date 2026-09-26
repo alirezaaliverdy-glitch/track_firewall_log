@@ -1,3 +1,11 @@
+## 2026-09-26 - Add controlled uploaded-backup restore
+
+- Moved backup navigation below Attackers and above Settings and reverified actual Linux/Cisco/MikroTik backups in independent commit 8049223.
+- Added owned-device encrypted upload/vault, native-format review, real read-only preview, administrator confirmation, PolicyGuard, fresh safety backup, bounded one-time execution and clear audited history/results.
+- Linux uses full /etc overlay with separate confirmation, no blind tar extraction or automatic restart; Cisco uses confirmed running configuration replacement; MikroTik 7.16+ uses dry-run/import merge; FortiGate uses its native SCP destination followed by explicit read-back after recovery.
+- Verified 39 focused tests, the 210-item catalog, API multipart/integrity/read-only preview smoke, and responsive/cancellation/full-/etc UI smoke. Built and applied API/frontend locally without deleting database volumes or changing protected lab flags.
+- No real restore was run on user equipment. The user confirmed no FortiGate target is available; FortiGate has protocol/unit coverage only. Published operational prerequisites and limits in VENDOR_BACKUP_RESTORE.md.
+
 ## 2026-09-26 - Add confirmed backup/history deletion and fix Linux sudo use
 
 - Diagnosed sudo on116 using only sanitized results: sudo -n id -u succeeded, while the stored sudo option was false. Added backup-only permission fallback; actual Linux backup and hash verification succeeded. Committed independently as6d2b769; server policies and general action privileges were not changed.

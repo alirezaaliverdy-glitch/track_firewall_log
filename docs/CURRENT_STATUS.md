@@ -1,3 +1,11 @@
+## 2026-09-26 - Controlled vendor backup upload and restore
+
+- Added the admin-only upload/preview/confirmed restore workflow within Backups. Encrypted owned-device files, SHA-256, ten-minute previews, stable target/credential fingerprints, real safety backups, single-use execution and audited results use existing DeviceSnapshot/ActionPlan tables without a migration.
+- Implemented native Cisco confirmed configuration replacement, RouterOS 7.16+ dry-run/import merge, FortiGate native SCP with later read-back verification, and Linux full /etc overlay with the user-requested separate confirmation. No automatic Linux service restart, MikroTik reset, or Cisco startup-config write occurs.
+- 39 focused tests passed, including actual Linux receiver filesystem tests in an isolated container. The 210-item catalog validates. Real API smoke verified encrypted multipart upload/download, read-only Cisco and Linux previews and rejection of invalid intent; browser smoke verified vault/mobile/desktop layouts, transport, cancellation and full-/etc confirmation.
+- API/frontend production builds and local deployment passed. Real backup collection/download integrity was verified on Linux, Cisco and MikroTik in the preceding independent commit 8049223. No real vendor restore was executed; the user confirmed no FortiGate device exists for live testing. Native restore support still requires platform/prerequisite verification and lab restore acceptance per model/version.
+- See VENDOR_BACKUP_RESTORE.md for method differences, requirements, interrupted-job handling and verification limits. Local Compose is docker-compose.firewall.yml; production manifest is docker-compose.production.yml with immutable images and real secure environment values.
+
 ## 2026-09-26 - Backup deletion and permitted Linux sudo
 
 - Verified on116 that the registered account has working noninteractive sudo; the false saved sudo option caused unprivileged /etc reads. Fixed only the backup collection path to retry permission-denied reads via fixed sudo -n tar; unrelated actions, credentials and server sudoers are unchanged. Live116 archive: 698,249 bytes, validated and SHA-256 verified on download. Independent commit: 6d2b769.

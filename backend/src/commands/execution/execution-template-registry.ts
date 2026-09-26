@@ -1,9 +1,11 @@
 import { FORTIGATE_FULL_CONTROL_ACTION_TYPES } from "../../fortigate/full-control-registry.js";
 import { executableCiscoOperations } from "../../cisco/cisco-operation-registry.js";
+import { RESTORE_TEMPLATES } from "../../backups/restore-profiles.js";
 
 export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh" | "sophos-api"; handler: string };
 
 const templates: ExecutionTemplate[] = [
+  ...Object.values(RESTORE_TEMPLATES).map(template => ({ id: template.id, actionType: "generic_security_action", connectorType: template.connector, handler: "backupRestorePlanner" })),
   { id: "linux_open_port", actionType: "linux_open_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_close_port", actionType: "close_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_list_open_ports", actionType: "linux_list_open_ports", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },

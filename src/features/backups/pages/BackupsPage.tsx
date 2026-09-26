@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import "./BackupsPage.css";
 import BackupHistory, { backupTime } from "./BackupHistory";
 import BackupDeleteDialog from "./BackupDeleteDialog";
+import BackupRestore from "./BackupRestore";
 import { useAuth } from "@/context/AuthContext";
 type Profile = { title: string; extension: string; scope: string; supported: boolean };
 type Target = { id: string; name: string; vendor: string; host: string; company: { id: string; name: string } | null; profile: Profile };
@@ -61,7 +62,7 @@ export default function BackupsPage() {
   const [downloading, setDownloading] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [view, setView] = useState<"activity" | "files">("activity");
+  const [view, setView] = useState<"activity" | "files" | "restore">("activity");
   const [revision, setRevision] = useState(0);
   const companies = useMemo(() => Array.from(new Map(data.devices.filter(d => d.company).map(d => [d.company!.id, d.company!])).values()), [data.devices]);
   const devices = data.devices.filter(d => (!company || d.company?.id === company) && `${d.name} ${d.host} ${d.vendor}`.toLowerCase().includes(query.toLowerCase()));
@@ -111,7 +112,7 @@ export default function BackupsPage() {
     <header className="backup-heading"><span className="backup-icon"><Archive size={28} /></span><div><h1>بک‌آپ تجهیزات</h1><p>تنظیمات دستگاه‌ها، در یک جای امن</p></div></header>
     {error && <div className="backup-message error" role="alert">{error}{!data.devices.length && !loading && <button onClick={() => { setLoading(true); void load().then(() => setError("")).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>تلاش دوباره</button>}</div>}
     {notice && <div className="backup-message success" role="status">{notice}</div>}
-    <section className="backup-panel" aria-label="گرفتن بک‌آپ">
+    {view !== "restore" && <section className="backup-panel" aria-label="گرفتن بک‌آپ">
       <h2>بک‌آپ جدید</h2>
       <div className="backup-fields">
         <label>شرکت<select disabled={busy || loading} value={company} onChange={e => { setCompany(e.target.value); setDeviceId(""); }}><option value="">همه شرکت‌ها</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
@@ -120,9 +121,9 @@ export default function BackupsPage() {
       </div>
       {selected && <div className="backup-scope"><div><strong>{selected.profile.title}</strong>{selected.profile.extension && <span className="backup-format" dir="ltr">.{selected.profile.extension}</span>}</div><p>{selected.profile.scope}</p><small>فایل می‌تواند شامل کلید و رمز باشد؛ پس از دریافت در محل امن نگهداری کنید.</small><Link to={`/assets/devices/${selected.id}/setup`}>تنظیم اتصال دستگاه</Link></div>}
       <footer className="backup-create-footer"><span><ShieldCheck size={18} />ذخیره رمزنگاری‌شده · بدون تغییر تنظیمات دستگاه</span><button className="backup-primary" onClick={() => void create()} disabled={!selected?.profile.supported || busy || loading}>{busy ? <Loader2 className="backup-spin" size={18} /> : <Archive size={18} />}{busy ? "در حال دریافت از دستگاه…" : "گرفتن بک‌آپ"}</button></footer>
-    </section>
-    <div className="backup-view-tabs" role="group" aria-label="نمای بک‌آپ"><button aria-pressed={view === "activity"} onClick={() => setView("activity")}>تاریخچه عملیات</button><button aria-pressed={view === "files"} onClick={() => setView("files")}>فایل‌های ذخیره‌شده</button></div>
-    {view === "activity" ? <BackupHistory companies={companies} explain={code => errors[code] ?? "دریافت بک‌آپ کامل نشد؛ اتصال و مجوز حساب دستگاه را بررسی کنید."} onDownload={download} downloading={downloading} revision={revision} /> :
+    </section>}
+    <div className="backup-view-tabs" role="group" aria-label="نمای بک‌آپ"><button aria-pressed={view === "activity"} onClick={() => setView("activity")}>تاریخچه عملیات</button><button aria-pressed={view === "files"} onClick={() => setView("files")}>فایل‌های ذخیره‌شده</button><button aria-pressed={view === "restore"} onClick={() => setView("restore")}>آپلود و بازگردانی</button></div>
+    {view === "restore" ? <BackupRestore devices={data.devices} onChanged={() => { setRevision(value => value + 1); void load().catch(() => undefined); }} /> : view === "activity" ? <BackupHistory companies={companies} explain={code => errors[code] ?? "دریافت بک‌آپ کامل نشد؛ اتصال و مجوز حساب دستگاه را بررسی کنید."} onDownload={download} downloading={downloading} revision={revision} /> :
     <section className="backup-panel"><div className="backup-history-heading"><h2>آخرین فایل‌های بک‌آپ</h2><span>{history.length.toLocaleString("fa-IR")} فایل</span></div>
       {loading ? <p role="status">در حال بارگذاری…</p> : !history.length ? <div className="backup-empty"><Archive size={32} /><p>هنوز بک‌آپی برای این انتخاب ندارید.</p></div> : <div className="backup-history">{history.map(r => <article className="backup-record" key={r.id}>
         <span className="backup-file-icon"><Archive size={22} /></span><div className="backup-record-info"><h3>{r.deviceName}<span dir="ltr">{r.vendor}</span></h3><p>{r.companyName} · {r.title}</p><div className="backup-record-meta"><time dateTime={r.createdAt}>{backupTime(r.createdAt)} · تهران</time><span>توسط {r.actorName || r.actor}</span><span dir="ltr">{(r.bytes / 1024).toFixed(1)} KB</span></div><details><summary>مشخصات فایل</summary><p>{r.scope}</p><code dir="ltr">{r.filename}</code><code dir="ltr">SHA-256: {r.sha256}</code></details></div>

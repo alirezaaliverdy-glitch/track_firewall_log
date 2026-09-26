@@ -105,6 +105,7 @@ async function regenerateLatestRevisionForExecution(plan: ActionPlan, input: Rec
 export async function executeActionPlan(id: string, executionInput: Record<string, unknown> = {}, dependencies: ExecutionDependencies = {}) {
   const initialPlan = await prisma.actionPlan.findUnique({ where: { id } });
   if (!initialPlan) return null;
+  if (asObject(initialPlan.parametersJson).source === "backup_restore") throw new ActionExecutionError("RESTORE_WORKFLOW_REQUIRED", "Use the backup restore workflow for this registered file-transfer plan.", 409);
   return withActionExecutionAdvisoryLock(initialPlan, executionInput, async () => {
   let plan = initialPlan;
 

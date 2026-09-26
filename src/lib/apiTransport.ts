@@ -9,7 +9,7 @@ export type ApiTransport = {
 
 export const webCookieTransport: ApiTransport = {
   fetch(input, init) {
-    const headers = init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers;
+    const headers = init?.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json", ...init.headers } : init?.headers;
     return fetch(input, { ...init, credentials: "include", headers });
   }
 };

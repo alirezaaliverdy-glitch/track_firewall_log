@@ -7,6 +7,11 @@ export type RoutePermissionPolicy = {
 };
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
+  { method: "POST", path: "/api/backups/vault", permission: "uploads.create" },
+  { method: "DELETE", path: "/api/backups/vault/:id", permission: "users.manage" },
+  { method: "POST", path: "/api/backups/restores/preview", permission: "actions.propose" },
+  { method: "POST", path: "/api/backups/restores/:id/execute", permission: "actions.execute.high_risk" },
+  { method: "POST", path: "/api/backups/restores/:id/verify", permission: "actions.execute.high_risk" },
   { method: "POST", path: "/api/backups", permission: "devices.manage" },
   { method: "DELETE", path: "/api/backups/activity", permission: "users.manage" },
   { method: "DELETE", path: "/api/backups/:id", permission: "users.manage" },

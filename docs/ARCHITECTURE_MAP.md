@@ -77,6 +77,10 @@ Frontend routing now uses `src/routes/appRoutes.tsx` plus `AppShell`. Asset and 
 - `backend/src/monitoring/linux/` adds health scoring, metric extraction, collection-run persistence, and read APIs for Linux health. Read APIs tolerate a pending migration; refresh writes require the migration and real connector-backed collection.
 - Frontend additions live under `src/features/vendors/cisco/` and `src/features/monitoring/pages/`, routed through `src/routes/appRoutes.tsx`.
 
+## Vendor backup restore extension (2026-09-26)
+
+The Backups upload/restore tab uses `/api/backups/vault` and `/api/backups/restores`. Encrypted artifacts remain in existing DeviceSnapshot storage; previews/executions remain ActionPlans with `source=backup_restore`. The registered restore planner and PolicyGuard validate owned target, file hash, native identity, expiry and stable connection/credential fingerprint. The dedicated execution service atomically claims a plan, collects a real safety backup and invokes only fixed vendor handlers. Ordinary action execution rejects these plans so it cannot bypass restore-specific confirmation or verification. Audit/result history contains metadata, never configuration content. See VENDOR_BACKUP_RESTORE.md for per-vendor scopes and recovery limits.
+
 ## Milestone 19A Product State Update
 
 - `backend/src/product-state/` is the single source for feature state and primary-navigation eligibility.
