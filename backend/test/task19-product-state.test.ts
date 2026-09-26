@@ -22,6 +22,9 @@ test("Task 19A product state rejects unsafe navigation mismatches", () => {
 });
 
 test("Task 19A navigation excludes planned, mock-only, not-configured and unverified routes", () => {
+  const groups = getProductNavigation().map((group) => group.key);
+  assert.equal(groups.indexOf("backups"), groups.indexOf("settings") - 1);
+  assert.ok(groups.indexOf("backups") > groups.indexOf("attackers"));
   const routes = getProductNavigation().flatMap((group) => group.items.map((item) => item.route));
   assert.ok(routes.includes("/dashboard"));
   assert.ok(routes.includes("/assets/devices/new"));

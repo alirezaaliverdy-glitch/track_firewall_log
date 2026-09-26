@@ -1576,3 +1576,8 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Grouped actions by operational category and clarified Cisco parameter labels and guidance in the Action Center. Detailed rollout boundaries are in `docs/CISCO_OPERATIONS_ROADMAP.md`.
 - Verified the actual local Catalyst 2960-X transitioned from offline to online after the API deployment, with an authenticated shared SSH session; later sensor cycles kept the device, Asset and management channel online with no channel error. All four local containers are healthy and `/firewall/actions` returns HTTP 200.
 - Final focused Cisco tests passed 12/12, the command catalog validator accepted 210 entries, and backend/frontend production-style builds completed. No live Cisco configuration change was executed.
+## 2026-09-26 - Lower backup navigation and reverify collection
+
+- Backup navigation now sits immediately before Settings in both the API navigation and frontend fallback. A regression assertion protects the order.
+- All 28 focused backup/navigation tests pass. Fresh live Linux, MikroTik and Cisco backups downloaded with matching SHA-256 checksums. FortiGate has no registered live target; fragmented SCP transfer, exact size and truncation rejection are covered by isolated tests, not claimed as live certification.
+- Local production API/web rebuild and health-gated deployment performed; no vendor configuration changed and no existing files/history were deleted.

@@ -79,7 +79,6 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
 ];
 
 const NAVIGATION_GROUPS = [
-  { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", mobilePrimary: false },
   { key: "dashboard", titleFa: "داشبورد", titleEn: "Dashboard", iconKey: "dashboard", mobilePrimary: true },
   { key: "assets", titleFa: "دارایی‌ها", titleEn: "Assets", iconKey: "assets", mobilePrimary: true },
   { key: "security", titleFa: "امنیت", titleEn: "Security", iconKey: "security", mobilePrimary: true },
@@ -89,6 +88,7 @@ const NAVIGATION_GROUPS = [
   { key: "tools", titleFa: "آزمایشگاه شبکه", titleEn: "Network lab", iconKey: "tools", mobilePrimary: false },
   { key: "assistant", titleFa: "دستیار هوشمند", titleEn: "Assistant", iconKey: "assistant", mobilePrimary: false },
   { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", mobilePrimary: false },
+  { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", mobilePrimary: false },
   { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", mobilePrimary: false }
 ] as const;
 

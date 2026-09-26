@@ -36,7 +36,6 @@ const navigationTones: Record<string, string> = {
 };
 
 const fallbackNavigation: ProductNavigationGroup[] = [
-  { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", route: "/backups", mobilePrimary: false, items: [] },
   { key: "reports", titleFa: "گزارش‌گیری", titleEn: "Reports", iconKey: "reports", route: "/reports", mobilePrimary: false, items: [] },
   { key: "tools", titleFa: "آزمایشگاه شبکه", titleEn: "Network lab", iconKey: "tools", route: "/tools/network-lab", mobilePrimary: false, items: [] },
   { key: "dashboard", titleFa: "داشبورد", titleEn: "Dashboard", iconKey: "dashboard", route: "/dashboard", mobilePrimary: true, items: [] },
@@ -46,6 +45,7 @@ const fallbackNavigation: ProductNavigationGroup[] = [
   { key: "actions", titleFa: "اقدامات", titleEn: "Actions", iconKey: "actions", route: "/actions", mobilePrimary: true, items: [] },
   { key: "assistant", titleFa: "دستیار هوشمند", titleEn: "Assistant", iconKey: "assistant", route: "/assistant", mobilePrimary: false, items: [] },
   { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", route: "/attackers", mobilePrimary: false, items: [] },
+  { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", route: "/backups", mobilePrimary: false, items: [] },
   { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", route: "/settings", mobilePrimary: false, items: [] },
 ];
 

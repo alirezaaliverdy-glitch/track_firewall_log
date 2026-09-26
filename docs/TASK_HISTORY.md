@@ -1669,3 +1669,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added category grouping and a bounded LACP access EtherChannel workflow with preflight checks, strict CLI write-error detection, and explicit review. Cisco's IOS 15.2(7)E configuration guide informed group and port limits.
 - Focused Cisco unit/integration tests and production image builds are used for validation; live Cisco configuration remains untouched.
 - Validation outcome: 12 Cisco tests passed, 210 catalog entries validated, local API/web/db/gateway healthy, and the live Cisco sensor recovered to a sustained authenticated online state.
+## 2026-09-26 - Move backups lower and validate current vendor collection
+
+- Moved backup navigation immediately above Settings, including frontend fallback.
+- Passed 28 isolated tests and fresh live Linux/MikroTik/Cisco collection plus download hash verification. No live FortiGate is registered; its native SCP protocol is unit-tested only.
+- Rebuilt the local API and frontend before the independent first-task commit. Backup restoration remains a separate subsequent task.
