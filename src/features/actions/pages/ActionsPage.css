@@ -249,6 +249,12 @@
 }
 
 .operations-center-page .operator-run-card select:disabled { opacity: .5; }
+.operator-action-guidance { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 0; color: #a7bcc9; font-size: .78rem; line-height: 1.7; }
+.operator-action-guidance span { flex: 0 0 auto; border: 1px solid rgba(103, 158, 181, .27); border-radius: 999px; padding: 3px 9px; color: #bdd5df; font-size: .7rem; }
+.operator-field-help { color: #89a3b1; font-size: .7rem; line-height: 1.55; }
+.operations-center-page .operator-acknowledgement { display: flex; align-items: center; gap: 10px; min-height: 42px; color: #d3e7eb; font-size: .78rem; }
+.operations-center-page .operator-acknowledgement input { width: 19px; height: 19px; min-height: 0; margin: 0; accent-color: #39bccb; }
+@media (max-width: 640px) { .operator-action-guidance { align-items: flex-start; flex-direction: column; } }
 .operations-center-page .operator-run-card > footer { padding-top: 14px; }
 .operations-center-page .operator-run-card > footer p { color: #829aaa; }
 .operations-center-page .operator-execute { min-width: 168px; min-height: 43px; }

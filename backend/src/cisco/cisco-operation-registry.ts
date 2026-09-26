@@ -140,6 +140,52 @@ function cidrRoute(params: Record<string, unknown>, key = "destinationCidr") {
   return `${network} ${maskText}`;
 }
 function cli(commandId: string, command: string, options: Partial<CiscoCliCommandSpec> = {}): CiscoCliCommandSpec { return { commandId, command, ...options }; }
+function etherChannelParams(params: Record<string, unknown>) {
+  const groupId = Number(params.groupId);
+  if (!Number.isInteger(groupId) || groupId < 1 || groupId > 24) throw new Error("Cisco EtherChannel group must be between 1 and 24.");
+  const accessVlanId = vlan(params, "accessVlanId");
+  const raw = text(params, "interfaces").split(",").map((item) => item.trim());
+  if (raw.length < 2 || raw.length > 8 || raw.some((item) => !/^(?:Gi|GigabitEthernet|Fa|FastEthernet|Te|TenGigabitEthernet)\d+(?:\/\d+){1,2}$/i.test(item))) {
+    throw new Error("Select 2 to 8 physical Ethernet ports separated by commas.");
+  }
+  const canonical = raw.map((item) => item.replace(/^Gi(?=\d)/i, "GigabitEthernet").replace(/^Fa(?=\d)/i, "FastEthernet").replace(/^Te(?=\d)/i, "TenGigabitEthernet"));
+  if (new Set(canonical.map((item) => item.toLowerCase())).size !== canonical.length) throw new Error("EtherChannel ports must be unique.");
+  if (new Set(canonical.map((item) => item.replace(/\d.*$/, "").toLowerCase())).size !== 1) throw new Error("EtherChannel ports must be the same Ethernet type.");
+  if (params.acknowledgeDisruption !== true && params.acknowledgeDisruption !== "true") {
+    throw new Error("Confirm that changing these ports may interrupt traffic before continuing.");
+  }
+  return { groupId, accessVlanId, interfaces: canonical };
+}
+
+export function buildCiscoAccessEtherChannelSpecs(params: Record<string, unknown>): CiscoCliCommandSpec[] {
+  const { groupId, accessVlanId, interfaces } = etherChannelParams(params);
+  return [
+    cli("etherchannel.precheck.summary", "show etherchannel summary", { strict: true, validateOutput: (output) => {
+      if (new RegExp(`\\bPo${groupId}\\s*\\(`, "i").test(output)) throw new Error("The selected Port-channel already exists; no change was sent.");
+    } }),
+    cli("etherchannel.precheck.vlan", `show vlan id ${accessVlanId}`, { strict: true, validateOutput: (output) => {
+      if (!new RegExp(`(?:^|\\n)\\s*${accessVlanId}\\s+\\S+\\s+active\\b`, "i").test(output)) {
+        throw new Error(`Access VLAN ${accessVlanId} is not active; no change was sent.`);
+      }
+    } }),
+    ...interfaces.map((name, index) => cli(`etherchannel.precheck.${index + 1}`, `show running-config interface ${name}`, { strict: true, validateOutput: (output) => {
+      if (!new RegExp(`\\binterface\\s+${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(output)) throw new Error(`Could not verify interface ${name}; no change was sent.`);
+      if (/^\s*(?:channel-group|ip address|switchport mode trunk|switchport voice vlan|authentication|dot1x)\b/im.test(output)) {
+        throw new Error(`Interface ${name} has an incompatible or security-sensitive configuration; no change was sent.`);
+      }
+    } })),
+    cli("etherchannel.configure", "configure terminal", { write: true }),
+    ...interfaces.flatMap((name, index) => [
+      cli(`etherchannel.${index + 1}.interface`, `interface ${name}`, { write: true }),
+      cli(`etherchannel.${index + 1}.access`, "switchport mode access", { write: true }),
+      cli(`etherchannel.${index + 1}.vlan`, `switchport access vlan ${accessVlanId}`, { write: true }),
+      cli(`etherchannel.${index + 1}.lacp`, `channel-group ${groupId} mode active`, { write: true }),
+      cli(`etherchannel.${index + 1}.exit`, "exit", { write: true })
+    ]),
+    cli("etherchannel.end", "end", { write: true }),
+    cli("etherchannel.verify", `show etherchannel ${groupId} summary`, { strict: true })
+  ];
+}
 function configWorkflow(slug: string, commands: string[], verify: string[]): CiscoCliCommandSpec[] {
   return [cli(`${slug}.configure`, "configure terminal", { write: true }), ...commands.map((command, index) => cli(`${slug}.${index + 1}`, command, { write: true })), cli(`${slug}.end`, "end", { write: true }), ...verify.map((command, index) => cli(`${slug}.verify.${index + 1}`, command, { redactOutput: /running-config|startup-config/i.test(command) }))];
 }
@@ -184,6 +230,12 @@ export const CISCO_OPERATION_REGISTRY: readonly CiscoOperationDefinition[] = Obj
   implementedCli("rename-vlan", "Rename VLAN", "switching", "configure", "medium", false, ["vlanId", "name"], ["name vlan"], (params) => configWorkflow("rename-vlan", [`vlan ${vlan(params)}`, `name ${text(params, "name").replace(/[\r\n]/g, " ").slice(0, 64)}`], ["show vlan brief"]), { rollback: configRollback(["Restore the previous VLAN name from backup evidence."]) }),
   implementedCli("assign-access-vlan", "Assign access VLAN", "switching", "configure", "high", false, ["interfaceName", "vlanId"], ["switchport access vlan"], (params) => configWorkflow("access-vlan", [`interface ${iface(params)}`, "switchport mode access", `switchport access vlan ${vlan(params)}`], [`show running-config interface ${iface(params)}`]), { rollback: configRollback(["Restore the previous switchport VLAN from backup evidence."]) }),
   implementedCli("configure-trunk-allowed-vlans", "Configure trunk allowed VLANs", "switching", "configure", "high", false, ["interfaceName", "allowedVlans"], ["switchport trunk allowed vlan"], (params) => configWorkflow("trunk-vlans", [`interface ${iface(params)}`, `switchport trunk allowed vlan ${text(params, "allowedVlans").replace(/[^0-9,\-]/g, "")}`], [`show interfaces trunk | include ${iface(params)}`]), { rollback: configRollback(["Restore the previous trunk allowed VLAN list from backup evidence."]) }),
+  implementedCli("create-access-etherchannel", "Create LACP access EtherChannel", "switching", "configure", "critical", false, ["groupId", "interfaces", "accessVlanId", "acknowledgeDisruption"], ["etherchannel", "lacp", "port-channel"], buildCiscoAccessEtherChannelSpecs, {
+    titleFa: "ساخت EtherChannel با LACP",
+    prechecks: ["IOS Classic/IOS-XE switch and privileged SSH are required.", "The selected group must be unused and member ports must not have trunk, Layer 3, voice VLAN, or authentication configuration.", "Peer-side LACP and matching speed/duplex/VLAN must be prepared before this change."],
+    verification: ["Check show etherchannel summary for the configured Port-channel and bundled member ports.", "LACP peer negotiation and traffic continuity require separate verification after the change."],
+    rollback: configRollback(["Before execution, save the affected interface configuration.", "To revert, remove channel-group from each member port, restore their previous switchport settings, and remove the unused Port-channel after checking dependencies."])
+  }),
   implementedCli("add-static-route", "Add static route", "routing", "configure", "high", false, ["destinationCidr", "nextHop"], ["ip route", "static route"], (params) => configWorkflow("add-static-route", [`ip route ${cidrRoute(params)} ${ip(params, "nextHop")}`], ["show ip route static"]), { rollback: configRollback(["Remove the static route with no ip route after validation."]) }),
   implementedCli("remove-static-route", "Remove static route", "routing", "configure", "high", false, ["destinationCidr", "nextHop"], ["no ip route", "remove static route"], (params) => configWorkflow("remove-static-route", [`no ip route ${cidrRoute(params)} ${ip(params, "nextHop")}`], ["show ip route static"]), { rollback: configRollback(["Re-add the removed static route if required."]) }),
   implementedCli("configure-ntp-server", "Configure NTP server", "services", "configure", "medium", false, ["server"], ["ntp server"], (params) => configWorkflow("ntp-server", [`ntp server ${ip(params, "server")}`], ["show ntp status"]), { rollback: configRollback(["Remove the NTP server with no ntp server if required."]) }),

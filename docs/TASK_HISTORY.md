@@ -1642,3 +1642,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Normalized real readings for reachability, management, health, CPU, memory, disk, service/port counts, interface state, and the vendor domains actually returned by a connector.
 - Added a responsive sensor summary to the bottom of every device overview, labelled stale data, and linked the operator to collection, connection settings, monitoring history, and actions.
 - Separated resource trend lines by measurement and translated common SSH timeout/authentication failures into actionable Persian descriptions.
+## 2026-09-26 - Cisco online recovery and controlled operations foundation
+
+- Investigated the local Catalyst 2960-X: authenticated Cisco collection succeeded using `legacy_cisco`, while shared monitoring connections repeatedly failed because they omitted that profile. Reused the registered profile in monitoring rather than manually marking the device online.
+- Added category grouping and a bounded LACP access EtherChannel workflow with preflight checks, strict CLI write-error detection, and explicit review. Cisco's IOS 15.2(7)E configuration guide informed group and port limits.
+- Focused Cisco unit/integration tests and production image builds are used for validation; live Cisco configuration remains untouched.
+- Validation outcome: 12 Cisco tests passed, 210 catalog entries validated, local API/web/db/gateway healthy, and the live Cisco sensor recovered to a sustained authenticated online state.

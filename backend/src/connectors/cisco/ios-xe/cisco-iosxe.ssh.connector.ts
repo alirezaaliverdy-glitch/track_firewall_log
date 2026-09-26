@@ -16,7 +16,7 @@ export type CiscoIosXeCommandResult = {
   durationMs: number;
 };
 
-export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean; confirmationPattern?: RegExp; confirmationResponse?: string };
+export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean; validateOutput?: (output: string) => void; confirmationPattern?: RegExp; confirmationResponse?: string };
 
 export function redactCiscoCliOutput(output: string) {
   return output
@@ -273,8 +273,8 @@ export class CiscoInteractiveSession {
     this.stream.write(`${command}\n`);
     const output = await this.collectUntil((value) => this.hasPrompt(value), this.commandTimeoutMs, "command");
     const stdout = stripCiscoEchoAndPrompt(output, command);
-    if (rejectCliErrors && /%\s*(Invalid input|Incomplete command|Ambiguous command|Authorization failed)/i.test(stdout)) {
-      throw connectorError("CISCO_COMMAND_REJECTED", "command", "The Cisco device rejected a registered read-only command.", this.state, 502, false);
+    if (rejectCliErrors && /%\s*(Invalid input|Incomplete command|Ambiguous command|Authorization failed|Error|Invalid interface|Interface .* does not exist)/i.test(stdout)) {
+      throw connectorError("CISCO_COMMAND_REJECTED", "command", "The Cisco device rejected a registered command.", this.state, 502, false);
     }
     return { stdout, stderr: "", exitCode: 0, durationMs: Date.now() - started };
   }
@@ -389,7 +389,7 @@ export class CiscoIosXeSshConnector {
     if (!isCiscoIosXeSshCandidate(device)) throw connectorError("CISCO_DEVICE_UNSUPPORTED", "input", "Device is not a Cisco SSH target.", initialDiagnosticState(ciscoCompatibilityProfile(device)), 400, false);
     if (specs.length === 0) throw connectorError("CISCO_COMMAND_MISSING", "input", "At least one Cisco command spec is required.", initialDiagnosticState(ciscoCompatibilityProfile(device)), 400, false);
     const compatibilityProfile = ciscoCompatibilityProfile(device);
-    const credential = await resolveDeviceCredential(device, compatibilityProfile);
+    const credential = await this.dependencies.credentialResolver(device, compatibilityProfile);
     let state: DiagnosticState = initialDiagnosticState(compatibilityProfile);
     state = { ...state, connectorInvoked: true, connectionPhase: "tcp" };
     let socket: Socket;
@@ -425,8 +425,12 @@ export class CiscoIosXeSshConnector {
         const results: CiscoIosXeCommandResult[] = [];
         for (const spec of specs) {
           const commandResult = spec.confirmationPattern
-            ? await session.runCommandWithConfirmation(spec.command, spec.confirmationPattern, spec.confirmationResponse, spec.strict === true)
-            : await session.runCommand(spec.command, spec.strict === true);
+            ? await session.runCommandWithConfirmation(spec.command, spec.confirmationPattern, spec.confirmationResponse, spec.strict === true || spec.write === true)
+            : await session.runCommand(spec.command, spec.strict === true || spec.write === true);
+          if (spec.validateOutput) {
+            try { spec.validateOutput(commandResult.stdout); }
+            catch (error) { throw connectorError("CISCO_PRECHECK_FAILED", "command", error instanceof Error ? error.message : "Cisco precheck failed; no change was sent.", state, 409, false, error); }
+          }
           results.push({ commandId: spec.commandId, command: spec.command, ...commandResult, stdout: spec.redactOutput ? redactCiscoCliOutput(commandResult.stdout) : commandResult.stdout, stderr: spec.redactOutput ? redactCiscoCliOutput(commandResult.stderr) : commandResult.stderr });
         }
         const platformOutput = results.find((item) => item.commandId === "platform")?.stdout;

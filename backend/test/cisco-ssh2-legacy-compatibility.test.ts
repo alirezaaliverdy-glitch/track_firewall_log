@@ -66,6 +66,7 @@ async function startFakeCiscoServer(options: FakeServerOptions = {}) {
             pending = pending.slice(index + 1);
             if (command === "terminal length 0") stream.write("terminal length 0\r\nfixture#");
             if (command === "show version") stream.write(`show version\r\n${options.showVersion ?? iosxeShowVersion}\r\nfixture#`);
+            if (command === "configure terminal") stream.write("configure terminal\r\n% Invalid input detected at '^' marker.\r\nfixture#");
           }
         });
       });
@@ -93,6 +94,18 @@ test("modern Cisco connection succeeds without legacy mode", async () => {
     assert.equal(result.connection.legacyCompatibilityRequested, false);
     assert.equal(result.connection.legacyCompatibilityApplied, false);
     assert.equal(result.connection.diagnostic.connectionPhase, "command");
+  } finally {
+    await new Promise<void>((resolve) => fixture.server.close(() => resolve()));
+  }
+});
+
+test("Cisco write action stops when CLI rejects a configuration command", async () => {
+  const fixture = await startFakeCiscoServer();
+  try {
+    await assert.rejects(
+      connector().runCliCommands(device(fixture.port), [{ commandId: "configure", command: "configure terminal", write: true }]),
+      (error: unknown) => error instanceof CiscoConnectorError && error.code === "CISCO_COMMAND_REJECTED"
+    );
   } finally {
     await new Promise<void>((resolve) => fixture.server.close(() => resolve()));
   }

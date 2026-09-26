@@ -1546,3 +1546,10 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 - Added a focused sender-connection dialog with a direct Google App Password step, prefilled promotion from any recipient, explicit verification feedback, and an option to choose whether the sender also receives alerts.
 - Replaced saturated full-card status colors with neutral surfaces and reserved color for small, meaningful state indicators. Recipient rows now clearly show `recipient only` or `verified sender` and remain responsive on mobile.
 - The production frontend image built successfully, 16 focused email/detection tests passed, UTF-8 validation passed across 694 files, and the refreshed local email-alert route and API both return HTTP 200.
+## 2026-09-26 - Cisco reconnect and first parameterized switching action
+
+- Aligned the shared SSH connectivity probe with Cisco IOS Classic legacy algorithms and keyboard-interactive authentication; connection-pool identity now changes with the compatibility profile.
+- Added a critical, parameterized LACP access EtherChannel action with typed input, explicit traffic-impact acknowledgement, read-only prechecks, command preview, CLI rejection handling, verification output and audit through the existing ActionPlan path. No live switch configuration was changed during implementation.
+- Grouped actions by operational category and clarified Cisco parameter labels and guidance in the Action Center. Detailed rollout boundaries are in `docs/CISCO_OPERATIONS_ROADMAP.md`.
+- Verified the actual local Catalyst 2960-X transitioned from offline to online after the API deployment, with an authenticated shared SSH session; later sensor cycles kept the device, Asset and management channel online with no channel error. All four local containers are healthy and `/firewall/actions` returns HTTP 200.
+- Final focused Cisco tests passed 12/12, the command catalog validator accepted 210 entries, and backend/frontend production-style builds completed. No live Cisco configuration change was executed.

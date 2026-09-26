@@ -21,6 +21,12 @@ import {
   terminalLifecycle,
 } from "@/features/actions/actionCenterWorkspaceModel";
 
+const ACTION_CATEGORY_FA: Record<string, string> = {
+  show: "بررسی و عیب‌یابی", health: "سلامت", interfaces: "پورت‌ها و اینترفیس‌ها",
+  switching: "سوئیچینگ و VLAN", routing: "مسیریابی", security: "امنیت",
+  services: "سرویس‌ها", configuration: "پیکربندی و نگهداری", system: "اطلاعات دستگاه"
+};
+
 export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initialActionPlanId?: string; onCreate: () => void }) {
   const { i18n } = useTranslation();
   const { user } = useAuth();
@@ -163,8 +169,13 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   const selectedDevice = useMemo(() => devices.find((device) => device.id === deviceId) ?? null, [deviceId, devices]);
   const selectedAction = useMemo(() => actions.find((action) => action.id === actionId) ?? null, [actionId, actions]);
+  const actionGroups = useMemo(() => {
+    const grouped = new Map<string, CatalogItem[]>();
+    for (const action of actions) grouped.set(action.category, [...(grouped.get(action.category) ?? []), action]);
+    return [...grouped];
+  }, [actions]);
   const allFields = useMemo(() => selectedAction ? [...selectedAction.requiredParams, ...selectedAction.optionalParams] : [], [selectedAction]);
-  const requiredComplete = useMemo(() => selectedAction?.requiredParams.every((field) => parameters[field.key]?.trim()) ?? false, [parameters, selectedAction]);
+  const requiredComplete = useMemo(() => selectedAction?.requiredParams.every((field) => field.key === "acknowledgeDisruption" ? parameters[field.key] === "true" : Boolean(parameters[field.key]?.trim())) ?? false, [parameters, selectedAction]);
 
   const loadHistory = useCallback(async () => {
     setHistoryBusy(true);
@@ -454,11 +465,12 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         <div className="operator-run-card__selectors">
           <label>{copy.selectDevice}<select aria-label={copy.selectDevice} value={deviceId} onChange={(event) => setDeviceId(event.target.value)}><option value="">{copy.choose}</option>{devices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.vendor}</option>)}</select></label>
           <label>{copy.selectCredential}<select aria-label={copy.selectCredential} value={credentialId} disabled={!selectedDevice} onChange={(event) => setCredentialId(event.target.value)}><option value="">{copy.choose}</option>{credentials.map((credential) => <option key={credential.id} value={credential.id}>{credential.name} · {credential.type}</option>)}</select></label>
-          <label>{copy.selectAction}<select aria-label={copy.selectAction} value={actionId} disabled={!selectedDevice} onChange={(event) => setActionId(event.target.value)}><option value="">{copy.choose}</option>{actions.map((action) => <option key={action.id} value={action.id}>{isFa ? action.titleFa : action.titleEn}</option>)}</select></label>
+          <label>{copy.selectAction}<select aria-label={copy.selectAction} value={actionId} disabled={!selectedDevice} onChange={(event) => setActionId(event.target.value)}><option value="">{copy.choose}</option>{actionGroups.map(([category, group]) => <optgroup key={category} label={isFa ? ACTION_CATEGORY_FA[category] ?? category : category}>{group.map((action) => <option key={action.id} value={action.id}>{isFa ? action.titleFa : action.titleEn}</option>)}</optgroup>)}</select></label>
         </div>
 
+        {selectedAction && <p className="operator-action-guidance">{isFa ? selectedAction.descriptionFa : selectedAction.titleEn}<span>{selectedAction.readOnly ? (isFa ? "فقط خواندن" : "Read only") : (isFa ? "تغییر پیکربندی · نیازمند تأیید" : "Configuration change · confirmation required")}</span></p>}
         {selectedAction && allFields.length > 0 && <section className="operator-parameters">
-          {allFields.map((field: CatalogParam) => <label key={field.key}>{isFa ? field.labelFa : humanize(field.key)}{selectedAction.requiredParams.some((required) => required.key === field.key) && <small>{copy.required}</small>}{field.type === "boolean" ? <select value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">{copy.choose}</option><option value="true">true</option><option value="false">false</option></select> : <input type={field.type === "number" ? "number" : "text"} placeholder={field.placeholderFa} value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))} />}</label>)}
+          {allFields.map((field: CatalogParam) => <label key={field.key}>{isFa ? field.labelFa : humanize(field.key)}{selectedAction.requiredParams.some((required) => required.key === field.key) && <small>{copy.required}</small>}{field.key === "acknowledgeDisruption" ? <span className="operator-acknowledgement"><input type="checkbox" checked={parameters[field.key] === "true"} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.checked ? "true" : "" }))} />{isFa ? "اثر احتمالی بر ترافیک را بررسی کردم" : "I reviewed the possible traffic impact"}</span> : field.type === "boolean" ? <select value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">{copy.choose}</option><option value="true">{isFa ? "بله" : "Yes"}</option><option value="false">{isFa ? "خیر" : "No"}</option></select> : <input type={field.type === "number" ? "number" : "text"} placeholder={field.placeholderFa} value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))} />}{field.helpFa && <span className="operator-field-help">{isFa ? field.helpFa : humanize(field.key)}</span>}</label>)}
         </section>}
 
         {error && <div className="state-panel state-panel--error" role="alert">{error}</div>}

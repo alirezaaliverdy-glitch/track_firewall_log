@@ -79,7 +79,23 @@ const fullControlFortiGateItems = FORTIGATE_FULL_CONTROL_REGISTRY.map((entry) =>
 
 
 
-const ciscoParam = (key: string): CommandParam => param(key, key, `Cisco parameter ${key}.`, key.toLowerCase().includes("vlan") || key.toLowerCase().includes("asn") || key.toLowerCase().includes("group") || key.toLowerCase().includes("id") ? "number" : key.toLowerCase().includes("ip") || key.toLowerCase().includes("hop") || key.toLowerCase().includes("server") ? "ip" : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("network") || key.toLowerCase().includes("source") ? "cidr" : "string");
+const ciscoParam = (key: string): CommandParam => {
+  const labels: Record<string, [string, string, string?]> = {
+    groupId: ["شماره Port-channel", "برای Catalyst 2960-X عددی از ۱ تا ۲۴ وارد کنید.", "5"],
+    interfaces: ["پورت‌های عضو", "۲ تا ۸ پورت فیزیکی هم‌نوع، جداشده با ویرگول. پورت‌های دارای تنظیمات ناسازگار قبل از تغییر رد می‌شوند.", "Gi1/0/1, Gi1/0/2"],
+    accessVlanId: ["VLAN دسترسی", "VLAN یکسان برای همهٔ پورت‌های عضو (۱ تا ۴۰۹۴).", "10"],
+    acknowledgeDisruption: ["تأیید اثر روی ترافیک", "تغییر پورت‌های عضو ممکن است ترافیک را قطع کند. ابتدا سمت مقابل را برای LACP آماده کنید."],
+    interfaceName: ["نام اینترفیس", "نام دقیق پورت روی دستگاه را وارد کنید.", "Gi1/0/1"],
+    vlanId: ["شماره VLAN", "شماره VLAN دستگاه را وارد کنید.", "10"],
+    target: ["آدرس مقصد", "آدرس IPv4 مقصد را وارد کنید.", "192.0.2.10"]
+  };
+  const [label, help, placeholder] = labels[key] ?? [key, `مقدار ${key} را وارد کنید.`];
+  const type = key === "acknowledgeDisruption" ? "boolean"
+    : key.toLowerCase().includes("vlan") || key.toLowerCase().includes("asn") || key.toLowerCase().includes("group") || key.toLowerCase().includes("id") ? "number"
+      : key.toLowerCase().includes("ip") || key.toLowerCase().includes("hop") || key.toLowerCase().includes("server") ? "ip"
+        : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("network") || key.toLowerCase().includes("source") ? "cidr" : "string";
+  return param(key, label, help, type, placeholder);
+};
 const ciscoCommandCatalogItems = CISCO_OPERATION_REGISTRY.map((operation) => item("cisco", operation.slug, operation.titleFa, operation.titleEn, operation.category, "generic_security_action", (operation.state === "implemented" ? implemented(operation.executionTemplateRef!, {
   mutates: !operation.readOnly,
   riskLevel: operation.risk as CommandRiskLevel,
@@ -90,7 +106,9 @@ const ciscoCommandCatalogItems = CISCO_OPERATION_REGISTRY.map((operation) => ite
   verification: operation.verification,
   rollback: operation.rollback.available ? { available: true, steps: operation.rollback.steps } : { available: false, notAvailableReasonFa: operation.rollback.reason },
   searchKeywordsFa: operation.keywords,
-  descriptionFa: `${operation.titleFa} through the controlled Cisco SSH connector and Action Center review flow.`
+  descriptionFa: operation.slug === "create-access-etherchannel"
+    ? "ساخت Port-channel از پورت‌های access با LACP؛ ابتدا پیش‌نیازهای دستگاه بررسی و فرمان‌ها برای تأیید شما نمایش داده می‌شوند. سمت مقابل باید از قبل آماده باشد."
+    : `${operation.titleFa} با اتصال کنترل‌شدهٔ سیسکو و بازبینی پیش از اجرا.`,
 }) : operation.state === "manualOnly" ? manual({
   mutates: !operation.readOnly,
   riskLevel: operation.risk as CommandRiskLevel,
