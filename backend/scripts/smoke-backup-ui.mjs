@@ -35,13 +35,21 @@ try {
   if (!await evaluate("Boolean(document.querySelector('.backup-scope'))")) throw new Error("Device selection did not show vendor scope");
   for(let i=0;i<100;i++){ await sleep(100); if(await evaluate("Boolean(document.querySelector('.backup-audit-meta'))"))break; }
   if(!await evaluate("Boolean(document.querySelector('.backup-audit-meta time[datetime]'))")) throw new Error("History has no actor or exact time");
-  for (const [width,height,label] of [[390,844,"mobile"],[1440,1000,"desktop"]]) {
+  for (const [width,height,label] of [[320,740,"small-mobile"],[390,844,"mobile"],[650,900,"large-mobile"],[768,1000,"tablet"],[1440,1000,"desktop"]]) {
     await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<600});
     await sleep(300);
     const result=await evaluate(`(() => {const page=document.querySelector('.backup-page');const panel=page.getBoundingClientRect();return {width:innerWidth,scrollWidth:document.documentElement.scrollWidth,visible:panel.width>0,overflows:[...page.querySelectorAll('input,select,button')].filter(el=>{const r=el.getBoundingClientRect();return r.left<0||r.right>innerWidth+1}).length}})()`);
     if(!result.visible||result.scrollWidth>width+1||result.overflows) throw new Error("Layout overflow: "+JSON.stringify(result));
     console.log(JSON.stringify({viewport:label,...result}));
     if(label==="mobile"){
+      await evaluate("document.querySelector('.backup-history-controls button').click()");
+      await sleep(150);
+      if(!await evaluate("Boolean(document.querySelector('.backup-delete-dialog[open]'))")) throw new Error("History confirmation did not open");
+      if(!await evaluate("(()=>{const r=document.querySelector('.backup-delete-dialog[open]').getBoundingClientRect();return r.left>=8&&r.right<=innerWidth-8&&r.top>=8&&r.bottom<=innerHeight-8;})()")) throw new Error("Confirmation is outside the usable viewport");
+      const modalShot=await send("Page.captureScreenshot",{format:"png"});await writeFile("/tmp/backups-delete-mobile.png",Buffer.from(modalShot.data,"base64"));
+      await evaluate("document.querySelector('.backup-delete-dialog[open] button').click()");
+      await sleep(150);
+      if(await evaluate("Boolean(document.querySelector('.backup-delete-dialog[open]'))")) throw new Error("History confirmation did not cancel");
       const shot=await send("Page.captureScreenshot",{format:"png"});await writeFile("/tmp/backups-mobile.png",Buffer.from(shot.data,"base64"));
       await evaluate("document.querySelector('.backup-history-filters').scrollIntoView({block:'start'})");
       await sleep(200);
@@ -53,6 +61,15 @@ try {
   await sleep(800);
   if(!await evaluate("[...document.querySelectorAll('.backup-event-status')].every(element=>element.classList.contains('failed'))")) throw new Error("History failure filter did not apply");
   console.log(JSON.stringify({stage:"history-ui",actorAndTime:true,failureFilter:true}));
+  await evaluate("document.querySelectorAll('.backup-view-tabs button')[1].click()");
+  await sleep(300);
+  await evaluate("document.querySelector('.backup-record-actions .backup-delete-button').click()");
+  await sleep(150);
+  if(!await evaluate("document.querySelector('.backup-delete-dialog[open]')?.parentElement.matches('.backup-page')")) throw new Error("File deletion confirmation missing");
+  await evaluate("document.querySelector('.backup-delete-dialog[open] button').click()");
+  await sleep(150);
+  if(await evaluate("Boolean(document.querySelector('.backup-delete-dialog[open]'))")) throw new Error("File confirmation did not cancel");
+  console.log(JSON.stringify({stage:"delete-ui",historyConfirmation:true,fileConfirmation:true,cancelPreservesData:true}));
 } finally {
   socket?.close(); browser.kill("SIGTERM"); await sleep(300);
   await prisma.authSession.deleteMany({where:{id:session.id}});

@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Download, Loader2, ShieldCheck, Search } from "lucide-react";
+import { Archive, Download, Loader2, ShieldCheck, Search, Trash2 } from "lucide-react";
 import { apiRequest } from "@/lib/apiTransport";
 import { Link } from "react-router-dom";
 import "./BackupsPage.css";
 import BackupHistory, { backupTime } from "./BackupHistory";
+import BackupDeleteDialog from "./BackupDeleteDialog";
+import { useAuth } from "@/context/AuthContext";
 type Profile = { title: string; extension: string; scope: string; supported: boolean };
 type Target = { id: string; name: string; vendor: string; host: string; company: { id: string; name: string } | null; profile: Profile };
 type Record = { id: string; deviceId: string; deviceName: string; companyName: string; host: string; vendor: string; filename: string; bytes: number; scope: string; title: string; actor: string; actorName: string; createdAt: string; sha256: string };
 type Data = { devices: Target[]; history: Record[] };
 const errors: { [key: string]: string } = {
+  ADMIN_REQUIRED: "فقط مدیر سامانه می‌تواند بک‌آپ یا تاریخچه را حذف کند.",
+  BACKUP_DELETE_FAILED: "حذف فایل انجام نشد؛ دوباره تلاش کنید.",
   BACKUP_PERMISSION_DENIED: "حساب اتصال اجازه خواندن تمام تنظیمات را ندارد. برای لینوکس، حساب مجاز یا sudo اعتبارنامه با مجوز محدود و بدون درخواست رمز لازم است؛ فایل ناقص ذخیره نشد.",
   BACKUP_SUDO_REQUIRED: "اجرای sudo به مجوز یا ورود رمز نیاز دارد. مجوز محدود بک‌آپ را روی سرور بررسی کنید؛ برنامه نمی‌تواند رمز sudo را تعاملی وارد کند.",
   BACKUP_SOURCE_CHANGED: "حین دریافت، فایل تنظیمات تغییر کرده است؛ برای جلوگیری از بک‌آپ ناقص، فایل ذخیره نشد. دوباره تلاش کنید.",
@@ -45,6 +49,9 @@ async function checked(response: Response) {
   return response;
 }
 export default function BackupsPage() {
+  const { user } = useAuth();
+  const [fileToDelete, setFileToDelete] = useState<Record | null>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
   const [data, setData] = useState<Data>({ devices: [], history: [] });
   const [company, setCompany] = useState("");
   const [deviceId, setDeviceId] = useState("");
@@ -90,6 +97,16 @@ export default function BackupsPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "دریافت فایل انجام نشد."); }
     finally { setDownloading(""); setRevision(value => value + 1); }
   }
+  async function removeFile() {
+    if (!fileToDelete || deletingFile) return;
+    setDeletingFile(true); setError(""); setNotice("");
+    try {
+      await checked(await apiRequest("/backups/" + encodeURIComponent(fileToDelete.id), { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE BACKUP FILE" }) }));
+      setData(current => ({ ...current, history: current.history.filter(item => item.id !== fileToDelete.id) }));
+      setFileToDelete(null); setRevision(value => value + 1); setNotice("فایل بک‌آپ حذف شد. روی دستگاه تغییری انجام نشد.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "حذف انجام نشد."); setFileToDelete(null); }
+    finally { setDeletingFile(false); }
+  }
   return <main className="backup-page" dir="rtl">
     <header className="backup-heading"><span className="backup-icon"><Archive size={28} /></span><div><h1>بک‌آپ تجهیزات</h1><p>تنظیمات دستگاه‌ها، در یک جای امن</p></div></header>
     {error && <div className="backup-message error" role="alert">{error}{!data.devices.length && !loading && <button onClick={() => { setLoading(true); void load().then(() => setError("")).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>تلاش دوباره</button>}</div>}
@@ -109,8 +126,10 @@ export default function BackupsPage() {
     <section className="backup-panel"><div className="backup-history-heading"><h2>آخرین فایل‌های بک‌آپ</h2><span>{history.length.toLocaleString("fa-IR")} فایل</span></div>
       {loading ? <p role="status">در حال بارگذاری…</p> : !history.length ? <div className="backup-empty"><Archive size={32} /><p>هنوز بک‌آپی برای این انتخاب ندارید.</p></div> : <div className="backup-history">{history.map(r => <article className="backup-record" key={r.id}>
         <span className="backup-file-icon"><Archive size={22} /></span><div className="backup-record-info"><h3>{r.deviceName}<span dir="ltr">{r.vendor}</span></h3><p>{r.companyName} · {r.title}</p><div className="backup-record-meta"><time dateTime={r.createdAt}>{backupTime(r.createdAt)} · تهران</time><span>توسط {r.actorName || r.actor}</span><span dir="ltr">{(r.bytes / 1024).toFixed(1)} KB</span></div><details><summary>مشخصات فایل</summary><p>{r.scope}</p><code dir="ltr">{r.filename}</code><code dir="ltr">SHA-256: {r.sha256}</code></details></div>
-        <button className="backup-download" disabled={Boolean(downloading)} onClick={() => void download(r)} aria-label={`دریافت بک‌آپ ${r.deviceName}`}>{downloading === r.id ? <Loader2 className="backup-spin" size={18} /> : <Download size={18} />}دریافت فایل</button>
+        <div className="backup-record-actions"><button className="backup-download" disabled={Boolean(downloading) || deletingFile} onClick={() => void download(r)} aria-label={`دریافت بک‌آپ ${r.deviceName}`}>{downloading === r.id ? <Loader2 className="backup-spin" size={18} /> : <Download size={18} />}دریافت فایل</button>
+        {user?.role === "admin" && <button className="backup-delete-button" disabled={Boolean(downloading) || deletingFile} onClick={() => setFileToDelete(r)} aria-label={"حذف فایل بک‌آپ " + r.deviceName}><Trash2 size={18} />حذف فایل</button>}</div>
       </article>)}</div>}
     </section>}
+    <BackupDeleteDialog open={Boolean(fileToDelete)} busy={deletingFile} title="حذف فایل بک‌آپ؟" description={fileToDelete ? `فایل بک‌آپ ${fileToDelete.deviceName} در تاریخ ${backupTime(fileToDelete.createdAt)} برای همیشه حذف می‌شود. سوابق عملیات باقی می‌مانند و روی دستگاه تغییری انجام نمی‌شود.` : ""} onCancel={() => setFileToDelete(null)} onConfirm={() => void removeFile()} />
   </main>;
 }

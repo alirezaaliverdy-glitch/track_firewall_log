@@ -54,3 +54,16 @@ export async function downloadBackup(id: string, ownerId: string, actor: string,
   await prisma.auditLog.create({ data: { deviceId: record.deviceId, actor, action: "device.backup.download", targetType: "device_backup", targetId: id, dryRun: false, approvalStatus: "not_required", metadata: { ...metadata, actor, actorId: ownerId, actorName } } });
   return { content, metadata };
 }
+export async function deleteBackupFile(id: string, ownerId: string, actor: string, actorName = actor) {
+  return prisma.$transaction(async tx => {
+    const where = { id, snapshotType: BACKUP_SNAPSHOT_TYPE, device: { deletedAt: null, company: { ownerId, deletedAt: null } } };
+    const record = await tx.deviceSnapshot.findFirst({ where });
+    if (!record) throw new BackupError("BACKUP_NOT_FOUND", 404);
+    const deleted = await tx.deviceSnapshot.deleteMany({ where });
+    if (!deleted.count) throw new BackupError("BACKUP_NOT_FOUND", 404);
+    await tx.auditLog.create({ data: { deviceId: record.deviceId, actor, action: "device.backup.delete",
+      targetType: "device_backup", targetId: id, dryRun: false, approvalStatus: "not_required",
+      metadata: { ...backupMetadata(record.dataJson), actor, actorId: ownerId, actorName } } });
+    return { ok: true, deletedCount: deleted.count };
+  });
+}

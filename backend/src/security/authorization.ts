@@ -8,6 +8,8 @@ export type RoutePermissionPolicy = {
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "POST", path: "/api/backups", permission: "devices.manage" },
+  { method: "DELETE", path: "/api/backups/activity", permission: "users.manage" },
+  { method: "DELETE", path: "/api/backups/:id", permission: "users.manage" },
   { method: "POST", path: "/api/auth/logout", permission: "auth.session.manage" },
   { method: "POST", path: "/api/auth/logout-all", permission: "auth.session.terminate" },
   { method: "POST", path: "/api/auth/change-password", permission: "auth.session.manage" },

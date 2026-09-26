@@ -1,3 +1,10 @@
+## 2026-09-26 - Backup deletion and permitted Linux sudo
+
+- Verified on116 that the registered account has working noninteractive sudo; the false saved sudo option caused unprivileged /etc reads. Fixed only the backup collection path to retry permission-denied reads via fixed sudo -n tar; unrelated actions, credentials and server sudoers are unchanged. Live116 archive: 698,249 bytes, validated and SHA-256 verified on download. Independent commit: 6d2b769.
+- Added admin-only deletion of individual or filtered history with explicit confirmation, owner scoping and a timestamp cutoff protecting concurrent new entries. History deletion never deletes snapshots. Clear operations remain independently audited.
+- Added separate confirmed permanent backup-file deletion, preserving history and auditing the deleting user. Missing/deleted files no longer display a working download action in history. No pre-existing user files/history were deleted during testing.
+- 28 isolated backup/deletion/sudo/product-state tests passed. Live fixture-only deletion verified history/file separation. UI cancellation, filters and responsive layout were checked at 320,390,650,768 and1440px. API/web built and deployed locally without database-volume deletion.
+
 ## 2026-09-26 - Backup history and server 116 diagnosis
 
 - Earlier, server 116 answered SSH on port 22022 but rejected its saved credential. The sensor now retains authentication failure as degraded rather than offline, honors management-channel credentials and immediately persists changed diagnostic codes. The user subsequently confirmed recovery; an authenticated backup diagnostic succeeded in opening SSH.

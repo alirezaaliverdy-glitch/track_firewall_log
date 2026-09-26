@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Download, History, Loader2, Search } from "lucide-react";
+import { Download, History, Loader2, Search, Trash2 } from "lucide-react";
 import { apiRequest } from "@/lib/apiTransport";
+import { useAuth } from "@/context/AuthContext";
+import BackupDeleteDialog from "./BackupDeleteDialog";
 type Activity = {
   id: string; backupId: string | null; deviceName: string; companyName: string;
   host: string; vendor: string; actor: string; actorName: string; createdAt: string;
-  action: "create" | "failed" | "download"; code: string | null; durationMs: number;
+  action: "create" | "failed" | "download" | "delete"; code: string | null; durationMs: number;
   filename: string; bytes: number; sha256: string;
 };
 type Result = { items: Activity[]; total: number; page: number; pageSize: number };
@@ -16,6 +18,10 @@ export default function BackupHistory({ companies, explain, onDownload, download
   onDownload: (record: { id: string; filename: string }) => Promise<void>;
   downloading: string; revision: number;
 }) {
+  const { user } = useAuth();
+  const [pendingDelete, setPendingDelete] = useState<{ ids?: string[]; count: number; before: string; companyId: string; action: string; search: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [company, setCompany] = useState("");
   const [action, setAction] = useState("");
@@ -39,26 +45,46 @@ export default function BackupHistory({ companies, explain, onDownload, download
     return () => { active = false; clearTimeout(timer); };
   }, [search, company, action, page, revision, retry]);
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
+  function confirmDelete(ids?: string[]) {
+    setPendingDelete({ ids, count: ids ? 1 : result.total, before: new Date().toISOString(), companyId: company, action, search });
+  }
+  async function removeHistory() {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true); setError(""); setNotice("");
+    try {
+      const { count: _count, ...filter } = pendingDelete;
+      const response = await apiRequest("/backups/activity", { method: "DELETE", body: JSON.stringify({ ...filter, confirmation: "DELETE BACKUP HISTORY" }) });
+      if (!response.ok) throw new Error("حذف تاریخچه انجام نشد. دسترسی مدیر و ارتباط با برنامه را بررسی کنید.");
+      const data = await response.json() as { deletedCount: number };
+      setNotice(data.deletedCount.toLocaleString("fa-IR") + " سابقه حذف شد؛ فایل‌های بک‌آپ باقی ماندند.");
+      setPendingDelete(null); setPage(1); setRetry(value => value + 1);
+    } catch (reason) { setPendingDelete(null); setError(reason instanceof Error ? reason.message : "حذف انجام نشد."); }
+    finally { setDeleting(false); }
+  }
   return <section className="backup-panel" aria-label="تاریخچه بک‌آپ">
-    <div className="backup-history-heading"><h2><History size={22} /> تاریخچه عملیات</h2><span>{result.total.toLocaleString("fa-IR")} رویداد</span></div>
+    <div className="backup-history-heading"><h2><History size={22} /> تاریخچه عملیات</h2><div className="backup-history-controls"><span>{result.total.toLocaleString("fa-IR")} رویداد</span>{user?.role === "admin" && <button className="backup-delete-button" disabled={loading || deleting || !result.total} onClick={() => confirmDelete()}><Trash2 size={18} />پاک‌کردن تاریخچه</button>}</div></div>
+    {notice && <div className="backup-message success" role="status">{notice}</div>}
     <div className="backup-history-filters">
       <label>جست‌وجو<span className="backup-search"><Search size={18} /><input value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder="کاربر، دستگاه، IP یا وندور" /></span></label>
       <label>شرکت<select value={company} onChange={event => { setCompany(event.target.value); setPage(1); }}><option value="">همه شرکت‌ها</option>{companies.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-      <label>نوع رویداد<select value={action} onChange={event => { setAction(event.target.value); setPage(1); }}><option value="">همه رویدادها</option><option value="create">بک‌آپ موفق</option><option value="failed">بک‌آپ ناموفق</option><option value="download">دریافت فایل</option></select></label>
+      <label>نوع رویداد<select value={action} onChange={event => { setAction(event.target.value); setPage(1); }}><option value="">همه رویدادها</option><option value="create">بک‌آپ موفق</option><option value="failed">بک‌آپ ناموفق</option><option value="download">دریافت فایل</option><option value="delete">حذف فایل</option></select></label>
     </div>
     {loading ? <div className="backup-empty" role="status"><Loader2 className="backup-spin" size={24} />در حال بارگذاری…</div>
       : error ? <div className="backup-message error" role="alert">{error}<button onClick={() => setRetry(value => value + 1)}>تلاش دوباره</button></div>
       : !result.items.length ? <div className="backup-empty"><History size={30} /><p>رویدادی برای این انتخاب پیدا نشد.</p></div>
       : <div className="backup-history">{result.items.map(item => <article key={item.id} className="backup-record">
         <div className="backup-record-info">
-          <div className="backup-event-title"><h3>{item.deviceName}<span dir="ltr">{item.vendor}</span></h3><span className={"backup-event-status " + item.action}>{item.action === "create" ? "بک‌آپ موفق" : item.action === "failed" ? "ناموفق" : "فایل دریافت شد"}</span></div>
+          <div className="backup-event-title"><h3>{item.deviceName}<span dir="ltr">{item.vendor}</span></h3><span className={"backup-event-status " + item.action}>{item.action === "create" ? "بک‌آپ موفق" : item.action === "failed" ? "ناموفق" : item.action === "delete" ? "فایل حذف شد" : "فایل دریافت شد"}</span></div>
           <p>{item.companyName || "شرکت ثبت نشده"} <bdi>· {item.host}</bdi></p>
           <div className="backup-audit-meta"><span>کاربر: <strong>{item.actorName || item.actor || "ثبت نشده"}</strong>{item.actorName !== item.actor && item.actor && <bdi> (@{item.actor})</bdi>}</span><time dateTime={item.createdAt}>{backupTime(item.createdAt)} · تهران</time></div>
           {item.action === "failed" ? <div className="backup-failure-reason">{explain(item.code || "BACKUP_COLLECTION_FAILED")}</div> : item.filename && <p dir="ltr" className="backup-artifact-name">{item.filename}</p>}
-          {item.durationMs > 0 && item.action !== "download" && <small className="backup-duration">مدت دریافت: {(item.durationMs / 1000).toLocaleString("fa-IR", { maximumFractionDigits: 1 })} ثانیه</small>}
+          {item.durationMs > 0 && (item.action === "create" || item.action === "failed") && <small className="backup-duration">مدت دریافت: {(item.durationMs / 1000).toLocaleString("fa-IR", { maximumFractionDigits: 1 })} ثانیه</small>}
+          {item.action === "create" && !item.backupId && <small className="backup-duration">این فایل دیگر موجود نیست.</small>}
         </div>
         {item.action === "create" && item.backupId && item.filename && <button className="backup-download" disabled={Boolean(downloading)} onClick={() => void onDownload({ id: item.backupId!, filename: item.filename })} aria-label={"دریافت بک‌آپ " + item.deviceName}>{downloading === item.backupId ? <Loader2 className="backup-spin" size={18} /> : <Download size={18} />}دریافت فایل</button>}
+        {user?.role === "admin" && <button className="backup-delete-button backup-history-delete" disabled={deleting || loading} onClick={() => confirmDelete([item.id])} aria-label={"حذف سابقه " + item.deviceName}><Trash2 size={18} />حذف سابقه</button>}
       </article>)}</div>}
     <nav className="backup-pagination" aria-label="صفحه‌های تاریخچه"><button disabled={loading || page <= 1} onClick={() => setPage(value => value - 1)}>قبلی</button><span>صفحه {page.toLocaleString("fa-IR")} از {totalPages.toLocaleString("fa-IR")}</span><button disabled={loading || page >= totalPages} onClick={() => setPage(value => value + 1)}>بعدی</button></nav>
+    <BackupDeleteDialog open={Boolean(pendingDelete)} busy={deleting} title="حذف تاریخچه؟" description={pendingDelete ? `${pendingDelete.count.toLocaleString("fa-IR")} سابقه مطابق فیلتر فعلی حذف می‌شود. فایل‌های بک‌آپ باقی می‌مانند. حذف سابقه قابل بازگردانی نیست.` : ""} onCancel={() => setPendingDelete(null)} onConfirm={() => void removeHistory()} />
   </section>;
 }

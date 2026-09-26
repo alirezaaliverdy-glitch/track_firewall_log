@@ -1,3 +1,10 @@
+## 2026-09-26 - Add confirmed backup/history deletion and fix Linux sudo use
+
+- Diagnosed sudo on116 using only sanitized results: sudo -n id -u succeeded, while the stored sudo option was false. Added backup-only permission fallback; actual Linux backup and hash verification succeeded. Committed independently as6d2b769; server policies and general action privileges were not changed.
+- Added admin-only individual/filtered history deletion and independent permanent file deletion. Backend ownership checks, confirmation tokens, timestamp cutoff, mutation authorization and audit records are enforced. History deletion preserves backups; file deletion preserves history.
+- Added isolated permission, ownership, confirmation, concurrent-entry cutoff and separation tests. Live delete smoke removes only its generated synthetic fixture IDs; existing user history/files are preserved. Native dialogs cancel correctly and use the application font.
+- Rebuilt and applied local API/web. No secrets or generated screenshots are committed; no global Docker cleanup or database volume removal was performed.
+
 ## 2026-09-26 - Diagnose 116 and improve vendor backup history
 
 - Connectivity correction is independently committed: e510e88. Live SSH service on 22022 answered, but stored credentials failed authentication; error is no longer falsely escalated to offline. No vendor credentials, ports or firewall policies were changed.

@@ -54,6 +54,7 @@ test("safe filenames and metadata never expose ciphertext", () => {
   assert.match(backupFilename('../../sw1"\r\n', "cfg"), /^[a-zA-Z0-9_.-]+$/);
   assert.ok(!("encrypted" in backupMetadata({ encrypted: "secret", filename: "a.cfg" })));
 });
+
 class Channel extends EventEmitter {
   stderr = new EventEmitter();
   writes: Buffer[] = [];
@@ -210,6 +211,7 @@ test("backup activity is paginated, owner scoped and excludes private output", a
       metadata: { actorName: "Administrator", code: "SSH_AUTH_FAILED", encrypted: "never expose", password: "never expose" } }];
   });
   replace(t, prisma, "$transaction", async (queries: any[]) => Promise.all(queries));
+  replace(t, prisma.deviceSnapshot, "findMany", async () => []);
   await backupRoutes(app);
   const response = await app.inject("/api/backups/activity?page=2&action=failed&search=116");
   assert.equal(response.statusCode, 200);
