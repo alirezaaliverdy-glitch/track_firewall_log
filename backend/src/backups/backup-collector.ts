@@ -60,6 +60,16 @@ export function backupSshTarget(device: Device, channels: DeviceConnectionChanne
   }
   return device;
 }
+export async function collectLinuxBackup(client: Client, sudo: boolean, read = readBackupCommand) {
+  const command = "tar -czf - -C / etc";
+  if (sudo) return read(client, "sudo -n " + command);
+  try { return await read(client, command); }
+  catch (error) {
+    // Backup-specific, fixed read-only elevation; do not enable sudo for unrelated actions.
+    if (!(error instanceof BackupError) || error.code !== "BACKUP_PERMISSION_DENIED") throw error;
+    return read(client, "sudo -n " + command);
+  }
+}
 export async function collectDeviceBackup(device: Device) {
   const profile = backupProfile(device.vendor, device.type);
   const channels = await prisma.deviceConnectionChannel.findMany({ where: { deviceId: device.id }, orderBy: { priority: "asc" } });
@@ -75,7 +85,7 @@ export async function collectDeviceBackup(device: Device) {
     password: credential.password, privateKey: credential.privateKey, passphrase: credential.passphrase,
     tryKeyboard: Boolean(credential.password), readyTimeout: env.sshHandshakeTimeoutMs
   }, async (client) => {
-    if (profile.key === "linux") return readBackupCommand(client, `${credential.sudo ? "sudo -n " : ""}tar -czf - -C / etc`);
+    if (profile.key === "linux") return collectLinuxBackup(client, credential.sudo);
     if (profile.key === "pfsense") return readBackupCommand(client, "cat /conf/config.xml");
     if (profile.key === "fortigate") return readFortigateConfig(client);
     if (profile.key !== "mikrotik") throw new BackupError("BACKUP_VENDOR_UNSUPPORTED");
