@@ -33,6 +33,8 @@ function identity(config: ConnectConfig) {
     .update(String(config.password ?? ""))
     .update(String(config.privateKey ?? ""))
     .update(String(config.passphrase ?? ""))
+    .update(JSON.stringify(config.algorithms ?? null))
+    .update(String(config.tryKeyboard ?? false))
     .digest("hex");
   return [config.host, config.port ?? 22, config.username, secret].join(":");
 }
@@ -121,6 +123,11 @@ async function ensure(entry: Entry, config: ConnectConfig): Promise<SharedSshRes
       entry.lastError = null;
       finish({ reachable: true, code: "SSH_SESSION_AUTHENTICATED", message: "Authenticated SSH session established.", latencyMs: Date.now() - started });
     });
+    if (config.tryKeyboard && config.password) {
+      client.on("keyboard-interactive", (_name, _instructions, _language, prompts, respond) => {
+        respond(prompts.map(() => String(config.password)));
+      });
+    }
     client.on("error", (error) => {
       const result = failure(error, Date.now() - started);
       drop(entry, client, result);
