@@ -1,0 +1,47 @@
+.backup-page{max-width:1280px;margin:auto;padding:24px;display:grid;gap:24px;color:#dce6ed;font-size:1rem;line-height:1.7;min-width:0}
+.backup-heading{display:flex;align-items:center;gap:16px}
+.backup-page h1{font-size:clamp(1.6rem,3vw,2rem);margin:0;font-weight:750}
+.backup-page h2{font-size:1.2rem;margin:0 0 20px}
+.backup-page h3{font-size:1.05rem;margin:0}
+.backup-heading p{color:#93a7b6;margin:3px 0 0}
+.backup-icon,.backup-file-icon{display:grid;place-items:center;flex:none;border:1px solid #294351;border-radius:16px;background:#102430;color:#9bbcca;width:58px;height:58px}
+.backup-panel{border:1px solid #233b4a;background:rgba(8,21,31,.94);border-radius:22px;padding:24px;min-width:0}
+.backup-fields{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.backup-fields label{display:grid;gap:8px;color:#a5b7c4;font-size:.95rem;min-width:0}
+.backup-device-field{grid-column:1/-1}
+.backup-page select,.backup-page input{width:100%;min-width:0;min-height:50px;background:#0a1924;color:#e1e9ee;border:1px solid #304753;border-radius:12px;padding:10px 14px;font:inherit;box-sizing:border-box}
+.backup-search{position:relative;display:flex;align-items:center}
+.backup-search svg{position:absolute;right:14px}
+.backup-search input{padding-right:42px}
+.backup-scope{margin-top:20px;border:1px solid #314653;border-radius:14px;background:#10202b;padding:18px}
+.backup-scope>div{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.backup-scope p{color:#b6c3cb;margin:8px 0}
+.backup-scope small{font-size:.87rem;color:#a7b1ba}
+.backup-scope a{display:block;margin-top:12px;font-size:.9rem;color:#b6cfdf;text-decoration:underline;text-underline-offset:4px}
+.backup-format{font-size:.85rem;background:#1e3340;border-radius:8px;padding:3px 10px}
+.backup-create-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:24px;flex-wrap:wrap}
+.backup-create-footer>span{display:flex;align-items:center;gap:8px;color:#94aab7;font-size:.87rem}
+.backup-page button{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:46px;border-radius:12px;padding:10px 18px;font:inherit;font-weight:650;border:1px solid #3a5261;cursor:pointer;background:#152b39;color:#d8e6ee}
+.backup-page .backup-primary{background:#31566a;border-color:#4b6c7e;color:#fff}
+.backup-page button:disabled{opacity:.5;cursor:not-allowed}
+.backup-page :is(button,input,select,summary):focus-visible{outline:2px solid #92c4de;outline-offset:3px}
+.backup-history-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.backup-history-heading>span{color:#93a7b6}
+.backup-history{display:grid;gap:12px}
+.backup-record{display:flex;align-items:flex-start;gap:16px;padding:18px;border:1px solid #273c49;border-radius:16px;background:#0d1d28;min-width:0}
+.backup-record-info{flex:1;min-width:0}
+.backup-record h3{display:flex;gap:12px;flex-wrap:wrap;overflow-wrap:anywhere}
+.backup-record h3 span{font-weight:400;color:#9fb1bd;font-size:.86rem}
+.backup-record p{margin:4px 0;color:#a4b6c2;font-size:.9rem}
+.backup-record-meta{display:flex;gap:6px 18px;flex-wrap:wrap;color:#91a4b2;font-size:.84rem}
+.backup-record details{font-size:.84rem;color:#9ab0bf;margin-top:8px}
+.backup-record summary{cursor:pointer}
+.backup-record code{display:block;overflow-wrap:anywhere;white-space:normal;font-size:.77rem;margin-top:8px;color:#a9bdca}
+.backup-empty{display:grid;justify-items:center;padding:32px 10px;color:#90a5b4;text-align:center}
+.backup-message{padding:14px 18px;border-radius:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.backup-message.error{border:1px solid #764e54;background:#261b24;color:#f1b4bd}
+.backup-message.success{border:1px solid #3d6057;background:#152a25;color:#bbdcd0}
+.backup-spin{animation:backup-rotate 1s linear infinite}
+@keyframes backup-rotate{to{transform:rotate(360deg)}}
+@media(max-width:640px){.backup-page{padding:16px 12px;gap:18px}.backup-panel{padding:18px 14px}.backup-fields{grid-template-columns:1fr}.backup-create-footer{align-items:stretch;flex-direction:column}.backup-record{flex-wrap:wrap;gap:12px}.backup-file-icon{width:42px;height:42px;border-radius:12px}.backup-download{width:100%}.backup-record-info{flex-basis:calc(100% - 54px)}}
+@media(prefers-reduced-motion:reduce){.backup-spin{animation:none}}

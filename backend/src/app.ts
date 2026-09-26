@@ -39,6 +39,7 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { scheduledTaskRoutes } from "./routes/scheduled-tasks.js";
 import { companyRoutes } from "./routes/companies.js";
 import { reportRoutes } from "./routes/reports.js";
+import { backupRoutes } from "./routes/backups.js";
 import { COMMAND_CATALOG } from "./commands/catalog/index.js";
 import { validateCommandCatalog } from "./commands/catalog/command-catalog-validator.js";
 import { stopAllLinuxLogStreams } from "./telemetry/linux/linux-log-stream.service.js";
@@ -110,6 +111,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(adminUserRoutes);
   await app.register(companyRoutes);
   await app.register(reportRoutes);
+  await app.register(backupRoutes);
   await app.register(healthRoutes);
   await app.register(dashboardRoutes);
   await app.register(actionRoutes);

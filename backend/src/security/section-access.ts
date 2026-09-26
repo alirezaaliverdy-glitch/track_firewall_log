@@ -15,7 +15,7 @@ const SECTION_PATHS: Array<{ section: ApplicationSection; patterns: RegExp[] }> 
   { section: "monitoring", patterns: [/^\/api\/devices\/[^/]+\/telemetry(?:\/|$)/] },
   { section: "security", patterns: [/^\/api\/devices\/[^/]+\/findings(?:\/|$)/] },
   { section: "dashboard", patterns: [/^\/api\/dashboard(?:\/|$)/] },
-  { section: "assets", patterns: [/^\/api\/(?:assets|devices|device-onboarding|device-workspaces|vendors|credentials|collectors|sites|vlans|prefixes|reports)(?:\/|$)/, /^\/api\/integrations\/netbox(?:\/|$)/] },
+  { section: "assets", patterns: [/^\/api\/(?:assets|devices|device-onboarding|device-workspaces|vendors|credentials|collectors|sites|vlans|prefixes|reports|backups)(?:\/|$)/, /^\/api\/integrations\/netbox(?:\/|$)/] },
   { section: "security", patterns: [/^\/api\/(?:security|findings|detection|detections|detection-rules|incidents|events|event-batches|assessments|recommendations|analysis|analysis-runs|uploads)(?:\/|$)/, /^\/api\/integrations\/wazuh(?:\/|$)/] },
   { section: "monitoring", patterns: [/^\/api\/(?:monitoring|daily-check|linux-health|telemetry)(?:\/|$)/] },
   { section: "actions", patterns: [/^\/api\/(?:actions|action-center|action-sessions|commands|connector-plans|connectors|diagnostics|scheduled-tasks)(?:\/|$)/] },

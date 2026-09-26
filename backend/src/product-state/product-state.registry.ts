@@ -9,6 +9,7 @@ function feature(input: Omit<ProductFeature, "lastVerifiedAt">): ProductFeature 
 }
 
 export const PRODUCT_FEATURES: ProductFeature[] = [
+  feature({ key: "backups.devices", titleFa: "بک‌آپ", titleEn: "Backups", route: "/backups", groupKey: "backups", order: 1, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Encrypted live configuration exports for Cisco, RouterOS, FortiGate, pfSense and Linux; unsupported vendors remain explicit. Not full disk backups." }),
   feature({ key: "dashboard.overview", titleFa: "داشبورد", titleEn: "Dashboard", route: "/dashboard", groupKey: "dashboard", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
 
   feature({ key: "assets.overview", titleFa: "نمای کلی", titleEn: "Overview", route: "/assets", groupKey: "assets", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
@@ -78,6 +79,7 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
 ];
 
 const NAVIGATION_GROUPS = [
+  { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", mobilePrimary: false },
   { key: "dashboard", titleFa: "داشبورد", titleEn: "Dashboard", iconKey: "dashboard", mobilePrimary: true },
   { key: "assets", titleFa: "دارایی‌ها", titleEn: "Assets", iconKey: "assets", mobilePrimary: true },
   { key: "security", titleFa: "امنیت", titleEn: "Security", iconKey: "security", mobilePrimary: true },
@@ -113,7 +115,7 @@ export function validateProductState(features: ProductFeature[] = PRODUCT_FEATUR
 
 export function getProductNavigation(allowedGroups?: readonly string[]): ProductNavigationGroup[] {
   validateProductState();
-  const allowed = allowedGroups ? new Set([...allowedGroups, ...(allowedGroups.includes("assets") ? ["reports"] : []), "settings"]) : null;
+  const allowed = allowedGroups ? new Set([...allowedGroups, ...(allowedGroups.includes("assets") ? ["reports", "backups"] : []), "settings"]) : null;
   return NAVIGATION_GROUPS.flatMap((group) => {
     if (allowed && !allowed.has(group.key === "tools" ? "actions" : group.key)) return [];
     const features = PRODUCT_FEATURES.filter((item) => item.groupKey === group.key && item.navigationVisible).sort((a, b) => a.order - b.order);

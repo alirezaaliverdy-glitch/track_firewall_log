@@ -1,3 +1,11 @@
+## 2026-09-26 - Vendor configuration backups
+
+- Added the /backups tab with company/device selection, clear vendor-specific backup scope, encrypted history and authenticated file downloads. The interface uses the application font and restrained colors, and is verified at 390px mobile and 1440px desktop widths without horizontal overflow.
+- Implemented Cisco running-config, RouterOS 6/7 rsc exports, native FortiGate SCP sys_config, pfSense config.xml and Linux /etc tar.gz collection. Unsupported vendors are explicit; these are not full disk backups and automatic restore is not implemented.
+- Files are encrypted in existing DeviceSnapshot storage, scoped to owned companies, guarded by devices.manage on every route, bounded in size/concurrency and verified with SHA-256 on download. Successful creation, downloads and failed attempts are audited without secret content.
+- Live Cisco and MikroTik backups/downloads succeeded (4,492 and 32,443 bytes). Both Linux devices currently time out during SSH handshake; no Linux backup is falsely reported as successful. FortiGate and pfSense have transport/unit coverage but no registered live devices to verify.
+- API/web production compilation and local deployment succeeded; local Compose and production manifest syntax were checked (production with temporary dummy values only). Production requires immutable image tags and real secure environment values. See DEVICE_BACKUPS.md for scopes, prerequisites and verification scripts.
+
 ## 2026-09-26 - Shared vendor connection lifecycle
 
 - Replaced sensor-only SSH pooling with a bounded shared SSH transport for the sensor and Linux, MikroTik, FortiGate, and pfSense connectors/collectors. Normal cycles reuse an authenticated session instead of opening one SSH socket per collector or action.

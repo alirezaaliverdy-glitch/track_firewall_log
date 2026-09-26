@@ -31,6 +31,7 @@ const AttackersPage = lazy(() => import("@/features/attackers/pages/AttackersPag
 const ToolsPage = lazy(() => import("@/features/tools/pages/ToolsPage"));
 const NetworkLabPage = lazy(() => import("@/features/tools/pages/NetworkLabPage"));
 const ReportsPage = lazy(() => import("@/features/reports/pages/ReportsPage"));
+const BackupsPage = lazy(() => import("@/features/backups/pages/BackupsPage"));
 const MonitoringPage = lazy(() => import("@/features/monitoring/pages/MonitoringPage"));
 const LinuxMonitoringPage = lazy(() => import("@/features/monitoring/pages/LinuxMonitoringPage"));
 const CiscoOverviewPage = lazy(() => import("@/features/vendors/cisco/pages/CiscoOverviewPage"));
@@ -41,6 +42,7 @@ const LocalMobileRuntimePage = lazy(() => import("@/features/mobile-local/pages/
 const planned = (title: string, description?: string): ComponentType<RouteComponentProps> => () => <PlannedState title={title} description={description} />;
 
 export const appRoutes: AppRoute[] = [
+  { path: "/backups", featureKey: "backups.devices", labelFa: "بک‌آپ", labelEn: "Backups", group: "backups", component: BackupsPage },
   { path: "/dashboard", featureKey: "dashboard.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "dashboard", component: DashboardPage },
   { path: "/assets", featureKey: "assets.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage },
   { path: "/assets/devices", featureKey: "assets.devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage },

@@ -51,6 +51,10 @@ android/signing.properties
 .playwright-mcp/
 .playwright-mcp_*.png
 backups/
+!backend/src/backups/
+!backend/src/backups/**
+!src/features/backups/
+!src/features/backups/**
 LOCAL_MOBILE_APP_CODEX_BUNDLE/
 
 # Local diagnostics, exports, backups, and environment-specific operator helpers

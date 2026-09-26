@@ -1,3 +1,11 @@
+## 2026-09-26 - Add vendor-aware backups tab
+
+- Built company/device selection, a vendor-specific scope preview and downloadable history with user, Tehran time, size and SHA-256. Files are encrypted at rest and owned-company access is enforced for creation, listing and download.
+- Added fixed-command Cisco/RouterOS/Linux/pfSense collectors and bounded native FortiGate SCP download; no raw user commands or incomplete files are accepted. Unsupported vendors remain visible as unsupported, not fake backups.
+- Read official Cisco, MikroTik, Fortinet and Netgate documentation before selecting backup formats. FortiGate uses native sys_config rather than non-restorable show output. Runtime backup behavior and dependencies are documented in DEVICE_BACKUPS.md.
+- Real Cisco and MikroTik collection and download integrity checks passed. Linux 115/116 returned SSH_HANDSHAKE_TIMEOUT, now shown explicitly. Chromium mobile/desktop layout checks passed. Rebuilt and applied local API/web images without deleting database volumes.
+- Added isolated tests for formats, binary transfers, truncation, scope, permissions, encryption, integrity, failure auditing and concurrency. Updated the route-registry consistency test to compare real backend/frontend registries rather than a stale hardcoded route count.
+
 ## 2026-09-26 - Optimize vendor connection reuse
 
 - Unified recurring SSH sensor, collection, and management traffic onto shared per-endpoint sessions for Linux, MikroTik, FortiGate, and pfSense, with bounded concurrency and reconnect behavior.
