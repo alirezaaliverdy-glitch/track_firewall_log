@@ -87,8 +87,10 @@ function failedProbe(startedAt: number, mode: ProbeResult["mode"], code: string,
   };
 }
 
-export function deriveConnectivityStatus(reachable: boolean, consecutiveFailures: number, offlineThreshold: number): DeviceStatus {
+export function deriveConnectivityStatus(reachable: boolean, consecutiveFailures: number, offlineThreshold: number, code = ""): DeviceStatus {
   if (reachable) return DeviceStatus.online;
+  // A rejected login proves that the SSH service answered, not that it is offline.
+  if (code === "SSH_AUTH_FAILED") return DeviceStatus.error;
   return consecutiveFailures >= Math.max(1, offlineThreshold) ? DeviceStatus.offline : DeviceStatus.error;
 }
 
@@ -200,7 +202,7 @@ export async function probeDeviceConnectivity(device: SensorDevice): Promise<Pro
   if (method === "agent" || method === "syslog") return passiveProbe(device.id, method);
   const mode = probeMode(device.protocol, method, port);
   if (mode === "ssh_banner") {
-    const session = await probeSshMonitorSession(device, host, port);
+    const session = await probeSshMonitorSession({ ...device, credentialId: management?.credentialId ?? device.credentialId }, host, port);
     if (session) return { ...session, status: session.reachable ? DeviceStatus.online : DeviceStatus.error, mode: "ssh_banner" };
     return sshBannerProbe(host, port, env.deviceConnectivityTimeoutMs);
   }
@@ -262,12 +264,12 @@ async function persistProbe(device: SensorDevice, originalResult: ProbeResult, n
   const result = graceActive
     ? { reachable: true, status: DeviceStatus.online, code: "RECENT_COLLECTION_VERIFIED", message: "A recent authenticated collection verified the device connection.", latencyMs: originalResult.latencyMs, mode: originalResult.mode }
     : originalResult;
-  const consecutiveFailures = result.reachable ? 0 : (previous?.consecutiveFailures ?? 0) + 1;
+  const consecutiveFailures = result.reachable || result.code === "SSH_AUTH_FAILED" ? 0 : (previous?.consecutiveFailures ?? 0) + 1;
   const nextStatus = result.status === DeviceStatus.unknown
     ? DeviceStatus.unknown
-    : deriveConnectivityStatus(result.reachable, consecutiveFailures, env.deviceConnectivityOfflineThreshold);
+    : deriveConnectivityStatus(result.reachable, consecutiveFailures, env.deviceConnectivityOfflineThreshold, result.code);
   const lastSuccessAt = result.reachable ? now : previous?.lastSuccessAt ?? null;
-  const transition = previous?.status !== nextStatus || device.status !== nextStatus;
+  const transition = previous?.status !== nextStatus || device.status !== nextStatus || previous?.code !== result.code;
   const heartbeatDue = !previous || now.getTime() - previous.persistedAt.getTime() >= env.deviceConnectivityHeartbeatSeconds * 1000;
   deviceStates.set(device.id, { consecutiveFailures, status: nextStatus, checkedAt: now, persistedAt: transition || heartbeatDue ? now : previous.persistedAt, lastSuccessAt, latencyMs: result.latencyMs, code: result.code });
   if (!transition && !heartbeatDue) return;

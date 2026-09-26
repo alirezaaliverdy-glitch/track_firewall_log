@@ -17,6 +17,14 @@ test("vendor probes verify the service layer instead of treating every open port
   assert.equal(probeMode(DeviceProtocol.api, "rest_api", 80), "tcp_connect");
 });
 
+test("rejected SSH authentication is reachable-but-degraded, never authenticated or offline", () => {
+  for (const failures of [1, 2, 100]) {
+    assert.equal(deriveConnectivityStatus(false, failures, 2, "SSH_AUTH_FAILED"), DeviceStatus.error);
+  }
+  assert.equal(deriveConnectivityStatus(false, 2, 2, "SSH_CONNECTION_REFUSED"), DeviceStatus.offline);
+  assert.equal(deriveConnectivityStatus(true, 100, 2, "SSH_SESSION_AUTHENTICATED"), DeviceStatus.online);
+});
+
 test("SSH probes use a throttled cadence so the sensor does not trigger server rate limits", () => {
   const interval = probeIntervalSeconds({ protocol: DeviceProtocol.ssh, connectionChannels: [] });
   assert.ok(interval >= 10);
