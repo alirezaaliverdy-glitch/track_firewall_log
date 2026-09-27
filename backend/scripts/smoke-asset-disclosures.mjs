@@ -34,9 +34,9 @@ try {
   await wait("Boolean(document.querySelector('.asset-overview-technical') && document.querySelector('.asset-cisco-expanded'))");
   for(const [width,height] of [[1440,1000],[390,844]]){
     await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<600});
-    await evaluate("(()=>{window.__assetRefs=['.asset-overview-technical','.asset-cisco-expanded'].map(s=>document.querySelector(s));window.__assetRefs.forEach(e=>{if(!e.open)e.querySelector('summary').click();});})()");
+    await evaluate("(()=>{window.__assetSelectors=['.asset-sensors-disclosure','.asset-cisco-expanded'];window.__assetRefs=window.__assetSelectors.map(s=>document.querySelector(s));window.__assetRefs.forEach(e=>{if(!e.open)e.querySelector('summary').click();});})()");
     const before=refreshes;await sleep(11000);
-    const preserved=await evaluate("window.__assetRefs.every(e=>e.isConnected && e===document.querySelector('.'+e.className.split(' ')[0]) && e.open)");
+    const preserved=await evaluate("window.__assetRefs.every((e,i)=>e.isConnected && e===document.querySelector(window.__assetSelectors[i]) && e.open)");
     if(!preserved||refreshes-before<2)throw new Error("Disclosures did not survive two real refreshes");
     console.log(JSON.stringify({stage:"disclosure-open",width,refreshes:refreshes-before,identityPreserved:preserved}));
     await evaluate("window.__assetRefs.forEach(e=>e.querySelector('summary').click())");

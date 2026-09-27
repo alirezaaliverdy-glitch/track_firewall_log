@@ -258,6 +258,10 @@ function queueRecoveryRefresh(device: SensorDevice, logger?: SensorLogger) {
   recoveryRefreshes.set(device.id, task);
 }
 
+export function isConnectivityTransition(previousStatus: DeviceStatus | undefined, storedStatus: DeviceStatus, nextStatus: DeviceStatus) {
+  return (previousStatus ?? storedStatus) !== nextStatus;
+}
+
 async function persistProbe(device: SensorDevice, originalResult: ProbeResult, now: Date, logger?: SensorLogger, refreshOnRecovery = true) {
   const previous = deviceStates.get(device.id);
   const graceActive = !originalResult.reachable && (verifiedUntil.get(device.id) ?? 0) > now.getTime();
@@ -269,10 +273,12 @@ async function persistProbe(device: SensorDevice, originalResult: ProbeResult, n
     ? DeviceStatus.unknown
     : deriveConnectivityStatus(result.reachable, consecutiveFailures, env.deviceConnectivityOfflineThreshold, result.code);
   const lastSuccessAt = result.reachable ? now : previous?.lastSuccessAt ?? null;
-  const transition = previous?.status !== nextStatus || device.status !== nextStatus || previous?.code !== result.code;
+  // A diagnostic code change or a stale cycle snapshot is not a connectivity transition.
+  const transition = isConnectivityTransition(previous?.status, device.status, nextStatus);
+  const diagnosticChanged = nextStatus !== DeviceStatus.online && previous?.code !== result.code;
   const heartbeatDue = !previous || now.getTime() - previous.persistedAt.getTime() >= env.deviceConnectivityHeartbeatSeconds * 1000;
-  deviceStates.set(device.id, { consecutiveFailures, status: nextStatus, checkedAt: now, persistedAt: transition || heartbeatDue ? now : previous.persistedAt, lastSuccessAt, latencyMs: result.latencyMs, code: result.code });
-  if (!transition && !heartbeatDue) return;
+  deviceStates.set(device.id, { consecutiveFailures, status: nextStatus, checkedAt: now, persistedAt: transition || diagnosticChanged || heartbeatDue ? now : previous!.persistedAt, lastSuccessAt, latencyMs: result.latencyMs, code: result.code });
+  if (!transition && !diagnosticChanged && !heartbeatDue) return;
 
   const management = device.connectionChannels.find((channel) => channel.role === "management");
   const channelStatus = nextStatus === DeviceStatus.online ? "verified" : nextStatus === DeviceStatus.offline ? "offline" : nextStatus === DeviceStatus.error ? "degraded" : "unknown";

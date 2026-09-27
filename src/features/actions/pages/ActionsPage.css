@@ -420,7 +420,8 @@
 .execution-review__close svg { width: 18px; height: 18px; }
 
 .execution-review__body {
-  display: grid;
+  display: block;
+  flex: 1 1 auto;
   min-height: 0;
   gap: 13px;
   overflow-y: auto;
@@ -428,6 +429,9 @@
   padding: 17px 22px;
   scrollbar-width: thin;
 }
+.execution-review__body > * + * { margin-top: 13px; }
+.execution-review__commands .command-review-list { max-height: 280px; overflow-y: auto; }
+.execution-review__commands .command-review-list code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.8; }
 
 .execution-review__summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
 .execution-review__summary article {

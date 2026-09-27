@@ -103,7 +103,7 @@ export function ExecutionReviewDialog({
             <div>{parameterEntries.map(([key, value]) => <label key={key}><span>{humanize(key)}</span><input value={value} disabled={busy || !item.controls.canEditParameters} onChange={(event) => onParameterChange(key, event.target.value)} /></label>)}</div>
           </section> : null}
 
-          <details className="execution-review__commands">
+          <details className="execution-review__commands" open>
             <summary><span><Terminal aria-hidden="true" />{isFa ? "فرمان‌های قابل اجرا" : "Commands to execute"}</span><b>{commands.length.toLocaleString(isFa ? "fa-IR" : "en-US")}</b></summary>
             {commands.length > 0 ? <ol className="command-review-list">{commands.map((command, index) => <li key={`${command}-${index}`}><code dir="ltr">{command}</code></li>)}</ol> : <p>{isFa ? "فرمانی در پیش‌نمایش ثبت نشده است؛ اجرا تا ساخت پیش‌نمایش معتبر امکان‌پذیر نیست." : "No command is present in the preview; execution requires a valid preview."}</p>}
           </details>

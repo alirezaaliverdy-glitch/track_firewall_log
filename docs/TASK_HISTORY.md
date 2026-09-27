@@ -1,3 +1,12 @@
+## 2026-09-27 - Clean asset overview/history and fix hidden command review
+
+- Corrected connectivity transition detection to stop rapid duplicate online audit events while keeping normal probing and heartbeat persistence.
+- Added readable filtered/paginated asset history; consecutive identical legacy connection records are grouped only in the UI, preserving all stored audit evidence.
+- Replaced index-based/invisible single-point charts with timestamp-aligned plots, visible markers, stepped availability and explicit units/measurement times. Independent resource queries prevent interface counters from starving CPU/RAM graphs; traffic averages and byte-counter deltas stay separate.
+- Reduced duplicated headings/KPIs, collapsed vendor inventory, grouped edit/delete controls and applied compact responsive muted styling. Native sensor and Cisco disclosures remain stable under live updates.
+- Fixed execution review grid compression; commands are initially visible and scrollable on desktop/mobile. No execution authorization or connector flow changes.
+- Backend/frontend production builds and 22 regressions passed; real deployed browser checks covered charts/history/command visibility and disclosure polling/recovery. Local API/web rebuilt; all four services healthy, HTTP health 200. No real device configuration changes or remote push.
+
 ## 2026-09-27 - Fix self-closing asset sensors and technical disclosures
 
 - Replaced nested React component identities with ordinary render helpers, retaining native details DOM/open state during live workspace updates. No polling interval, vendor sensor collection or connector behavior was changed.

@@ -1,0 +1,56 @@
+/* A quiet, compact overview: essential readings first, inventory on demand. */
+.asset-detail-page .page-header { padding: 18px 22px; border-radius: 18px; }
+.asset-detail-page .page-header h1 { font-size: 1.65rem; }
+.asset-header-menu { position: relative; }
+.asset-header-menu > summary { cursor: pointer; padding: 10px 14px; border: 1px solid var(--app-border); border-radius: 10px; font-size: .9rem; }
+.asset-header-menu > button { display: block; width: 100%; margin-top: 8px; }
+.asset-device-overview__identity > svg { width: 20px; height: 20px; color: #90a9b4; }
+.asset-device-overview__identity > strong { font-size: .9rem; color: #b4c7d0; }
+.asset-detail-page .workspace-tabs { position: static; padding: 8px; gap: 6px; overflow-x: auto; }
+.asset-detail-page .workspace-tabs a { flex-shrink: 0; padding: 10px 16px; font-size: .9rem; }
+.asset-detail-page .asset-device-overview { gap: 16px; }
+.asset-detail-page .asset-device-overview__hero { padding: 16px 20px; background: var(--app-panel, #0a1823); }
+.asset-detail-page .asset-device-overview__identity h2 { font-size: 1.2rem; }
+.asset-detail-page .asset-device-overview__identity small { display: none; }
+.asset-detail-page .asset-device-overview__identity > span { width: 40px; height: 40px; flex-basis: 40px; }
+.asset-detail-page .asset-device-overview__live { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.asset-detail-page .asset-overview-kpis article { padding: 13px 16px; }
+.asset-detail-page .asset-overview-main-grid > article { padding: 18px; }
+.asset-detail-page .asset-overview-trends { padding: 20px; border-radius: 18px; background: #0a1823; }
+.asset-detail-page .asset-overview-trends__grid { gap: 12px; }
+.asset-detail-page .workspace-chart, .asset-detail-page .asset-traffic-chart { display: flex; flex-direction: column; min-height: 0; padding: 16px; border-radius: 14px; background: #07131d; overflow: hidden; }
+.asset-detail-page .workspace-chart h3, .asset-detail-page .asset-traffic-chart h3 { font-size: .95rem; }
+.asset-detail-page .workspace-chart > div:first-child { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.asset-detail-page .workspace-chart > div:first-child > span { font-size: 1.15rem; font-weight: 700; }
+.asset-detail-page .asset-chart-plot { width: 100%; min-height: 100px; color: #8ca1ae; margin: 10px 0; }
+.asset-detail-page .asset-chart-plot svg { width: 100%; height: auto; display: block; aspect-ratio: 3; }
+.asset-detail-page .workspace-chart .asset-chart-plot svg { height: auto; max-height: none; }
+.asset-detail-page .workspace-chart p, .asset-detail-page .asset-traffic-chart time { margin-top: auto; padding-top: 10px; font-size: .78rem; color: #96a9b4; }
+.asset-detail-page .asset-vendor-overview { padding: 0; background: #0a1823; }
+.asset-detail-page .asset-vendor-overview > summary { padding: 18px 20px; font-size: .95rem; cursor: pointer; }
+.asset-detail-page .asset-vendor-overview[open] > :not(summary) { margin: 16px 20px; }
+.asset-detail-page .asset-vendor-overview > header small, .asset-detail-page .asset-vendor-overview > header p { display: none; }
+.asset-detail-page .asset-overview-technical, .asset-detail-page .asset-cisco-expanded { border-radius: 14px; background: #0a1823; }
+.asset-detail-page .asset-overview-actions { padding: 16px 20px; background: #0a1823; }
+.asset-detail-page .asset-overview-actions p { display: none; }
+.asset-detail-page .asset-history { padding: 22px; }
+.asset-history > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.asset-history > header small { color: #91a5b3; }
+.asset-history nav, .asset-history footer { display: flex; align-items: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.asset-history button { padding: 8px 16px; color: #c7d5de; border: 1px solid var(--app-border); border-radius: 10px; background: #0e202e; cursor: pointer; }
+.asset-history button[aria-pressed="true"] { border-color: #639ba3; background: #16303a; }
+.asset-history button:disabled { opacity: .4; cursor: default; }
+.asset-history ol { list-style: none; margin: 16px 0; padding: 0; }
+.asset-history li { display: flex; gap: 20px; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--app-border); padding: 16px 0; }
+.asset-history li > div { min-width: 0; display: grid; gap: 6px; }
+.asset-history li strong { font-size: .95rem; overflow-wrap: anywhere; }
+.asset-history li small, .asset-history li time, .asset-history__duplicates { color: #91a5b3; font-size: .8rem; line-height: 1.7; }
+.asset-history li time { flex-shrink: 0; }
+.asset-history footer { justify-content: center; }
+@media(max-width:900px) { .asset-detail-page .asset-overview-trends__grid { grid-template-columns: 1fr; } }
+@media(max-width:600px) {
+  .asset-detail-page .asset-overview-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .asset-detail-page .asset-overview-main-grid { grid-template-columns: 1fr; }
+  .asset-history > header, .asset-history li { flex-direction: column; gap: 8px; }
+  .asset-detail-page .asset-overview-trends, .asset-detail-page .asset-history { padding: 14px; }
+}

@@ -1,3 +1,12 @@
+## 2026-09-27 - Compact asset workspace, accurate charts and visible execution preview
+
+- Simplified asset overview/header, removed duplicate status summaries and moved vendor inventory into stable collapsible sections. Quiet responsive styling prioritizes status, trends and readable device facts.
+- Fixed invisible single-point charts. Traffic directions share timestamp/value axes; availability uses stepped states and percentage charts use a consistent scale. Invalid readings are rejected, recorded timestamps remain visible and missing samples are never fabricated.
+- Resource history is loaded independently per metric (240 samples each, bounded to 30 days); interface traffic is independently bounded to 8192 samples. Fresh CPU/RAM data can no longer be evicted by network counters. Traffic keeps one named interface and never mixes counter deltas with five-minute averages.
+- Connectivity audit now records actual state transitions, not healthy diagnostic-code changes or stale cycle snapshots. Heartbeats and realtime probe cadence are preserved. History has category filters, 12-row pagination and non-destructive grouping of consecutive legacy duplicate connection records; its UI refresh is 30 seconds rather than 5 seconds.
+- Execution preview commands start expanded, retain show/hide behavior and scroll correctly without compressed grid rows. Existing Preview -> Confirm -> PolicyGuard -> Connector -> Audit flow is unchanged.
+- Validation: 22 focused regressions passed; backend/frontend production builds deployed locally. Real Chromium tests at 1440/390px verified charts, bounded/filterable history, 12 commands in an existing preview, cancellation, sensor/Cisco disclosure identity across polling and transient failure/recovery. No vendor configuration writes were performed. All four Compose services healthy; API health HTTP 200.
+
 ## 2026-09-27 - Preserve asset disclosure state during live refresh
 
 - Fixed the actual remount cause: overview/sensor/chart render helpers were declared inside AssetDetailPage and rendered as newly recreated component types on every five-second refresh. Ordinary render helpers now preserve DOM identity and native details state across data updates for all vendors.

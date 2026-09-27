@@ -274,6 +274,18 @@ function optionalTables() {
   return optionalTablesPromise;
 }
 
+async function loadWorkspaceMetrics(deviceId: string) {
+  const timestamp = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+  const select = { metricKey: true, value: true, unit: true, timestamp: true, source: true, labelsJson: true } as const;
+  // Interface counters must not evict CPU/memory/disk readings from one global limit.
+  const keys = ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent", "swap.usage_percent", "cpu.load_1m", "sessions.count", "interfaces.up_count", "interfaces.down_count", "vpn.active_count", "services.failed_count", "ports.listening_count", "firewall.enabled"];
+  const groups = await Promise.all([
+    ...keys.map((metricKey) => prisma.metricSample.findMany({ where: { deviceId, metricKey, timestamp }, orderBy: { timestamp: "desc" }, take: 240, select })),
+    prisma.metricSample.findMany({ where: { deviceId, metricKey: { in: ["network.rx_bytes", "network.tx_bytes", "network.rx_mbps", "network.tx_mbps"] }, timestamp }, orderBy: { timestamp: "desc" }, take: 8192, select })
+  ]);
+  return groups.flat().sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+}
+
 export async function getDeviceWorkspace(reference: string) {
   const directDevice = await prisma.device.findUnique({ where: { id: reference } });
   const directAsset = directDevice
@@ -288,10 +300,10 @@ export async function getDeviceWorkspace(reference: string) {
   const [statusChecks, healthHistory, metricSamples, findings, actions, audit, capabilityCache, configBackup, collections, connectionChannels] = await Promise.all([
     deviceId ? prisma.deviceStatusCheck.findMany({ where: { deviceId }, orderBy: { checkedAt: "desc" }, take: 240 }) : [],
     tables.has("HealthSnapshot") ? prisma.healthSnapshot.findMany({ where: { OR: [{ ...(deviceId ? { deviceId } : { deviceId: "__none__" }) }, { ...(assetId ? { assetId } : { assetId: "__none__" }) }] }, orderBy: { collectedAt: "desc" }, take: 240 }) : [],
-    deviceId && tables.has("MetricSample") ? prisma.metricSample.findMany({ where: { deviceId }, orderBy: { timestamp: "desc" }, take: 500, select: { metricKey: true, value: true, unit: true, timestamp: true, source: true, labelsJson: true } }) : [],
+    deviceId && tables.has("MetricSample") ? loadWorkspaceMetrics(deviceId) : [],
     prisma.finding.findMany({ where: relatedRecords, orderBy: { lastSeen: "desc" }, take: 250 }),
     prisma.actionPlan.findMany({ where: relatedRecords, orderBy: { updatedAt: "desc" }, take: 100, select: { id: true, actionType: true, status: true, riskLevel: true, createdAt: true, updatedAt: true } }),
-    deviceId ? prisma.auditLog.findMany({ where: { deviceId }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, action: true, dryRun: true, approvalStatus: true, createdAt: true } }) : [],
+    deviceId ? prisma.auditLog.findMany({ where: { deviceId }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, actor: true, action: true, dryRun: true, approvalStatus: true, createdAt: true } }) : [],
     deviceId && tables.has("DeviceCapabilityCache") ? prisma.deviceCapabilityCache.findFirst({ where: { deviceId }, orderBy: { refreshedAt: "desc" } }) : null,
     deviceId && tables.has("DeviceSnapshot") ? prisma.deviceSnapshot.findFirst({ where: { deviceId, snapshotType: { contains: "config", mode: "insensitive" } }, orderBy: { collectedAt: "desc" }, select: { collectedAt: true, snapshotType: true } }) : null,
     tables.has("CollectionRun") ? prisma.collectionRun.findMany({ where: relatedRecords, orderBy: { startedAt: "desc" }, take: 100, select: { id: true, provider: true, status: true, startedAt: true, completedAt: true, durationMs: true, errorCode: true } }) : [],
