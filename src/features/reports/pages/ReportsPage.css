@@ -20,3 +20,11 @@
 .history-row__date strong{font-size:15px}
 .history-row__metrics span,.history-row__metrics b{font-size:13px}
 .report-delete-dialog__notice{font-size:14px}
+/* Clear report findings and editable remediation, using the application's font. */
+.report-followups{border:1px solid #29404f;border-radius:18px;background:#091722;padding:22px;display:grid;gap:14px}
+.report-followups h2{font-size:20px;margin:0}.report-followups p{font-size:16px;line-height:1.9;margin:5px 0;color:#b9cad5}
+.report-followups>article{border:1px solid #2b4151;border-radius:12px;padding:16px}.report-followups article header{display:flex;gap:12px;justify-content:space-between;font-size:17px}.report-followups article header span{color:#c9b99a;font-size:14px}
+.report-followups nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.report-followups nav a{font-size:14px;border:1px solid #314c60;padding:7px 11px;border-radius:8px;color:#accddd}.report-followups__action{color:#d5dfe6!important}
+.report-paper{font-size:16px}.equipment-editor label{font-size:15px}.equipment-editor input,.equipment-editor select,.equipment-editor textarea{font-size:16px}
+.equipment-editor__assessment{display:grid;gap:10px;margin:12px 0}.equipment-editor__assessment label{display:grid;gap:6px}.equipment-editor__assessment textarea{width:100%;min-height:85px;border:1px solid #bdcddb;border-radius:8px;background:white;color:#243c55;padding:10px;font-family:inherit;line-height:1.8;resize:vertical}.equipment-editor__assessment a{color:#315b7b;font-size:15px}.equipment-editor__assessment details{font-size:14px;background:#eff4f8;border-radius:7px;padding:10px}.equipment-editor__assessment details p{overflow-wrap:anywhere;margin:5px 0;color:#4e6074}
+@media(max-width:600px){.report-followups{padding:14px}.report-followups article header{flex-direction:column}.report-followups nav{display:grid}.equipment-editor__assessment textarea{min-height:100px}}

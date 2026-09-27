@@ -1,3 +1,12 @@
+## 2026-09-27 - Readable company reports and actionable asset status
+
+- Replaced the cramped export with a restrained two-page A4 managerial report, full-width equipment cards, 14px body text and embedded application font. Dual dates, second-accurate Tehran time, live/stored source and per-device measurement times remain visible.
+- Explained limited status as requiring review, distinct from disconnected management channels or missing permissions. Added Persian causes, scoped next steps, editable assessment and links to asset details/connection/action preview; stale inventory and failed collections cannot silently become verified online.
+- Corrected generic-firewall Cisco classification to switch/router by vendor role, and replaced unrelated audit noise with successful actually executed operations. Unknown metrics remain missing, not zero; summary counts are recomputed after editing.
+- PDF/HTML deliberately prioritize up to four assets and two follow-ups to remain two readable pages; omitted asset/vendor counts are explicit. Excel contains every asset with cause, remedy, source, CPU/disk and technical details in two readable RTL sheets. Legacy historical scores are not rewritten.
+- Verification: 15 report/history/authorization tests passed; real Chromium at 1440/390px verified readable editable causes, follow-up links and dismissal. Real and 30-asset stress exports passed two-page overflow checks. Actual Linux 116 is online with recent security warnings, not a sudo or connection failure; the report explains review of login-event timing/source without claiming confirmed intrusion.
+- Backend and frontend production builds deployed through standard local rebuild scripts; no vendor configuration writes, restore, alert email or remote push performed. FortiGate has no live target available for acceptance.
+
 ## 2026-09-27 - Universal Highcharts asset monitoring panels
 
 - Added locally bundled Highcharts 13.1.1 Core with accessibility, timestamp axes, Tehran/Persian formatting, quiet responsive cards, tooltips and horizontal zoom. Every asset overview has four fixed panels: interface RX/TX Mbps, CPU percentage, device availability and measured successful management-channel check duration (not ICMP RTT).

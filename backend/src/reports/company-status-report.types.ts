@@ -8,6 +8,8 @@ export type CompanyStatusEquipment = {
   vendorFields: Array<{ label: string; value: string }>;
   cpuPercent: number | null; diskPercent: number | null;
   collectedAt: string | null; source: "live" | "snapshot" | "inventory";
+  statusReason?: string; recommendation?: string; technicalDetails?: string;
+  connectionState?: "online" | "offline" | "unknown";
 };
 
 export type CompanyStatusReport = {
