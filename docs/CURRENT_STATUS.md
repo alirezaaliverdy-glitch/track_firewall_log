@@ -1,3 +1,9 @@
+## 2026-09-27 - Form-style company report refinement
+
+- Restored the original report-form structure: compact bilingual header, dual dates/precise Tehran time, preparer, numeric summary, vendor statistics, and category-colored server/firewall/switch/router equipment cards. Healthy cards no longer repeat generic diagnostic prose; causes and next steps remain in the follow-up page.
+- Corrected the embedded IRANYekan data URL (invalid separator previously hid every Persian glyph in Chromium PDF); added font-loading and no-overflow checks to the real/30-asset renderer. Increased visible PDF typography and prioritized measured RAM, interface and session counts where their vendor connectors provide them. Unsupported metrics remain blank rather than invented.
+- Verified the local backend build, 15 report/history tests, live Linux/MikroTik/Cisco report collection, loaded Persian font and exactly two overflow-free A4 pages. The API container is healthy. FortiGate still has no live device available for acceptance. No configuration write or remote push was performed.
+
 ## 2026-09-27 - Readable company reports and actionable asset status
 
 - Replaced the cramped export with a restrained two-page A4 managerial report, full-width equipment cards, 14px body text and embedded application font. Dual dates, second-accurate Tehran time, live/stored source and per-device measurement times remain visible.

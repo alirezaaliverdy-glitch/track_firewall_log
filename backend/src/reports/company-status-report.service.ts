@@ -57,9 +57,9 @@ function normalizedVendorFields(device: DeviceData, live: Live) {
   const result: Array<{ label: string; value: string }> = [];
   const add = (label: string, value: unknown) => { if (value !== undefined && value !== null && String(value).trim()) result.push({ label, value: String(value).trim() }); };
   const c = live?.connector;
-  if (live?.linux) { add("سیستم‌عامل", live.linux.host.os); add("Kernel", live.linux.host.kernel); add("Uptime", live.linux.host.uptime); add("RAM", live.linux.memory.usedPercent === null ? null : `${live.linux.memory.usedPercent}%`); }
-  if (c?.fortigate) { add("FortiOS", c.fortigate.version); add("Serial", c.fortigate.serial); add("License", c.fortigate.licenseStatus); add("Session", c.fortigate.sessionCount); add("Policy", c.fortigate.policies.length); }
-  if (c?.mikrotik) { add("RouterOS", c.mikrotik.routerosVersion); add("Architecture", c.mikrotik.architecture); add("Uptime", c.mikrotik.uptime); add("CPU Load", c.mikrotik.cpuLoad); add("Interface", c.mikrotik.interfaces.length); }
+  if (live?.linux) { add("RAM", live.linux.memory.usedPercent === null ? null : `${live.linux.memory.usedPercent}%`); add("سیستم‌عامل", live.linux.host.os); add("Uptime", live.linux.host.uptime); add("Kernel", live.linux.host.kernel); }
+  if (c?.fortigate) { add("Session", c.fortigate.sessionCount); add("Policy", c.fortigate.policies.length); add("FortiOS", c.fortigate.version); add("License", c.fortigate.licenseStatus); add("Serial", c.fortigate.serial); }
+  if (c?.mikrotik) { add("اینترفیس", c.mikrotik.interfaces.length); add("RouterOS", c.mikrotik.routerosVersion); add("Uptime", c.mikrotik.uptime); add("CPU Load", c.mikrotik.cpuLoad); add("Architecture", c.mikrotik.architecture); }
   if (c?.sophos) { add("API Version", c.sophos.apiVersion); add("Interface", c.sophos.interfaces.length); add("Firewall Rule", c.sophos.firewallRules.length); add("VPN", c.sophos.vpnConnections.length); }
   if (device.vendor === "cisco") { add("سامانه", c?.os ?? device.asset?.platform?.name); }
   // Diagnostic codes and retry flags are not vendor inventory or useful managerial facts.

@@ -1,3 +1,7 @@
+## 2026-09-27 - Form-style company report refinement
+
+- Reworked PDF/HTML to match the original form, display concise measured vendor figures, retain editable assessment and full Excel detail, and fixed Persian font rendering in Chromium. Rebuilt local API and checked real plus stress PDFs without overflow.
+
 ## 2026-09-27 - Readable company reports and actionable asset status
 
 - Replaced the cramped export with a restrained two-page A4 managerial report, full-width equipment cards, 14px body text and embedded application font. Dual dates, second-accurate Tehran time, live/stored source and per-device measurement times remain visible.

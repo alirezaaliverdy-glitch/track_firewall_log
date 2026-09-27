@@ -20,10 +20,12 @@ try {
   await fs.writeFile("/tmp/company-report-new.xlsx",await renderCompanyReportXlsx(report));
   const browser=await puppeteer.launch({executablePath:process.env.CHROMIUM_PATH || "/usr/bin/chromium-browser",headless:true,args:["--no-sandbox","--disable-dev-shm-usage"]});
   try {
-    const page=await browser.newPage();await page.setViewport({width:1000,height:1200,deviceScaleFactor:1});
+    const page=await browser.newPage();page.on("console",message=>console.log(JSON.stringify({stage:"browser-console",type:message.type(),message:message.text().slice(0,500)})));await page.setViewport({width:1000,height:1200,deviceScaleFactor:1});
     for(const scenario of ["real","many-assets"]){
       const input=scenario==="real"?report:{...report,equipment:Array.from({length:30},(_,i)=>({...report.equipment[0],id:`fixture-${i}`,vendor:`Test vendor ${i}`,name:"تجهیز آزمایشی برای کنترل صفحه‌بندی",status:"limited",statusReason:"هشدار نیازمند بررسی در سنسورهای ثبت‌شده ".repeat(10),recommendation:"علت هشدار را در سنسورها بررسی و سپس جمع‌آوری تازه اجرا کنید. ".repeat(10)})),futureActions:Array(8).fill("بررسی سنسورها و رفع مشکل ".repeat(10)),completedActions:Array(8).fill("بررسی تأییدشده ".repeat(10)),additionalNotes:"یادداشت مسئول ".repeat(50)};
       await page.setContent(await renderCompanyReportHtml(input));await page.evaluate(()=>document.fonts.ready);
+      const fontState=await page.evaluate(()=>({ready:document.fonts.status,faces:[...document.fonts].map(face=>({family:face.family,status:face.status})),persian:document.fonts.check("14px IRANYekan","گزارش")}));
+      console.log(JSON.stringify({stage:"font",scenario,fontState}));assert.ok(fontState.persian && fontState.faces.some(face=>face.family==="IRANYekan" && face.status==="loaded"),"Application Persian font did not load");
       const layout=await page.evaluate(()=>[...document.querySelectorAll(".page")].map(e=>({height:e.clientHeight,scroll:e.scrollHeight,width:e.clientWidth,scrollWidth:e.scrollWidth,bodyFont:getComputedStyle(document.body).fontSize})));
       console.log(JSON.stringify({stage:"pdf-layout",scenario,layout}));assert.equal(layout.length,2);assert.ok(layout.every(e=>e.scroll<=e.height+1 && e.scrollWidth<=e.width+1),"Report overflow detected");
       if(scenario==="real"){const pages=await page.$$(".page");await pages[0].screenshot({path:"/tmp/company-report-page1.png"});await pages[1].screenshot({path:"/tmp/company-report-page2.png"});}
