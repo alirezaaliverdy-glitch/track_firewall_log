@@ -1,6 +1,6 @@
 import { API_BASE_URL } from "@/config/frontendEnv";
 
-export type ConnectionMethodKey = "ssh" | "rest_api" | "netconf" | "restconf" | "snmpv3" | "syslog" | "gnmi" | "agent" | "xml_api";
+export type ConnectionMethodKey = "ssh" | "rest_api" | "netconf" | "restconf" | "snmpv3" | "syslog" | "gnmi" | "agent" | "xml_api" | "soap_api";
 export type ConnectionPurpose = "control" | "inventory" | "telemetry" | "events";
 
 export type VendorConnectionMethod = {
@@ -21,7 +21,7 @@ export type VendorConnectionMethod = {
 };
 
 export type VendorConnectionProfile = {
-  vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
+  vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
   strategy: string;
   strategyFa: string;
   recommendedSecondary: ConnectionMethodKey;
@@ -35,5 +35,5 @@ export async function listConnectionProfiles() {
 }
 
 export function onboardingProtocol(method: VendorConnectionMethod): "ssh" | "api" {
-  return method.key === "rest_api" || method.key === "xml_api" ? "api" : "ssh";
+  return method.key === "rest_api" || method.key === "xml_api" || method.key === "soap_api" ? "api" : "ssh";
 }

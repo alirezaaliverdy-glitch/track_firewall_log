@@ -12,6 +12,8 @@ import { ciscoIosXePlanner } from "./vendors/cisco-ios-xe.planner.js";
 import { ciscoIosXeConnector } from "./cisco-ios-xe.connector.js";
 import { sophosApiConnector } from "./sophos-api.connector.js";
 import { sophosPlanner } from "./vendors/sophos.planner.js";
+import { esxiSoapConnector } from "./esxi-soap.connector.js";
+import { esxiPlanner } from "./vendors/esxi.planner.js";
 
 const planners: VendorPlanner[] = [
   fortigatePlanner,
@@ -19,6 +21,7 @@ const planners: VendorPlanner[] = [
   linuxEdgePlanner,
   ciscoIosXePlanner,
   sophosPlanner,
+  esxiPlanner,
   pfsensePlanner
 ];
 
@@ -28,7 +31,8 @@ const connectors: DeviceConnector[] = [
   mikrotikSshConnector,
   linuxSshConnector,
   ciscoIosXeConnector,
-  sophosApiConnector
+  sophosApiConnector,
+  esxiSoapConnector
 ];
 
 export function getVendorPlanners() {
@@ -86,6 +90,13 @@ export function getConnectorCapabilities(): ConnectorCapability[] {
       deviceTypes: [DeviceType.generic_firewall],
       protocols: [DeviceProtocol.api],
       supportedActions: sophosPlanner.supportedActions,
+      executionEnabled: true
+    },
+    {
+      vendor: "esxi",
+      deviceTypes: [DeviceType.esxi],
+      protocols: [DeviceProtocol.api],
+      supportedActions: esxiPlanner.supportedActions,
       executionEnabled: true
     },
     {

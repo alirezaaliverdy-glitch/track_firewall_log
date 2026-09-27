@@ -626,6 +626,7 @@
   "onboarding.vendor.fortigate": "فایروال FortiGate",
   "onboarding.vendor.mikrotik": "MikroTik RouterOS",
   "onboarding.vendor.sophos": "Sophos Firewall با اتصال XML API رسمی",
+  "onboarding.vendor.esxi": "هاست مستقل VMware ESXi با API رسمی",
   "onboarding.help.name": "نام واضح، جست‌وجو، هشدارها و سوابق ممیزی را قابل‌فهم‌تر می‌کند.",
   "onboarding.help.management": "یک IP مدیریتی یا نام میزبان DNS قابل‌دسترسی وارد کنید.",
   "onboarding.help.port": "پورت پیش‌فرض متناسب با وندور انتخاب شده است؛ فقط در صورت نیاز تغییرش دهید.",

@@ -18,11 +18,12 @@ const deviceVendor = (device: { type: string; vendor: string }) => {
   if (device.type === "linux_edge" || vendor.includes("linux")) return "linux";
   if (vendor.includes("cisco")) return "cisco";
   if (vendor.includes("sophos") || vendor.includes("sfos") || vendor.includes("cyberoam")) return "sophos";
+  if (device.type === "esxi" || vendor.includes("esxi") || vendor.includes("vmware")) return "esxi";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type;
 };
-const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : vendor === "sophos" ? "sophos-api" : null;
-const selectedDeviceSupportsConnector = (device: { protocol?: string | null }, connectorType: string | null) => connectorType?.endsWith("-ssh") ? device.protocol === "ssh" : Boolean(connectorType);
+const connectorTypeForVendor = (vendor: string) => vendor === "fortigate" ? "fortigate-ssh" : vendor === "mikrotik" ? "mikrotik-ssh" : vendor === "linux" ? "linux-ssh" : vendor === "cisco" ? "cisco-ios-xe-ssh" : vendor === "sophos" ? "sophos-api" : vendor === "esxi" ? "esxi-soap" : null;
+const selectedDeviceSupportsConnector = (device: { protocol?: string | null }, connectorType: string | null) => connectorType?.endsWith("-ssh") ? device.protocol === "ssh" : connectorType?.endsWith("-api") || connectorType?.endsWith("-soap") ? device.protocol === "api" : Boolean(connectorType);
 function invalidValue(type: string, value: unknown) {
   if (type === "ip") return typeof value !== "string" || net.isIP(value) === 0;
   if (type === "cidr") { if (typeof value !== "string") return true; const [address, prefix] = value.split("/"); const version = net.isIP(address); const max = version === 4 ? 32 : version === 6 ? 128 : -1; return prefix === undefined || !/^\d+$/.test(prefix) || Number(prefix) > max; }
@@ -42,7 +43,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     }
     const items = searchCatalog({ ...request.query, vendor, readOnly: bool(request.query.readOnly), executable: bool(request.query.executable), includePlanned: bool(request.query.includePlanned) }).filter((item) => {
       if (!device || item.implementationState === "manualOnly") return true;
-      return item.connectorType === "sophos-api" ? device.protocol === "api" : item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" || item.connectorType === "cisco-ios-xe-ssh" ? device.protocol === "ssh" : true;
+      return item.connectorType === "sophos-api" || item.connectorType === "esxi-soap" ? device.protocol === "api" : item.connectorType === "linux-ssh" || item.connectorType === "mikrotik-ssh" || item.connectorType === "fortigate-ssh" || item.connectorType === "cisco-ios-xe-ssh" ? device.protocol === "ssh" : true;
     });
     return { count: items.length, items };
   });

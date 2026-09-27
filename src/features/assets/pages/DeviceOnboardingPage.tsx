@@ -32,6 +32,7 @@ const platforms: Record<OnboardingDraft["vendor"], string> = {
   fortigate: "fortios",
   mikrotik: "routeros",
   sophos: "sophos-sfos"
+  ,esxi: "esxi-standalone"
 };
 
 const emptyCredential: CredentialInput = { name: "", type: "password", username: "", password: "", privateKey: "", passphrase: "", sudo: false };
@@ -48,12 +49,13 @@ const vendorChoices = [
   { key: "fortigate", title: "FortiGate", icon: Shield, tone: "rose", descriptionKey: "onboarding.vendor.fortigate" },
   { key: "mikrotik", title: "MikroTik", icon: Wifi, tone: "amber", descriptionKey: "onboarding.vendor.mikrotik" },
   { key: "sophos", title: "Sophos Firewall", icon: ShieldCheck, tone: "emerald", descriptionKey: "onboarding.vendor.sophos" },
+  { key: "esxi", title: "VMware ESXi", icon: Server, tone: "cyan", descriptionKey: "onboarding.vendor.esxi" },
 ] as const;
 
 function initialVendor(params: Record<string, string>) {
   const query = new URLSearchParams(window.location.search).get("vendor");
   const value = (params.vendorKey || query || "linux").toLowerCase();
-  return (["linux", "cisco", "fortigate", "mikrotik", "sophos"].includes(value) ? value : "linux") as OnboardingDraft["vendor"];
+  return (["linux", "cisco", "fortigate", "mikrotik", "sophos", "esxi"].includes(value) ? value : "linux") as OnboardingDraft["vendor"];
 }
 
 function statusText(session: OnboardingSession | null, t: TFunction) {
@@ -212,7 +214,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   const activeSession = session;
   const change = <K extends keyof OnboardingDraft>(key: K, value: OnboardingDraft[K]) => {
     setForm((current) => current ? { ...current, [key]: value } : current);
-    if (["companyId", "host", "managementPort", "credentialId", "enableCredentialId", "ciscoLegacyCompatibilityApproved"].includes(key)) {
+    if (["companyId", "host", "managementPort", "credentialId", "enableCredentialId", "ciscoLegacyCompatibilityApproved", "esxiCaCertificate"].includes(key)) {
       setSession((current) => current ? { ...current, status: "draft", test: null, detection: null, discovery: null, preview: null } : current);
       setMessage("");
     }
@@ -222,7 +224,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
     const profile = connectionProfiles.find((item) => item.vendor === vendor);
     const method = profile?.methods.find((item) => item.selectable && item.readiness === "ready" && item.recommended)
       ?? profile?.methods.find((item) => item.selectable && item.readiness === "ready");
-    const connectionMethod = method ? onboardingProtocol(method) : vendor === "sophos" ? "api" : "ssh";
+    const connectionMethod = method ? onboardingProtocol(method) : vendor === "sophos" || vendor === "esxi" ? "api" : "ssh";
     const managementPort = method?.defaultPort ?? (connectionMethod === "api" ? (vendor === "sophos" ? 4444 : 443) : 22);
     setForm({
       ...activeForm,
@@ -255,7 +257,13 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   async function ensureCredential() {
-    if (credentialMode === "existing") return { credentialId: activeForm.credentialId, enableCredentialId: activeForm.enableCredentialId ?? "" };
+    if (credentialMode === "existing") {
+      if (activeForm.vendor === "esxi" && credentials.find((item) => item.id === activeForm.credentialId)?.type !== "password")
+        throw new Error(isFa ? "برای ESXi یک اعتبارنامه نام کاربری و رمز عبور انتخاب کنید." : "ESXi requires a username/password credential.");
+      return { credentialId: activeForm.credentialId, enableCredentialId: activeForm.enableCredentialId ?? "" };
+    }
+    if (activeForm.vendor === "esxi" && (credentialForm.type !== "password" || !credentialForm.password?.trim()))
+      throw new Error(isFa ? "برای ESXi نام کاربری و رمز عبور لازم است." : "ESXi requires a username and password.");
     if (!credentialForm.name.trim() || !credentialForm.username.trim()) throw new Error(t("onboarding.errors.credentialFields"));
     const credentialName = nextAvailableCredentialName(credentialForm.name, credentials.map((item) => item.name));
     const created = await createCredential({ ...credentialForm, name: credentialName });
@@ -411,6 +419,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
             <header className="onboarding-stage__heading"><span><KeyRound size={21} /></span><div><small>{t("onboarding.stage.step", { current: 2, total: 3 })}</small><h2>{t("onboarding.step2.title")}</h2><p>{t("onboarding.step2.description")}</p></div></header>
             <div className="onboarding-credential-modes" role="tablist"><button type="button" aria-pressed={credentialMode === "existing"} onClick={() => setCredentialMode("existing")}><LockKeyhole size={18} /><span><strong>{t("onboarding.credentials.existing")}</strong><small>{t("onboarding.credentials.existingHelp")}</small></span></button><button type="button" aria-pressed={credentialMode === "new"} onClick={() => setCredentialMode("new")}><KeyRound size={18} /><span><strong>{t("onboarding.credentials.new")}</strong><small>{t("onboarding.credentials.newHelp")}</small></span></button></div>
             {credentialMode === "existing" ? <label className="onboarding-field onboarding-field--wide"><span>{t("onboarding.fields.credential")}<b>{t("onboarding.required")}</b></span><select value={activeForm.credentialId} onChange={(event) => change("credentialId", event.target.value)}><option value="">{t("onboarding.credentials.choose")}</option>{credentials.map((item) => <option key={item.id} value={item.id}>{item.name} — {item.username}</option>)}</select><small>{credentials.length ? t("onboarding.credentials.safeReference") : t("onboarding.credentials.empty")}</small></label> : <div className="onboarding-field-grid onboarding-new-credential"><label className="onboarding-field"><span>{t("onboarding.fields.credentialName")}</span><input value={credentialForm.name} onChange={(event) => setCredentialForm({ ...credentialForm, name: event.target.value })} /></label><label className="onboarding-field"><span>{t("onboarding.fields.username")}</span><input autoComplete="username" value={credentialForm.username} onChange={(event) => setCredentialForm({ ...credentialForm, username: event.target.value })} /></label><label className="onboarding-field"><span>{t("onboarding.fields.credentialType")}</span><select value={credentialForm.type} onChange={(event) => setCredentialForm({ ...credentialForm, type: event.target.value as CredentialInput["type"] })}><option value="password">{t("onboarding.fields.password")}</option><option value="private_key">{t("onboarding.fields.privateKey")}</option></select></label>{credentialForm.type === "password" ? <label className="onboarding-field"><span>{t("onboarding.fields.password")}</span><input type="password" autoComplete="new-password" value={credentialForm.password ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, password: event.target.value })} /></label> : <><label className="onboarding-field onboarding-field--wide"><span>{t("onboarding.fields.privateKey")}</span><textarea value={credentialForm.privateKey ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, privateKey: event.target.value })} /></label><label className="onboarding-field"><span>{t("onboarding.fields.passphrase")}</span><input type="password" autoComplete="new-password" value={credentialForm.passphrase ?? ""} onChange={(event) => setCredentialForm({ ...credentialForm, passphrase: event.target.value })} /></label></>} {activeForm.vendor === "cisco" ? <label className="onboarding-field"><span>{t("onboarding.fields.enableSecret")}</span><input type="password" autoComplete="new-password" value={enableSecret} onChange={(event) => setEnableSecret(event.target.value)} /></label> : null}</div>}
+            {activeForm.vendor === "esxi" ? <label className="onboarding-field onboarding-field--wide"><span>{isFa ? "گواهی CA یا هاست ESXi (PEM)" : "ESXi CA or host certificate (PEM)"}</span><textarea dir="ltr" rows={5} value={activeForm.esxiCaCertificate ?? ""} onChange={(event) => change("esxiCaCertificate", event.target.value)} placeholder="-----BEGIN CERTIFICATE-----" /><small>{isFa ? "اگر گواهی در trust store سرور برنامه نیست، گواهی معتبر را اینجا وارد کنید. تطبیق نام هاست و TLS همیشه اجباری است." : "Paste the trusted certificate when it is not in the application server trust store. Hostname and TLS verification remain mandatory."}</small></label> : null}
             <div className="onboarding-credential-manager-link"><span><KeyRound size={17} />{isFa ? "نیاز به تغییر یا حذف اعتبارنامه ذخیره‌شده دارید؟" : "Need to edit or delete a stored credential?"}</span><Link to="/settings?tab=credentials">{isFa ? "مدیریت اعتبارنامه‌ها" : "Manage credentials"}</Link></div>
             {activeForm.vendor === "cisco" ? <section className={`onboarding-cisco-compatibility ${activeForm.ciscoLegacyCompatibilityApproved ? "is-enabled" : ""}`}><div><ShieldAlert size={20} /><span><strong>{t("onboarding.advanced.ciscoTitle")}</strong><small>{t("onboarding.advanced.ciscoWarning")}</small></span></div><label className="warning-check"><input type="checkbox" checked={activeForm.ciscoLegacyCompatibilityApproved === true} onChange={(event) => change("ciscoLegacyCompatibilityApproved", event.target.checked)} /><span>{t("onboarding.advanced.ciscoLegacy")}</span></label></section> : null}
             <div className="onboarding-connection-preview"><span className={`onboarding-connection-preview__icon onboarding-selected-vendor--${selectedVendorChoice.tone}`}><Network size={20} /></span><div><small>{t("onboarding.connection.target")}</small><strong dir="ltr">{activeForm.host}:{activeForm.managementPort}</strong><span>{selectedVendorChoice.title} · {activeForm.connectionMethod.toUpperCase()} · {t("onboarding.connection.readOnly")}</span></div></div>

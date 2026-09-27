@@ -2,7 +2,7 @@ import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type OnboardingDraft = {
   companyId: string;
-  vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
+  vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
   platform: string;
   connectionMethod: "ssh" | "api";
   name: string;
@@ -11,6 +11,7 @@ export type OnboardingDraft = {
   credentialId: string;
   enableCredentialId?: string;
   ciscoLegacyCompatibilityApproved?: boolean;
+  esxiCaCertificate?: string;
   site: string;
   location: string;
   environment: "lab" | "staging" | "production";

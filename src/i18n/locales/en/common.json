@@ -626,6 +626,7 @@
   "onboarding.vendor.fortigate": "FortiGate firewall",
   "onboarding.vendor.mikrotik": "MikroTik RouterOS",
   "onboarding.vendor.sophos": "Sophos Firewall via the official XML API",
+  "onboarding.vendor.esxi": "Standalone VMware ESXi via the official API",
   "onboarding.help.name": "A clear name makes search, alerts, and audit records easier to understand.",
   "onboarding.help.management": "Enter a reachable management IP address or DNS hostname.",
   "onboarding.help.port": "The default is selected for the vendor; change it only when needed.",

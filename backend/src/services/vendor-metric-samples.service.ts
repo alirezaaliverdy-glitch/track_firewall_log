@@ -16,6 +16,16 @@ function add(measurements: Measurement[], metricKey: string, value: unknown, uni
 export function vendorMeasurements(result: DeviceConnectionTestResult): Measurement[] {
   if (!result.connected) return [];
   const measurements: Measurement[] = [];
+  if (result.esxi) {
+    add(measurements, "cpu.usage_percent", result.esxi.cpuPercent, "percent");
+    add(measurements, "memory.usage_percent", result.esxi.memoryPercent, "percent");
+    add(measurements, "vm.count", result.esxi.vmCount, "count");
+    add(measurements, "datastore.count", result.esxi.datastoreCount, "count");
+    for (const datastore of result.esxi.datastores) {
+      if (datastore.capacityBytes && datastore.freeBytes !== null)
+        add(measurements, "datastore.usage_percent", (1 - datastore.freeBytes / datastore.capacityBytes) * 100, "percent", { datastore: datastore.name });
+    }
+  }
   if (result.mikrotik) {
     add(measurements, "cpu.usage_percent", result.mikrotik.cpuLoad, "percent");
     for (const item of result.mikrotik.interfaceCounters?.slice(0, 32) ?? []) {

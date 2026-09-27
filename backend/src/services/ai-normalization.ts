@@ -1,6 +1,6 @@
 import { AiIntentType } from "@prisma/client";
 
-export type NormalizedVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "juniper" | "paloalto" | "windows" | "docker" | "kubernetes" | "generic" | "unknown";
+export type NormalizedVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "esxi" | "juniper" | "paloalto" | "windows" | "docker" | "kubernetes" | "generic" | "unknown";
 
 function normalizedToken(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase().replace(/[\s_-]+/g, "") : "";
@@ -13,6 +13,7 @@ export function normalizeVendor(value: unknown): NormalizedVendor | null {
   if (["linux", "linuxedge", "linuxserver", "ubuntu"].includes(token)) return "linux";
   if (["pfsense", "pfs"].includes(token)) return "pfsense";
   if (["cisco", "ios", "iosxe", "nxos"].includes(token)) return "cisco";
+  if (["esxi", "vmwareesxi", "vspherehost"].includes(token)) return "esxi";
   if (["juniper", "junos"].includes(token)) return "juniper";
   if (["paloalto", "panos"].includes(token)) return "paloalto";
   if (["windows", "windowsserver"].includes(token)) return "windows";
@@ -52,6 +53,7 @@ function isVendorDevice(device: DeviceResolutionCandidate, vendor: NormalizedVen
   if (vendor === "linux") return device.type === "linux_edge" || deviceVendor === "linux";
   if (vendor === "pfsense") return device.type === "pfsense" || deviceVendor === "pfsense";
   if (vendor === "cisco") return deviceVendor === "cisco";
+  if (vendor === "esxi") return device.type === "esxi" || deviceVendor === "esxi";
   return device.type.startsWith("generic_") || deviceVendor === "generic" || vendor === "unknown";
 }
 

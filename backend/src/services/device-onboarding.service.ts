@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, X509Certificate } from "node:crypto";
 import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType, Prisma, type Device } from "@prisma/client";
 import { CiscoConnectorError, ciscoIosXeSshConnector, redactCiscoCliOutput } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { buildCiscoIosCollection, CISCO_IOS_CLASSIC_DISCOVERY_COMMANDS, CISCO_IOS_CLASSIC_INVENTORY_COMMANDS } from "../connectors/cisco/ios-xe/cisco-iosxe.inventory.js";
@@ -10,7 +10,7 @@ import { getDeviceById } from "./device.service.js";
 import { resolveCredentialById } from "./credential.service.js";
 import { getConnectionProfile, type ConnectionMethodKey } from "../vendors/connection-method.registry.js";
 
-type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
+type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
 export class OnboardingCredentialInvalidError extends Error {}
 export class OnboardingConnectionTestError extends Error {
   readonly code: string;
@@ -72,6 +72,7 @@ type Draft = {
   credentialId: string;
   enableCredentialId: string;
   ciscoLegacyCompatibilityApproved?: boolean;
+  esxiCaCertificate?: string;
   site: string;
   location: string;
   environment: "lab" | "staging" | "production";
@@ -106,13 +107,14 @@ const SUPPORTED_PLATFORMS: Record<OnboardingVendor, string[]> = {
   cisco: ["cisco-ios-xe", "cisco-ios-classic", "cisco-nx-os", "cisco-asa"],
   fortigate: ["fortios"],
   mikrotik: ["routeros"],
-  sophos: ["sophos-sfos"]
+  sophos: ["sophos-sfos"],
+  esxi: ["esxi-standalone"]
 };
 
 function normalizeVendor(value: unknown): OnboardingVendor {
   const vendor = String(value ?? "linux").trim().toLowerCase().replace(/[\s_-]+edge$/, "").replace(/[\s_-]+/g, "");
-  if (vendor === "linux" || vendor === "cisco" || vendor === "fortigate" || vendor === "mikrotik" || vendor === "sophos" || vendor === "sfos") return vendor === "sfos" ? "sophos" : vendor;
-  throw new Error("Unsupported vendor. Choose Linux, Cisco, FortiGate, MikroTik, or Sophos.");
+  if (vendor === "linux" || vendor === "cisco" || vendor === "fortigate" || vendor === "mikrotik" || vendor === "sophos" || vendor === "esxi" || vendor === "sfos") return vendor === "sfos" ? "sophos" : vendor;
+  throw new Error("Unsupported vendor. Choose Linux, Cisco, FortiGate, MikroTik, Sophos, or ESXi.");
 }
 
 function defaultPlatform(vendor: OnboardingVendor) { return SUPPORTED_PLATFORMS[vendor][0]; }
@@ -208,6 +210,7 @@ function deviceType(vendor: OnboardingVendor) {
   if (vendor === "linux") return DeviceType.linux_edge;
   if (vendor === "fortigate") return DeviceType.fortigate;
   if (vendor === "mikrotik") return DeviceType.mikrotik;
+  if (vendor === "esxi") return DeviceType.esxi;
   return DeviceType.generic_firewall;
 }
 
@@ -229,7 +232,7 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
     environment: draft.environment as DeviceEnvironment,
     tags: [],
     status: DeviceStatus.unknown,
-    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
+    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -245,13 +248,17 @@ function requireConnectionDraft(session: OnboardingSession) {
     fail(session, "credential_missing", "credential", "A stored credential reference is required.");
     throw new Error("A stored credential reference is required.");
   }
-  const validTransport = draft.vendor === "sophos"
+  const validTransport = draft.vendor === "sophos" || draft.vendor === "esxi"
     ? draft.connectionMethod === "api"
     : draft.vendor === "mikrotik"
       ? draft.connectionMethod === "ssh" || draft.connectionMethod === "api"
       : draft.connectionMethod === "ssh";
   if (!validTransport) throw new Error(`No registered onboarding connector supports ${draft.vendor}/${draft.connectionMethod}.`);
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
+  if (draft.vendor === "esxi" && draft.esxiCaCertificate) {
+    if (draft.esxiCaCertificate.length > 16_384 || !/^\s*-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\s*$/.test(draft.esxiCaCertificate)) throw new Error("Provide exactly one PEM certificate; private keys are forbidden.");
+    try { new X509Certificate(draft.esxiCaCertificate); } catch { throw new Error("Provide a valid PEM certificate for ESXi."); }
+  }
 }
 
 async function assertOnboardingCompany(companyId: string, ownerId?: string) {
@@ -264,7 +271,7 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
   assertNoSecrets(input);
   const existing = typeof input.deviceId === "string" && input.deviceId ? await getDeviceById(input.deviceId, ownerId) : null;
   const vendor = normalizeVendor(input.vendor ?? existing?.vendor ?? existing?.type ?? "linux");
-  const method = String(input.connectionMethod ?? existing?.protocol ?? "ssh") === "api" ? "api" : "ssh";
+  const method = String(input.connectionMethod ?? existing?.protocol ?? (vendor === "esxi" || vendor === "sophos" ? "api" : "ssh")) === "api" ? "api" : "ssh";
   const session: OnboardingSession = {
     id: randomUUID(),
     ownerId,
@@ -280,6 +287,7 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
       host: normalizeManagementAddress(String(input.host ?? existing?.host ?? "")),
       managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method, vendor)),
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
+      esxiCaCertificate: String(input.esxiCaCertificate ?? record(existing?.capabilities).esxiCaCertificate ?? ""),
       enableCredentialId: String(input.enableCredentialId ?? ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).enableCredentialId ?? "")),
       site: String(input.site ?? ""),
       location: String(input.location ?? ""),
@@ -318,6 +326,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     host: normalizeManagementAddress(String(input.host ?? session.draft.host).trim()),
     managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod, nextVendor))),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
+    esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
     site: String(input.site ?? session.draft.site).trim(),
@@ -454,12 +463,13 @@ export async function detectOnboardingPlatform(id: string, ownerId?: string) {
     }
     session.draft.platform = detection.platform;
   } else {
+    const esxi = record(record(session.privateEvidence.vendorStatus).esxi);
     session.detection = {
       vendor: session.draft.vendor,
       platform: session.draft.platform,
       supported: SUPPORTED_PLATFORMS[session.draft.vendor].includes(session.draft.platform),
       confidence: 100,
-      evidence: ["registered connector completed its safe connection test"]
+      evidence: session.draft.vendor === "esxi" ? [`ESXi HostAgent SOAP API ${String(esxi.version ?? "")}`] : ["registered connector completed its safe connection test"]
     };
   }
   const response = touch(session, "platform_detected", "discover");
@@ -505,7 +515,7 @@ export async function discoverOnboardingInventory(id: string, ownerId?: string) 
         ? record(vendorStatus.mikrotik)
         : session.draft.vendor === "fortigate"
           ? record(vendorStatus.fortigate)
-          : {};
+          : session.draft.vendor === "esxi" ? record(vendorStatus.esxi) : {};
       session.discovery = {
         connectorInvoked: session.test?.connectorInvoked === true,
         connectorType: session.test?.connectorType,
@@ -562,7 +572,7 @@ function json(value: unknown): Prisma.InputJsonValue {
 
 function managementMethodKey(draft: Draft): ConnectionMethodKey {
   if (draft.connectionMethod !== "api") return "ssh";
-  return draft.vendor === "sophos" ? "xml_api" : "rest_api";
+  return draft.vendor === "sophos" ? "xml_api" : draft.vendor === "esxi" ? "soap_api" : "rest_api";
 }
 
 function connectionArchitecture(draft: Draft, verified: boolean) {
@@ -720,6 +730,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   return {
     companyId: String(input.companyId ?? session.draft.companyId).trim(), vendor, platform, name, host, managementPort, environment, connectionMethod,
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
+    esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
     site: String(input.site ?? session.draft.site).trim(),
@@ -731,12 +742,15 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   const session = await activeSession(id, ownerId);
   if (session.status === "completed") throw new Error("Completed onboarding sessions are immutable.");
   const draft = validateUnverifiedDraft(session, input);
+  session.draft = draft;
+  requireConnectionDraft(session);
   await assertOnboardingCompany(draft.companyId, ownerId);
   const normalizedVendor = draft.vendor.toLowerCase();
 
   touch(session, "saving", "save");
   const createdAt = now();
   const nextCapabilities: Record<string, unknown> = {
+    ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
     connectionArchitecture: connectionArchitecture(draft, false),
     onboarding: {
       sessionId: session.id,
@@ -839,6 +853,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
   await assertOnboardingCompany(draft.companyId, ownerId);
 
   const capabilities: Record<string, unknown> = {
+    ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
     connectionArchitecture: connectionArchitecture(draft, true),
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),
@@ -851,7 +866,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
   } else {
     const vendorStatus = record(session.privateEvidence.vendorStatus);
     if (Object.keys(vendorStatus).length > 0) {
-      const statusKey = draft.vendor === "mikrotik" ? "mikrotikStatus" : draft.vendor === "fortigate" ? "fortigateStatus" : draft.vendor === "sophos" ? "sophosStatus" : "linuxStatus";
+      const statusKey = draft.vendor === "mikrotik" ? "mikrotikStatus" : draft.vendor === "fortigate" ? "fortigateStatus" : draft.vendor === "sophos" ? "sophosStatus" : draft.vendor === "esxi" ? "esxiStatus" : "linuxStatus";
       capabilities[statusKey] = { ...vendorStatus, collectedAt: now() };
     }
   }

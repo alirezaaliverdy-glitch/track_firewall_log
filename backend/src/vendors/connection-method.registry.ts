@@ -1,5 +1,5 @@
-export type VendorConnectionKey = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos";
-export type ConnectionMethodKey = "ssh" | "rest_api" | "netconf" | "restconf" | "snmpv3" | "syslog" | "gnmi" | "agent" | "xml_api";
+export type VendorConnectionKey = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
+export type ConnectionMethodKey = "ssh" | "rest_api" | "netconf" | "restconf" | "snmpv3" | "syslog" | "gnmi" | "agent" | "xml_api" | "soap_api";
 export type ConnectionPurpose = "control" | "inventory" | "telemetry" | "events";
 export type ConnectionReadiness = "ready" | "setup_required" | "planned";
 
@@ -80,6 +80,15 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
       method({ key: "syslog", title: "Syslog over TLS", titleFa: "Syslog امن", summary: "Traffic, UTM and security event stream.", summaryFa: "ارسال رخدادهای ترافیک، UTM و امنیت.", purposes: ["events"], readiness: "setup_required", recommended: true, selectable: false, secure: true, defaultPort: 6514, credential: "certificate", prerequisites: ["Reliable/TLS logging configured"], prerequisitesFa: ["تنظیم ارسال قابل‌اعتماد یا TLS برای لاگ‌ها"] })
     ]
   },
+  esxi: {
+    vendor: "esxi",
+    recommendedSecondary: "soap_api",
+    strategy: "Use the standalone host vSphere SOAP API with verified TLS and a least-privilege account.",
+    strategyFa: "API رسمی هاست مستقل با TLS معتبر و حساب حداقل‌دسترسی.",
+    methods: [
+      method({ key: "soap_api", title: "vSphere SOAP API", titleFa: "API هاست ESXi", summary: "Verified host inventory and reviewed host operations.", summaryFa: "موجودی هاست و عملیات تأییدشدهٔ هاست", purposes: ["control", "inventory"], readiness: "ready", recommended: true, selectable: true, secure: true, defaultPort: 443, credential: "username_password", prerequisites: ["Standalone ESXi host", "Trusted server certificate or CA PEM", "Least-privilege account"], prerequisitesFa: ["هاست مستقل", "گواهی معتبر یا CA", "حساب حداقل‌دسترسی"] })
+    ]
+  },
   sophos: {
     vendor: "sophos",
     recommendedSecondary: "syslog",
@@ -106,7 +115,7 @@ export function onboardingMethodFor(vendor: VendorConnectionKey, key: Connection
   const selected = PROFILES[vendor].methods.find((item) => item.key === key && item.selectable && item.readiness === "ready");
   if (!selected) return null;
   return {
-    protocol: key === "rest_api" || key === "xml_api" ? "api" as const : "ssh" as const,
+    protocol: key === "rest_api" || key === "xml_api" || key === "soap_api" ? "api" as const : "ssh" as const,
     port: selected.defaultPort ?? (key === "ssh" ? 22 : 443)
   };
 }

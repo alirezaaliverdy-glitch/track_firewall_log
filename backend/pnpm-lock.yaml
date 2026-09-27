@@ -56,6 +56,9 @@ importers:
       puppeteer-core:
         specifier: ^25.11.0
         version: 25.11.0
+      saxes:
+        specifier: 5.0.1
+        version: 5.0.1
       ssh2:
         specifier: ^1.17.0
         version: 1.17.0

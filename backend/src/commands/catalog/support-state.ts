@@ -73,6 +73,12 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "sophos_set_interface_ipv4",
   "sophos_enable_firewall_rule",
   "sophos_disable_firewall_rule",
+  "esxi_inventory",
+  "esxi_enter_maintenance",
+  "esxi_exit_maintenance",
+  "esxi_start_service",
+  "esxi_stop_service",
+  "esxi_set_ntp",
   ...executableCiscoOperations().map((operation) => operation.executionTemplateRef!)
 ]);
 
@@ -82,6 +88,7 @@ function connectorVendor(connectorType: string | null) {
   if (connectorType === "mikrotik-ssh") return "mikrotik";
   if (connectorType === "cisco-ios-xe-ssh") return "cisco";
   if (connectorType === "sophos-api") return "sophos";
+  if (connectorType === "esxi-soap") return "esxi";
   return null;
 }
 

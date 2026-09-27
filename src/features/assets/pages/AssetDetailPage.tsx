@@ -207,7 +207,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     finally { setSaving(false); }
   };
 
-  const supportsVendorCollection = ["cisco", "linux", "mikrotik", "fortigate", "sophos"].includes(currentWorkspace.vendor.key);
+  const supportsVendorCollection = ["cisco", "linux", "mikrotik", "fortigate", "sophos", "esxi"].includes(currentWorkspace.vendor.key);
   const collectLiveData = async () => {
     if (!workspace.device) return;
     setCollecting(true); setError("");

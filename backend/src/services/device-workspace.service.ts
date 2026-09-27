@@ -73,6 +73,38 @@ export function projectVendorOverview(vendorKey: string, factsValue: unknown, re
     sections: [] as Array<ReturnType<typeof vendorSection>>
   };
 
+  if (vendorKey === "esxi") return { ...base,
+    summary: compact([
+      fact("hostname", "نام هاست", "Host"),
+      fact("version", "نسخه ESXi", "ESXi version"),
+      fact("model", "مدل", "Model"),
+      fact("connectionState", "وضعیت اتصال", "Connection"),
+      fact("maintenanceMode", "حالت نگهداری", "Maintenance mode"),
+      fact("serialNumber", "شماره سریال", "Serial number"),
+      fact("biosVersion", "نسخه BIOS", "BIOS version"),
+      fact("lockdownMode", "حالت قفل", "Lockdown mode"),
+      fact("vmCount", "تعداد VM", "Virtual machines"),
+      fact("cpuPercent", "مصرف CPU", "CPU usage", facts.cpuPercent === null ? null : `${facts.cpuPercent}%`),
+      fact("memoryPercent", "مصرف حافظه", "Memory usage", facts.memoryPercent === null ? null : `${facts.memoryPercent}%`)
+    ]),
+    sections: [
+      vendorSection("vms", "ماشین‌های مجازی", "Virtual machines", facts.vms),
+      vendorSection("datastores", "دیتاستورها", "Datastores", facts.datastores),
+      vendorSection("networks", "شبکه‌ها", "Networks", facts.networks),
+      vendorSection("sensors", "سنسورهای سخت‌افزار", "Hardware sensors", facts.sensors),
+      vendorSection("services", "سرویس‌های هاست", "Host services", facts.services),
+      vendorSection("storageAdapters", "کنترلرهای ذخیره‌سازی", "Storage adapters", facts.storageAdapters),
+      vendorSection("storageDevices", "دیسک‌های فیزیکی", "Storage devices", facts.storageDevices),
+      vendorSection("firewallRulesets", "قوانین فایروال هاست", "Host firewall rulesets", facts.firewallRulesets),
+      vendorSection("physicalNics", "کارت‌های شبکه فیزیکی", "Physical NICs", facts.physicalNics),
+      vendorSection("vmkernelNics", "اینترفیس‌های VMkernel", "VMkernel NICs", facts.vmkernelNics),
+      vendorSection("virtualSwitches", "سوئیچ‌های مجازی", "Virtual switches", facts.virtualSwitches),
+      vendorSection("portGroups", "گروه‌های پورت", "Port groups", facts.portGroups),
+      vendorSection("dns", "تنظیمات DNS", "DNS", facts.dns),
+      vendorSection("time", "تنظیمات زمان", "Time settings", facts.time)
+    ].filter(item=>item.count>0)
+  };
+
   if (vendorKey === "mikrotik") return { ...base,
     summary: compact([fact("hostname", "نام دستگاه", "Identity"), fact("version", "نسخه RouterOS", "RouterOS version"), fact("uptime", "زمان فعالیت", "Uptime"), fact("architecture", "معماری", "Architecture"), fact("cpuLoad", "بار CPU", "CPU load", healthFacts.cpuLoad), fact("memoryFree", "حافظه آزاد", "Free memory", healthFacts.memoryFree)]),
     sections: [vendorSection("interfaces", "اینترفیس‌ها", "Interfaces", facts.interfaces), vendorSection("addresses", "آدرس‌های IP", "IP addresses", facts.ipAddresses), vendorSection("routing", "مسیرها", "Routes", facts.routes), vendorSection("firewall", "قوانین فایروال", "Firewall rules", facts.firewallFilterRules), vendorSection("nat", "قوانین NAT", "NAT rules", facts.natRules), vendorSection("services", "سرویس‌ها", "Services", facts.services), vendorSection("logs", "رویدادهای اخیر", "Recent events", facts.recentLogs)].filter((item) => item.count > 0)
@@ -129,7 +161,7 @@ export function resolveWorkspaceConnectionState(
 }
 
 export function liveVendorProjection(vendorKey: string, capabilities: Record<string, unknown>, refreshedAt: Date | string | null) {
-  const statusKey = vendorKey === "mikrotik" ? "mikrotikStatus" : vendorKey === "fortigate" ? "fortigateStatus" : vendorKey === "sophos" ? "sophosStatus" : vendorKey === "linux" ? "linuxStatus" : "";
+  const statusKey = vendorKey === "mikrotik" ? "mikrotikStatus" : vendorKey === "fortigate" ? "fortigateStatus" : vendorKey === "sophos" ? "sophosStatus" : vendorKey === "esxi" ? "esxiStatus" : vendorKey === "linux" ? "linuxStatus" : "";
   const status = statusKey ? asObject(capabilities[statusKey]) : {};
   if (status.connected !== true) return null;
   const connectorCapabilities = asObject(status.capabilities);
@@ -140,6 +172,65 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
     const hasData = Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : value !== null && value !== undefined;
     return hasData ? { key, titleFa, titleEn, state: "available" as const, reason: null, requirement: "", nextAction: "" } : null;
   };
+
+  if (vendorKey === "esxi") {
+    const data=asObject(status.esxi);
+    return {
+      connectorType:"esxi-soap",
+      facts:{
+        hostname:data.hostname??status.hostname??null,
+        version:data.version??null,
+        build:data.build??null,
+        model:data.model??null,
+        hardwareVendor:data.hardwareVendor??null,
+        serialNumber:data.serialNumber??null,
+        biosVersion:data.biosVersion??null,
+        lockdownMode:data.lockdownMode??null,
+        connectionState:data.connectionState??null,
+        overallStatus:data.overallStatus??null,
+        maintenanceMode:data.maintenanceMode??null,
+        cpuPercent:data.cpuPercent??null,
+        memoryPercent:data.memoryPercent??null,
+        vmCount:data.vmCount??null,
+        cpuCores:data.cpuCores??null,
+        memoryBytes:data.memoryBytes??null,
+        bootTime:data.bootTime??null,
+        vms:data.vms??[],
+        datastores:data.datastores??[],
+        networks:data.networks??[],
+        sensors:data.sensors??[],
+        services:data.services??[],
+        storageAdapters:data.storageAdapters??[],
+        storageDevices:data.storageDevices??[],
+        firewallRulesets:data.firewallRulesets??[],
+        physicalNics:data.physicalNics??[],
+        vmkernelNics:data.vmkernelNics??[],
+        virtualSwitches:data.virtualSwitches??[],
+        portGroups:data.portGroups??[],
+        dns:data.dns??null,
+        time:data.time??null,
+        collection:{inventoryStatus:"collected",capabilityStatus:asArray(status.warnings).length?"partial":"available"}
+      },
+      capabilities:capabilityList,
+      warnings:asArray(status.warnings),
+      refreshedAt:data.collectedAt??status.collectedAt??refreshedAt,
+      sections:[
+        section("host","هاست","Host",data.hostname),
+        section("vms","ماشین‌های مجازی","Virtual machines",data.vms),
+        section("datastores","دیتاستورها","Datastores",data.datastores),
+        section("networks","شبکه‌ها","Networks",data.networks),
+        section("sensors","سنسورهای سخت‌افزار","Hardware sensors",data.sensors),
+        section("services","سرویس‌های هاست","Host services",data.services),
+        section("storageAdapters","کنترلرهای ذخیره‌سازی","Storage adapters",data.storageAdapters),
+        section("storageDevices","دیسک‌های فیزیکی","Storage devices",data.storageDevices),
+        section("firewallRulesets","قوانین فایروال هاست","Host firewall rulesets",data.firewallRulesets),
+        section("physicalNics","کارت‌های شبکه فیزیکی","Physical NICs",data.physicalNics),
+        section("vmkernelNics","اینترفیس‌های VMkernel","VMkernel NICs",data.vmkernelNics),
+        section("virtualSwitches","سوئیچ‌های مجازی","Virtual switches",data.virtualSwitches),
+        section("portGroups","گروه‌های پورت","Port groups",data.portGroups)
+      ].filter((item):item is NonNullable<typeof item>=>item!==null)
+    };
+  }
 
   if (vendorKey === "mikrotik") {
     const data = asObject(status.mikrotik);

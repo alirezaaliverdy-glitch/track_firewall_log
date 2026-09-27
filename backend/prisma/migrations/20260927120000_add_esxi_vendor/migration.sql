@@ -1,0 +1,1 @@
+ALTER TYPE "DeviceType" ADD VALUE IF NOT EXISTS 'esxi';

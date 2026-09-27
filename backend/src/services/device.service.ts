@@ -487,6 +487,7 @@ export async function testDeviceConnection(id: string, ownerId?: string) {
     const statusKey = connector.name === "mikrotik" ? "mikrotikStatus"
       : connector.name === "fortigate" ? "fortigateStatus"
         : connector.name === "sophos" ? "sophosStatus"
+        : connector.name === "esxi" ? "esxiStatus"
         : connector.name.includes("cisco") ? "ciscoStatus"
           : "linuxStatus";
     const statusCheck = await prisma.deviceStatusCheck.create({

@@ -2,7 +2,7 @@ import { FORTIGATE_FULL_CONTROL_ACTION_TYPES } from "../../fortigate/full-contro
 import { executableCiscoOperations } from "../../cisco/cisco-operation-registry.js";
 import { RESTORE_TEMPLATES } from "../../backups/restore-profiles.js";
 
-export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh" | "sophos-api"; handler: string };
+export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh" | "sophos-api" | "esxi-soap"; handler: string };
 
 const templates: ExecutionTemplate[] = [
   ...Object.values(RESTORE_TEMPLATES).map(template => ({ id: template.id, actionType: "generic_security_action", connectorType: template.connector, handler: "backupRestorePlanner" })),
@@ -61,6 +61,7 @@ const templates: ExecutionTemplate[] = [
     "sophos_inventory", "sophos_enable_interface", "sophos_disable_interface", "sophos_set_interface_ipv4",
     "sophos_enable_firewall_rule", "sophos_disable_firewall_rule"
   ].map((id) => ({ id, actionType: "generic_security_action", connectorType: "sophos-api" as const, handler: "sophosPlanner" }))
+  ,...["esxi_inventory","esxi_enter_maintenance","esxi_exit_maintenance","esxi_start_service","esxi_stop_service","esxi_set_ntp"].map((id) => ({ id, actionType: "generic_security_action", connectorType: "esxi-soap" as const, handler: "esxiPlanner" }))
   ,...executableCiscoOperations().map((operation) => ({ id: operation.executionTemplateRef!, actionType: "generic_security_action", connectorType: "cisco-ios-xe-ssh" as const, handler: "ciscoIosXePlanner" }))
   ,...FORTIGATE_FULL_CONTROL_ACTION_TYPES.map((actionType) => ({ id: actionType, actionType, connectorType: "fortigate-ssh" as const, handler: "fortigatePlanner" }))
 ];

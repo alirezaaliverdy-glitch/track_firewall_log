@@ -85,7 +85,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     actions: commandCatalogForVendor(request.params.vendor)
   }));
 
-  app.post<{ Body: { prompt?: string; vendor?: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "sophos" } }>("/api/actions/match", async (request, reply) => {
+  app.post<{ Body: { prompt?: string; vendor?: "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "sophos" | "esxi" } }>("/api/actions/match", async (request, reply) => {
     const prompt = request.body?.prompt?.trim();
     if (!prompt) return reply.code(400).send({ error: "prompt is required" });
     return routeCatalogIntent(prompt, request.body.vendor ?? null);

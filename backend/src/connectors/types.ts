@@ -1,6 +1,7 @@
 import type { ActionPlan, ActionType, AiRiskLevel, Device, DeviceProtocol, DeviceType } from "@prisma/client";
 
-export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "cisco" | "sophos" | "generic";
+export type VendorPlannerName = "fortigate" | "mikrotik" | "linux_edge" | "pfsense" | "cisco" | "sophos" | "esxi" | "generic";
+import type { EsxiDiscovery } from "./esxi-inventory.js";
 export type CommandPlanStatus = "planned" | "needs_clarification" | "unsupported";
 export type CommandTransport = "ssh" | "api" | "manual";
 
@@ -73,6 +74,7 @@ export type DeviceConnectionTestResult = {
   mikrotik?: MikroTikDiscovery;
   fortigate?: FortiGateDiscovery;
   sophos?: SophosDiscovery;
+  esxi?: EsxiDiscovery;
   stages: Array<{
     name: "resolve_device" | "resolve_credential" | "tcp_connect" | "ssh_handshake" | "ssh_auth" | "shell" | "prompt" | "privilege" | "platform_detection" | "basic_commands" | "readonly_discovery" | "discovery" | "optional_capabilities";
     status: "ok" | "warning" | "failed";

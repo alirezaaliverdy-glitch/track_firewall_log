@@ -1,6 +1,6 @@
 import type { ActionType, AiRiskLevel } from "@prisma/client";
 
-export type CatalogVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "sophos";
+export type CatalogVendor = "mikrotik" | "fortigate" | "linux" | "pfsense" | "cisco" | "sophos" | "esxi";
 
 export type CommandCatalogEntry = {
   id: string;

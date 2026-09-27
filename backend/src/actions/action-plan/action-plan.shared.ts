@@ -35,7 +35,7 @@ export function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-export type ActionVendor = "mikrotik" | "fortigate" | "linux_edge" | "pfsense" | "cisco" | "juniper" | "paloalto" | "windows" | "docker" | "kubernetes" | "generic" | "unknown" | undefined;
+export type ActionVendor = "mikrotik" | "fortigate" | "linux_edge" | "pfsense" | "cisco" | "esxi" | "juniper" | "paloalto" | "windows" | "docker" | "kubernetes" | "generic" | "unknown" | undefined;
 
 export function vendorFromActionType(actionType: ActionType | string): ActionVendor {
   if (String(actionType).startsWith("mikrotik_")) return "mikrotik";
@@ -377,7 +377,8 @@ const CONNECTOR_TYPE_TO_NAME: Record<ExecutionTemplate["connectorType"], DeviceC
   "mikrotik-ssh": "mikrotik",
   "fortigate-ssh": "fortigate",
   "cisco-ios-xe-ssh": "cisco",
-  "sophos-api": "sophos"
+  "sophos-api": "sophos",
+  "esxi-soap": "esxi"
 };
 
 const CONNECTOR_TYPE_NAME_ALIASES: Record<ExecutionTemplate["connectorType"], string[]> = {
@@ -385,7 +386,8 @@ const CONNECTOR_TYPE_NAME_ALIASES: Record<ExecutionTemplate["connectorType"], st
   "mikrotik-ssh": ["mikrotik", "routeros", "mikrotik-ssh"],
   "fortigate-ssh": ["fortigate", "fortinet", "fortigate-ssh"],
   "cisco-ios-xe-ssh": ["cisco", "cisco-ios-xe-ssh", "cisco-iosxe-ssh"],
-  "sophos-api": ["sophos", "sfos", "sophos-api"]
+  "sophos-api": ["sophos", "sfos", "sophos-api"],
+  "esxi-soap": ["esxi", "esxi-soap"]
 };
 
 export type ExecutionPipelineResolution = {

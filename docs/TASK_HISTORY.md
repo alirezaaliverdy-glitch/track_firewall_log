@@ -1728,3 +1728,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Moved backup navigation immediately above Settings, including frontend fallback.
 - Passed 28 isolated tests and fresh live Linux/MikroTik/Cisco collection plus download hash verification. No live FortiGate is registered; its native SCP protocol is unit-tested only.
 - Rebuilt the local API and frontend before the independent first-task commit. Backup restoration remains a separate subsequent task.
+
+## 2026-09-27 - Add standalone ESXi host support
+
+- Implemented verified SOAP host discovery, host-centric asset overview, bounded read-only inventory and cataloged maintenance/service/NTP operations. Removed VM-changing actions after the user clarified scope.
+- Added host-action safety prechecks, XML/TLS limits, focused tests and an operator guide. API/web deployed locally with four healthy services. Recovered the one-line enum migration from an existing type-ownership mismatch. No live ESXi target was available; no vendor configuration write was performed.
