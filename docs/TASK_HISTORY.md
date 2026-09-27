@@ -1,3 +1,10 @@
+## 2026-09-27 - Fix self-closing asset sensors and technical disclosures
+
+- Replaced nested React component identities with ordinary render helpers, retaining native details DOM/open state during live workspace updates. No polling interval, vendor sensor collection or connector behavior was changed.
+- Retained last data on transient refresh errors and exposed a retry notice. Initial missing-workspace errors remain explicit.
+- Seven focused regressions passed. Real browser assertions covered identity/open preservation over two polling cycles in desktop/mobile, manual closure, transient request failure and recovery. Rebuilt/deployed local frontend; API health and all four Compose services are healthy.
+- Independent Cisco functionality commit: c74ab45. No mutative Cisco test or live network reconfiguration was performed.
+
 ## 2026-09-27 - Complete controlled Cisco switching workflows
 
 - Added validated LACP group/member management, Trunk allowed-list preservation and guarded VLAN operations using the existing Preview -> Confirm -> PolicyGuard -> Connector -> Audit flow.

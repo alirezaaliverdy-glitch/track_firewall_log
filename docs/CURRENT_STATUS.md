@@ -1,3 +1,10 @@
+## 2026-09-27 - Preserve asset disclosure state during live refresh
+
+- Fixed the actual remount cause: overview/sensor/chart render helpers were declared inside AssetDetailPage and rendered as newly recreated component types on every five-second refresh. Ordinary render helpers now preserve DOM identity and native details state across data updates for all vendors.
+- Transient refresh failures keep last received workspace visible with a retry notice, rather than unmounting the entire page. Initial-load errors still use ErrorState.
+- Seven source/projection regression tests passed. Real Chromium smoke verified both Cisco technical and sensor panels across at least two actual poll responses at 1440/390px, manual close persistence, blocked-request failure and recovery without resetting open state.
+- Frontend production build was applied through the standard deployment script. API HTTP health is 200 and all four local Compose services are healthy. Cisco operations are independently committed in c74ab45; no device configuration was changed in either task's testing.
+
 ## 2026-09-27 - Controlled Cisco EtherChannel / Trunk / VLAN management
 
 - Added 15 registered parameterized switching workflows: LACP Access/Trunk groups, membership changes, same-mode group VLAN edits/deletion, standalone Trunk and separate allowed-list replace/add/remove, VLAN create/rename/guarded delete and Access assignment.

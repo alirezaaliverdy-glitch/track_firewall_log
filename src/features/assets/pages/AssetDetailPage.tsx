@@ -180,7 +180,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     return () => window.clearInterval(timer);
   }, [deleteOpen, editing, load]);
   if (!workspace && !error) return <LoadingState />;
-  if (error || !workspace) return <ErrorState message={error || t("workspace.notFound")} onRetry={load} />;
+  if (!workspace) return <ErrorState message={error || t("workspace.notFound")} onRetry={load} />;
 
   const currentWorkspace = workspace;
   const deviceId = workspace.device?.id || reference;
@@ -245,13 +245,14 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     catch { setError(t("workspace.errors.deleteFailed")); setSaving(false); }
   };
 
-  function AdvancedWorkspaceDetails() {
+  // Ordinary render helpers preserve DOM identity and open details across polling updates.
+  function renderAdvancedWorkspaceDetails() {
     const warnings = asArray(currentWorkspace.capabilities?.warnings);
     const hasDiagnostics = warnings.length > 0 || capabilityList.length > 0;
     return <details className="content-panel overview-advanced"><summary>{t("workspace.advanced.title")}</summary><dl className="detail-list"><dt>{t("workspace.labels.connector")}</dt><dd dir="ltr">{value(overview.connectorType, fallback)}</dd>{capabilityList.length ? <><dt>{t("workspace.labels.capabilityStatus")}</dt><dd>{capabilityLabel(capabilityStatus, t)}</dd></> : null}{currentWorkspace.collections.length ? <><dt>{t("workspace.labels.collectionHistory")}</dt><dd>{String(currentWorkspace.collections.length)}</dd></> : null}{overview.lastSuccessfulCollection || currentWorkspace.capabilities?.refreshedAt ? <><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt, locale, fallback)}</dd></> : null}</dl><div className="button-row"><button className="secondary-button" type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? t("common.loading") : t("workspace.actions.collectData")}</button><Link className="secondary-link" to={`/assets/devices/${deviceId}/monitoring`}>{t("workspace.actions.refreshHealth")}</Link></div>{currentWorkspace.vendor.sections.length ? <section><h3>{t("workspace.advanced.vendorSections")}</h3>{currentWorkspace.vendor.sections.map((item) => { const state = item.capabilityState ?? item.state; return <div className="list-row" key={item.key}><span>{isFa ? item.titleFa : item.titleEn}</span><StatusBadge value={capabilityLabel(state, t)} tone={stateTone(state)} /></div>; })}</section> : null}{hasDiagnostics ? <details><summary>{t("workspace.advanced.rawDiagnostics")}</summary><pre dir="ltr">{JSON.stringify({ platform: overview.platform, warnings, capabilities: capabilityList }, null, 2)}</pre></details> : null}</details>;
   }
 
-  function SensorReadings() {
+  function renderSensorReadings() {
     const readings = currentWorkspace.sensors ?? [];
     const now = Date.now();
     const connectionOffline = readings.some((item) => item.key === "reachability" && ["offline", "error", "degraded"].includes(String(item.value).toLowerCase()));
@@ -282,7 +283,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     </section>;
   }
 
-  function OverviewTrends() {
+  function renderOverviewTrends() {
     const vendor = currentWorkspace.vendor.key;
     const preferred = vendor === "fortigate"
       ? ["sessions.count", "memory.usage_percent", "cpu.usage_percent"]
@@ -312,7 +313,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     </section>;
   }
 
-  function OverviewFirstViewport() {
+  function renderOverviewFirstViewport() {
     const setupPath = `/assets/devices/${deviceId}/setup`;
     const nextPath = verifiedDevice ? `/actions?deviceId=${encodeURIComponent(deviceId)}` : setupPath;
     const optionalIdentity = ([
@@ -352,7 +353,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
         <article><span><Activity /></span><div><small>{isFa ? "اقدام در انتظار" : "Pending actions"}</small><strong>{overview.pendingActions.toLocaleString(locale)}</strong></div></article>
       </section>
 
-      <OverviewTrends />
+      {renderOverviewTrends()}
 
       <details className="asset-overview-technical"><summary>{isFa ? "مسیرهای اتصال دستگاه" : "Device connection channels"}</summary><DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} /></details>
 
@@ -369,13 +370,13 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
       {isCisco && currentWorkspace.vendorDetails ? <details className="asset-cisco-expanded"><summary>{isFa ? "نمای تخصصی Cisco" : "Cisco technical view"}</summary><CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={dataTime} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /></details> : null}
 
-      <details className="asset-overview-technical"><summary>{isFa ? "همهٔ سنسورها و زمان اندازه‌گیری" : "All sensors and measurement times"}</summary><SensorReadings /></details>
+      <details className="asset-overview-technical"><summary>{isFa ? "همهٔ سنسورها و زمان اندازه‌گیری" : "All sensors and measurement times"}</summary>{renderSensorReadings()}</details>
       <section className="asset-overview-actions"><div><h2>{t("workspace.cards.nextAction")}</h2><p>{verifiedDevice ? t("workspace.next.verified") : t("workspace.next.unverified")}</p></div><div><Link className="primary-link" to={nextPath}>{verifiedDevice ? t("workspace.actions.openActionCenter") : t("workspace.actions.testConnection")}</Link>{interfaces.length ? <Link className="secondary-link" to={`/assets/devices/${deviceId}/interfaces`}>{isFa ? "مشاهده اینترفیس‌ها" : "View interfaces"}</Link> : null}{isCisco ? <Link className="secondary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}&catalog=cisco_run_backup`}>{t("workspace.actions.runBackup")}</Link> : null}</div></section>
-      <AdvancedWorkspaceDetails />
+      {renderAdvancedWorkspaceDetails()}
     </section>;
   }
 
-  function WorkspaceCharts() {
+  function renderWorkspaceCharts() {
     const changes = currentWorkspace.charts.recentChanges.filter((item) => new Date(item.timestamp).getTime() >= since);
     const resourceLabels: Record<string, [string, string]> = { "cpu.usage_percent": ["مصرف CPU", "CPU usage"], "memory.usage_percent": ["مصرف حافظه", "Memory usage"], "disk.usage_percent": ["مصرف دیسک", "Disk usage"], "cpu.load_1m": ["بار CPU", "CPU load"] };
     const resources = Object.entries(resourceLabels).map(([key, labels]) => ({ key, title: labels[isFa ? 0 : 1], points: chart(currentWorkspace.charts.resources.filter((item) => item.label === key)) })).filter((item) => item.points.length);
@@ -383,16 +384,17 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   }
 
   const content = (() => {
-    if (section === "overview") return <OverviewFirstViewport />;
-    if (section === "interfaces") return <div className="content-grid"><section className="content-panel cisco-interface-panel"><header><div><h2>{t("workspace.interfaces.title")}</h2><p>{isFa ? `${interfaces.length} اینترفیس؛ ${interfaceUpCount} لینک فعال و ${interfaceDownCount} لینک قطع` : `${interfaces.length} interfaces; ${interfaceUpCount} links up and ${interfaceDownCount} links down`}</p></div><Link className="secondary-link" to={`/assets/topology?deviceId=${encodeURIComponent(deviceId)}`}>{isFa ? "نمای گرافیکی پورت‌ها" : "Graphical port view"}</Link></header>{interfaces.length ? <div className="cisco-interface-list">{interfaces.slice(0, 128).map((item, index) => { const row = asRecord(item); const state = interfaceState(row); const address = row.ipAddress ?? asArray(row.ipAddresses)[0]; const portMeta = [row.vlan ? `VLAN ${row.vlan}` : "", row.speed ? `${row.speed} Mbps` : "", row.duplex ? String(row.duplex) : ""].filter(Boolean).join(" · "); return <article className={`cisco-interface-row is-${state.operational}`} key={String(row.name ?? row.interface ?? index)}><i aria-hidden="true" /><div><strong dir="ltr">{value(row.name ?? row.interface ?? row.id, fallback)}</strong><small>{value(row.description, isFa ? "بدون توضیح" : "No description")}</small><small dir="ltr">{value(address, isFa ? "بدون IP" : "No IP")}</small>{portMeta ? <small dir="ltr">{portMeta}</small> : null}</div><span><small>{isFa ? "لینک" : "Link"}</small><b>{state.operational === "up" ? (isFa ? "فعال" : "Up") : state.operational === "down" ? (isFa ? "قطع" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span><span><small>{isFa ? "مدیریتی" : "Admin"}</small><b>{state.administrative === "up" ? (isFa ? "روشن" : "Up") : state.administrative === "down" ? (isFa ? "خاموش" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span></article>; })}</div> : <p>{t("workspace.empty.interfaces")}</p>}</section><AdvancedWorkspaceDetails /></div>;
+    if (section === "overview") return renderOverviewFirstViewport();
+    if (section === "interfaces") return <div className="content-grid"><section className="content-panel cisco-interface-panel"><header><div><h2>{t("workspace.interfaces.title")}</h2><p>{isFa ? `${interfaces.length} اینترفیس؛ ${interfaceUpCount} لینک فعال و ${interfaceDownCount} لینک قطع` : `${interfaces.length} interfaces; ${interfaceUpCount} links up and ${interfaceDownCount} links down`}</p></div><Link className="secondary-link" to={`/assets/topology?deviceId=${encodeURIComponent(deviceId)}`}>{isFa ? "نمای گرافیکی پورت‌ها" : "Graphical port view"}</Link></header>{interfaces.length ? <div className="cisco-interface-list">{interfaces.slice(0, 128).map((item, index) => { const row = asRecord(item); const state = interfaceState(row); const address = row.ipAddress ?? asArray(row.ipAddresses)[0]; const portMeta = [row.vlan ? `VLAN ${row.vlan}` : "", row.speed ? `${row.speed} Mbps` : "", row.duplex ? String(row.duplex) : ""].filter(Boolean).join(" · "); return <article className={`cisco-interface-row is-${state.operational}`} key={String(row.name ?? row.interface ?? index)}><i aria-hidden="true" /><div><strong dir="ltr">{value(row.name ?? row.interface ?? row.id, fallback)}</strong><small>{value(row.description, isFa ? "بدون توضیح" : "No description")}</small><small dir="ltr">{value(address, isFa ? "بدون IP" : "No IP")}</small>{portMeta ? <small dir="ltr">{portMeta}</small> : null}</div><span><small>{isFa ? "لینک" : "Link"}</small><b>{state.operational === "up" ? (isFa ? "فعال" : "Up") : state.operational === "down" ? (isFa ? "قطع" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span><span><small>{isFa ? "مدیریتی" : "Admin"}</small><b>{state.administrative === "up" ? (isFa ? "روشن" : "Up") : state.administrative === "down" ? (isFa ? "خاموش" : "Down") : (isFa ? "نامشخص" : "Unknown")}</b></span></article>; })}</div> : <p>{t("workspace.empty.interfaces")}</p>}</section>{renderAdvancedWorkspaceDetails()}</div>;
     if (section === "configuration") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.configuration.title")}</h2><dl className="detail-list"><dt>{t("workspace.labels.configState")}</dt><dd>{value(overview.configBackup.state, fallback)}</dd><dt>{t("workspace.labels.lastBackup")}</dt><dd>{date(overview.configBackup.collectedAt, locale, fallback)}</dd></dl></section><section className="content-panel"><h2>{t("workspace.configuration.connectionTitle")}</h2><p>{t("workspace.values.credentialReference")}</p><dl className="detail-list"><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(currentWorkspace.device?.host ?? overview.managementIp, fallback)}</dd><dt>{t("workspace.labels.protocol")}</dt><dd>{value(currentWorkspace.device?.protocol, fallback)}</dd><dt>{t("workspace.labels.environment")}</dt><dd>{value(currentWorkspace.device?.environment, fallback)}</dd></dl><Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.actions.openSetup")}</Link></section></div>;
     if (section === "actions") return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.actions.title")}</h2>{currentWorkspace.actions.length ? currentWorkspace.actions.map((item) => <Link className="list-row" key={String(item.id)} to={`/actions/${item.id}`}>{value(item.actionType, fallback)}<span>{value(item.status, fallback)}</span></Link>) : <p>{t("workspace.empty.actions")}</p>}<Link className="primary-link" to={`/actions?deviceId=${encodeURIComponent(deviceId)}`}>{t("workspace.actions.reviewOrCreate")}</Link></section><section className="content-panel"><h2>{t("workspace.chart.findings")}</h2>{currentWorkspace.findings.length ? currentWorkspace.findings.map((item) => <div className="list-row" key={String(item.id)}>{value(item.title, fallback)}<span>{value(item.severity, fallback)}</span></div>) : <p>{t("workspace.empty.findings")}</p>}</section></div>;
-    if (section === "monitoring") return <><SensorReadings />{workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}<WorkspaceCharts /></>;
+    if (section === "monitoring") return <>{renderSensorReadings()}{workspace.device ? <DeviceVerificationPanel deviceId={deviceId} /> : null}{renderWorkspaceCharts()}</>;
     return <div className="content-grid"><section className="content-panel"><h2>{t("workspace.history.auditTitle")}</h2>{currentWorkspace.audit.length ? currentWorkspace.audit.map((item) => <div className="list-row" key={String(item.id)}>{value(item.action, fallback)}<span>{date(item.createdAt, locale, fallback)}</span></div>) : <p>{t("workspace.empty.audit")}</p>}</section><section className="content-panel"><h2>{t("workspace.history.collectionTitle")}</h2>{currentWorkspace.collections.length ? currentWorkspace.collections.map((item) => <div className="list-row" key={String(item.id)}>{value(item.provider, fallback)}<span>{value(item.status, fallback)}</span></div>) : <p>{t("workspace.empty.collections")}</p>}</section></div>;
   })();
 
   return (
     <section className="page-stack asset-detail-page">
+      {error ? <div className="content-panel asset-refresh-notice" role="status"><span>{isFa ? "به‌روزرسانی انجام نشد؛ آخرین اطلاعات دریافتی نمایش داده می‌شود." : "Refresh failed; showing the last received data."}</span><button className="secondary-button" type="button" onClick={() => void load()}>{isFa ? "تلاش دوباره" : "Try again"}</button></div> : null}
       <PageHeader title={overview.name} eyebrow={t("workspace.eyebrow")} description={`${overview.vendor} / ${overview.platform}`} actions={<><Link className="secondary-link" to="/assets/devices">{t("workspace.backToDevices")}</Link>{workspace.device && <button className="secondary-button" type="button" onClick={startEditing}>{t("workspace.editDevice")}</button>}<Link className="primary-link" to={`/assets/devices/${deviceId}/setup`}>{t("workspace.setupConnection")}</Link>{workspace.device && <button className="danger-button" type="button" onClick={() => { setDeleteOpen(true); setDeleteName(""); }}>{t("workspace.deleteDevice")}</button>}</>} />
       {editing && workspace.device && <section className="content-panel device-edit-panel" aria-label={t("workspace.edit.aria")}><header><div><p className="operator-eyebrow">{t("workspace.edit.eyebrow")}</p><h2>{t("workspace.edit.title")}</h2></div><button className="secondary-button" type="button" onClick={() => setEditing(false)}>{t("workspace.actions.closeEdit")}</button></header><div className="device-edit-grid"><label>{t("workspace.labels.name")}<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label>{t("workspace.labels.managementAddress")}<input value={form.host} onChange={(event) => setForm({ ...form, host: event.target.value })} required dir="ltr" /></label><label>{t("onboarding.fields.port")}<input type="number" min="1" max="65535" value={form.managementPort} onChange={(event) => setForm({ ...form, managementPort: event.target.value })} required /></label><label>{t("workspace.labels.protocol")}<select value={form.protocol} onChange={(event) => setForm({ ...form, protocol: event.target.value })}><option value="ssh">SSH</option><option value="api">API</option><option value="syslog">Syslog</option><option value="agent">Agent</option></select></label><label>{t("workspace.labels.environment")}<select value={form.environment} onChange={(event) => setForm({ ...form, environment: event.target.value })}><option value="lab">Lab</option><option value="production">Production</option><option value="staging">Staging</option></select></label><label>{t("workspace.labels.tags")}<input value={form.tags} onChange={(event) => setForm({ ...form, tags: event.target.value })} placeholder="linux, edge" /></label></div><div className="button-row"><button className="primary-button" type="button" disabled={saving || !form.name.trim() || !form.host.trim()} onClick={() => void saveDevice()}>{saving ? t("common.saving") : t("common.saveChanges")}</button><button className="secondary-button" type="button" disabled={saving} onClick={() => setEditing(false)}>{t("common.cancel")}</button></div></section>}
       {deleteOpen && workspace.device && <section className="destructive-confirm" role="alertdialog" aria-label={t("workspace.delete.aria")}><strong>{t("workspace.delete.title", { name: workspace.device.name })}</strong><p>{t("workspace.delete.body")}</p><label>{t("workspace.labels.name")}<input value={deleteName} onChange={(event) => setDeleteName(event.target.value)} autoComplete="off" /></label><div className="button-row"><button className="danger-button" type="button" disabled={saving || deleteName.trim() !== workspace.device.name} onClick={() => void removeDevice()}>{saving ? t("common.deleting") : t("workspace.actions.confirmDelete")}</button><button className="secondary-button" type="button" disabled={saving} onClick={() => setDeleteOpen(false)}>{t("common.cancel")}</button></div></section>}
