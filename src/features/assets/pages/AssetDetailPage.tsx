@@ -21,6 +21,8 @@ import "../components/CiscoAssetDashboard.css";
 
 import { AssetChartPlot, orderedReadings } from "../components/AssetChartPlot";
 import { AssetHistory } from "../components/AssetHistory";
+import { AssetMetricCard } from "../components/AssetMetricCard";
+import { latencyReadings } from "../components/assetChartData";
 import "./AssetWorkspace.css";
 const sections = [
   { key: "overview", labelKey: "workspace.tabs.overview" },
@@ -140,17 +142,6 @@ function TrendChart({ title, points, empty, binary = false, locale }: { title: s
   return <article className="workspace-chart"><div><h3>{title}</h3><span>{reading}</span></div><AssetChartPlot series={[{ points, label: title, color: "#69c9d5" }]} binary={binary} locale={locale} title={title} /><p>{date(latest?.timestamp, locale, empty)}</p></article>;
 }
 
-function TrafficTrendChart({ rx, tx, interfaceName, method, locale, isFa }: { rx: WorkspaceChartPoint[]; tx: WorkspaceChartPoint[]; interfaceName: string | null; method: string; locale: string; isFa: boolean }) {
-  rx = orderedReadings(rx); tx = orderedReadings(tx);
-  const latest = orderedReadings([...rx, ...tx]).at(-1);
-  return <article className="asset-traffic-chart">
-    <header><div><small>{isFa ? "اینترفیس" : "Interface"} <b dir="ltr">{interfaceName ?? "—"}</b></small><h3>{isFa ? "ترافیک عبوری" : "Network traffic"}</h3></div><span>Mbps</span></header>
-    {latest ? <><AssetChartPlot series={[{ points: rx, label: isFa ? "دریافت" : "Receive", color: "#69c9d5" }, { points: tx, label: isFa ? "ارسال" : "Transmit", color: "#ac9bdc" }]} locale={locale} title={isFa ? "ترافیک دریافتی و ارسالی" : "Received and transmitted traffic"} />
-      <div className="asset-traffic-chart__legend"><span><i />{isFa ? "دریافت" : "Receive"} <b>{rx.at(-1)?.value.toLocaleString(locale) ?? "—"}</b></span><span><i />{isFa ? "ارسال" : "Transmit"} <b>{tx.at(-1)?.value.toLocaleString(locale) ?? "—"}</b></span></div>
-      <time>{method === "device_5m_average" ? (isFa ? "میانگین ۵ دقیقه‌ای" : "5-minute average") + " · " : ""}{date(latest.timestamp, locale, "—")}</time>
-    </> : <p>{isFa ? "در این بازه دادهٔ معتبر ترافیک ثبت نشده است." : "No verified traffic readings in this range."}</p>}
-  </article>;
-}
 
 export default function AssetDetailPage({ params }: RouteComponentProps) {
   const navigate = useNavigate();
@@ -282,31 +273,19 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   }
 
   function renderOverviewTrends() {
-    const vendor = currentWorkspace.vendor.key;
-    const preferred = vendor === "fortigate"
-      ? ["sessions.count", "memory.usage_percent", "cpu.usage_percent"]
-      : vendor === "sophos"
-        ? ["interfaces.up_count", "vpn.active_count"]
-        : vendor === "linux"
-          ? ["cpu.usage_percent", "disk.usage_percent", "memory.usage_percent"]
-          : ["cpu.usage_percent", "memory.usage_percent"];
-    const labels: Record<string, [string, string]> = {
-      "cpu.usage_percent": ["مصرف CPU", "CPU usage"],
-      "disk.usage_percent": ["مصرف دیسک", "Disk usage"],
-      "memory.usage_percent": ["مصرف حافظه", "Memory usage"],
-      "sessions.count": ["نشست‌های فعال", "Active sessions"],
-      "interfaces.up_count": ["لینک‌های فعال", "Active links"],
-      "vpn.active_count": ["VPN فعال", "Active VPN"]
-    };
-    const metric = preferred.map((key) => ({ key, points: chart(currentWorkspace.charts.resources.filter((item) => item.label === key)) })).find((item) => item.points.length >= 1);
     const traffic = currentWorkspace.traffic ?? { interface: null, method: "counter_delta", rx: [], tx: [] };
     const available = chart(currentWorkspace.charts.availability);
+    const cpu = orderedReadings(currentWorkspace.charts.resources.filter((item) => item.label === "cpu.usage_percent" && item.value >= 0 && item.value <= 100));
+    const latency = latencyReadings(currentWorkspace.statusChecks);
+    const end = Date.now();
+    const noData = isFa ? "در این بازه نمونهٔ معتبر ثبت نشده است" : "No verified sample in this range";
     return <section className="asset-overview-trends" aria-label={isFa ? "روند وضعیت دارایی" : "Asset status trends"}>
       <header><div><small>{isFa ? "داده‌های ثبت‌شده" : "Recorded measurements"}</small><h2>{isFa ? "روند وضعیت" : "Status trends"}</h2></div><div className="asset-overview-trends__tools"><div role="group" aria-label={isFa ? "بازه زمانی" : "Time range"}><button type="button" aria-pressed={timeRange === "24h"} onClick={() => setTimeRange("24h")}>{isFa ? "۲۴ ساعت" : "24h"}</button><button type="button" aria-pressed={timeRange === "7d"} onClick={() => setTimeRange("7d")}>{isFa ? "۷ روز" : "7d"}</button></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات پایش" : "Monitoring details"}<ArrowUpLeft aria-hidden="true" /></Link></div></header>
       <div className="asset-overview-trends__grid">
-        <TrendChart title={isFa ? "دسترسی دستگاه" : "Device availability"} points={available} empty={isFa ? "هنوز بررسی اتصالی ثبت نشده است." : "No connection checks recorded yet."} binary locale={locale} />
-        <TrafficTrendChart rx={chart(traffic.rx)} tx={chart(traffic.tx)} interfaceName={traffic.interface} method={traffic.method} locale={locale} isFa={isFa} />
-        {metric ? <TrendChart title={labels[metric.key][isFa ? 0 : 1]} points={metric.points} empty="" locale={locale} /> : <article className="workspace-chart is-empty"><h3>{isFa ? "شاخص اختصاصی وندور" : "Vendor metric"}</h3><p>{isFa ? "با نخستین جمع‌آوری معتبر نمایش داده می‌شود." : "Shown after the first verified collection."}</p></article>}
+        <AssetMetricCard title={isFa ? "ترافیک عبوری" : "Network traffic"} series={[{ points: chart(traffic.rx), label: isFa ? "دریافت" : "Receive", color: "#65bfce" }, { points: chart(traffic.tx), label: isFa ? "ارسال" : "Transmit", color: "#a69bcf" }]} locale={locale} unit="Mbps" empty={noData} subtitle={`${traffic.interface ?? "—"} · ${traffic.method === "device_5m_average" ? (isFa ? "میانگین ۵ دقیقه‌ای" : "5-minute average") : (isFa ? "نرخ شمارندهٔ اینترفیس" : "Interface counter rate")}`} start={since} end={end} />
+        <AssetMetricCard title={isFa ? "مصرف CPU" : "CPU usage"} series={[{ points: chart(cpu), label: "CPU", color: "#7bb4d5" }]} locale={locale} unit="%" empty={isFa ? "CPU از این تجهیز هنوز دریافت نشده است" : "CPU readings have not been collected"} staleReading={chart(cpu).length ? undefined : cpu.at(-1)} start={since} end={end} />
+        <AssetMetricCard title={isFa ? "دسترسی دستگاه" : "Device availability"} series={[{ points: available, label: isFa ? "دسترسی" : "Availability", color: "#76b8aa" }]} locale={locale} binary empty={noData} start={since} end={end} />
+        <AssetMetricCard title={isFa ? "زمان بررسی اتصال" : "Connection check duration"} series={[{ points: chart(latency), label: isFa ? "کانال مدیریتی" : "Management channel", color: "#c2ae85" }]} locale={locale} unit="ms" empty={noData} subtitle={isFa ? "مدت بررسی موفق کانال؛ نه تأخیر ICMP" : "Successful channel check; not ICMP latency"} start={since} end={end} />
       </div>
     </section>;
   }

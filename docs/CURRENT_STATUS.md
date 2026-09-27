@@ -1,3 +1,12 @@
+## 2026-09-27 - Universal Highcharts asset monitoring panels
+
+- Added locally bundled Highcharts 13.1.1 Core with accessibility, timestamp axes, Tehran/Persian formatting, quiet responsive cards, tooltips and horizontal zoom. Every asset overview has four fixed panels: interface RX/TX Mbps, CPU percentage, device availability and measured successful management-channel check duration (not ICMP RTT).
+- Reused real collected vendor metrics and status checks. No fabricated samples, passive/default-zero response times or substituted CPU metrics; old CPU values are explicitly marked, single samples have markers and collector evidence gaps break the plotted line. Traffic identifies its interface and distinguishes counter rates from device five-minute averages.
+- Charts update existing instances during polling and resize, and destroy their resources on unmount. Direct Core integration avoids a production-only circular module failure observed with the optional React wrapper. No CDN, export server, configuration writes or new connections are introduced by the charts.
+- Validation: frontend production build/deployment and 14 focused regressions passed. Deployed Chromium verified four visible charts at 1440/390px, existing Linux/Cisco/MikroTik assets with external Highcharts CDN blocked, and chart identity across two polling cycles. Existing history filtering and command preview/cancellation passed without vendor writes. FortiGate has no registered device for live acceptance; missing vendor telemetry remains explicit.
+- Highcharts commercial/production licensing must be confirmed separately; credits remain visible. Official references: https://www.highcharts.com/download/ and https://api.highcharts.com/highcharts/plotOptions.series.connectNulls .
+- Disclosure smoke also passed desktop/mobile polling, manual close and transient failure/recovery. UTF-8 validation passed (732 files); all four local Compose services are healthy and API health is HTTP 200. No remote push or vendor configuration write was performed.
+
 ## 2026-09-27 - Compact asset workspace, accurate charts and visible execution preview
 
 - Simplified asset overview/header, removed duplicate status summaries and moved vendor inventory into stable collapsible sections. Quiet responsive styling prioritizes status, trends and readable device facts.

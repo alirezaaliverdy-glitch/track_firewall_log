@@ -24,8 +24,12 @@ try {
   socket.onmessage=event=>{const m=JSON.parse(event.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(new Error(m.error.message)):p.resolve(m.result);}}};
   const send=(method,params={})=>new Promise((resolve,reject)=>{const key=++id;pending.set(key,{resolve,reject});socket.send(JSON.stringify({id:key,method,params}));});
   const evaluate=async expression=>{const r=await send("Runtime.evaluate",{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw new Error("Browser expression failed");return r.result.value;};
-  const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await sleep(150);}console.log(JSON.stringify(await evaluate("({library:!!document.querySelector('[data-testid=action-library]'),wizard:!!document.querySelector('[data-testid=action-library] section[dir]'),wizardMessages:[...document.querySelectorAll('[data-testid=action-library] section[dir]>p')].map(p=>p.textContent.slice(0,200))})")));throw new Error("UI condition not reached: "+expression);};
+  const wait=async expression=>{for(let i=0;i<100;i++){if(await evaluate(expression))return;await sleep(150);}console.log(JSON.stringify(await evaluate("({title:document.title,path:location.pathname,body:document.body.innerText.slice(0,300)})")));throw new Error("UI condition not reached: "+expression);};
   await send("Network.enable");
+  await send("Network.setBlockedURLs", { urls: ["*://code.highcharts.com/*", "*://export.highcharts.com/*"] });
+  await send("Runtime.enable");
+  const runtimeHandler = socket.onmessage;
+  socket.onmessage = event => { const m=JSON.parse(event.data); if(m.method === "Runtime.exceptionThrown")console.log(JSON.stringify({runtimeError:m.params.exceptionDetails.exception?.description?.slice(0,900)})); if(m.method === "Runtime.consoleAPICalled" && m.params.type === "error")console.log(JSON.stringify({consoleError:m.params.args.map(a=>a.description?.slice(0,900) ?? a.value)})); runtimeHandler(event); };
   await send("Network.setCookie",{name:"firewall_session",value:token,url:"http://main-nginx/",path:"/"});
   let refreshes=0;
   const previousMessage=socket.onmessage;
@@ -36,9 +40,25 @@ try {
   for (const [width,height] of [[1440,1000],[390,844]]) {
     await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<600});
     await sleep(500);
-    const result = await evaluate("(()=>{const root=document.querySelector('.asset-overview-trends');return {scrollWidth:document.documentElement.scrollWidth,plots:root.querySelectorAll('svg circle').length,nonzeroPlots:[...root.querySelectorAll('.asset-chart-plot')].every(e=>e.getBoundingClientRect().height>70),collapsedInventory:!document.querySelector('.asset-vendor-overview').open};})()");
-    if(result.scrollWidth > width+1 || !result.plots || !result.nonzeroPlots || !result.collapsedInventory) throw new Error("Overview assertion: "+JSON.stringify(result));
+    const result = await evaluate("(()=>{const root=document.querySelector(\'.asset-overview-trends\');return {scrollWidth:document.documentElement.scrollWidth,charts:root.querySelectorAll(\'.highcharts-root\').length,cards:root.querySelectorAll(\'.asset-metric-card\').length,nonzeroPlots:[...root.querySelectorAll(\'.asset-chart-plot\')].every(e=>e.getBoundingClientRect().height>=200),collapsedInventory:!document.querySelector(\'.asset-vendor-overview\').open};})()");
+    if(result.scrollWidth > width+1 || result.charts !== 4 || result.cards !== 4 || !result.nonzeroPlots || !result.collapsedInventory) throw new Error("Overview assertion: "+JSON.stringify(result));
     console.log(JSON.stringify({stage:"overview",width,...result}));
+  }
+  const ownedDevices = await prisma.device.findMany({ where: { deletedAt: null, company: { ownerId: user.id, deletedAt: null } }, select: { id: true, vendor: true } });
+  const testedVendors = new Set();
+  for (const asset of ownedDevices) {
+    if (testedVendors.has(asset.vendor)) continue;
+    testedVendors.add(asset.vendor);
+    await navigate("assets/devices/"+encodeURIComponent(asset.id)+"/overview");
+    await wait("document.querySelectorAll('.asset-overview-trends .highcharts-root').length === 4");
+    const metrics = await evaluate("[...document.querySelectorAll('.asset-metric-card')].map(e=>e.dataset.metric)");
+    if(metrics.join(',') !== 'traffic,cpu,availability,latency') throw new Error("Missing universal monitoring panels");
+    await evaluate("window.smokeChartRoots=[...document.querySelectorAll('.asset-overview-trends .highcharts-root')]");
+    const before = refreshes;
+    await wait("Boolean(document.querySelector('.asset-overview-trends'))");
+    for(let i=0;i<70 && refreshes<before+2;i++)await sleep(200);
+    if(refreshes<before+2 || !await evaluate("window.smokeChartRoots.every((e,i)=>e===document.querySelectorAll('.asset-overview-trends .highcharts-root')[i])"))throw new Error("Chart identity lost during polling");
+    console.log(JSON.stringify({stage:"vendor-charts",vendor:asset.vendor,metrics,pollIdentityPreserved:true,externalChartCDNBlocked:true}));
   }
   await navigate("assets/devices/"+encodeURIComponent(device.id)+"/history");
   await wait("Boolean(document.querySelector('.asset-history'))");

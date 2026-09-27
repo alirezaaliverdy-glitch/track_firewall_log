@@ -1,43 +1,46 @@
+import { useEffect, useMemo, useRef } from "react";
+import Highcharts from "highcharts";
+import "highcharts/modules/accessibility";
 import type { WorkspaceChartPoint } from "@/lib/deviceOnboarding";
+import { chartReadings, orderedReadings } from "./assetChartData";
+export { orderedReadings } from "./assetChartData";
 
-export function orderedReadings(points: WorkspaceChartPoint[]) {
-  const byTime = new Map<number, WorkspaceChartPoint>();
-  for (const point of points) {
-    const time = Date.parse(point.timestamp);
-    if (Number.isFinite(time) && Number.isFinite(point.value)) byTime.set(time, point);
-  }
-  return [...byTime.entries()].sort(([a], [b]) => a - b).map(([, point]) => point);
-}
-
-/** Both directions share a real time/value domain; single readings remain visible. */
-export function AssetChartPlot({ series, binary = false, locale, title }: {
+export function AssetChartPlot({ series, binary = false, locale, title, windowStart, windowEnd, valueUnit }: {
   series: Array<{ points: WorkspaceChartPoint[]; label: string; color: string }>;
-  binary?: boolean; locale: string; title: string;
+  binary?: boolean; locale: string; title: string; windowStart?: number; windowEnd?: number; valueUnit?: string;
 }) {
-  const cleaned = series.map((item) => ({ ...item, points: orderedReadings(item.points) }));
-  const all = cleaned.flatMap((item) => item.points);
-  if (!all.length) return null;
-  const times = all.map((point) => Date.parse(point.timestamp));
-  const start = Math.min(...times), end = Math.max(...times);
-  const percentage = all.every((point) => point.unit === "percent" || point.unit === "%");
-  const max = binary ? 1 : Math.max(percentage ? 100 : 0.001, ...all.map((point) => point.value));
-  const min = binary ? 0 : Math.min(0, ...all.map((point) => point.value));
-  const x = (point: WorkspaceChartPoint) => start === end ? 210 : 24 + (Date.parse(point.timestamp) - start) / (end - start) * 372;
-  const y = (point: WorkspaceChartPoint) => 116 - (point.value - min) / (max - min) * 92;
-  const clock = (time: number) => new Date(time).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-  return <div className="asset-chart-plot" dir="ltr">
-    <svg viewBox="0 0 420 140" role="img" aria-label={title}>
-      {[24, 70, 116].map((height) => <line key={height} x1="24" x2="396" y1={height} y2={height} stroke="currentColor" opacity=".12" />)}
-      {cleaned.map((item) => {
-        const path = item.points.map((point, index) => index === 0 ? `M ${x(point)} ${y(point)}` : binary ? `H ${x(point)} V ${y(point)}` : `L ${x(point)} ${y(point)}`).join(" ");
-        return <g key={item.label} style={{ color: item.color }}>
-          <path d={path} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          {item.points.map((point, index) => <circle key={point.timestamp} cx={x(point)} cy={y(point)} r={item.points.length === 1 ? 5 : index === item.points.length - 1 ? 3.5 : 1.5} fill="currentColor"><title>{item.label}: {point.value.toLocaleString(locale)} {point.unit ?? ""} · {new Date(point.timestamp).toLocaleString(locale)}</title></circle>)}
-        </g>;
-      })}
-      <text x="24" y="136" fill="currentColor" fontSize="11">{clock(start)}</text>
-      <text x="396" y="136" textAnchor="end" fill="currentColor" fontSize="11">{clock(end)}</text>
-      <text x="24" y="16" fill="currentColor" fontSize="11">{max.toLocaleString(locale, { maximumFractionDigits: 3 })}</text>
-    </svg>
-  </div>;
+  const container = useRef<HTMLDivElement>(null);
+  const chart = useRef<Highcharts.Chart | null>(null);
+  const options = useMemo<Highcharts.Options>(() => {
+    const readings = series.flatMap((item) => orderedReadings(item.points));
+    const percentage = valueUnit === "%" || readings.length > 0 && readings.every((point) => point.unit === "percent" || point.unit === "%");
+    const unit = valueUnit ?? (percentage ? "%" : readings[0]?.unit === "count" ? "" : readings[0]?.unit ?? "");
+    const fa = locale.startsWith("fa");
+    const state = (value: number) => value === 1 ? (fa ? "برقرار" : "Online") : value === 0 ? (fa ? "قطع" : "Offline") : (fa ? "نامشخص / نیازمند بررسی" : "Unknown / degraded");
+    return {
+      chart: { type: "line", backgroundColor: "transparent", height: 210, animation: false, spacing: [12, 8, 8, 8], style: { fontFamily: "inherit", fontSize: "12px" }, zooming: { type: "x" } },
+      title: { text: undefined }, time: { timezone: "Asia/Tehran" },
+      credits: { enabled: true, style: { color: "#8297a4", fontSize: "9px" } },
+      accessibility: { description: title },
+      legend: { enabled: series.length > 1, itemStyle: { color: "#b5c8d2", fontWeight: "normal", fontSize: "12px" }, itemHoverStyle: { color: "#eff8fc" } },
+      xAxis: { type: "datetime", min: windowStart, max: windowEnd, lineColor: "#263947", tickColor: "#263947", tickPixelInterval: 115,
+        labels: { style: { color: "#95aab7", fontSize: "11px" }, formatter() { return new Date(Number(this.value)).toLocaleString(locale, { timeZone: "Asia/Tehran", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); } } },
+      yAxis: { title: { text: binary ? undefined : unit, style: { color: "#95aab7" } }, min: 0, max: binary ? 1 : percentage ? 100 : undefined,
+        tickPositions: binary ? [0, .5, 1] : undefined, gridLineColor: "rgba(148,163,184,.12)", startOnTick: true, endOnTick: !binary,
+        labels: { style: { color: "#95aab7", fontSize: "11px" }, formatter() { return binary ? state(Number(this.value)) : Number(this.value).toLocaleString(locale, { maximumFractionDigits: 3 }); } } },
+      tooltip: { shared: false, useHTML: false, backgroundColor: "#142b3a", borderColor: "#375365", style: { color: "#e2eef4", fontSize: "13px" },
+        formatter() { const time = new Date(this.x ?? 0).toLocaleString(locale, { timeZone: "Asia/Tehran" }); const reading = this.y === null || this.y === undefined ? "—" : binary ? state(this.y) : `${this.y.toLocaleString(locale, { maximumFractionDigits: 3 })} ${unit}`; return `${time}\n${this.series.name}: ${reading}`; } },
+      plotOptions: { series: { animation: false, connectNulls: false, lineWidth: 2, marker: { enabled: readings.length < 3, radius: 4, states: { hover: { enabled: true, radius: 5 } } }, states: { inactive: { opacity: .65 } } } },
+      series: series.map((item, index) => ({ type: "line", id: `asset-series-${index}`, name: item.label, color: item.color, step: binary ? "left" : undefined, data: chartReadings(item.points, binary) }))
+    };
+  }, [series, binary, locale, title, windowStart, windowEnd, valueUnit]);
+  useEffect(() => {
+    if (!container.current) return;
+    chart.current = Highcharts.chart(container.current, {});
+    const observer = new ResizeObserver(() => chart.current?.reflow());
+    observer.observe(container.current);
+    return () => { observer.disconnect(); chart.current?.destroy(); chart.current = null; };
+  }, []);
+  useEffect(() => { chart.current?.update(options, true, true, false); }, [options]);
+  return <div ref={container} className="asset-chart-plot asset-highchart" dir="ltr" aria-label={title} />;
 }

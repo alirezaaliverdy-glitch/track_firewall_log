@@ -26,10 +26,13 @@ test("traffic preserves the selected interface and does not mix averages with co
 });
 test("single readings have visible markers and traffic shares timestamp axes", () => {
   const source = readFileSync("/src/features/assets/components/AssetChartPlot.tsx", "utf8");
-  assert.match(source, /Date.parse\(point.timestamp\) - start/);
-  assert.match(source, /<circle/);
-  assert.match(source, /Number.isFinite\(point.value\)/);
-  assert.match(source, /binary \? `H/);
+  assert.match(source, /Highcharts.chart\(container.current/);
+  assert.match(source, /chart.current\?\.update\(options, true, true, false\)/);
+  assert.match(source, /observer.disconnect\(\); chart.current\?\.destroy\(\)/);
+  assert.match(source, /type: "datetime"/);
+  assert.match(source, /marker: \{ enabled: readings.length < 3/);
+  assert.match(source, /step: binary \? "left"/);
+  assert.match(source, /connectNulls: false/);
 });
 test("command review starts expanded and its scroll body cannot compress detail rows", () => {
   const dialog = readFileSync("/src/features/actions/components/ExecutionReviewDialog.tsx", "utf8");
