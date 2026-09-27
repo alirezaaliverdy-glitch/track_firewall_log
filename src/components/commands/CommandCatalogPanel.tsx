@@ -12,6 +12,7 @@ const VENDORS = ["fortigate", "mikrotik", "linux", "cisco", "pfsense", "generic"
 
 function vendorOf(device?: Device) {
   if (!device) return "";
+  if (device.vendor?.toLowerCase().includes("cisco")) return "cisco";
   if (device.type === "linux_edge") return "linux";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type ?? "";
@@ -105,7 +106,7 @@ export default function CommandCatalogPanel() {
     url.searchParams.set("catalogActionId", item.id);
     url.searchParams.set("vendor", item.vendor);
     if (deviceId) url.searchParams.set("deviceId", deviceId);
-    navigate(`${url.pathname}${url.search}`, { replace: true });
+    navigate(`${location.pathname}${url.search}`, { replace: true });
   }
 
   function closeGuidedFlow() {
@@ -113,7 +114,7 @@ export default function CommandCatalogPanel() {
     const url = new URL(window.location.href);
     url.searchParams.delete("guidedBlueprintId");
     url.searchParams.delete("catalogActionId");
-    navigate(`${url.pathname}${url.search}`, { replace: true });
+    navigate(`${location.pathname}${url.search}`, { replace: true });
   }
 
   function openCatalogGuidedFlow(item: CatalogItem) {

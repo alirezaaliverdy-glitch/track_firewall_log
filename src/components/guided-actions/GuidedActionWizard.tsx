@@ -5,6 +5,7 @@ import { answerGuidedSession, buildGuidedPlan, cancelGuidedSession, getGuidedSes
 import type { GuidedActionField } from "@/lib/commandCatalog";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { listDevices, type Device } from "@/lib/devices";
+import { getDeviceWorkspace } from "@/lib/deviceOnboarding";
 
 function valueToString(value: unknown) {
   if (Array.isArray(value)) return value.join(",");
@@ -67,6 +68,7 @@ export default function GuidedActionWizard(props: {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [ciscoPorts, setCiscoPorts] = useState<string[]>([]);
 
   useEffect(() => {
     void listDevices().then(setDevices).catch(() => setDevices([]));
@@ -99,7 +101,18 @@ export default function GuidedActionWizard(props: {
   const previewOnly = isPreviewOnly(session);
   const selectedDeviceId = session?.deviceId ?? props.deviceId ?? (typeof stepValues.deviceId === "string" ? stepValues.deviceId : null);
   const selectedDevice = devices.find((device) => device.id === selectedDeviceId);
-  const interfaceOptions = useMemo(() => fortigateInterfaceOptions(selectedDevice), [selectedDevice]);
+  const interfaceOptions = useMemo(() => selectedDevice?.vendor === "cisco" ? ciscoPorts : fortigateInterfaceOptions(selectedDevice), [selectedDevice, ciscoPorts]);
+  useEffect(() => {
+    let active = true;
+    setCiscoPorts([]);
+    if (selectedDevice?.vendor === "cisco") void getDeviceWorkspace(selectedDevice.id).then(workspace => {
+      const facts = object(workspace.capabilities?.facts);
+      const rows = Array.isArray(facts.interfaces) ? facts.interfaces : Array.isArray(facts.interfaceStatus) ? facts.interfaceStatus : [];
+      const names = rows.map(row => String(object(row).name ?? object(row).interface ?? "")).filter(name => /^(?:Gi|Fa|Te|GigabitEthernet|FastEthernet|TenGigabitEthernet|Po|Port-channel)\d/i.test(name));
+      if (active) setCiscoPorts([...new Set(names)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [selectedDevice?.id, selectedDevice?.vendor]);
 
   async function saveStep() {
     if (!session || !currentStep) return;
@@ -206,6 +219,18 @@ export default function GuidedActionWizard(props: {
                       onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.checked }))}
                       className="mt-3 h-4 w-4"
                     />
+                  ) : field.key === "interfaces" && session?.blueprint.vendor === "cisco" ? (
+                    <>
+                      <input type="text" dir="ltr" value={raw} placeholder={field.placeholderFa} onChange={event => setValues(current => ({ ...current, [field.key]: event.target.value }))} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 p-2" />
+                      <span className="mt-2 flex max-h-40 flex-wrap gap-2 overflow-y-auto" role="group" aria-label="انتخاب پورت‌های واقعی دستگاه">
+                        {ciscoPorts.filter(name => !/^(Po|Port-channel)/i.test(name)).map(name => {
+                          const selected = raw.split(",").map(port => port.trim());
+                          const pressed = selected.includes(name);
+                          return <button type="button" key={name} aria-pressed={pressed} disabled={busy} dir="ltr" className={`rounded-lg border px-3 py-2 text-sm ${pressed ? "border-slate-400 bg-slate-700 text-white" : "border-slate-700 bg-slate-900 text-slate-300"}`} onClick={event => { event.preventDefault(); setValues(current => ({ ...current, [field.key]: (pressed ? selected.filter(port => port !== name) : [...selected.filter(Boolean), name]).join(", ") })); }}>{name}</button>;
+                        })}
+                      </span>
+                      {!ciscoPorts.length && <span className="mt-1 block text-xs text-slate-400">فهرست پورت هنوز جمع‌آوری نشده؛ نام دقیق را وارد کنید. هنگام اجرا از دستگاه بررسی می‌شود.</span>}
+                    </>
                   ) : field.type === "interfaceSelect" ? (
                     <>
                       <input

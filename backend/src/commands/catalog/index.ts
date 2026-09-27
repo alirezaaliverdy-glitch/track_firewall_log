@@ -2,6 +2,7 @@ import { FORTIGATE_FULL_CONTROL_REGISTRY } from "../../fortigate/full-control-re
 import type { CommandCatalogItem, CommandParam, CommandRiskLevel, CommandVendor, ImplementationState } from "./types.js";
 import { evaluateCatalogSupportState } from "./support-state.js";
 import { CISCO_OPERATION_REGISTRY } from "../../cisco/cisco-operation-registry.js";
+import { SWITCHING_ACTIONS } from "../../cisco/cisco-switching.js";
 export { COMMAND_CATALOG_VERSION } from "./version.js";
 
 const param = (key: string, labelFa: string, helpFa: string, type: CommandParam["type"], placeholderFa?: string): CommandParam => ({ key, labelFa, helpFa, type, placeholderFa });
@@ -84,13 +85,19 @@ const ciscoParam = (key: string): CommandParam => {
     groupId: ["شماره Port-channel", "برای Catalyst 2960-X عددی از ۱ تا ۲۴ وارد کنید.", "5"],
     interfaces: ["پورت‌های عضو", "۲ تا ۸ پورت فیزیکی هم‌نوع، جداشده با ویرگول. پورت‌های دارای تنظیمات ناسازگار قبل از تغییر رد می‌شوند.", "Gi1/0/1, Gi1/0/2"],
     accessVlanId: ["VLAN دسترسی", "VLAN یکسان برای همهٔ پورت‌های عضو (۱ تا ۴۰۹۴).", "10"],
+    allowedVlans: ["VLANهای مجاز", "فهرست دقیق مانند 10,20-25؛ all یعنی همه و none یعنی هیچ‌کدام. افزودن، حذف و جایگزینی عملیات جدا هستند.", "10,20-25"],
+    nativeVlanId: ["Native VLAN", "VLAN ترافیک بدون تگ؛ باید با سمت مقابل مطابقت داشته باشد.", "1"],
+    portMode: ["حالت گروه موجود", "برای افزودن عضو، همان حالت Access یا Trunk گروه موجود را انتخاب کنید."],
+    lacpMode: ["حالت LACP", "Active پیشنهاد می‌شود. در حالت Passive باید سمت مقابل Active باشد."],
+    enableMembers: ["روشن‌کردن اعضای انتخابی", "اگر انتخاب شود no shutdown روی اعضای انتخابی اعمال می‌شود؛ در غیر این صورت وضعیت مدیریتی قبلی حفظ می‌شود."],
+    name: ["نام VLAN", "حداکثر ۳۲ حرف لاتین، عدد، خط تیره یا زیرخط.", "Office"],
     acknowledgeDisruption: ["تأیید اثر روی ترافیک", "تغییر پورت‌های عضو ممکن است ترافیک را قطع کند. ابتدا سمت مقابل را برای LACP آماده کنید."],
     interfaceName: ["نام اینترفیس", "نام دقیق پورت روی دستگاه را وارد کنید.", "Gi1/0/1"],
     vlanId: ["شماره VLAN", "شماره VLAN دستگاه را وارد کنید.", "10"],
     target: ["آدرس مقصد", "آدرس IPv4 مقصد را وارد کنید.", "192.0.2.10"]
   };
   const [label, help, placeholder] = labels[key] ?? [key, `مقدار ${key} را وارد کنید.`];
-  const type = key === "acknowledgeDisruption" ? "boolean"
+  const type = key === "allowedVlans" ? "string" : key === "acknowledgeDisruption" || key === "enableMembers" ? "boolean"
     : key.toLowerCase().includes("vlan") || key.toLowerCase().includes("asn") || key.toLowerCase().includes("group") || key.toLowerCase().includes("id") ? "number"
       : key.toLowerCase().includes("ip") || key.toLowerCase().includes("hop") || key.toLowerCase().includes("server") ? "ip"
         : key.toLowerCase().includes("cidr") || key.toLowerCase().includes("network") || key.toLowerCase().includes("source") ? "cidr" : "string";
@@ -102,13 +109,20 @@ const ciscoCommandCatalogItems = CISCO_OPERATION_REGISTRY.map((operation) => ite
   privilegeLevel: operation.readOnly ? "read" : "admin",
   required: (operation.requiredParams ?? []).map(ciscoParam),
   optionalParams: (operation.optionalParams ?? []).map(ciscoParam),
+  defaultParams: operation.optionalParams?.includes("lacpMode") ? { lacpMode: "active" } : {},
+  paramCandidates: { lacpMode: ["active", "passive"], portMode: ["access", "trunk"] },
   prechecks: operation.prechecks,
   verification: operation.verification,
   rollback: operation.rollback.available ? { available: true, steps: operation.rollback.steps } : { available: false, notAvailableReasonFa: operation.rollback.reason },
   searchKeywordsFa: operation.keywords,
   descriptionFa: operation.slug === "create-access-etherchannel"
     ? "ساخت Port-channel از پورت‌های access با LACP؛ ابتدا پیش‌نیازهای دستگاه بررسی و فرمان‌ها برای تأیید شما نمایش داده می‌شوند. سمت مقابل باید از قبل آماده باشد."
-    : `${operation.titleFa} با اتصال کنترل‌شدهٔ سیسکو و بازبینی پیش از اجرا.`,
+    : /remove-etherchannel-members|delete-etherchannel/.test(operation.slug)
+      ? "اعضای جداشده خاموش می‌مانند تا حلقه شبکه ایجاد نشود؛ تنظیمات قبلی پورت پاک نمی‌شود."
+      : operation.slug === "configure-trunk-allowed-vlans" ? "کل فهرست VLANهای مجاز جایگزین می‌شود؛ برای حفظ بقیه، عملیات افزودن یا حذف انتخابی را انتخاب کنید."
+      : SWITCHING_ACTIONS.some(action => action.slug === operation.slug)
+        ? `${operation.titleFa} با بررسی تنظیمات فعلی، بک‌آپ ایمنی و تطبیق نتیجه؛ Startup-config خودکار ذخیره نمی‌شود.`
+        : `${operation.titleFa} برای دستگاه انتخاب‌شده، با ثبت شواهد و بازبینی نتیجه.`,
 }) : operation.state === "manualOnly" ? manual({
   mutates: !operation.readOnly,
   riskLevel: operation.risk as CommandRiskLevel,

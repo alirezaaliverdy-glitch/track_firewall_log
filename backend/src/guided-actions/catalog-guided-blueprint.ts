@@ -81,6 +81,19 @@ export function buildCatalogGuidedBlueprint(blueprintId: string): GuidedActionBl
     ...item.requiredParams.map((param) => fieldFromParam(param, true)),
     ...item.optionalParams.map((param) => fieldFromParam(param, false)),
   ];
+  if (item.vendor === "cisco") for (const field of fields) {
+    if (field.key === "lacpMode" || field.key === "portMode") {
+      field.type = "select";
+      const choices = item.paramCandidates[field.key] ?? [];
+      field.options = choices.map(value => ({ value: String(value), labelFa: String(value) === "active" ? "Active — پیشنهادشده" : String(value) === "passive" ? "Passive — سمت مقابل باید Active باشد" : String(value) === "access" ? "Access — یک VLAN" : "Trunk — چند VLAN", source: "existing_template" }));
+      field.validation = { allowedValues: choices.map(String) };
+    }
+    if (field.key === "interfaceName") field.type = "interfaceSelect";
+    if (item.id === "cisco.add-etherchannel-members" && ["accessVlanId", "allowedVlans", "nativeVlanId"].includes(field.key)) {
+      field.required = true;
+      field.dependsOn = { portMode: field.key === "accessVlanId" ? "access" : "trunk" };
+    }
+  }
   return {
     id: blueprintId,
     vendor: item.vendor,

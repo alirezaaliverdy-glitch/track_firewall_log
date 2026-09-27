@@ -5,6 +5,11 @@ import { ciscoReadCommand } from "./cisco/ios-xe/cisco-iosxe.templates.js";
 import type { CiscoCliCommandSpec } from "./cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { findCiscoOperation, type CiscoOperationDefinition } from "../cisco/cisco-operation-registry.js";
 import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
+import { SWITCHING_ACTIONS } from "../cisco/cisco-switching.js";
+import { prisma } from "../db/prisma.js";
+import { detectCiscoPlatform } from "./cisco/ios-xe/cisco-iosxe.parsers.js";
+const switchingOperations = new Set<string>(SWITCHING_ACTIONS.map(operation => "cisco." + operation.slug));
+const activeSwitchingDevices = new Set<string>();
 
 function metadata(plan: ActionPlan) {
   const parameters = plan.parametersJson && typeof plan.parametersJson === "object" && !Array.isArray(plan.parametersJson)
@@ -37,7 +42,12 @@ function actionParameters(plan: ActionPlan) {
 }
 
 function specsForOperation(operation: CiscoOperationDefinition, plan: ActionPlan): CiscoCliCommandSpec[] {
-  if (operation.buildCommandSpecs) return operation.buildCommandSpecs(actionParameters(plan));
+  if (operation.buildCommandSpecs) {
+    const specs = operation.buildCommandSpecs(actionParameters(plan));
+    return switchingOperations.has(operation.id) ? [{ commandId: "platform", command: "show version", strict: true, validateOutput(output: string) {
+      if (!detectCiscoPlatform(output).supported) throw new Error("پلتفرم IOS/IOS XE پشتیبانی‌شده تأیید نشد؛ تغییر ارسال نشد.");
+    } }, ...specs] : specs;
+  }
   return operation.commandIds.map((commandId) => ({
     commandId,
     command: ciscoReadCommand(commandId),
@@ -131,14 +141,14 @@ export const ciscoIosXeConnector: DeviceConnector = {
     const operation = executableOperation(plan);
     return {
       plannedCommands: specsForOperation(operation, plan).map((spec) => spec.command),
-      validationWarnings: [`Controlled Cisco SSH2 operation: ${operation.titleEn}.`],
+      validationWarnings: switchingOperations.has(operation.id) ? [operation.titleFa, ...operation.prechecks, "بک‌آپ ایمنی گرفته می‌شود؛ ذخیره Startup-config و بازگردانی خودکار انجام نمی‌شود."] : [`Controlled Cisco SSH2 operation: ${operation.titleEn}.`],
       affectedPorts: [],
       affectedServices: [],
       rollbackSteps: operation.rollback.available ? operation.rollback.steps : [],
       riskLevel: plan.riskLevel,
       requiresApproval: true,
       commandSpecs: specsForOperation(operation, plan).map((spec) => ({ template: spec.commandId, command: spec.command, write: spec.write === true, target: { deviceId: plan.deviceId, operationId: operation.id } })),
-      exactTarget: { deviceId: plan.deviceId }
+      exactTarget: { deviceId: plan.deviceId, interfaces: String(actionParameters(plan).interfaces ?? actionParameters(plan).interfaceName ?? "") }
     };
   },
   async execute(plan, device): Promise<ConnectorExecutionResult> {
@@ -161,6 +171,20 @@ export const ciscoIosXeConnector: DeviceConnector = {
     }
     const operation = executableOperation(plan);
     const specs = specsForOperation(operation, plan);
+    const switching = switchingOperations.has(operation.id);
+    if (switching && activeSwitchingDevices.has(device.id)) throw new Error("CISCO_SWITCHING_BUSY: عملیات دیگری روی این دستگاه در حال اجراست.");
+    if (switching) activeSwitchingDevices.add(device.id);
+    let safetyBackupId: string | undefined;
+    try {
+    if (switching) {
+      if (!device.companyId) throw new Error("CISCO_BACKUP_OWNER_REQUIRED");
+      const company = await prisma.company.findFirst({ where: { id: device.companyId, deletedAt: null }, select: { ownerId: true } });
+      if (!company) throw new Error("CISCO_BACKUP_OWNER_REQUIRED");
+      const { createBackup } = await import("../backups/device-backup.service.js");
+      const backup = await createBackup(device.id, company.ownerId, plan.requestedBy || "system");
+      safetyBackupId = backup.id;
+      await prisma.actionAuditLog.create({ data: { actionPlanId: plan.id, deviceId: device.id, eventType: "cisco_switching_safety_backup", message: "Fresh encrypted backup saved before switching configuration changes.", metadataJson: { safetyBackupId, sha256: backup.sha256 } } });
+    }
     const mustUseSpecRunner = specs.some((spec) => spec.write === true || spec.redactOutput === true);
     const result = operation.commandIds.length > 0 && !operation.buildCommandSpecs && !mustUseSpecRunner
       ? await ciscoIosXeSshConnector.runReadOnlyCommands(device, operation.commandIds)
@@ -170,9 +194,10 @@ export const ciscoIosXeConnector: DeviceConnector = {
       actionType: plan.actionType,
       deviceId: device.id,
       commands: result.results.map((entry) => ({ template: entry.commandId, stdout: entry.stdout, stderr: entry.stderr, exitCode: entry.exitCode })),
-      warnings: result.warnings,
-      rollbackJson: operation.rollback.available ? { available: true, steps: operation.rollback.steps, outcome: operation.readOnly ? "read_only_no_rollback_required" : "change_executed_manual_rollback_available" } : { available: false, outcome: operation.readOnly ? "read_only_no_rollback_required" : "manual_rollback_required" }
+      warnings: [...result.warnings, ...(switching ? ["تنظیمات درخواست‌شده از دستگاه خوانده و تأیید شدند؛ Startup-config ذخیره نشده است."] : [])],
+      rollbackJson: switching ? { available: false, safetyBackupId, outcome: "verified_change_manual_restore_available", verification: { ok: true, summary: "Requested switching configuration matched authenticated read-back." } } : operation.rollback.available ? { available: true, steps: operation.rollback.steps, outcome: operation.readOnly ? "read_only_no_rollback_required" : "change_executed_manual_rollback_available" } : { available: false, outcome: operation.readOnly ? "read_only_no_rollback_required" : "manual_rollback_required" }
     };
+    } finally { if (switching) activeSwitchingDevices.delete(device.id); }
   },
   async rollback(plan, device): Promise<ConnectorExecutionResult> {
     const operation = executableOperation(plan);

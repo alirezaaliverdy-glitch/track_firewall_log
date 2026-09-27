@@ -30,6 +30,23 @@ function plan(executionTemplateRef: string, normalizedParams: Record<string, unk
 
 const device = { id: "device-cisco-1", vendor: "cisco", host: "192.0.2.12", managementPort: 22 } as never;
 
+test("switching preview includes platform and VTP prechecks before any write", async () => {
+  const preview = await ciscoIosXeConnector.dryRun(plan("cisco_create_vlan", { vlanId: 20, name: "Office" }));
+  assert.equal(preview.plannedCommands[0], "show version");
+  assert.ok(preview.plannedCommands.includes("show vtp status"));
+  assert.ok(preview.validationWarnings.some(warning => warning.includes("Startup-config")));
+});
+test("switching cannot send configuration without an owned safety backup and releases its lock", async () => {
+  const original = ciscoIosXeSshConnector.runCliCommands; let invoked = false;
+  ciscoIosXeSshConnector.runCliCommands = (async () => { invoked = true; throw new Error("must not invoke"); }) as never;
+  try {
+    const action = plan("cisco_create_vlan", { vlanId: 20, name: "Office" });
+    await assert.rejects(ciscoIosXeConnector.execute(action, device), /CISCO_BACKUP_OWNER_REQUIRED/);
+    await assert.rejects(ciscoIosXeConnector.execute(action, device), /CISCO_BACKUP_OWNER_REQUIRED/);
+    assert.equal(invoked, false);
+  } finally { ciscoIosXeSshConnector.runCliCommands = original; }
+});
+
 test("IOS Classic Action Center exposes read-only and safe-write Cisco operations through one registry", () => {
   const executableRefs = new Set(executableCiscoOperations().map((operation) => operation.executionTemplateRef));
   for (const ref of [

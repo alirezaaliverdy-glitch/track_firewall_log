@@ -14,20 +14,20 @@ test("EtherChannel appears as a controlled, critical Cisco action", () => {
 test("EtherChannel plan verifies ports before writing and uses LACP active", () => {
   const specs = buildCiscoAccessEtherChannelSpecs(params);
   const firstWrite = specs.findIndex((spec) => spec.write);
-  assert.equal(firstWrite, 4);
+  assert.equal(firstWrite, 6);
   assert.ok(specs.slice(0, firstWrite).every((spec) => spec.strict && spec.validateOutput));
   assert.ok(specs.some((spec) => spec.command === "channel-group 5 mode active"));
   assert.ok(specs.some((spec) => spec.command === "interface GigabitEthernet1/0/1"));
-  assert.equal(specs.at(-1)?.command, "show etherchannel 5 summary");
-  assert.throws(() => specs[0].validateOutput?.("5 Po5(SU) LACP Gi1/0/1(P)"), /already exists/);
-  assert.throws(() => specs[1].validateOutput?.("VLAN Name Status\n5 default suspended"), /not active/);
-  assert.throws(() => specs[2].validateOutput?.("interface GigabitEthernet1/0/1\n channel-group 3 mode active"), /incompatible/);
+  assert.equal(specs.at(-1)?.command, "show etherchannel summary");
+  assert.throws(() => specs[0].validateOutput?.("Group Port-channel Protocol Ports\n5 Po5(SU) LACP Gi1/0/1(P)"), /already exists/);
+  assert.throws(() => specs[1].validateOutput?.("VLAN Name Status\n5 default suspended"), /فعال نیست/);
+  assert.throws(() => specs[4].validateOutput?.("interface GigabitEthernet1/0/1\n channel-group 3 mode active"), /incompatible/);
 });
 
 test("EtherChannel input rejects unsafe or ambiguous values", () => {
   assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, acknowledgeDisruption: false }), /Confirm/);
-  assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, groupId: 25 }), /between 1 and 24/);
+  assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, groupId: 25 }), /1 and 24/);
   assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, interfaces: "Gi1/0/1, GigabitEthernet1/0/1" }), /unique/);
-  assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, interfaces: "Gi1/0/1; reload, Gi1/0/2" }), /2 to 8/);
+  assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, interfaces: "Gi1/0/1; reload, Gi1/0/2" }), /معتبر نیست/);
   assert.throws(() => buildCiscoAccessEtherChannelSpecs({ ...params, interfaces: "Gi1/0/1, Fa1/0/2" }), /same Ethernet type/);
 });

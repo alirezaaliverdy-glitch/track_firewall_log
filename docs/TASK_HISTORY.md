@@ -1,3 +1,11 @@
+## 2026-09-27 - Complete controlled Cisco switching workflows
+
+- Added validated LACP group/member management, Trunk allowed-list preservation and guarded VLAN operations using the existing Preview -> Confirm -> PolicyGuard -> Connector -> Audit flow.
+- Added fresh owned-device backup/audit before writes, strict supported-platform and configuration prechecks, exact result verification and read-only LACP settling retries. No automatic write replay, Startup-config save or rollback is claimed.
+- Improved the parameter wizard with real collected ports and mode-dependent fields; corrected generic-firewall Cisco vendor matching and double-/firewall navigation on wizard open/cancel.
+- Validated isolated regressions, 219 catalog entries and local production API/web builds. No user-device configuration was changed for testing; documented supported scope and live acceptance limits in CISCO_SWITCHING_OPERATIONS.md.
+- Browser smoke verified actual collected port selection, responsive 390/1440px layout and cancel without building/executing an operation; focused coverage totals 23 unique tests.
+
 ## 2026-09-26 - Add controlled uploaded-backup restore
 
 - Moved backup navigation below Attackers and above Settings and reverified actual Linux/Cisco/MikroTik backups in independent commit 8049223.

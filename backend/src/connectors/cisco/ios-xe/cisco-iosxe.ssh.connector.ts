@@ -16,7 +16,7 @@ export type CiscoIosXeCommandResult = {
   durationMs: number;
 };
 
-export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean; validateOutput?: (output: string) => void; confirmationPattern?: RegExp; confirmationResponse?: string };
+export type CiscoCliCommandSpec = { commandId: string; command: string; strict?: boolean; write?: boolean; redactOutput?: boolean; validateOutput?: (output: string) => void; verificationAttempts?: number; confirmationPattern?: RegExp; confirmationResponse?: string };
 
 export function redactCiscoCliOutput(output: string) {
   return output
@@ -423,13 +423,21 @@ export class CiscoIosXeSshConnector {
       try {
         const initialized = await session.initialize("enableSecret" in credential && typeof credential.enableSecret === "string" ? credential.enableSecret : undefined);
         const results: CiscoIosXeCommandResult[] = [];
+        let writesAttempted = false;
         for (const spec of specs) {
-          const commandResult = spec.confirmationPattern
+          if (spec.write) writesAttempted = true;
+          let commandResult = spec.confirmationPattern
             ? await session.runCommandWithConfirmation(spec.command, spec.confirmationPattern, spec.confirmationResponse, spec.strict === true || spec.write === true)
             : await session.runCommand(spec.command, spec.strict === true || spec.write === true);
           if (spec.validateOutput) {
-            try { spec.validateOutput(commandResult.stdout); }
-            catch (error) { throw connectorError("CISCO_PRECHECK_FAILED", "command", error instanceof Error ? error.message : "Cisco precheck failed; no change was sent.", state, 409, false, error); }
+            const attempts = !spec.write && writesAttempted ? Math.max(1, Math.min(5, spec.verificationAttempts ?? 1)) : 1;
+            for (let attempt = 1; attempt <= attempts; attempt++) {
+              try { spec.validateOutput(commandResult.stdout); break; }
+              catch (error) {
+                if (attempt < attempts) { await new Promise(resolve => setTimeout(resolve, 1000)); commandResult = await session.runCommand(spec.command, true); continue; }
+                throw connectorError(writesAttempted ? "CISCO_VERIFICATION_FAILED" : "CISCO_PRECHECK_FAILED", "command", error instanceof Error ? error.message : writesAttempted ? "Changes may have been applied but read-back did not verify the requested result; review before retrying." : "Cisco precheck failed; no change was sent.", state, 409, false, error);
+              }
+            }
           }
           results.push({ commandId: spec.commandId, command: spec.command, ...commandResult, stdout: spec.redactOutput ? redactCiscoCliOutput(commandResult.stdout) : commandResult.stdout, stderr: spec.redactOutput ? redactCiscoCliOutput(commandResult.stderr) : commandResult.stderr });
         }

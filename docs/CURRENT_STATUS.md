@@ -1,3 +1,11 @@
+## 2026-09-27 - Controlled Cisco EtherChannel / Trunk / VLAN management
+
+- Added 15 registered parameterized switching workflows: LACP Access/Trunk groups, membership changes, same-mode group VLAN edits/deletion, standalone Trunk and separate allowed-list replace/add/remove, VLAN create/rename/guarded delete and Access assignment.
+- Fresh encrypted safety backup + audit precede writes; authenticated platform/port/VLAN/membership/speed checks precede configuration. Exact read-back verifies requested settings, and LACP success requires SU/P rather than CLI acceptance. Detached members stay shut down. Startup-config and rollback are not automatic.
+- Fixed Cisco guided-session vendor resolution and basename-safe catalog wizard navigation. Real interface selection is suggested from workspace data and rechecked at execution.
+- Isolated switching/planner/transport tests and the 219-item catalog validate; API/web production builds applied locally. No real mutative Cisco operation was run. Model/firmware-specific lab execution remains required. Scope, VTP restrictions, partial-write behavior and official references: CISCO_SWITCHING_OPERATIONS.md.
+- Browser smoke passed at 390/1440px: 53 collected physical-port choices, working selection and cancel, no horizontal/form overflow and no ActionPlan built/executed. 23 unique focused tests cover switching, transport, guided vendor identity and basename-safe navigation.
+
 ## 2026-09-26 - Controlled vendor backup upload and restore
 
 - Added the admin-only upload/preview/confirmed restore workflow within Backups. Encrypted owned-device files, SHA-256, ten-minute previews, stable target/credential fingerprints, real safety backups, single-use execution and audited results use existing DeviceSnapshot/ActionPlan tables without a migration.
