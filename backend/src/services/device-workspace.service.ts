@@ -176,7 +176,7 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
   if (vendorKey === "esxi") {
     const data=asObject(status.esxi);
     return {
-      connectorType:"esxi-soap",
+      connectorType:asObject(status.diagnostic).transport === "ssh" ? "esxi-ssh" : "esxi-soap",
       facts:{
         hostname:data.hostname??status.hostname??null,
         version:data.version??null,

@@ -1,7 +1,7 @@
 import type { PlatformDefinition } from "./vendor.types.js";
 
 export const PLATFORM_REGISTRY: PlatformDefinition[] = [
-  { key: "esxi-standalone", vendorKey: "esxi", titleFa: "ESXi مستقل", titleEn: "Standalone ESXi", family: "esxi", implementationState: "partial", executable: true, notes: ["SOAP API over verified HTTPS; inventory and reviewed VM power operations."] },
+  { key: "esxi-standalone", vendorKey: "esxi", titleFa: "ESXi مستقل", titleEn: "Standalone ESXi", family: "esxi", implementationState: "partial", executable: true, notes: ["Verified SOAP host inventory and reviewed host operations; SSH read-only inventory with pinned RSA-SHA2 host key. No VM mutation."] },
   { key: "cisco-ios-xe", vendorKey: "cisco", titleFa: "Cisco IOS-XE", titleEn: "Cisco IOS-XE", family: "ios-xe", implementationState: "partial", executable: true, notes: ["Milestone 18.2A supports safe read-only SSH capabilities only."] },
   { key: "cisco-ios-classic", vendorKey: "cisco", titleFa: "Cisco IOS Classic", titleEn: "Cisco IOS Classic", family: "ios-classic", implementationState: "partial", executable: true, notes: ["Safe read-only SSH discovery, inventory, health, and capability profiling use the shared Cisco SSH2 connector."] },
   { key: "cisco-nx-os", vendorKey: "cisco", titleFa: "Cisco NX-OS", titleEn: "Cisco NX-OS", family: "nx-os", implementationState: "planned", executable: false, notes: ["Detected as unsupported for IOS-XE connector."] },

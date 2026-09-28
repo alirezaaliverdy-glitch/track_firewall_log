@@ -1,3 +1,9 @@
+## 2026-09-28 - Verified ESXi SSH connection and API setup guidance
+
+- Added selectable ESXi SSH registration, password/private-key credentials and mandatory verified RSA SHA256 fingerprint. The separate fixed read-only ESXCLI collector uses the shared authenticated SSH pool, including connectivity probes; SHA-1 host keys, arbitrary commands and SSH writes are not exposed.
+- Displays measured identity, hardware capacity, maintenance, datastore and network inventory. CPU/RAM utilization, health and VM count stay unknown on SSH. SOAP host operations are not offered for SSH devices; alternate channels are not silently enabled. Added embedded Persian setup guidance and docs/ESXI_CONNECTION_SETUP_FA.md covering TSM-SSH, Shell Access, source-IP restrictions, /sdk, certificate/SAN, privileges, lockdown and license limitations.
+- Verification: backend/frontend production builds, 17 API/SSH/connection regressions, 225-item catalog validation, and isolated Chromium registration interactions at 1440/390px passed. A loopback SSH server verified fingerprint rejection and single-session reuse. Local API/web are healthy (health endpoint 200). No live ESXi target was supplied; no vendor writes, VM operations or push were performed.
+
 ## 2026-09-27 - Form-style company report refinement
 
 - Restored the original report-form structure: compact bilingual header, dual dates/precise Tehran time, preparer, numeric summary, vendor statistics, and category-colored server/firewall/switch/router equipment cards. Healthy cards no longer repeat generic diagnostic prose; causes and next steps remain in the follow-up page.

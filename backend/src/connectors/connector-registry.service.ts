@@ -13,6 +13,7 @@ import { ciscoIosXeConnector } from "./cisco-ios-xe.connector.js";
 import { sophosApiConnector } from "./sophos-api.connector.js";
 import { sophosPlanner } from "./vendors/sophos.planner.js";
 import { esxiSoapConnector } from "./esxi-soap.connector.js";
+import { esxiSshConnector } from "./esxi-ssh.connector.js";
 import { esxiPlanner } from "./vendors/esxi.planner.js";
 
 const planners: VendorPlanner[] = [
@@ -32,7 +33,8 @@ const connectors: DeviceConnector[] = [
   linuxSshConnector,
   ciscoIosXeConnector,
   sophosApiConnector,
-  esxiSoapConnector
+  esxiSoapConnector,
+  esxiSshConnector
 ];
 
 export function getVendorPlanners() {
@@ -95,7 +97,7 @@ export function getConnectorCapabilities(): ConnectorCapability[] {
     {
       vendor: "esxi",
       deviceTypes: [DeviceType.esxi],
-      protocols: [DeviceProtocol.api],
+      protocols: [DeviceProtocol.api, DeviceProtocol.ssh],
       supportedActions: esxiPlanner.supportedActions,
       executionEnabled: true
     },

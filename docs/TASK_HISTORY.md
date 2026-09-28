@@ -1,3 +1,8 @@
+## 2026-09-28 - ESXi SSH registration and connection guide
+
+- Implemented a pinned-host-key, read-only ESXi SSH connector sharing its session with monitoring; added onboarding fields and embedded API/SSH setup instructions. Preserved the richer SOAP path and blocked unsupported SSH mutations. Missing usage/health metrics are not fabricated.
+- Passed 17 targeted/regression tests, both builds, 225-item catalog validation and desktop/mobile mocked-API browser checks. Local API/web rebuilt and healthy. Live ESXi acceptance remains pending; no real host was provided.
+
 ## 2026-09-27 - Form-style company report refinement
 
 - Reworked PDF/HTML to match the original form, display concise measured vendor figures, retain editable assessment and full Excel detail, and fixed Persian font rendering in Chromium. Rebuilt local API and checked real plus stress PDFs without overflow.

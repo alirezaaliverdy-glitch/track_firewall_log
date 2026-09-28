@@ -8,7 +8,7 @@ export type EsxiDiscovery = {
   serialNumber:string; biosVersion:string; lockdownMode:string;
   connectionState: string; overallStatus: string; maintenanceMode: boolean | null; bootTime: string | null;
   cpuPercent: number | null; memoryPercent: number | null; cpuCores: number | null; memoryBytes: number | null;
-  vmCount: number; vms: EsxiVm[]; vmsTruncated: boolean; datastores: EsxiDatastore[]; datastoreCount: number;
+  vmCount: number | null; vms: EsxiVm[]; vmsTruncated: boolean; datastores: EsxiDatastore[]; datastoreCount: number | null;
   networks: string[]; sensors: Array<{name:string;state:string;reading:number|null;unit:string}>;
   services: Array<{key:string;label:string;running:boolean|null;policy:string;required:boolean|null}>;
   storageAdapters:Array<{name:string;model:string;driver:string;status:string}>;

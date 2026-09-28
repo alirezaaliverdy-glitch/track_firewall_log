@@ -8,6 +8,7 @@ import { prisma } from "../db/prisma.js";
 import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js";
 import { getDeviceById } from "./device.service.js";
 import { resolveCredentialById } from "./credential.service.js";
+import { esxiSshFingerprint } from "../connectors/esxi-ssh.transport.js";
 import { getConnectionProfile, type ConnectionMethodKey } from "../vendors/connection-method.registry.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
@@ -73,6 +74,7 @@ type Draft = {
   enableCredentialId: string;
   ciscoLegacyCompatibilityApproved?: boolean;
   esxiCaCertificate?: string;
+  esxiSshFingerprint?: string;
   site: string;
   location: string;
   environment: "lab" | "staging" | "production";
@@ -232,7 +234,7 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
     environment: draft.environment as DeviceEnvironment,
     tags: [],
     status: DeviceStatus.unknown,
-    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
+    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}), ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -248,12 +250,14 @@ function requireConnectionDraft(session: OnboardingSession) {
     fail(session, "credential_missing", "credential", "A stored credential reference is required.");
     throw new Error("A stored credential reference is required.");
   }
-  const validTransport = draft.vendor === "sophos" || draft.vendor === "esxi"
+  const validTransport = draft.vendor === "sophos"
     ? draft.connectionMethod === "api"
-    : draft.vendor === "mikrotik"
+    : draft.vendor === "mikrotik" || draft.vendor === "esxi"
       ? draft.connectionMethod === "ssh" || draft.connectionMethod === "api"
       : draft.connectionMethod === "ssh";
   if (!validTransport) throw new Error(`No registered onboarding connector supports ${draft.vendor}/${draft.connectionMethod}.`);
+  if (draft.vendor === "esxi" && draft.connectionMethod === "ssh")
+    esxiSshFingerprint({id: session.id, capabilities: {esxiSshFingerprint: draft.esxiSshFingerprint ?? ""}});
   if (!SUPPORTED_PLATFORMS[draft.vendor].includes(draft.platform)) throw new Error(`Platform ${draft.platform} is not supported for ${draft.vendor} onboarding.`);
   if (draft.vendor === "esxi" && draft.esxiCaCertificate) {
     if (draft.esxiCaCertificate.length > 16_384 || !/^\s*-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\s*$/.test(draft.esxiCaCertificate)) throw new Error("Provide exactly one PEM certificate; private keys are forbidden.");
@@ -288,6 +292,7 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
       managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method, vendor)),
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
       esxiCaCertificate: String(input.esxiCaCertificate ?? record(existing?.capabilities).esxiCaCertificate ?? ""),
+      esxiSshFingerprint: String(input.esxiSshFingerprint ?? record(existing?.capabilities).esxiSshFingerprint ?? "").trim(),
       enableCredentialId: String(input.enableCredentialId ?? ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).enableCredentialId ?? "")),
       site: String(input.site ?? ""),
       location: String(input.location ?? ""),
@@ -327,6 +332,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod, nextVendor))),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
+    esxiSshFingerprint: String(input.esxiSshFingerprint ?? session.draft.esxiSshFingerprint ?? "").trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
     site: String(input.site ?? session.draft.site).trim(),
@@ -469,7 +475,7 @@ export async function detectOnboardingPlatform(id: string, ownerId?: string) {
       platform: session.draft.platform,
       supported: SUPPORTED_PLATFORMS[session.draft.vendor].includes(session.draft.platform),
       confidence: 100,
-      evidence: session.draft.vendor === "esxi" ? [`ESXi HostAgent SOAP API ${String(esxi.version ?? "")}`] : ["registered connector completed its safe connection test"]
+      evidence: session.draft.vendor === "esxi" ? [`ESXi ${session.draft.connectionMethod === "ssh" ? "SSH" : "HostAgent SOAP API"} ${String(esxi.version ?? "")}`] : ["registered connector completed its safe connection test"]
     };
   }
   const response = touch(session, "platform_detected", "discover");
@@ -601,8 +607,8 @@ function connectionArchitecture(draft: Draft, verified: boolean) {
         role: "observability",
         method: secondary.key,
         purposes: secondary.purposes,
-        status: secondary.readiness === "ready" ? "available" : "setup_required",
-        enabled: secondary.readiness === "ready",
+        status: secondary.readiness === "ready" && draft.vendor !== "esxi" ? "available" : "setup_required",
+        enabled: secondary.readiness === "ready" && draft.vendor !== "esxi",
         readiness: secondary.readiness,
         host: secondary.purposes.includes("events") ? null : draft.host,
         port: secondary.defaultPort,
@@ -731,6 +737,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
     companyId: String(input.companyId ?? session.draft.companyId).trim(), vendor, platform, name, host, managementPort, environment, connectionMethod,
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
+    esxiSshFingerprint: String(input.esxiSshFingerprint ?? session.draft.esxiSshFingerprint ?? "").trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
     site: String(input.site ?? session.draft.site).trim(),
@@ -751,6 +758,7 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   const createdAt = now();
   const nextCapabilities: Record<string, unknown> = {
     ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
+    ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}),
     connectionArchitecture: connectionArchitecture(draft, false),
     onboarding: {
       sessionId: session.id,
@@ -854,6 +862,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
 
   const capabilities: Record<string, unknown> = {
     ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
+    ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}),
     connectionArchitecture: connectionArchitecture(draft, true),
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}),

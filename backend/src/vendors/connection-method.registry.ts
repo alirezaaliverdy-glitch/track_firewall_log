@@ -84,9 +84,10 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
     vendor: "esxi",
     recommendedSecondary: "soap_api",
     strategy: "Use the standalone host vSphere SOAP API with verified TLS and a least-privilege account.",
-    strategyFa: "API رسمی هاست مستقل با TLS معتبر و حساب حداقل‌دسترسی.",
+    strategyFa: "SSH برای اتصال و اطلاعات پایه؛ API برای پایش کامل‌تر و تغییرات کنترل‌شدهٔ هاست.",
     methods: [
-      method({ key: "soap_api", title: "vSphere SOAP API", titleFa: "API هاست ESXi", summary: "Verified host inventory and reviewed host operations.", summaryFa: "موجودی هاست و عملیات تأییدشدهٔ هاست", purposes: ["control", "inventory"], readiness: "ready", recommended: true, selectable: true, secure: true, defaultPort: 443, credential: "username_password", prerequisites: ["Standalone ESXi host", "Trusted server certificate or CA PEM", "Least-privilege account"], prerequisitesFa: ["هاست مستقل", "گواهی معتبر یا CA", "حساب حداقل‌دسترسی"] })
+      method({ key: "soap_api", title: "vSphere SOAP API", titleFa: "API هاست ESXi", summary: "Verified host inventory and reviewed host operations.", summaryFa: "پایش هاست، مصرف منابع و تغییرات کنترل‌شده", purposes: ["control", "inventory"], readiness: "ready", recommended: true, selectable: true, secure: true, defaultPort: 443, credential: "username_password", prerequisites: ["Standalone ESXi host", "Trusted server certificate or CA PEM", "Least-privilege account"], prerequisitesFa: ["هاست مستقل", "گواهی معتبر یا CA", "حساب حداقل‌دسترسی"] }),
+      method({ key: "ssh", title: "ESXi SSH", titleFa: "SSH هاست ESXi", summary: "Read-only host identity, hardware, storage and network discovery.", summaryFa: "اتصال و مشاهدهٔ سخت‌افزار، دیتاستورها و شبکه؛ بدون تغییر تنظیمات", purposes: ["inventory"], readiness: "ready", recommended: false, selectable: true, secure: true, defaultPort: 22, credential: "username_password", prerequisites: ["TSM-SSH enabled and restricted to the application server", "Shell Access for the account", "Verified SHA256 SSH host key fingerprint"], prerequisitesFa: ["فعال‌بودن TSM-SSH؛ دسترسی فقط از سرور برنامه", "مجوز Shell Access برای حساب", "اثر انگشت SHA256 معتبر کلید هاست"] })
     ]
   },
   sophos: {

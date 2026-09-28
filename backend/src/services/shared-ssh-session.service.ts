@@ -42,13 +42,16 @@ function identity(config: ConnectConfig) {
 function failure(error: unknown, elapsed: number): SharedSshResult {
   const source = error && typeof error === "object" ? error as { level?: string; code?: string; message?: string } : {};
   const message = String(source.message ?? "");
-  const code = source.level === "client-authentication" || /authentication failed|all configured authentication methods failed/i.test(message)
+  const code = /host denied|host.*verification failed/i.test(message)
+    ? "SSH_HOST_KEY_REJECTED"
+    : source.level === "client-authentication" || /authentication failed|all configured authentication methods failed/i.test(message)
     ? "SSH_AUTH_FAILED"
     : source.code === "ETIMEDOUT" || /timed out|timeout/i.test(message) ? "SSH_HANDSHAKE_TIMEOUT"
       : source.code === "ECONNREFUSED" ? "SSH_CONNECTION_REFUSED"
         : source.code === "ENETUNREACH" || source.code === "EHOSTUNREACH" ? "SSH_NETWORK_UNREACHABLE"
           : "SSH_SESSION_ERROR";
-  const detail = code === "SSH_AUTH_FAILED" ? "SSH authentication was rejected."
+  const detail = code === "SSH_HOST_KEY_REJECTED" ? "SSH host key does not match the trusted fingerprint; verify the host identity with its administrator."
+    : code === "SSH_AUTH_FAILED" ? "SSH authentication was rejected."
     : code === "SSH_HANDSHAKE_TIMEOUT" ? "SSH handshake timed out."
       : code === "SSH_CONNECTION_REFUSED" ? "SSH service refused the connection."
         : code === "SSH_NETWORK_UNREACHABLE" ? "The network path to SSH is unavailable."

@@ -1,6 +1,6 @@
 # Standalone ESXi host support
 
-The ESXi integration targets the **standalone host**, not vCenter. It uses the vSphere Web Services SOAP endpoint at `https://<host>:<port>/sdk`. It does not change or power-cycle individual VMs.
+The ESXi integration targets the **standalone host**, not vCenter. SOAP uses `https://<host>:<port>/sdk`; the separately selectable SSH path provides fixed read-only inventory with a pinned RSA-SHA2 host key. It does not change or power-cycle individual VMs. See the [Persian SSH/API setup guide](ESXI_CONNECTION_SETUP_FA.md). The host operations below apply to API devices only.
 
 ## Register a host
 

@@ -6,7 +6,7 @@ import { getConnectionProfile, listConnectionProfiles, onboardingMethodFor } fro
 
 test("connection catalog exposes an honest profile for every onboarded vendor", () => {
   const profiles = listConnectionProfiles();
-  assert.deepEqual(profiles.map((profile) => profile.vendor).sort(), ["cisco", "fortigate", "linux", "mikrotik", "sophos"]);
+  assert.deepEqual(profiles.map((profile) => profile.vendor).sort(), ["cisco", "esxi", "fortigate", "linux", "mikrotik", "sophos"]);
   for (const profile of profiles) {
     assert.ok(profile.methods.some((method) => method.selectable && method.readiness === "ready"), `${profile.vendor} needs an executable onboarding method`);
     assert.ok(profile.methods.every((method) => method.prerequisites.length === method.prerequisitesFa.length));
@@ -22,6 +22,12 @@ test("MikroTik exposes SSH control and RouterOS REST read-only onboarding", () =
   assert.equal(onboardingMethodFor("mikrotik", "ssh")?.protocol, "ssh");
   assert.deepEqual(onboardingMethodFor("mikrotik", "rest_api"), { protocol: "api", port: 443 });
   assert.equal(onboardingMethodFor("mikrotik", "snmpv3"), null);
+});
+
+test("ESXi exposes separate SSH and standalone SOAP onboarding ports", () => {
+  assert.deepEqual(onboardingMethodFor("esxi", "ssh"), {protocol:"ssh",port:22});
+  assert.deepEqual(onboardingMethodFor("esxi", "soap_api"), {protocol:"api",port:443});
+  assert.deepEqual(getConnectionProfile("esxi")?.methods.find(v=>v.key==="ssh")?.purposes, ["inventory"]);
 });
 
 test("RouterOS REST connector is selected only for MikroTik API devices", () => {
