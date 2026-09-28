@@ -1,3 +1,8 @@
+## 2026-09-28 - ESXi fingerprint guide requested by user
+
+- Explained the SHA256 portion of ssh-keygen output and added in-app collapsible help with a copyable full-path ESXi command, highlighted sample, trusted-console instructions and distinction from passwords/HTTPS certificates. Kept mandatory SSH host identity verification and changed no vendor settings.
+- Passed production web build and isolated Chromium tests at desktop/390px/320px, including copy failure fallback and stable disclosure state. Local web healthy after rebuild. Updated Persian setup docs; remote host acceptance remains separate and unverified.
+
 ## 2026-09-28 - ESXi root credentials rejected
 
 - After explicit root authorization, attempted SSH once with the exact saved host key and tried Host Client once with the independently confirmed TLS pin. Both rejected authentication; UI reported an incorrect user name or password. No remote mutation, reset, bypass or guessed credential. Closed diagnostics; need valid unlocked Administrator credentials or a manual role change to continue. No application code changed.

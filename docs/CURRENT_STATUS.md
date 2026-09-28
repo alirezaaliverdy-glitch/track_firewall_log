@@ -1,3 +1,8 @@
+## 2026-09-28 - ESXi fingerprint onboarding guidance
+
+- Added clear Persian/English SSH-only help in the shared registration/edit page: correct full-path ESXi command, SHA256-only output explanation, copy button with manual fallback and a host-identity/security note. Updated the connection guide; fingerprint enforcement remains mandatory.
+- Frontend production build and local web deployment/health passed. Mocked-API browser checks at 1440/390/320px verified copy/fallback, stable collapsible help, mobile layout and API/SSH separation. No vendor writes/authentication retries or new claims of live SSH acceptance.
+
 ## 2026-09-28 - Authorized root login rejected
 
 - User explicitly requested root SSH with the previously supplied password. One RSA-host-key-pinned SSH authentication attempt failed; one independently certificate-pinned Host Client login failed with the incorrect-user-name-or-password message. The previously successful alireza UI login does not validate root credentials or exclude a root-account restriction/lock.

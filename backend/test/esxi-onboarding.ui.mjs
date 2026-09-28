@@ -5,9 +5,13 @@ import puppeteer from "puppeteer-core";
 import {listConnectionProfiles} from "../dist/vendors/connection-method.registry.js";
 
 const browser = await puppeteer.launch({executablePath:"/usr/bin/chromium-browser",headless:true,args:["--no-sandbox","--disable-dev-shm-usage"]});
+const fingerprintCommand = "/usr/lib/vmware/openssh/bin/ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub -E sha256";
 try {
-  for (const width of [1440,390]) {
+  for (const width of [1440,390,320]) {
     const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "clipboard", {configurable:true,value:{writeText:async text => { window.testCopiedCommand = text; }}});
+    });
     await page.setViewport({width,height:1000});
     const errors = [];
     const paths = [];
@@ -48,9 +52,28 @@ try {
     });
     assert.ok(await page.$('input[placeholder="SHA256:…"]'));
     assert.equal(await page.$('textarea[placeholder="-----BEGIN CERTIFICATE-----"]'), null);
-    await page.click(".onboarding-stage--credential details summary");
-    assert.ok(await page.$eval(".onboarding-stage--credential details",v => v.open));
+    const guide = '[data-testid="esxi-fingerprint-guide"]';
+    assert.equal(await page.$eval(guide,v => v.open), false, "Help starts collapsed");
+    await page.click(`${guide} summary`);
+    assert.ok(await page.$eval(guide,v => v.open));
+    assert.equal(await page.$eval(`${guide} .esxi-ssh-fingerprint__command>code`,v => v.textContent), fingerprintCommand);
+    assert.equal(await page.$eval(`${guide} mark`,v => v.textContent), "SHA256:…");
+    assert.equal(await page.$$eval(`${guide} ol li`,vs => vs.length), 3);
+    await page.type('#esxi-ssh-fingerprint-input', `SHA256:${Buffer.alloc(32,1).toString("base64").replace(/=+$/u,"")}`);
+    assert.ok(await page.$eval(guide,v => v.open), "Typing must not close the guide");
+    await page.click('[data-testid="esxi-copy-fingerprint-command"]');
+    await page.waitForFunction(() => window.testCopiedCommand !== undefined);
+    assert.equal(await page.evaluate(() => window.testCopiedCommand), fingerprintCommand);
+    assert.match(await page.$eval(`${guide} [role="status"]`,v => v.textContent), /کپی شد/u);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator,"clipboard", {configurable:true,value:{writeText:async () => { throw new Error("Test clipboard unavailable"); }}});
+    });
+    await page.click('[data-testid="esxi-copy-fingerprint-command"]');
+    await page.waitForFunction(() => document.querySelector('.esxi-ssh-fingerprint__copy-status').textContent.includes("دستی"));
+    assert.equal(await page.evaluate(() => window.getSelection().toString()), fingerprintCommand, "Manual fallback selects the full command");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth+4), false, `SSH form overflows at ${width}px`);
+    await page.click(`${guide} summary`);
+    assert.equal(await page.$eval(guide,v => v.open), false, "Help can be closed");
     await page.click(".onboarding-context-bar nav button");
     await page.waitForSelector('[data-testid="onboarding-step-identity"]');
     await page.evaluate(() => [...document.querySelectorAll(".onboarding-method-card")].find(v => v.textContent.includes("API")).click());
@@ -60,8 +83,9 @@ try {
     await page.waitForSelector('[data-testid="onboarding-step-credential"]');
     assert.ok(await page.$('textarea[placeholder="-----BEGIN CERTIFICATE-----"]'));
     assert.equal(await page.$('input[placeholder="SHA256:…"]'), null);
+    assert.equal(await page.$(guide), null, "SSH guide must not appear for API connections");
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({ok:true,width,sshSelectable:true,apiSelectable:true,fieldsSeparated:true}));
+    console.log(JSON.stringify({ok:true,width,sshSelectable:true,apiSelectable:true,fieldsSeparated:true,guideStable:true,copyCommand:true,manualCopyFallback:true,noOverflow:true}));
     await page.close();
   }
 } finally { await browser.close(); }

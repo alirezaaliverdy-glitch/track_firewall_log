@@ -145,6 +145,27 @@
 .onboarding-companion-methods article b.is-planned { background:rgba(100,116,139,.12);color:#a8b7c7; }
 .onboarding-companion-methods article b.is-ready { background:rgba(16,185,129,.1);color:#6ee7b7; }
 
+.esxi-ssh-fingerprint { min-width:0;display:grid;gap:10px; }
+.esxi-ssh-fingerprint__hint,.esxi-ssh-fingerprint__note { margin:0;color:var(--app-muted);font-size:.78rem;line-height:1.9; }
+.esxi-ssh-fingerprint__guide { min-width:0;border:1px solid var(--app-border);border-radius:12px;background:rgba(15,23,42,.22); }
+.esxi-ssh-fingerprint__guide>summary { display:flex;align-items:center;gap:8px;min-height:44px;padding:11px 14px;color:var(--app-text);font-size:.82rem;cursor:pointer;list-style:none; }
+.esxi-ssh-fingerprint__guide>summary::-webkit-details-marker { display:none; }
+.esxi-ssh-fingerprint__guide>summary::after { content:"+";margin-inline-start:auto;font-size:1.1rem; }
+.esxi-ssh-fingerprint__guide[open]>summary::after { content:"−"; }
+.esxi-ssh-fingerprint__guide>summary:focus-visible,.esxi-ssh-fingerprint__command button:focus-visible { outline:2px solid var(--app-text);outline-offset:3px; }
+.esxi-ssh-fingerprint__body { display:grid;min-width:0;gap:14px;padding:0 14px 14px; }
+.esxi-ssh-fingerprint__body ol { margin:0;padding-inline-start:22px;color:var(--app-text);font-size:.8rem;line-height:1.9; }
+.esxi-ssh-fingerprint__body li+li { margin-top:9px; }
+.esxi-ssh-fingerprint__body bdi { overflow-wrap:anywhere; }
+.esxi-ssh-fingerprint__command { min-width:0;border:1px solid var(--app-border);border-radius:10px;padding:12px;background:rgba(2,6,23,.28); }
+.esxi-ssh-fingerprint__command>div { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--app-muted);font-size:.78rem; }
+.esxi-ssh-fingerprint__command button { display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:8px 12px;border:1px solid var(--app-border);border-radius:9px;background:rgba(148,163,184,.08);color:var(--app-text);font:inherit;cursor:pointer; }
+.esxi-ssh-fingerprint__command button:hover { background:rgba(148,163,184,.16); }
+.esxi-ssh-fingerprint__command>code,.esxi-ssh-fingerprint__example>code { display:block;min-width:0;margin-top:10px;color:var(--app-text);font-family:monospace;font-size:.8rem;line-height:1.8;text-align:left;overflow-wrap:anywhere;white-space:pre-wrap;user-select:text; }
+.esxi-ssh-fingerprint__copy-status { margin:8px 0 0;color:var(--app-muted);font-size:.75rem;line-height:1.8; }
+.esxi-ssh-fingerprint__example>span { color:var(--app-muted);font-size:.78rem;line-height:1.8; }
+.esxi-ssh-fingerprint__example mark { padding:3px 5px;border-radius:5px;background:rgba(148,163,184,.18);color:var(--app-text);font-weight:700; }
+
 @media (max-width: 650px) {
   .device-onboarding-bootstrap { min-height: auto; }
   .onboarding-bootstrap-card { grid-template-columns: 1fr; margin: 0; border-radius: 18px; padding: 19px; }
