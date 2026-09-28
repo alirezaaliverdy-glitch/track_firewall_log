@@ -1,3 +1,11 @@
+## 2026-09-28 - ESXi root credentials rejected
+
+- After explicit root authorization, attempted SSH once with the exact saved host key and tried Host Client once with the independently confirmed TLS pin. Both rejected authentication; UI reported an incorrect user name or password. No remote mutation, reset, bypass or guessed credential. Closed diagnostics; need valid unlocked Administrator credentials or a manual role change to continue. No application code changed.
+
+## 2026-09-28 - ESXi Administrator role assignment rejected
+
+- With explicit user approval, attempted only the existing account's Administrator assignment in the pinned Host Client. Host rejected Set Entity Permissions; checked that the old role remains. A saved-key-pinned SSH baseline independently rejected authentication. No host settings changed and no successful SSH claimed. Logged out/closed the diagnostic browser; need an existing Administrator/root path to continue. Application code unchanged.
+
 ## 2026-09-28 - ESXi SSH password-method compatibility
 
 - Fixed missing keyboard-interactive support for ESXi password credentials; passed 18 tests, including a real loopback PAM challenge. Built/redeployed the local API. After independent user certificate confirmation, verified live Host Client login and SSH-enabled state; observed a non-Administrator built-in role and no Shell Access control in the old UI. No remote changes or successful SSH collection claimed. Administrator-role promotion requires separate explicit approval; credentials stayed memory-only and browser session was logged out/closed.

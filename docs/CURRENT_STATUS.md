@@ -1,3 +1,14 @@
+## 2026-09-28 - Authorized root login rejected
+
+- User explicitly requested root SSH with the previously supplied password. One RSA-host-key-pinned SSH authentication attempt failed; one independently certificate-pinned Host Client login failed with the incorrect-user-name-or-password message. The previously successful alireza UI login does not validate root credentials or exclude a root-account restriction/lock.
+- Closed the diagnostic connections/browser. No retries, password guessing/reset, role/configuration changes, credential persistence or authorization bypass. Requires a valid unlocked Administrator/root login or manual approved role assignment by the user before acceptance testing alireza SSH. Remote repair remains incomplete; application code unchanged.
+
+## 2026-09-28 - Approved ESXi account repair blocked by host authorization
+
+- User approved promoting alireza to Administrator. Verified Host Client login over the independently confirmed pinned HTTPS certificate, preserving the existing propagation/group flags. The single Set Entity Permissions attempt returned Permission to perform this operation was denied; re-opened permissions confirmed No Trusted Infrastructure administrator remains unchanged.
+- One read-only SSH baseline used the exact saved RSA host key from local known_hosts and the deployed ESXi keyboard-interactive config. Host identity matched, but authentication was rejected. No retry loop, authorization bypass, password reset, access.conf edit, network/firewall/VM change or secret persistence occurred. Browser logged out and closed.
+- Requires root/an existing Administrator to perform the approved role assignment, then repeat the pinned read-only SSH acceptance test. The remote fix is not complete; no successful live SSH or collected ESXCLI inventory is claimed. No backend/frontend code changed; prior 18-test/build verification remains applicable.
+
 ## 2026-09-28 - ESXi keyboard-interactive authentication follow-up
 
 - Enabled ESXi PAM/keyboard-interactive password authentication in the pinned-host-key SSH config. Private-key-only connections do not activate password challenges; existing shared-session identity includes the authentication policy.
