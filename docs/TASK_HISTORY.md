@@ -1,3 +1,8 @@
+## 2026-09-28 - Fix misleading ESXi registration blocker
+
+- Diagnosed stored successful verification followed by Asset company/management-address unique collision against an archived Linux identity with another port. Fixed reuse and preserved history, active conflicts and ownership scope.
+- Added complete-evidence save-failed retry, precise not-ready 400, UI state refresh and verified retry behavior; no bypass of host pinning, credentials or connector verification. Backend/frontend builds and targeted database/SSH/SOAP tests passed, along with three desktop/mobile mocked-API flows. Local API/web redeployed; user still confirms the actual save. No new vendor connection or mutation, production data repair, migration or push.
+
 ## 2026-09-28 - ESXi fingerprint guide requested by user
 
 - Explained the SHA256 portion of ssh-keygen output and added in-app collapsible help with a copyable full-path ESXi command, highlighted sample, trusted-console instructions and distinction from passwords/HTTPS certificates. Kept mandatory SSH host identity verification and changed no vendor settings.

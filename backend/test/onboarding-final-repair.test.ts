@@ -170,7 +170,8 @@ test("verified commit cannot report success before a real connector invocation",
   t.after(async () => { await app.close(); });
   const created = await app.inject({ method: "POST", url: "/api/device-onboarding/sessions", payload: { vendor: "linux", platform: "linux" } });
   const commit = await app.inject({ method: "POST", url: `/api/device-onboarding/sessions/${created.json().id}/commit`, payload: {} });
-  assert.equal(commit.statusCode, 502);
+  assert.equal(commit.statusCode, 400);
+  assert.equal(commit.json().error.code, "ONBOARDING_COMMIT_NOT_READY");
   assert.notEqual(commit.json().connectorInvoked, true);
   assert.match(commit.json().error.message, /connector-backed test/i);
 });

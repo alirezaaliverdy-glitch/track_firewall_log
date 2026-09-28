@@ -707,17 +707,21 @@ async function resolveOnboardingRegistrationTarget(tx: Prisma.TransactionClient,
     if (existing) byId.set(existing.id, existing);
   }
   const candidates = [...byId.values()];
+  const isArchived = (device: typeof candidates[number]) => Boolean(device.deletedAt) || archivedInventory(device.capabilities)
+    || (asset?.deviceId === device.id && asset.managedState === "archived");
   const reusable = candidates.find((device) => {
     if (sessionDeviceId && device.id === sessionDeviceId) return true;
-    const sameAddress = normalizeManagementAddress(device.host) === managementIp && device.managementPort === draft.managementPort;
-    return sameAddress && (sameVendor(device.vendor, draft.vendor) || archivedInventory(device.capabilities));
+    const sameAddress = normalizeManagementAddress(device.host) === managementIp;
+    // The Asset identity is company + address, not vendor + SSH port. Reuse an
+    // archived identity even when its replacement has a different transport.
+    return sameAddress && (isArchived(device) || (sameVendor(device.vendor, draft.vendor) && device.managementPort === draft.managementPort));
   }) ?? null;
-  const conflicting = candidates.find((device) => device.id !== reusable?.id && normalizeManagementAddress(device.host) === managementIp && !archivedInventory(device.capabilities));
+  const conflicting = candidates.find((device) => device.id !== reusable?.id && normalizeManagementAddress(device.host) === managementIp && !isArchived(device));
   if (conflicting) throw new OnboardingManagementIpConflictError(managementIp, conflicting.id, asset?.id ?? null);
-  if (asset?.device && reusable?.id !== asset.device.id && !archivedInventory(asset.device.capabilities)) {
+  if (asset?.device && reusable?.id !== asset.device.id) {
     throw new OnboardingManagementIpConflictError(managementIp, asset.device.id, asset.id);
   }
-  return { deviceId: sessionDeviceId ?? reusable?.id ?? null, assetId: asset?.id ?? null, reactivated: Boolean(reusable && archivedInventory(reusable.capabilities)) || asset?.managedState === "archived" };
+  return { deviceId: sessionDeviceId ?? reusable?.id ?? null, assetId: asset?.id ?? null, reactivated: Boolean(reusable && isArchived(reusable)) || asset?.managedState === "archived" };
 }
 function validateUnverifiedDraft(session: OnboardingSession, input: Record<string, unknown>) {
   assertNoSecrets(input);
@@ -851,10 +855,14 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   }
 }
 
+export class OnboardingCommitNotReadyError extends Error {}
+
 export async function commitOnboardingSession(id: string, ownerId?: string) {
   const session = await activeSession(id, ownerId);
-  if (session.status !== "preview_ready" || session.test?.connectorInvoked !== true || session.discovery?.connectorInvoked !== true) {
-    throw new Error("A connector-backed test, supported detection, discovery, and preview are required before save.");
+  if (!["preview_ready", "save_failed"].includes(session.status) || session.test?.connected !== true
+    || session.test?.connectorInvoked !== true || session.detection?.supported !== true
+    || session.discovery?.connectorInvoked !== true || !session.preview) {
+    throw new OnboardingCommitNotReadyError("A connector-backed test, supported detection, discovery, and preview are required before save.");
   }
   touch(session, "saving", "save");
   const draft = session.draft;

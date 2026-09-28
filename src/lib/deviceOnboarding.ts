@@ -51,6 +51,12 @@ export type OnboardingSession = {
   result: { deviceId?: string; assetId?: string; route?: string; verificationStatus?: "verified" | "unverified"; connectorInvoked?: boolean; connectionVerified?: boolean; platform?: string; initialHealth?: Record<string, unknown> } | null;
 };
 
+export function isOnboardingReadyForCommit(session: OnboardingSession | null): boolean {
+  return Boolean(session && ["preview_ready", "save_failed"].includes(session.status)
+    && session.test?.connected === true && session.test.connectorInvoked === true
+    && session.detection?.supported === true && session.discovery?.connectorInvoked === true && session.preview);
+}
+
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

@@ -1,3 +1,8 @@
+## 2026-09-28 - ESXi registration save recovery
+
+- Found a confirmed save failure from company/address uniqueness colliding with an archived Linux record on a different SSH port; connection/detection/discovery/preview had succeeded. Fixed archived identity reuse without history deletion, preserving active-address conflicts and company scope.
+- Save-failed retries retain complete verification and do not reconnect or downgrade to unverified. Incomplete evidence returns a clear 400 code; UI refreshes failed-save state and separates save failure from connectivity failure. Builds and isolated backend/browser checks passed; local web/API updated. No actual vendor change or live registration committed in this follow-up.
+
 ## 2026-09-28 - ESXi fingerprint onboarding guidance
 
 - Added clear Persian/English SSH-only help in the shared registration/edit page: correct full-path ESXi command, SHA256-only output explanation, copy button with manual fallback and a host-identity/security note. Updated the connection guide; fingerprint enforcement remains mandatory.

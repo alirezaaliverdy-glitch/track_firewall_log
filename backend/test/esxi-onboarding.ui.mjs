@@ -15,6 +15,7 @@ try {
     await page.setViewport({width,height:1000});
     const errors = [];
     const paths = [];
+    let session = null, testCalls = 0, commitCalls = 0, unverifiedCalls = 0;
     page.on("pageerror", error => errors.push(error.message));
     await page.setRequestInterception(true);
     page.on("request", async req => {
@@ -26,11 +27,29 @@ try {
       else if (path.endsWith("/auth/csrf")) body = {token:"ui-test-only",csrfToken:"ui-test-only"};
       else if (path.endsWith("/product-state/navigation")) body = {contractVersion:"1",navigation:[]};
       else if (path.endsWith("/companies")) body = {companies:[{id:"test-company",name:"Test company",code:"TEST",deletedAt:null,_count:{devices:0,assets:0}}]};
-      else if (path.endsWith("/credentials")) body = {credentials:[]};
+      else if (path.endsWith("/credentials")) body = {credentials:[{id:"test-credential",name:"Test SSH",type:"password",username:"test",sudo:false}]};
       else if (path.endsWith("/vendors/connection-methods")) body = {profiles:listConnectionProfiles()};
       else if (path.endsWith("/device-onboarding/sessions")) {
         const input = JSON.parse(req.postData() || "{}");
         body = {id:"test-session",status:"draft",step:"vendor",draft:{companyId:"test-company",vendor:"linux",platform:"linux",connectionMethod:"ssh",name:"",host:"",managementPort:22,credentialId:"",enableCredentialId:"",site:"",location:"",environment:"lab",...input},test:null,detection:null,discovery:null,preview:null,result:null};
+        session = body;
+      } else if (path.includes("/device-onboarding/sessions/test-session")) {
+        const action = path.split("/").at(-1);
+        if (action === "answers") session = {...session,draft:JSON.parse(req.postData()),status:"answers_saved",test:null,detection:null,discovery:null,preview:null};
+        if (action === "test") { testCalls++; session = {...session,status:"connection_verified",test:{connected:true,connectorInvoked:true}}; }
+        if (action === "detect") session = {...session,status:"platform_detected",detection:{supported:true}};
+        if (action === "discover") session = {...session,status:"discovery_completed",discovery:{connectorInvoked:true}};
+        if (action === "preview") session = {...session,status:"preview_ready",preview:{device:session.draft}};
+        if (action === "register-unverified") unverifiedCalls++;
+        if (action === "commit") {
+          commitCalls++;
+          if (commitCalls === 1) {
+            session = {...session,status:"save_failed",result:{error:"Simulated save failure"}};
+            return req.respond({status:400,contentType:"application/json",body:JSON.stringify({error:{code:"ONBOARDING_COMMIT_BLOCKED",message:"Simulated save failure"}})});
+          }
+          session = {...session,status:"completed",result:{verificationStatus:"verified",connectorInvoked:true,connectionVerified:true}};
+        }
+        body = session;
       } else body = {devices:[],items:[],data:[],count:0};
       await req.respond({status:200,contentType:"application/json",body:JSON.stringify(body)});
     });
@@ -74,6 +93,19 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth+4), false, `SSH form overflows at ${width}px`);
     await page.click(`${guide} summary`);
     assert.equal(await page.$eval(guide,v => v.open), false, "Help can be closed");
+    await page.select('.onboarding-stage--credential select',"test-credential");
+    await page.click('.onboarding-stage--credential .workflow-primary-action');
+    await page.waitForSelector('[data-testid="onboarding-step-review"]');
+    assert.ok(await page.$('.onboarding-result-hero.is-verified'));
+    await page.click('.onboarding-stage--review .workflow-primary-action');
+    await page.waitForFunction(() => document.querySelector('.onboarding-feedback.is-error'));
+    await page.waitForFunction(() => !document.querySelector('.onboarding-stage--review .workflow-primary-action').disabled);
+    assert.ok(await page.$('.onboarding-result-hero.is-verified'),"Save failure must preserve verified evidence");
+    await page.click('.onboarding-stage--review .workflow-primary-action');
+    await page.waitForFunction(() => !document.querySelector('.onboarding-stage--review .workflow-primary-action').disabled);
+    assert.equal(commitCalls,2,"Retry must call verified commit, not unverified registration");
+    assert.equal(unverifiedCalls,0);
+    assert.equal(testCalls,1,"Saving again must not reconnect to the vendor");
     await page.click(".onboarding-context-bar nav button");
     await page.waitForSelector('[data-testid="onboarding-step-identity"]');
     await page.evaluate(() => [...document.querySelectorAll(".onboarding-method-card")].find(v => v.textContent.includes("API")).click());
@@ -85,7 +117,7 @@ try {
     assert.equal(await page.$('input[placeholder="SHA256:…"]'), null);
     assert.equal(await page.$(guide), null, "SSH guide must not appear for API connections");
     assert.deepEqual(errors,[]);
-    console.log(JSON.stringify({ok:true,width,sshSelectable:true,apiSelectable:true,fieldsSeparated:true,guideStable:true,copyCommand:true,manualCopyFallback:true,noOverflow:true}));
+    console.log(JSON.stringify({ok:true,width,sshSelectable:true,apiSelectable:true,fieldsSeparated:true,guideStable:true,copyCommand:true,manualCopyFallback:true,noOverflow:true,verifiedSaveRecovery:true}));
     await page.close();
   }
 } finally { await browser.close(); }

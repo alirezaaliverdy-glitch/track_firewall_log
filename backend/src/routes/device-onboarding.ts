@@ -14,7 +14,8 @@ import {
   OnboardingDuplicateDeviceError,
   OnboardingManagementIpConflictError,
   OnboardingCredentialInvalidError,
-  OnboardingConnectionTestError
+  OnboardingConnectionTestError,
+  OnboardingCommitNotReadyError
 } from "../services/device-onboarding.service.js";
 import { CiscoConnectorError } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 
@@ -105,6 +106,7 @@ export const deviceOnboardingRoutes: FastifyPluginAsync = async (app) => {
     try { return await commitOnboardingSession(request.params.sessionId, request.authUser?.id); }
     catch (error) {
       if (error instanceof OnboardingManagementIpConflictError) return reply.code(409).send(conflictPayload(error));
+      if (error instanceof OnboardingCommitNotReadyError) return reply.code(400).send({ error: { code: "ONBOARDING_COMMIT_NOT_READY", message: error.message } });
       return reply.code(statusCode(error)).send({ error: { code: "ONBOARDING_COMMIT_BLOCKED", message: error instanceof Error ? error.message : "Save failed." } });
     }
   });

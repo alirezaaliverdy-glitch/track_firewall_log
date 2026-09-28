@@ -17,6 +17,7 @@ import {
   detectOnboarding,
   discoverOnboarding,
   getOnboarding,
+  isOnboardingReadyForCommit,
   previewOnboarding,
   registerUnverifiedOnboarding,
   startOnboarding,
@@ -69,6 +70,14 @@ function mappedError(failure: unknown, fallbackKey: string, t: TFunction, isFa =
   if (failure instanceof OnboardingApiError) {
     const code = failure.code ?? "";
     const message = failure.message.toLowerCase();
+    if (code === "ONBOARDING_COMMIT_NOT_READY") return {
+      message: isFa ? "مراحل تأیید دستگاه کامل نیست. به «اتصال و تست» برگردید و تست را دوباره انجام دهید." : "Verification is incomplete. Return to Connection and test and run the test again.",
+      diagnostic: `${code}: ${failure.message}`
+    };
+    if (code === "ONBOARDING_COMMIT_BLOCKED") return {
+      message: isFa ? "ثبت دستگاه انجام نشد؛ این خطا لزوماً به معنی قطع اتصال نیست. دوباره ثبت کنید؛ اگر تکرار شد جزئیات فنی را بررسی کنید." : "Device save failed; this does not necessarily mean a connection failure. Retry saving and check the details if it persists.",
+      diagnostic: `${code}: ${failure.message}`
+    };
     let key = "onboarding.errors.generic";
     if (code.includes("NEGOTIATION") || /algorithm negotiation|no matching.*algorithm/.test(message)) {
       return {
@@ -189,9 +198,9 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   const selectedCredential = useMemo(() => credentials.find((item) => item.id === form?.credentialId) ?? null, [credentials, form?.credentialId]);
-  const verified = session?.test?.connected === true && session.test.connectorInvoked === true && session.status === "preview_ready";
+  const verified = isOnboardingReadyForCommit(session);
   const unverifiedResult = session?.result?.verificationStatus === "unverified" && session.result.connectorInvoked === false;
-  const connectionFailed = Boolean(session?.test && !verified);
+  const connectionFailed = Boolean(session?.test && (session.test.connected !== true || session.test.connectorInvoked !== true));
 
   if (!form || !session) {
     const missingCompany = bootstrapIssue === "missing_company";
@@ -335,6 +344,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
   }
 
   async function register() {
+    if (busy) return;
     setBusy("register"); setError(""); setDiagnostic(""); setConflict(null);
     try {
       const next = verified ? await commitOnboarding(activeSession.id) : await registerUnverifiedOnboarding(activeSession.id, activeForm);
@@ -345,6 +355,8 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
       setError(nextError.message);
       if (failure instanceof OnboardingApiError && failure.code === "DEVICE_MANAGEMENT_IP_CONFLICT") setConflict({ route: failure.route, existingDeviceId: failure.existingDeviceId });
       setDiagnostic(nextError.diagnostic);
+      setMessage("");
+      await getOnboarding(activeSession.id).then((current) => { setSession(current); setForm(current.draft); }).catch(() => undefined);
     } finally { setBusy(""); }
   }
 
