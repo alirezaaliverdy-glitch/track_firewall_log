@@ -21,6 +21,8 @@ export type EsxiDiscovery = {
   dns: {hostName:string;domainName:string;servers:string[]};
   time: {ntpServers:string[];lastSyncTime:string|null;protocol:string};
   serviceSystemId:string|null; dateTimeSystemId:string|null;
+  interfaceCounters?: Array<{name:string;rxBytes:number|null;txBytes:number|null}>;
+  coverage?: Array<{key:string;status:"available"|"unavailable"}>;
   collectedAt: string;
 };
 const number=(value:unknown) => {const n=Number(value);return value!=="" && value!==null && Number.isFinite(n)&&n>=0?n:null;};
@@ -121,9 +123,13 @@ export async function readEsxiInventory(client:EsxiSoapClient,content:XmlNode,de
       connectionState:field(runtime,"connectionState")||"unknown",overallStatus:field(summary,"overallStatus")||"unknown",
       maintenanceMode:bool(field(runtime,"inMaintenanceMode")),bootTime:field(runtime,"bootTime")||null,
       cpuPercent,memoryPercent,cpuCores:number(field(hardware,"numCpuCores")),memoryBytes,
-      vmCount:vmIds.length,vms,vmsTruncated:vmIds.length>100,datastores,datastoreCount:datastoreIds.length,
+      vmCount:prop(host,"vm") ? vmIds.length : null,vms,vmsTruncated:vmIds.length>100,datastores,datastoreCount:prop(host,"datastore") ? datastoreIds.length : null,
       networks,sensors,services,storageAdapters,storageDevices,firewallRulesets,physicalNics,vmkernelNics,virtualSwitches,portGroups,dns,time,
       serviceSystemId:field(manager,"serviceSystem")||null,dateTimeSystemId:field(manager,"dateTimeSystem")||null,
+      coverage:([ ["summary",quick],["hardware",hardware],["maintenance",runtime],["datastores",prop(host,"datastore")],
+        ["nics",networkConfig],["vmkernel",networkConfig],["portgroups",networkConfig],["switches",networkConfig],
+        ["dns",dnsConfig],["ntp",dateTime],["services",serviceConfig],["adapters",prop(host,"config.storageDevice")],
+        ["firewall",prop(host,"config.firewall")],["sensors",nested(runtime,"healthSystemRuntime","systemHealthInfo")] ] as Array<[string,XmlNode|undefined]>).map(([key,node])=>({key,status:node?"available":"unavailable"})),
       collectedAt:new Date().toISOString()
     };
 }

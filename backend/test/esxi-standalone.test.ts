@@ -71,6 +71,10 @@ test("ESXi inventory extracts host, VM and datastore metrics from typed API prop
   assert.throws(()=>validateEsxiHostChange(inventory,"enter-maintenance",""),(e:unknown)=>e instanceof EsxiSoapError&&e.code==="ESXI_VM_RUNNING");
   const idle={...inventory,vms:[{...inventory.vms[0]!,powerState:"poweredOff"}],services:[{key:"hostd",label:"Host daemon",running:true,policy:"on",required:true}],serviceSystemId:"serviceSystem"};
   assert.doesNotThrow(()=>validateEsxiHostChange(idle,"enter-maintenance",""));
+  assert.throws(()=>validateEsxiHostChange({...idle,vmCount:null},"enter-maintenance",""),/Power off or migrate/);
+  assert.throws(()=>validateEsxiHostChange({...idle,vmCount:2},"enter-maintenance",""),/Power off or migrate/);
+  assert.throws(()=>validateEsxiHostChange({...idle,maintenanceMode:null},"enter-maintenance",""),/Fresh maintenance state/);
+  assert.throws(()=>validateEsxiHostChange({...idle,services:[{key:"ntpd",label:"NTP",running:null,required:false,policy:"on"}]},"start-service","ntpd"),/Fresh service state/);
   assert.throws(()=>validateEsxiHostChange(idle,"stop-service","hostd"),(e:unknown)=>e instanceof EsxiSoapError&&e.code==="ESXI_SERVICE_PROTECTED");
   assert.throws(()=>validateEsxiHostChange({...idle,vmsTruncated:true},"enter-maintenance",""),(e:unknown)=>e instanceof EsxiSoapError&&e.code==="ESXI_VM_RUNNING");
   const metrics=vendorMeasurements({connected:true,esxi:inventory} as never);

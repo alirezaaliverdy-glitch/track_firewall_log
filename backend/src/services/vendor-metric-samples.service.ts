@@ -21,6 +21,10 @@ export function vendorMeasurements(result: DeviceConnectionTestResult): Measurem
     add(measurements, "memory.usage_percent", result.esxi.memoryPercent, "percent");
     add(measurements, "vm.count", result.esxi.vmCount, "count");
     add(measurements, "datastore.count", result.esxi.datastoreCount, "count");
+    for(const item of result.esxi.interfaceCounters?.slice(0,16) ?? []) {
+      add(measurements,"network.rx_bytes",item.rxBytes,"bytes",{interface:item.name});
+      add(measurements,"network.tx_bytes",item.txBytes,"bytes",{interface:item.name});
+    }
     for (const datastore of result.esxi.datastores) {
       if (datastore.capacityBytes && datastore.freeBytes !== null)
         add(measurements, "datastore.usage_percent", (1 - datastore.freeBytes / datastore.capacityBytes) * 100, "percent", { datastore: datastore.name });

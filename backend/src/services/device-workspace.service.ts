@@ -204,11 +204,17 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
         storageDevices:data.storageDevices??[],
         firewallRulesets:data.firewallRulesets??[],
         physicalNics:data.physicalNics??[],
+        interfaces:asArray(data.physicalNics).slice(0,100).map(item=>{
+          const nic=asObject(item);
+          return {name:nic.name??"",operationalStatus:nic.linkUp===true?"up":nic.linkUp===false?"down":"unknown",administrativeStatus:"unknown",speed:nic.speedMb??null};
+        }),
         vmkernelNics:data.vmkernelNics??[],
         virtualSwitches:data.virtualSwitches??[],
         portGroups:data.portGroups??[],
         dns:data.dns??null,
         time:data.time??null,
+        coverage:data.coverage??[],
+        interfaceCounters:data.interfaceCounters??[],
         collection:{inventoryStatus:"collected",capabilityStatus:asArray(status.warnings).length?"partial":"available"}
       },
       capabilities:capabilityList,

@@ -6,7 +6,7 @@ import ssh2, { type Client, type ClientChannel } from "ssh2";
 import type { Device } from "@prisma/client";
 import { esxiSshConfig, esxiSshSessionId, esxiExec } from "../src/connectors/esxi-ssh.transport.js";
 import { ESXI_SSH_READ_COMMANDS, esxiCsv, parseEsxiSshInventory } from "../src/connectors/esxi-ssh.inventory.js";
-import { esxiSshConnector } from "../src/connectors/esxi-ssh.connector.js";
+import { esxiSshConnector, collectEsxiSshHost } from "../src/connectors/esxi-ssh.connector.js";
 import { vendorMeasurements } from "../src/services/vendor-metric-samples.service.js";
 import { selectDeviceConnector } from "../src/connectors/connector-registry.service.js";
 import { getConnectionProfile } from "../src/vendors/connection-method.registry.js";
@@ -117,7 +117,13 @@ test(`Real loopback SSH ${method} verifies the pinned host and reuses one authen
       const session = accept();
       session.on("exec", (acceptExec, _reject, info) => {
         const stream = acceptExec();
-        stream.write(info.command === "vmware -v" ? "VMware ESXi 8.0.3 build-12345678\n" : "Disabled\n");
+        const responses:Record<string,string>={
+          "vmware -v":"VMware ESXi 8.0.3 build-12345678\n",
+          "vim-cmd hostsvc/hostsummary":"hardware = (vim.host.Summary.HardwareSummary) {\n cpuMhz = 2000,\n numCpuCores = 4,\n memorySize = 8589934592,\n}\nquickStats = (vim.host.Summary.QuickStats) {\n overallCpuUsage = 2000,\n overallMemoryUsage = 4096,\n}",
+          "esxcli --formatter=csv network nic list":"Name,Link Status,Speed,\nvmnic0,Up,1000,",
+          "esxcli network nic stats get -n vmnic0":"Bytes received: 1000000\nBytes sent: 2000000"
+        };
+        stream.write(responses[info.command] ?? "Disabled\n");
         stream.exit(0); stream.end();
       });
     }));
@@ -132,6 +138,12 @@ test(`Real loopback SSH ${method} verifies the pinned host and reuses one authen
     assert.match(first,/VMware ESXi/);
     assert.equal(await withSharedSsh(esxiSshSessionId(target),config,client => esxiExec(client,"esxcli system maintenanceMode get",1000)), "Disabled\n");
     assert.equal(connections,1);
+    const collection=await withSharedSsh(esxiSshSessionId(target),config,client=>collectEsxiSshHost(client,target));
+    assert.equal(collection.esxi.version,"8.0.3");
+    assert.equal(collection.esxi.cpuPercent,25);
+    assert.equal(collection.esxi.memoryPercent,50);
+    assert.equal(collection.esxi.interfaceCounters?.[0]?.rxBytes,1000000);
+    assert.equal(connections,1); // Entire inventory collection uses the existing authenticated session.
     const wrong = {...device,id:"esxi-wrong-fingerprint"};
     await assert.rejects(withSharedSsh(esxiSshSessionId(wrong),esxiSshConfig(wrong,"127.0.0.1",port,cred),async()=>undefined), /host key does not match/i);
   } finally {

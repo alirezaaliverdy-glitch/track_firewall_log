@@ -1,3 +1,10 @@
+## 2026-09-28 - ESXi host monitoring and readable overview
+
+- Expanded fixed read-only SSH discovery with typed host CPU/RAM quickstats, bounded strictly validated physical NIC traffic, services, vSwitches, DNS/NTP, storage adapters and firewall rulesets. Shared pinned SSH sessions, deadlines, no raw shell and no VM mutations remain intact.
+- Persisted measured CPU/RAM and labelled counters through existing chart storage. Projected NICs into the shared interfaces tab and per-domain coverage into the host panel; missing permissions/invalid CSV/truncation are not zero or authenticated-host offline states.
+- Added a quiet responsive ESXi host overview with resource values, readable grouped disclosures, API action/setup links and explicit historical/offline/unknown data. Stronger API prechecks reject unknown maintenance, incomplete VM inventory and unknown service state. Host operations remain inventory, maintenance, service start/stop and NTP over API only; broader mutations are still unsupported.
+- Verification: both production builds, 28 ESXi/shared-transport/workspace/chart regressions, 225 catalog entries and UTF-8 scan passed. Real loopback password/keyboard-interactive collection reused one session; intercepted deployed-browser tests passed 1440/390/320px, polling identity, no overflow/writes and API/unknown/offline states. No real host changes or fresh live collection, migrations or push. Local services healthy; final live acceptance remains required.
+
 ## 2026-09-28 - Fix misleading ESXi registration blocker
 
 - Diagnosed stored successful verification followed by Asset company/management-address unique collision against an archived Linux identity with another port. Fixed reuse and preserved history, active conflicts and ownership scope.

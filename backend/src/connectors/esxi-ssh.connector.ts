@@ -1,10 +1,36 @@
 import { DeviceProtocol, type Device } from "@prisma/client";
+import type { Client } from "ssh2";
 import type { DeviceConnectionTestResult, DeviceConnector } from "./types.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { SharedSshConnectionError, withSharedSsh } from "../services/shared-ssh-session.service.js";
 import { EsxiSoapError } from "./esxi-soap.transport.js";
 import { esxiExec, esxiSshConfig, esxiSshSessionId } from "./esxi-ssh.transport.js";
-import { ESXI_SSH_READ_COMMANDS, parseEsxiSshInventory, type EsxiSshOutputs } from "./esxi-ssh.inventory.js";
+import { ESXI_SSH_READ_COMMANDS, esxiNicStatsCommand, parseEsxiNicStats, parseEsxiSshInventory, type EsxiSshOutputs } from "./esxi-ssh.inventory.js";
+
+export async function collectEsxiSshHost(client:Client,device:Pick<Device,"id"|"host">) {
+  const outputs:EsxiSshOutputs={};
+  const deadline=Date.now()+30_000;
+  for(const [key,command] of Object.entries(ESXI_SSH_READ_COMMANDS)) {
+    const name=key as keyof EsxiSshOutputs;
+    if(Date.now()>=deadline) break;
+    try {
+      outputs[name]=await esxiExec(client,command,Math.min(5_000,deadline-Date.now()));
+      if(name==="identity") parseEsxiSshInventory(outputs,device);
+    } catch(error) { if(name==="identity") throw error; }
+  }
+  const esxi=parseEsxiSshInventory(outputs,device);
+  const nics=esxi.physicalNics.filter(item=>/^vmnic\d{1,4}$/.test(item.name)).slice(0,16);
+  for(const nic of nics) {
+    if(Date.now()>=deadline) break;
+    try { esxi.interfaceCounters!.push(parseEsxiNicStats(nic.name,await esxiExec(client,esxiNicStatsCommand(nic.name),Math.min(3_000,deadline-Date.now())))); }
+    catch { /* Missing traffic remains unknown, never zero. */ }
+  }
+  const trafficComplete=esxi.physicalNics.length>0 && esxi.interfaceCounters!.length===esxi.physicalNics.length && esxi.interfaceCounters!.every(item=>item.rxBytes!==null && item.txBytes!==null);
+  esxi.coverage!.push({key:"traffic",status:trafficComplete?"available":"unavailable"});
+  const warnings=[{code:"ESXI_SSH_READONLY",message:"SSH provides read-only host monitoring. Reviewed host changes and complete hardware health require the API connection."},
+    ...esxi.coverage!.filter(item=>item.status==="unavailable").map(item=>({code:"ESXI_SSH_PARTIAL_INVENTORY",message:`Host field ${item.key} is unavailable; check ESXi version and account permissions.`}))];
+  return {esxi,warnings};
+}
 
 export async function testEsxiSsh(device: Device): Promise<DeviceConnectionTestResult> {
   try {
@@ -13,21 +39,7 @@ export async function testEsxiSsh(device: Device): Promise<DeviceConnectionTestR
     if (!credential) throw new EsxiSoapError("ESXI_SSH_CREDENTIAL_REQUIRED", "Select a stored SSH credential.");
     const config = esxiSshConfig(device, device.host, device.managementPort, credential);
     return await withSharedSsh(esxiSshSessionId(device), config, async client => {
-      const outputs: EsxiSshOutputs = {};
-      const warnings = [{code: "ESXI_SSH_READONLY", message: "SSH collects host identity, hardware, storage and networking only. CPU/RAM usage, hardware health and reviewed host changes require API."}];
-      const deadline = Date.now() + 30_000;
-      for (const [key, command] of Object.entries(ESXI_SSH_READ_COMMANDS)) {
-        const name = key as keyof typeof ESXI_SSH_READ_COMMANDS;
-        try {
-          if (Date.now() >= deadline) throw new EsxiSoapError("ESXI_SSH_COLLECTION_TIMEOUT", "Host inventory deadline reached.");
-          outputs[name] = await esxiExec(client, command, Math.min(5_000, deadline - Date.now()));
-          if (name === "identity") parseEsxiSshInventory(outputs, device);
-        } catch (error) {
-          if (name === "identity") throw error;
-          warnings.push({code: "ESXI_SSH_PARTIAL_INVENTORY", message: `Host field ${name} is unavailable; check ESXi version and account permissions.`});
-        }
-      }
-      const esxi = parseEsxiSshInventory(outputs, device);
+      const {esxi,warnings}=await collectEsxiSshHost(client,device);
       return {
         connected: true, deviceId: device.id, vendor: "esxi", host: device.host, port: device.managementPort,
         credentialResolved: true, hostname: esxi.hostname, os: `ESXi ${esxi.version}`, esxi, diagnostic: {transport: "ssh"},

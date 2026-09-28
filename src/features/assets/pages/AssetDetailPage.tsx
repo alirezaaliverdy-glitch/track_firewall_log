@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DeviceVerificationPanel } from "@/features/assets/components/DeviceVerificationPanel";
 import { DeviceConnectionChannels } from "@/features/assets/components/DeviceConnectionChannels";
 import { CiscoAssetDashboard } from "@/features/assets/components/CiscoAssetDashboard";
+import { EsxiHostOverview } from "@/features/assets/components/EsxiHostOverview";
 import { deleteDevice, testDeviceConnection, updateDevice, type DeviceInput } from "@/lib/devices";
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
 import { refreshDeviceVendorCapabilities } from "@/lib/vendors";
@@ -332,6 +333,8 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
       {renderOverviewTrends()}
 
+      {currentWorkspace.vendor.key === "esxi" ? <EsxiHostOverview facts={facts} deviceId={deviceId} isFa={isFa} locale={locale} ssh={currentWorkspace.capabilities?.connectorType === "esxi-ssh" || currentWorkspace.device?.protocol === "ssh"} available={overview.availability === "online"} /> : null}
+
       <details className="asset-overview-technical"><summary>{isFa ? "مسیرهای اتصال دستگاه" : "Device connection channels"}</summary><DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} /></details>
 
       <section className="asset-overview-main-grid">
@@ -339,11 +342,11 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
         <article className="asset-health-card"><header><span><CheckCircle2 /></span><div><small>{isFa ? "سلامت و پوشش" : "Health and coverage"}</small><h3>{isFa ? "وضعیت قابل اقدام" : "Actionable status"}</h3></div></header><dl><div><dt>{t("workspace.labels.healthState")}</dt><dd>{statusLabel(overview.healthState, t)}</dd></div><div><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(dataTime, locale, fallback)}</dd></div><div><dt>{isFa ? "دامنه‌های خوانده‌شده" : "Collected domains"}</dt><dd>{vendorOverview.sections.length.toLocaleString(locale)}</dd></div><div><dt>{isFa ? "اینترفیس" : "Interfaces"}</dt><dd>{interfaces.length.toLocaleString(locale)}</dd></div></dl>{healthSummary !== fallback ? <p dir="ltr">{healthSummary}</p> : null}</article>
       </section>
 
-      <details className="asset-vendor-overview"><summary>{isFa ? "اطلاعات تخصصی وندور" : "Vendor inventory"}</summary>
+      {currentWorkspace.vendor.key !== "esxi" ? <details className="asset-vendor-overview"><summary>{isFa ? "اطلاعات تخصصی وندور" : "Vendor inventory"}</summary>
         <header><div><span><Network /></span><div><small>{isFa ? "اطلاعات واقعی و نرمال‌شده" : "Verified normalized data"}</small><h2>{isFa ? `نمای کامل ${overview.vendor}` : `${overview.vendor} overview`}</h2><p>{isFa ? "اطلاعاتی که آخرین Connector موفق از دستگاه خوانده است." : "Information read by the latest successful connector collection."}</p></div></div><time><Clock3 />{date(dataTime, locale, fallback)}</time></header>
         {vendorOverview.summary.length ? <div className="asset-vendor-facts">{vendorOverview.summary.map((item) => <article key={item.key}><small>{isFa ? item.labelFa : item.labelEn}</small><strong dir="auto">{item.value}</strong></article>)}</div> : null}
         {vendorOverview.sections.length ? <details className="asset-vendor-more"><summary>{isFa ? "مشاهدهٔ اطلاعات تخصصی" : "Show technical inventory"}</summary><div className="asset-vendor-sections">{vendorOverview.sections.map((vendorSection) => <details key={vendorSection.key}><summary><span>{isFa ? vendorSection.titleFa : vendorSection.titleEn}</span><b>{vendorSection.count.toLocaleString(locale)}</b></summary><div>{vendorSection.items.map((item, itemIndex) => <article key={`${vendorSection.key}-${itemIndex}`}><strong dir="auto">{item.title}</strong>{item.fields.length ? <dl>{item.fields.map((field) => <div key={field.key}><dt>{field.key}</dt><dd dir="auto">{field.value}</dd></div>)}</dl> : null}</article>)}</div></details>)}</div></details> : <div className="asset-vendor-empty"><Database /><strong>{isFa ? "هنوز داده جامع وندور جمع‌آوری نشده است" : "No comprehensive vendor data yet"}</strong><p>{isFa ? "برای دیدن جزئیات، یک‌بار اطلاعات دستگاه را جمع‌آوری کنید." : "Collect device data to see details."}</p></div>}
-      </details>
+      </details> : null}
 
       {isCisco && currentWorkspace.vendorDetails ? <details className="asset-cisco-expanded"><summary>{isFa ? "نمای تخصصی Cisco" : "Cisco technical view"}</summary><CiscoAssetDashboard details={currentWorkspace.vendorDetails} deviceId={deviceId} availability={overview.availability} lastCollected={dataTime} collecting={collecting} isFa={isFa} onCollect={() => void collectLiveData()} /></details> : null}
 

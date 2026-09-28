@@ -26,9 +26,11 @@ function intent(plan:ActionPlan) {
   return {operation,serviceKey,ntpServers};
 }
 export function validateEsxiHostChange(snapshot:EsxiDiscovery,operation:Operation,serviceKey:string) {
+  if(["enter-maintenance","exit-maintenance"].includes(operation) && snapshot.maintenanceMode===null)
+    throw new EsxiSoapError("ESXI_MAINTENANCE_STATE_UNKNOWN","Fresh maintenance state is required before a host change.");
   if(operation==="enter-maintenance") {
     if(snapshot.maintenanceMode) throw new EsxiSoapError("ESXI_ALREADY_IN_MAINTENANCE","Host is already in maintenance mode.");
-    if(snapshot.vmsTruncated||snapshot.vms.some(vm=>vm.powerState!=="poweredOff"&&vm.powerState!=="suspended"))
+    if(snapshot.vmCount===null || snapshot.vmCount!==snapshot.vms.length || snapshot.vmsTruncated||snapshot.vms.some(vm=>vm.powerState!=="poweredOff"&&vm.powerState!=="suspended"))
       throw new EsxiSoapError("ESXI_VM_RUNNING","Power off or migrate all VMs outside this application before entering maintenance mode.");
   }
   if(operation==="exit-maintenance"&&!snapshot.maintenanceMode)
@@ -36,6 +38,7 @@ export function validateEsxiHostChange(snapshot:EsxiDiscovery,operation:Operatio
   if(operation==="start-service"||operation==="stop-service") {
     const service=snapshot.services.find(item=>item.key===serviceKey);
     if(!service) throw new EsxiSoapError("ESXI_SERVICE_NOT_FOUND","Service is not in fresh host inventory.");
+    if(service.running===null) throw new EsxiSoapError("ESXI_SERVICE_STATE_UNKNOWN","Fresh service state is required before a host change.");
     if(operation==="stop-service"&&(service.required!==false||["hostd","vpxa","rhttpproxy","dcui","TSM","TSM-SSH"].includes(serviceKey)))
       throw new EsxiSoapError("ESXI_SERVICE_PROTECTED","Stopping a required or management service is blocked.");
     if(service.running===(operation==="start-service")) throw new EsxiSoapError("ESXI_SERVICE_STATE_CHANGED","Service already has the requested state.");
