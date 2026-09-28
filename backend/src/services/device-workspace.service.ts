@@ -320,6 +320,8 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
         ipHosts: data.ipHosts ?? [],
         services: data.services ?? [],
         vpnConnections: data.vpnConnections ?? [],
+        vpnProfiles: data.vpnProfiles ?? [],
+        collectionWarnings: data.collectionWarnings ?? [],
         collection: { inventoryStatus: "collected", capabilityStatus: asArray(status.warnings).length ? "partial" : "available" }
       },
       capabilities: capabilityList,
@@ -332,7 +334,8 @@ export function liveVendorProjection(vendorKey: string, capabilities: Record<str
         section("routing", "درگاه‌ها و مسیریابی", "Gateways and routing", data.gateways),
         section("firewall", "قوانین فایروال", "Firewall rules", data.firewallRules),
         section("objects", "میزبان‌ها و سرویس‌ها", "Hosts and services", [...asArray(data.ipHosts), ...asArray(data.services)]),
-        section("vpn", "اتصال‌های VPN", "VPN connections", data.vpnConnections)
+        section("vpn", "تنظیمات VPN (نه وضعیت SA)", "VPN configuration (not SA state)", data.vpnConnections),
+        section("vpnProfiles", "پروفایل‌های IPsec", "IPsec profiles", data.vpnProfiles)
       ].filter((item): item is NonNullable<typeof item> => item !== null)
     };
   }

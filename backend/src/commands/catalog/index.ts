@@ -197,6 +197,16 @@ const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("fortigate", "vpn-status", "وضعیت VPN", "VPN status", "vpn", "fortigate_show_vpn_status", implemented("fortigate_show_vpn_status", { mutates: false, searchKeywordsFa: ["وضعیت vpn", "تونل ipsec", "ssl vpn"] })),
   item("fortigate", "ha-vdom-zone", "HA، VDOM و Zone", "HA, VDOM and zones", "network", "fortigate_show_ha_vdom_zone", implemented("fortigate_show_ha_vdom_zone", { mutates: false, searchKeywordsFa: ["وضعیت ha", "vdom ها", "zone ها"] })),
   ...fullControlFortiGateItems,
+  item("fortigate", "guided-ipsec-site-to-site", "ساخت تونل Site-to-Site فورتی‌گیت", "Create FortiGate IPsec tunnel", "vpn", "fortigate_guided_vpn_setup", implemented("fortigate_guided_vpn_setup", {
+    mutates: true, riskLevel: "high", descriptionFa: "فرم مرحله‌ای IKEv2، شبکه‌ها، WAN/LAN، PSK، Route و Policy؛ پیش‌نمایش و بررسی تنظیمات پس از اجرا.",
+    required: [param("vpnName", "نام تونل", "نام حداکثر ۱۵ نویسه؛ با فرم مرحله‌ای تکمیل کنید.", "string", "BranchVPN"), param("pskSecretRef", "مرجع رمز مشترک", "فرم امن، رمز را به مرجع موقت تبدیل می‌کند.", "string")],
+    verification: ["Phase1/Phase2 و Route و Policy در دستگاه تطبیق داده شوند؛ ایجاد تنظیمات به معنی برقراری SA نیست"], rollback: { available: false, notAvailableReasonFa: "بازگردانی دستی پس از بررسی اشیای ساخته‌شده و بک‌آپ" }, searchKeywordsFa: ["ساخت تونل", "IKEv2", "اترنت بین سایت", "IPsec"]
+  })),
+  item("sophos", "create-ipsec-tunnel", "ساخت تونل Site-to-Site سوفوس", "Create Sophos IPsec tunnel", "vpn", "generic_security_action", implemented("sophos_create_ipsec_tunnel", {
+    mutates: true, riskLevel: "high", descriptionFa: "انتخاب شبکه‌ها و پروفایل IKEv2 موجود در دستگاه، ورود امن PSK و بررسی تنظیمات ساخته‌شده از XML API.",
+    required: [param("vpnName", "نام تونل", "از فرم مرحله‌ای تکمیل کنید.", "string", "Branch_IPsec"), param("wanInterface", "پورت WAN", "پورت واقعی دستگاه.", "string"), param("localHost", "شبکه محلی", "IP Host نوع Network.", "string"), param("remoteHost", "شبکه سمت مقابل", "IP Host نوع Network.", "string"), param("remoteGateway", "دروازه سمت مقابل", "IPv4 ثابت.", "ip"), param("profileName", "پروفایل IPsec", "پروفایل امن IKEv2 موجود.", "string"), param("localId", "Local ID", "شناسه IPv4 محلی.", "ip"), param("remoteId", "Remote ID", "شناسه IPv4 سمت مقابل.", "ip"), param("pskSecretRef", "مرجع رمز مشترک", "با فرم امن ساخته می‌شود؛ رمز خام پذیرفته نمی‌شود.", "string"), param("profileIkev2Confirmed", "تأیید IKEv2", "پروفایل را در دستگاه بررسی کنید.", "boolean")],
+    verification: ["تنظیمات VPNIPSecConnection با پارامترهای درخواست تطبیق داده شوند؛ SA نامشخص باقی می‌ماند"], rollback: { available: false, notAvailableReasonFa: "حذف دستی اتصال تازه پس از بررسی دستگاه؛ بک‌آپ توصیه می‌شود" }, searchKeywordsFa: ["ساخت تونل", "IKEv2", "IPsec", "VPN سوفوس"]
+  })),
   item("sophos", "inventory", "جمع‌آوری کامل وضعیت سوفوس", "Collect Sophos inventory", "system", "generic_security_action", implemented("sophos_inventory", {
     mutates: false,
     descriptionFa: "اینترفیس‌ها، Zoneها، Gatewayها، قوانین فایروال، میزبان‌ها، سرویس‌ها و اتصال‌های VPN را از XML API رسمی SFOS می‌خواند.",

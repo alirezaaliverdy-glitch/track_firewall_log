@@ -68,6 +68,7 @@ const VERIFIED_RESULT_PARSERS = new Set<string>([
   "fortigate_reboot",
   "fortigate_shutdown",
   "sophos_inventory",
+  "sophos_create_ipsec_tunnel",
   "sophos_enable_interface",
   "sophos_disable_interface",
   "sophos_set_interface_ipv4",

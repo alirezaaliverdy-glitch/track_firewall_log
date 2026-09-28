@@ -8,11 +8,13 @@ import GuidedActionWizard from "@/components/guided-actions/GuidedActionWizard";
 import { startGuidedSession } from "@/lib/guidedActions";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const VENDORS = ["fortigate", "mikrotik", "linux", "cisco", "pfsense", "generic"];
+const VENDORS = ["fortigate", "sophos", "esxi", "mikrotik", "linux", "cisco", "pfsense", "generic"];
 
 function vendorOf(device?: Device) {
   if (!device) return "";
   if (device.vendor?.toLowerCase().includes("cisco")) return "cisco";
+  if (/sophos|sfos|cyberoam/i.test(device.vendor ?? "")) return "sophos";
+  if (/esxi|vmware/i.test(device.vendor ?? "")) return "esxi";
   if (device.type === "linux_edge") return "linux";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type ?? "";
@@ -20,6 +22,8 @@ function vendorOf(device?: Device) {
 
 function connectorTypeOf(vendor: string) {
   if (vendor === "fortigate") return "fortigate-ssh";
+  if (vendor === "sophos") return "sophos-api";
+  if (vendor === "esxi") return "esxi-soap";
   if (vendor === "mikrotik") return "mikrotik-ssh";
   if (vendor === "linux") return "linux-ssh";
   return null;
@@ -34,6 +38,8 @@ function isParameterized(item: CatalogItem) {
 }
 
 function catalogBlueprintId(item: CatalogItem) {
+  if (item.id === "fortigate.guided-ipsec-site-to-site") return "fortigate_ipsec_site_to_site";
+  if (item.id === "sophos.create-ipsec-tunnel") return "sophos_ipsec_site_to_site";
   return `catalog:${item.id}`;
 }
 
@@ -121,7 +127,7 @@ export default function CommandCatalogPanel() {
     setGuidedUrlState(item);
     setGuidedWorkflow({
       blueprintId: catalogBlueprintId(item),
-      initialValues: {},
+      initialValues: item.id === "fortigate.guided-ipsec-site-to-site" ? { vpnType: "ipsec_site_to_site", authMethod: "psk", pskMode: "manual", proposal: "aes256-sha256", dhGroup: "14", ikeVersion: "2", natTraversal: true, logTraffic: true, createFirewallPolicy: true, createStaticRoute: true, enableAfterCreate: false } : item.id === "sophos.create-ipsec-tunnel" ? { startupMode: "RespondOnly", enableAfterCreate: false } : {},
       initialRequest: item.titleEn || item.titleFa,
       vendor: item.vendor,
       deviceId: deviceId || null,

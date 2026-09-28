@@ -51,6 +51,7 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { id: string }; Body: { deviceId?: string; params?: Record<string, unknown>; requestedBy?: string } }>("/api/commands/catalog/:id/create-action-plan", async (request, reply) => {
     const item = findCatalogItem(request.params.id);
     if (!item) return reply.code(404).send({ error: "COMMAND_NOT_FOUND", messageFa: "دستور آماده پیدا نشد." });
+    if (["sophos.create-ipsec-tunnel", "fortigate.guided-ipsec-site-to-site"].includes(item.id)) return reply.code(409).send({ error: "GUIDED_VPN_REQUIRED", messageFa: "برای ورود امن رمز مشترک و پارامترها، فرم مرحله‌ای ساخت تونل را باز کنید.", blueprintId: item.vendor === "sophos" ? "sophos_ipsec_site_to_site" : "fortigate_ipsec_site_to_site" });
     if (item.supportState === "unsupported") return reply.code(409).send({ error: "COMMAND_NOT_AVAILABLE", code: "COMMAND_NOT_AVAILABLE", messageKey: item.supportReasonKey, messageFa: item.disabledReasonFa, implementationState: item.implementationState, supportState: item.supportState });
     if (item.supportState === "verified" && (!item.executionTemplateRef || !getExecutionTemplate(item.executionTemplateRef))) return reply.code(409).send({ error: "COMMAND_NOT_EXECUTABLE", code: "COMMAND_NOT_EXECUTABLE", messageKey: "support.reason.missingRequirements", messageFa: "این دستور هنوز template اجرایی ثبت‌شده ندارد." });
     const params = { ...item.defaultParams, ...(request.body?.params ?? {}) };

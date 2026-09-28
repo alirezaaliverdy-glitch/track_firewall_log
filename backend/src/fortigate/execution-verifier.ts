@@ -1,4 +1,6 @@
 import { ActionType } from "@prisma/client";
+import { fortiEntry, redactFortiVpnOutput } from "./vpn-safety.js";
+import { cidrToSubnet } from "./command-compiler/shared.js";
 
 type CommandOutput = {
   template: string;
@@ -20,6 +22,7 @@ export type FortiGateVerificationResult = {
   actionType: string;
   summary: string;
   checks: FortiGateVerificationCheck[];
+  tunnelState?: "up" | "down" | "unknown";
 };
 
 const CLI_FAILURE_PATTERNS: Array<[RegExp, string]> = [
@@ -88,61 +91,68 @@ export function verifyFortiGateGuidedVpn(parameters: Record<string, unknown>, co
   const checks: FortiGateVerificationCheck[] = [];
   const push = (id: string, label: string, ok: boolean, evidence?: string, expected?: string) => checks.push({ id, label, ok, evidence, expected });
 
-  const phase1Output = commandText(findCommand(commands, (command) => command.template.includes("show vpn ipsec phase1-interface")) ?? { template: "", stdout: "", stderr: "", exitCode: null });
+  const phase1Output = redactFortiVpnOutput(fortiEntry(commandText(findCommand(commands, (command) => command.template.includes("show vpn ipsec phase1-interface")) ?? { template: "", stdout: "", stderr: "", exitCode: null }), phase1Name));
   push(
     "phase1",
     "Phase1 exists with selected proposal, interface, and peer",
-    includesAll(phase1Output, [`edit "${phase1Name}"`, `set proposal ${proposal}`, `set interface "${wanInterface}"`, `set remote-gw ${remoteGateway}`]),
+    includesAll(phase1Output, [`edit "${phase1Name}"`, `set proposal ${proposal}`, `set interface "${wanInterface}"`, `set remote-gw ${remoteGateway}`, "set ike-version 2", `set dhgrp ${parameters.dhGroup ?? "14"}`]),
     phase1Output.slice(0, 1200),
     `edit "${phase1Name}", proposal ${proposal}, interface ${wanInterface}, remote-gw ${remoteGateway}`
   );
 
-  const phase2Output = commandText(findCommand(commands, (command) => command.template.includes("show vpn ipsec phase2-interface")) ?? { template: "", stdout: "", stderr: "", exitCode: null });
+  const phase2Output = fortiEntry(commandText(findCommand(commands, (command) => command.template.includes("show vpn ipsec phase2-interface")) ?? { template: "", stdout: "", stderr: "", exitCode: null }), phase2Name);
   push(
     "phase2",
     "Phase2 exists with selected proposal and selectors",
-    includesAll(phase2Output, [`edit "${phase2Name}"`, `set phase1name "${phase1Name}"`, `set proposal ${proposal}`]) &&
-      (localSubnet ? phase2Output.includes(cidrNetwork(localSubnet)) : true) &&
-      (remoteSubnet ? phase2Output.includes(cidrNetwork(remoteSubnet)) : true),
+    includesAll(phase2Output, [`edit "${phase2Name}"`, `set phase1name "${phase1Name}"`, `set proposal ${proposal}`, `set dhgrp ${parameters.dhGroup ?? "14"}`]) &&
+      (localSubnet ? phase2Output.includes(`set src-subnet ${cidrToSubnet(localSubnet, "localSubnet")}`) : false) &&
+      (remoteSubnet ? phase2Output.includes(`set dst-subnet ${cidrToSubnet(remoteSubnet, "remoteSubnet")}`) : false),
     phase2Output.slice(0, 1200),
     `edit "${phase2Name}", phase1 ${phase1Name}, proposal ${proposal}, selectors ${localSubnet} -> ${remoteSubnet}`
   );
 
-  const routeOutput = commandText(findCommand(commands, (command) => command.template.includes("routing-table")) ?? { template: "", stdout: "", stderr: "", exitCode: null });
+  const routeOutput = commandText(findCommand(commands, (command) => command.template.includes("show router static") || command.template.includes("routing-table")) ?? { template: "", stdout: "", stderr: "", exitCode: null });
   push(
     "static_route",
     createStaticRoute ? "Static route exists for remote subnet" : "Static route creation was disabled",
-    createStaticRoute ? Boolean(remoteSubnet && routeOutput.includes(cidrNetwork(remoteSubnet)) && routeOutput.toLowerCase().includes(phase1Name.toLowerCase())) : true,
+    createStaticRoute ? Boolean(remoteSubnet && [...routeOutput.matchAll(/^\s*edit[^\r\n]+\r?\n[\s\S]*?^\s*next\s*$/gm)].some(row => row[0].includes(`set dst ${cidrToSubnet(remoteSubnet, "remoteSubnet")}`) && row[0].includes(`set device "${phase1Name}"`))) : true,
     createStaticRoute ? routeOutput.slice(0, 1000) : "createStaticRoute=false",
     createStaticRoute ? `${remoteSubnet} via ${phase1Name}` : "route intentionally not created"
   );
 
   const policyOutput = commandText(findCommand(commands, (command) => command.template.includes("show firewall policy")) ?? { template: "", stdout: "", stderr: "", exitCode: null });
+  const outboundPolicy = fortiEntry(policyOutput, lanPolicyName, true), inboundPolicy = fortiEntry(policyOutput, vpnPolicyName, true);
   const natExpectation = natEnabled ? "set nat enable" : "set nat disable";
   const loggingExpectation = logTraffic ? "set logtraffic all" : "set logtraffic disable";
   push(
     "lan_to_vpn_policy",
     createFirewallPolicy ? "LAN-to-VPN firewall policy exists with expected fields" : "Firewall policy creation was disabled",
-    createFirewallPolicy ? includesAll(policyOutput, [lanPolicyName, `set srcintf "${lanInterface}"`, `set dstintf "${phase1Name}"`, "set action accept", 'set schedule "always"', 'set service "ALL"', natExpectation, loggingExpectation]) : true,
+    createFirewallPolicy ? includesAll(outboundPolicy, [lanPolicyName, `set srcintf "${lanInterface}"`, `set dstintf "${phase1Name}"`, "set action accept", 'set schedule "always"', 'set service "ALL"', natExpectation, loggingExpectation]) : true,
     createFirewallPolicy ? policyOutput.slice(0, 1400) : "createFirewallPolicy=false",
     createFirewallPolicy ? `${lanPolicyName} ${lanInterface}->${phase1Name} nat=${natEnabled}` : "policies intentionally not created"
   );
   push(
     "vpn_to_lan_policy",
     createFirewallPolicy ? "VPN-to-LAN firewall policy exists with expected fields" : "Firewall policy creation was disabled",
-    createFirewallPolicy ? includesAll(policyOutput, [vpnPolicyName, `set srcintf "${phase1Name}"`, `set dstintf "${lanInterface}"`, "set action accept", 'set schedule "always"', 'set service "ALL"', "set nat disable", loggingExpectation]) : true,
+    createFirewallPolicy ? includesAll(inboundPolicy, [vpnPolicyName, `set srcintf "${phase1Name}"`, `set dstintf "${lanInterface}"`, "set action accept", 'set schedule "always"', 'set service "ALL"', "set nat disable", loggingExpectation]) : true,
     createFirewallPolicy ? policyOutput.slice(0, 1400) : "createFirewallPolicy=false",
     createFirewallPolicy ? `${vpnPolicyName} ${phase1Name}->${lanInterface} nat=false` : "policies intentionally not created"
   );
 
   const tunnelOutput = commandText(findCommand(commands, (command) => command.template.includes("tunnel summary")) ?? { template: "", stdout: "", stderr: "", exitCode: null });
-  push("tunnel_summary", "VPN tunnel summary references the phase1/tunnel", tunnelOutput.toLowerCase().includes(phase1Name.toLowerCase()), tunnelOutput.slice(0, 1000), phase1Name);
+  const summaryLine = tunnelOutput.split(/\r?\n/).find(line => line.trim().startsWith(`'${phase1Name}' `) || line.trim().startsWith(`"${phase1Name}" `) || line.trim().startsWith(`${phase1Name}:`));
+  const selector = summaryLine?.match(/selectors\(total,up\):\s*(\d+)\/(\d+)/i);
+  const tunnelState = selector ? Number(selector[2]) > 0 ? "up" as const : "down" as const : "unknown" as const;
+  const iface = fortiEntry(commandText(findCommand(commands, command => command.template.includes("show system interface")) ?? { template: "", stdout: "", stderr: "", exitCode: null }), phase1Name);
+  const enabled = parameters.enableAfterCreate !== false;
+  push("administrative_state", "Tunnel administrative state matches request", Boolean(iface) && (enabled ? !iface.includes("set status down") : iface.includes("set status down")), iface.slice(0, 1000), enabled ? "up" : "down");
 
   const ok = checks.every((check) => check.ok);
   return {
     ok,
     actionType: "fortigate_guided_vpn_setup",
-    summary: ok ? "FortiGate IPsec VPN post-execution verification passed." : "FortiGate IPsec VPN post-execution verification failed.",
+    summary: ok ? `تنظیمات IPsec از دستگاه تأیید شد؛ وضعیت SA: ${tunnelState === "up" ? "برقرار" : tunnelState === "down" ? "برقرار نیست" : "نامشخص"}.` : "تنظیمات IPsec پس از اجرا تطبیق نداشت؛ دستگاه را پیش از تلاش مجدد بررسی کنید.",
+    tunnelState,
     checks,
   };
 }

@@ -39,6 +39,7 @@ function verifiedVpnOutputs(overrides: Partial<typeof vpnParams> = {}) {
       `set interface "${params.wanInterface}"`,
       `set proposal ${params.proposal}`,
       `set remote-gw ${params.remoteGateway}`,
+      "set ike-version 2", "set dhgrp 14", "next",
     ].join("\n")),
     command("verify show vpn ipsec phase2-interface", [
       `edit "${params.phase2Name}"`,
@@ -46,8 +47,10 @@ function verifiedVpnOutputs(overrides: Partial<typeof vpnParams> = {}) {
       `set proposal ${params.proposal}`,
       "set src-subnet 192.168.77.0 255.255.255.0",
       "set dst-subnet 10.77.0.0 255.255.255.0",
+      "set dhgrp 14", "next",
     ].join("\n")),
     command("verify show firewall policy", [
+      "edit 1",
       `set name "${params.vpnName}-lan-to-vpn"`,
       `set srcintf "${params.lanInterface}"`,
       `set dstintf "${params.phase1Name}"`,
@@ -56,7 +59,7 @@ function verifiedVpnOutputs(overrides: Partial<typeof vpnParams> = {}) {
       'set service "ALL"',
       "set nat disable",
       "set logtraffic all",
-      `set name "${params.vpnName}-vpn-to-lan"`,
+      "next", "edit 2", `set name "${params.vpnName}-vpn-to-lan"`,
       `set srcintf "${params.phase1Name}"`,
       `set dstintf "${params.lanInterface}"`,
       "set action accept",
@@ -64,8 +67,10 @@ function verifiedVpnOutputs(overrides: Partial<typeof vpnParams> = {}) {
       'set service "ALL"',
       "set nat disable",
       "set logtraffic all",
+      "next",
     ].join("\n")),
-    command("verify get router info routing-table all", `S 10.77.0.0/24 [10/0] is directly connected, ${params.phase1Name}`),
+    command("verify show router static", `edit 1\nset dst 10.77.0.0 255.255.255.0\nset device "${params.phase1Name}"\nnext`),
+    command("verify show system interface", `edit "${params.phase1Name}"\nset status up\nnext`),
     command("verify get vpn ipsec tunnel summary", `${params.phase1Name} selectors(total,up): 1/0 rx/tx`),
   ];
 }
@@ -76,10 +81,10 @@ test("FortiGate guided VPN preserves AES256-SHA256 and never emits DES/MD5/SHA1 
   const commands = validation.commandSpecs.map((spec) => spec.command).join("\n").toLowerCase();
   assert.match(commands, /set proposal aes256-sha256/);
   assert.doesNotMatch(commands, /des-md5|des-sha1|\bmd5\b|set proposal\s+(?:des|3des)/);
-  assert.match(commands, /show vpn ipsec phase1-interface task17-7-vpn/);
-  assert.match(commands, /show vpn ipsec phase2-interface task17-7-vpn-p2/);
-  assert.match(commands, /show firewall policy \| grep -f task17-7-vpn/);
-  assert.match(commands, /get router info routing-table all \| grep 10\.77\.0\.0\/24/);
+  assert.match(commands, /show full-configuration vpn ipsec phase1-interface task17-7-vpn/);
+  assert.match(commands, /show full-configuration vpn ipsec phase2-interface task17-7-vpn-p2/);
+  assert.match(commands, /show full-configuration firewall policy \| grep -f task17-7-vpn/);
+  assert.match(commands, /show router static/);
 });
 
 test("FortiGate guided VPN rejects weak proposals unless explicitly allowed", () => {
@@ -92,7 +97,7 @@ test("FortiGate guided VPN rejects weak proposals unless explicitly allowed", ()
 });
 
 test("FortiGate guided VPN semantic verification fails when route or policies are missing", () => {
-  const missingRoute = verifyFortiGateGuidedVpn(vpnParams, verifiedVpnOutputs().filter((item) => !item.template.includes("routing-table")));
+  const missingRoute = verifyFortiGateGuidedVpn(vpnParams, verifiedVpnOutputs().filter((item) => !item.template.includes("show router static")));
   assert.equal(missingRoute.ok, false);
   assert.equal(missingRoute.checks.find((check) => check.id === "static_route")?.ok, false);
 

@@ -10,6 +10,9 @@ import { resolveCredentialById, resolveCredentialByName } from "../services/cred
 import { resolveEphemeralSecretRef } from "../services/ephemeral-secret.service.js";
 import { evaluateFortiGatePolicy } from "../services/fortigate-policy-guard.service.js";
 import { assertNoFortiGateCliFailure, verifyFortiGateExecution } from "../fortigate/execution-verifier.js";
+import { assertFortiVpnCreateOnly, redactFortiVpnOutput } from "../fortigate/vpn-safety.js";
+import { withVdom } from "../fortigate/command-compiler/shared.js";
+import { validateFortiGateGuidedVpnParameters } from "../services/fortigate-guided-vpn.schema.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -575,11 +578,29 @@ export const fortigateSshConnector: DeviceConnector = {
       throw new FortiGateConnectorError("FORTIGATE_BREAK_GLASS_REQUIRED", "Critical FortiGate action requires breakGlass=true, executeConfirmation=EXECUTE, matching deviceNameConfirmation, and a reason.", 409);
     }
     const allowedCommands = new Set([...policy.preflightCommands, ...validation.commandSpecs.map((spec) => spec.command)]);
+    const vpnCreate = actionPlan.actionType === ActionType.fortigate_guided_vpn_setup;
+    const vpnReads = { phase1: "show vpn ipsec phase1-interface", phase2: "show vpn ipsec phase2-interface", interfaces: "show system interface", addresses: "show firewall address", policies: "show firewall policy" };
+    if (vpnCreate) for (const command of Object.values(vpnReads)) allowedCommands.add(withVdom(command, typeof rawParams.vdom === "string" ? rawParams.vdom : undefined));
     const commands: ConnectorExecutionResult["commands"] = [];
     const credential = await getCredential(device);
     await audit?.("policy_guard_passed", "FortiGate catalog validation passed.", { actionType: actionPlan.actionType, target: validation.normalizedParameters, commandCount: validation.commandSpecs.length, backupEnabled: false });
     return withSshWithCredential(device, credential, async (client) => {
       await audit?.("connection_attempt", "FortiGate SSH execution connection is ready.", { host: device.host, port: device.managementPort, actionType: actionPlan.actionType, backupEnabled: false });
+      if (vpnCreate) {
+        if (!pskSecretValue || pskSecretValue.length < 16 || pskSecretValue.length > 64) throw new FortiGateConnectorError("FORTIGATE_VPN_PSK_INVALID", "VPN PSK must be 16..64 characters.", 400);
+        const configs: Record<string, string> = {};
+        for (const [key, command] of Object.entries(vpnReads)) {
+          const reply = await exec(client, withVdom(command, typeof rawParams.vdom === "string" ? rawParams.vdom : undefined), env.sshCommandTimeoutMs, allowedCommands);
+          assertNoFortiGateCliFailure({ template: command, ...reply });
+          if (reply.exitCode !== 0 || !reply.stdout.includes("config ")) throw new FortiGateConnectorError("FORTIGATE_VPN_PREFLIGHT_FAILED", "Cannot verify existing VPN objects; no configuration writes were started.", 409);
+          configs[key] = reply.stdout;
+        }
+        const names = new Set([...configs.interfaces.matchAll(/^\s*edit "([^"]+)"/gm)].map(row => row[1]));
+        const checked = validateFortiGateGuidedVpnParameters(rawParams, names);
+        if (checked.issues.length) throw new FortiGateConnectorError("FORTIGATE_VPN_PREFLIGHT_FAILED", checked.issues[0].message, 409);
+        assertFortiVpnCreateOnly(validation.normalizedParameters, configs as { phase1: string; phase2: string; interfaces: string; addresses: string; policies: string }, validation.commandSpecs.map(spec => spec.target));
+        await audit?.("vpn_preflight_passed", "Fresh FortiGate interfaces and object-name collisions checked; no configuration has been overwritten.", { vpnName: rawParams.vpnName });
+      }
       for (const command of policy.preflightCommands) {
         const result = await exec(client, command, env.sshCommandTimeoutMs, allowedCommands);
         const commandResult = { template: command, stdout: result.stdout.slice(0, 4000), stderr: result.stderr.slice(0, 2000), exitCode: result.exitCode };
@@ -589,11 +610,11 @@ export const fortigateSshConnector: DeviceConnector = {
       }
       for (const spec of validation.commandSpecs) {
         const result = await exec(client, spec.command, env.sshCommandTimeoutMs, allowedCommands);
-        const commandResult = { template: spec.template, stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
+        const commandResult = { template: spec.template, stdout: redactFortiVpnOutput(result.stdout, pskSecretValue), stderr: redactFortiVpnOutput(result.stderr, pskSecretValue), exitCode: result.exitCode };
         assertNoFortiGateCliFailure(commandResult);
         commands.push(commandResult);
-        await audit?.("command_executed", `FortiGate template executed: ${spec.template}`, { template: spec.template, write: spec.write, target: spec.target, exitCode: result.exitCode, stdout: result.stdout.slice(0, 2000), stderr: result.stderr.slice(0, 2000) });
-        if (result.exitCode !== 0) throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || result.stdout || `FortiGate command failed: ${spec.template}`, 502);
+        await audit?.("command_executed", `FortiGate template executed: ${spec.template}`, { template: spec.template, write: spec.write, target: spec.target, exitCode: result.exitCode, stdout: commandResult.stdout.slice(0, 2000), stderr: commandResult.stderr.slice(0, 2000) });
+        if (result.exitCode !== 0) throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", commandResult.stderr || commandResult.stdout || `FortiGate command failed: ${spec.template}`, 502);
       }
       const verification = verifyFortiGateExecution(actionPlan.actionType, validation.normalizedParameters, commands);
       await audit?.(verification.ok ? "post_verification_passed" : "post_verification_failed", verification.summary, verification);

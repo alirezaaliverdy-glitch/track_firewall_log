@@ -1,5 +1,6 @@
 import type { GuidedActionBuildContext } from "../../types.js";
 import { createEphemeralSecretRef } from "../../../services/ephemeral-secret.service.js";
+import { validateFortiGateGuidedVpnParameters } from "../../../services/fortigate-guided-vpn.schema.js";
 import {
   FORTIGATE_ALLOWACCESS_OPTIONS,
   FORTIGATE_ENABLE_DISABLE_OPTIONS,
@@ -29,7 +30,6 @@ export const guidedAuthOptions = [
 ];
 
 export const guidedPskOptions = [
-  { labelFa: "تولید خودکار", value: "generate", source: "project_default" as const },
   { labelFa: "ورود دستی", value: "manual", source: "project_default" as const },
 ];
 
@@ -44,7 +44,7 @@ export const guidedVpnSteps = [
     titleFa: "نوع VPN",
     fields: [
       field("vpnType", "نوع VPN", "select", true, { options: guidedVpnTypeOptions, validation: { allowedValues: guidedVpnTypeOptions.map((item) => item.value) } }),
-      field("vpnName", "VPN Name", "text", true, { placeholderFa: "branch-office-vpn", validation: nameValidation }),
+      field("vpnName", "نام تونل (حداکثر ۱۵ نویسه)", "text", true, { placeholderFa: "BranchVPN", validation: { pattern: "^[A-Za-z0-9_.:-]{1,15}$" } }),
     ],
   },
   {
@@ -54,7 +54,7 @@ export const guidedVpnSteps = [
       field("localSubnet", "Local Subnet", "cidr", true, { placeholderFa: "192.168.7.0/24" }),
       field("remoteSubnet", "Remote Subnet", "cidr", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "10.20.30.0/24" }),
       field("vpnPoolCidr", "Pool VPN", "cidr", true, { dependsOn: { vpnType: "ssl_vpn" } }),
-      field("allowedSubnets", "شبکه‌های مجاز", "cidrList", true),
+      field("allowedSubnets", "شبکه‌های مجاز", "cidrList", true, { dependsOn: { vpnType: "ssl_vpn" } }),
     ],
   },
   {
@@ -63,7 +63,7 @@ export const guidedVpnSteps = [
     fields: [
       field("wanInterface", "WAN/Gateway Interface", "interfaceSelect", true, { placeholderFa: "port2", dynamicOptions: { provider: "fortigate_interfaces" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
       field("lanInterface", "LAN/Internal Interface", "interfaceSelect", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "port1", dynamicOptions: { provider: "fortigate_interfaces" }, validation: { pattern: nameValidation.pattern, allowCustom: true } }),
-      field("remoteGateway", "Remote Gateway", "text", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "185.238.45.165", validation: { pattern: "^[A-Za-z0-9_.:-]{1,253}$" } }),
+      field("remoteGateway", "IPv4 دروازه سمت مقابل", "ip", true, { dependsOn: { vpnType: "ipsec_site_to_site" }, placeholderFa: "198.51.100.20" }),
     ],
   },
   {
@@ -74,8 +74,8 @@ export const guidedVpnSteps = [
       field("pskMode", "روش PSK", "select", false, { dependsOn: { authMethod: "psk" }, options: guidedPskOptions, validation: { allowedValues: guidedPskOptions.map((item) => item.value) } }),
       field("psk", "Pre-shared Key", "password", true, { secret: true, dependsOn: { authMethod: "psk" } }),
       field("proposal", "Proposal", "select", false, { options: guidedProposalOptions, validation: { allowedValues: guidedProposalOptions.map((item) => item.value) } }),
-      field("dhGroup", "DH Group", "select", false, { options: [{ labelFa: "14", value: "14", source: "existing_template" }, { labelFa: "5", value: "5", source: "existing_template" }, { labelFa: "19", value: "19", source: "existing_template" }, { labelFa: "20", value: "20", source: "existing_template" }], validation: { allowedValues: ["5", "14", "19", "20"] } }),
-      field("ikeVersion", "IKE Version", "select", false, { options: [{ labelFa: "2", value: "2", source: "existing_template" }, { labelFa: "1", value: "1", source: "existing_template" }], validation: { allowedValues: ["1", "2"] } }),
+      field("dhGroup", "گروه DH (در هر دو فاز)", "select", false, { options: [{ labelFa: "14", value: "14", source: "existing_template" }, { labelFa: "19", value: "19", source: "existing_template" }, { labelFa: "20", value: "20", source: "existing_template" }], validation: { allowedValues: ["14", "19", "20"] } }),
+      field("ikeVersion", "نسخه IKE", "select", false, { options: [{ labelFa: "IKEv2", value: "2", source: "existing_template" }], validation: { allowedValues: ["2"] } }),
     ],
   },
   {
@@ -85,7 +85,7 @@ export const guidedVpnSteps = [
       field("createFirewallPolicy", "Policy هم ساخته شود", "checkbox", false),
       field("createStaticRoute", "Route سمت مقابل ساخته شود", "checkbox", false),
       field("natTraversal", "NAT Traversal", "checkbox", false),
-      field("natEnabled", "NAT فعال باشد", "checkbox", false),
+      field("natEnabled", "NAT ترافیک داخل تونل (معمولاً خاموش)", "checkbox", false, { helpFa: "با NAT Traversal تفاوت دارد؛ فقط اگر سمت مقابل ترجمه آدرس را انتظار دارد فعال کنید." }),
       field("logTraffic", "لاگ ترافیک فعال باشد", "checkbox", false),
       field("enableAfterCreate", "بعد از ساخت فعال شود", "checkbox", false),
     ],
@@ -179,6 +179,10 @@ export function buildFortiGateVpnPreview(context: GuidedActionBuildContext) {
   const enableAfterCreate = context.values.enableAfterCreate !== false;
 
   if (vpnType === "ipsec_site_to_site" && authMethod === "psk") {
+    const validation = validateFortiGateGuidedVpnParameters({ vpnName, phase1Name, phase2Name, wanInterface, lanInterface, remoteGateway, localSubnet, remoteSubnet, proposal, dhGroup, ikeVersion, pskSecretRef: "pending" });
+    if (validation.issues.length) return { ok: false as const, status: "needs_input" as const, reasonFa: validation.issues[0].message };
+    const rawSecret = String(context.values.psk ?? "");
+    if (rawSecret !== rawSecret.trim() || rawSecret.length < 16 || rawSecret.length > 64 || /[\r\n`|;]/.test(rawSecret)) return { ok: false as const, status: "needs_input" as const, reasonFa: "کلید مشترک باید ۱۶ تا ۶۴ نویسه و بدون فاصله ابتدا و انتها، خط جدید یا نویسه‌های ` | ; باشد." };
     const pskSecretRef = createEphemeralSecretRef(String(context.values.psk ?? ""), "fortigate_ipsec_psk");
     const verificationPlan = ["get vpn ipsec tunnel summary", "diagnose vpn tunnel list name <tunnel>", "show vpn ipsec phase1-interface", "show vpn ipsec phase2-interface", ...(createFirewallPolicy ? ["show firewall policy"] : [])];
     const rollbackPlan = [

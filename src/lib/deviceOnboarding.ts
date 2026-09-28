@@ -12,6 +12,7 @@ export type OnboardingDraft = {
   enableCredentialId?: string;
   ciscoLegacyCompatibilityApproved?: boolean;
   esxiCaCertificate?: string;
+  sophosCaCertificate?: string;
   esxiSshFingerprint?: string;
   site: string;
   location: string;

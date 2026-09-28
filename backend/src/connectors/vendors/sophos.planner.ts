@@ -14,14 +14,14 @@ export const sophosPlanner: VendorPlanner = {
   plan(input: PlannerInput): VendorCommandPlan {
     const metadata = record(input.parameters.metadata);
     const catalogId = String(metadata.catalogCommandId ?? metadata.executionTemplateRef ?? "");
-    if (!catalogId.startsWith("sophos.")) {
+    if (!["sophos.inventory", "sophos.enable-interface", "sophos.disable-interface", "sophos.set-interface-ipv4", "sophos.enable-firewall-rule", "sophos.disable-firewall-rule", "sophos.create-ipsec-tunnel"].includes(catalogId)) {
       return { status: "unsupported", vendor: "sophos", deviceId: input.device?.id ?? null, actionType: input.actionType, transport: "manual", commands: [], apiCalls: [], warnings: [], rollbackSteps: [], riskLevel: input.riskLevel, requiresApproval: true, unsupportedReason: "Sophos action is not registered in the controlled command catalog." };
     }
     return {
       status: "planned", vendor: "sophos", deviceId: input.device?.id ?? null, actionType: input.actionType, transport: "api",
       commands: [], apiCalls: [{ method: "POST", path: "/webconsole/APIController", description: `Controlled Sophos operation: ${catalogId}` }],
       warnings: ["The XML payload is built by the registered connector; plaintext credentials and raw AI commands are never accepted."],
-      rollbackSteps: catalogId === "sophos.inventory" ? [] : ["Restore the previous object state captured by the connector."],
+      rollbackSteps: catalogId === "sophos.inventory" || catalogId === "sophos.create-ipsec-tunnel" ? [] : ["Restore the previous object state captured by the connector."],
       riskLevel: input.riskLevel, requiresApproval: catalogId !== "sophos.inventory"
     };
   }

@@ -92,7 +92,17 @@ function validSubnet(value: unknown) {
 }
 
 function validGateway(value: unknown) {
-  return typeof value === "string" && (net.isIP(value.trim()) === 4 || SAFE_FQDN.test(value.trim()));
+  return typeof value === "string" && net.isIP(value.trim()) === 4;
+}
+
+export function fortiVpnSubnet(value: unknown) {
+  if (!validSubnet(value)) return null;
+  const number = (ip: string) => ip.split(".").reduce((sum, part) => ((sum << 8) | Number(part)) >>> 0, 0);
+  const parts = String(value).trim().split(/\s+/), [ip, prefix] = parts[0].split("/");
+  const bits = parts.length === 2 ? number(parts[1]) : Number(prefix) === 0 ? 0 : (0xffffffff << (32 - Number(prefix))) >>> 0;
+  const inverse = (~bits) >>> 0, start = (number(ip) & bits) >>> 0;
+  if (!bits || ((inverse + 1) & inverse) !== 0 || start !== number(ip)) return null;
+  return { start, end: (start | inverse) >>> 0 };
 }
 
 function validName(value: unknown) {
@@ -108,7 +118,7 @@ export function validateFortiGateGuidedVpnParameters(parameters: Record<string, 
     ["phase2Name", "FortiGate phase2 name, for example branch-office-vpn-p2"],
     ["wanInterface", "FortiGate interface name, for example port2 or wan1"],
     ["lanInterface", "FortiGate interface name, for example port1 or internal"],
-    ["remoteGateway", "IPv4 address or FQDN, for example 185.238.45.165"],
+    ["remoteGateway", "IPv4 address"],
     ["localSubnet", "IPv4 CIDR or address/mask, for example 192.168.7.0/24"],
     ["remoteSubnet", "IPv4 CIDR or address/mask, for example 10.20.30.0/24"],
     ["pskSecretRef", "temporary PSK secret reference"],
@@ -119,7 +129,16 @@ export function validateFortiGateGuidedVpnParameters(parameters: Record<string, 
   for (const field of ["vpnName", "phase1Name", "phase2Name", "wanInterface", "lanInterface"] as const) {
     if (p[field] !== undefined && !validName(p[field])) issues.push(validationError(field, `${field} has an invalid value.`, p[field], field.includes("Interface") ? "FortiGate interface name, not an internal action/source token" : "safe FortiGate object name"));
   }
-  if (p.remoteGateway !== undefined && !validGateway(p.remoteGateway)) issues.push(validationError("remoteGateway", "remoteGateway must be a valid IPv4 address or FQDN.", p.remoteGateway, "IPv4 address or FQDN"));
+  for (const field of ["vpnName", "phase1Name"] as const) if (String(p[field] ?? "").length > 15) issues.push(validationError(field, "نام تونل FortiOS حداکثر ۱۵ نویسه است.", p[field], "BranchVPN"));
+  if (p.wanInterface === p.lanInterface) issues.push(validationError("lanInterface", "پورت WAN و LAN باید متفاوت باشند.", p.lanInterface, "separate LAN interface"));
+  if (!["14", "19", "20", "21"].includes(String(p.dhGroup))) issues.push(validationError("dhGroup", "Only approved DH groups are allowed.", p.dhGroup, "14, 19, 20, 21"));
+  if (String(p.ikeVersion) !== "2") issues.push(validationError("ikeVersion", "This Site-to-Site workflow requires IKEv2.", p.ikeVersion, "2"));
+  if (!Number.isInteger(Number(p.routeDistance)) || Number(p.routeDistance) < 1 || Number(p.routeDistance) > 254) issues.push(validationError("routeDistance", "Route distance must be 1..254.", p.routeDistance, "1..254"));
+  const local = fortiVpnSubnet(p.localSubnet), remote = fortiVpnSubnet(p.remoteSubnet);
+  if (!local) issues.push(validationError("localSubnet", "یک آدرس شبکه IPv4 با ماسک پیوسته وارد کنید؛ مسیر پیش‌فرض مجاز نیست.", p.localSubnet, "192.168.7.0/24"));
+  if (!remote) issues.push(validationError("remoteSubnet", "یک آدرس شبکه IPv4 با ماسک پیوسته وارد کنید؛ مسیر پیش‌فرض مجاز نیست.", p.remoteSubnet, "10.20.30.0/24"));
+  if (local && remote && local.start <= remote.end && remote.start <= local.end) issues.push(validationError("remoteSubnet", "شبکه‌های دو طرف هم‌پوشانی دارند.", p.remoteSubnet, "non-overlapping network"));
+  if (p.remoteGateway !== undefined && !validGateway(p.remoteGateway)) issues.push(validationError("remoteGateway", "remoteGateway must be a valid IPv4 address.", p.remoteGateway, "IPv4 address"));
   if (p.localSubnet !== undefined && !validSubnet(p.localSubnet)) issues.push(validationError("localSubnet", "localSubnet must be a valid IPv4 CIDR or address/mask.", p.localSubnet, "IPv4 CIDR or address/mask"));
   if (p.remoteSubnet !== undefined && !validSubnet(p.remoteSubnet)) issues.push(validationError("remoteSubnet", "remoteSubnet must be a valid IPv4 CIDR or address/mask.", p.remoteSubnet, "IPv4 CIDR or address/mask"));
   const proposal = typeof p.proposal === "string" ? p.proposal.trim().toLowerCase() : "";
@@ -130,7 +149,7 @@ export function validateFortiGateGuidedVpnParameters(parameters: Record<string, 
   } else if (!STRONG_PROPOSALS.has(proposal) && p.allowWeakProposal !== true) {
     issues.push(validationError("proposal", "Only approved AES/SHA2 FortiGate VPN proposals are allowed by default.", p.proposal, "aes256-sha256"));
   }
-  if (discoveredInterfaces && discoveredInterfaces.size > 0) {
+  if (discoveredInterfaces) {
     for (const field of ["wanInterface", "lanInterface"] as const) {
       const value = String(p[field] ?? "");
       if (value && !discoveredInterfaces.has(value)) issues.push(validationError(field, `${field} was not found in FortiGate discovery.`, value, "FortiGate interface name discovered on device"));

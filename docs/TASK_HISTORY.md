@@ -1767,3 +1767,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Implemented verified SOAP host discovery, host-centric asset overview, bounded read-only inventory and cataloged maintenance/service/NTP operations. Removed VM-changing actions after the user clarified scope.
 - Added host-action safety prechecks, XML/TLS limits, focused tests and an operator guide. API/web deployed locally with four healthy services. Recovered the one-line enum migration from an existing type-ownership mismatch. No live ESXi target was available; no vendor configuration write was performed.
+## 2026-09-28 - Guided firewall tunnels and Sophos connection setup
+
+- User selected Site-to-Site IPsec/IKEv2 and asked how to connect their Sophos. Added embedded API/allowed-source/HTTPS/certificate setup help and a Persian operational guide with official sources.
+- Added executable dedicated FortiGate/Sophos catalog workflows and readable mobile parameter UI; preserved preview/confirmation/PolicyGuard/audit pipeline. Fresh object/network/crypto checks, create-only safeguards, valid FortiGate CLI and readback verification replace optimistic success. Sophos configuration Active is not fabricated SA-up; FortiGate SA is separate from configuration success.
+- Protected ephemeral PSKs, limited incomplete session lifetime, sanitized outputs and bound guided-plan audit actor to authenticated identity. Fixed valid VPN names/examples being rejected by generic placeholder validation without removing other catalog placeholder protections.
+- Verified production builds, focused regression tests, 227 catalog entries, UTF-8 scan and six intercepted browser flows (two vendors x desktop/390/320px, all steps, no overflow/live writes/public PSK). Local API/web updated. No real firewall mutation or push; actual versions and live acceptance still required. Scope and manual recovery limitations documented in docs/FIREWALL_SITE_TO_SITE_VPN.md.
+- Final focused run: 21/21 tests passed; UTF-8/mojibake check passed (753 files).

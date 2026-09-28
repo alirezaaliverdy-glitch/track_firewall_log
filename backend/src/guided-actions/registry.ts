@@ -1,5 +1,7 @@
 import { FORTIGATE_GUIDED_BLUEPRINTS, resolveFortiGateGuidedIntent } from "./vendors/fortigate/fortigate-blueprints.js";
 import { buildCatalogGuidedBlueprint } from "./catalog-guided-blueprint.js";
+import { sophosVpnBlueprint } from "./vendors/sophos-vpn-blueprint.js";
+import { fortigateSiteToSiteBlueprint } from "./vendors/fortigate/fortigate-site-to-site-blueprint.js";
 import type { GuidedActionBlueprint, GuidedActionBuildContext, GuidedActionField } from "./types.js";
 
 function planned(reasonFa: string) {
@@ -50,6 +52,8 @@ const GENERIC_GUIDED_BLUEPRINTS: readonly GuidedActionBlueprint[] = Object.freez
 
 export const GUIDED_ACTION_BLUEPRINTS: readonly GuidedActionBlueprint[] = Object.freeze([
   ...FORTIGATE_GUIDED_BLUEPRINTS,
+  sophosVpnBlueprint,
+  fortigateSiteToSiteBlueprint,
   ...GENERIC_GUIDED_BLUEPRINTS,
 ]);
 
@@ -64,6 +68,7 @@ export function listGuidedActionBlueprints(filter?: { vendor?: string }) {
 export function resolveGuidedAction(input: { text: string; vendor: string }) {
   if (input.vendor === "fortigate") return resolveFortiGateGuidedIntent(input.text);
   const text = input.text.toLowerCase().replace(/\u200c/g, " ");
+  if (input.vendor === "sophos" && /vpn|ipsec|تونل/i.test(text)) return { blueprintId: sophosVpnBlueprint.id, initialValues: {}, reasonFa: "پارامترهای تونل Site-to-Site را مرحله‌ای تکمیل کنید." };
   if (input.vendor === "mikrotik") {
     if (/wireguard|وایرگارد/i.test(text)) return { blueprintId: "mikrotik_guided_wireguard_setup", initialValues: {}, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };
     if (/l2tp|ipsec/i.test(text)) return { blueprintId: "mikrotik_guided_l2tp_ipsec_setup", initialValues: {}, reasonFa: "این درخواست چندمرحله‌ای است و باید اطلاعات تکمیلی از شما گرفته شود." };

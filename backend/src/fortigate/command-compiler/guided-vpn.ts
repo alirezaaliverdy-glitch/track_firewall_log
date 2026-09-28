@@ -64,7 +64,9 @@ export function compileFortiGateGuidedVpnSetup(input: {
       `set proposal ${proposal}`,
       `set src-subnet ${localSubnet.subnet}`,
       `set dst-subnet ${remoteSubnet.subnet}`,
-      ...statusLines,
+      "set pfs enable",
+      `set dhgrp ${dhGroup}`,
+      `set auto-negotiate ${enableAfterCreate ? "enable" : "disable"}`,
       "next",
       "end"
     ];
@@ -80,7 +82,7 @@ export function compileFortiGateGuidedVpnSetup(input: {
       `set remote-gw ${remoteGateway}`,
       pskLine,
       `set nattraversal ${natTraversal ? "enable" : "disable"}`,
-      ...statusLines,
+      "set dpd on-idle",
       "next",
       "end"
     ]);
@@ -111,7 +113,7 @@ export function compileFortiGateGuidedVpnSetup(input: {
     const policyCommand = block([
       "config firewall policy",
       "edit 0",
-      `set name ${quote(objectName(`${policyBaseName}-lan-to-vpn`, 0))}`,
+      `set name ${quote(`${policyBaseName}-lan-to-vpn`.slice(0, 79))}`,
       `set srcintf ${quote(lanInterface)}`,
       `set dstintf ${quote(phase1Name)}`,
       `set srcaddr ${localAddressNames.map(quote).join(" ")}`,
@@ -124,7 +126,7 @@ export function compileFortiGateGuidedVpnSetup(input: {
       ...statusLines,
       "next",
       "edit 0",
-      `set name ${quote(objectName(`${policyBaseName}-vpn-to-lan`, 0))}`,
+      `set name ${quote(`${policyBaseName}-vpn-to-lan`.slice(0, 79))}`,
       `set srcintf ${quote(phase1Name)}`,
       `set dstintf ${quote(lanInterface)}`,
       `set srcaddr ${remoteAddressNames.map(quote).join(" ")}`,
@@ -139,21 +141,23 @@ export function compileFortiGateGuidedVpnSetup(input: {
       "end"
     ]);
     const verificationCommands = [
-      `show vpn ipsec phase1-interface ${phase1Name}`,
-      `show vpn ipsec phase2-interface ${phase2Name}`,
-      ...(createFirewallPolicy ? [`show firewall policy | grep -f ${name}`] : []),
-      ...(createStaticRoute ? [`get router info routing-table all | grep ${remoteSubnet.cidr}`] : []),
+      `show full-configuration vpn ipsec phase1-interface ${phase1Name}`,
+      `show full-configuration vpn ipsec phase2-interface ${phase2Name}`,
+      `show full-configuration system interface ${phase1Name}`,
+      ...(createFirewallPolicy ? [`show full-configuration firewall policy | grep -f ${policyBaseName}`] : []),
+      ...(createStaticRoute ? ["show router static"] : []),
       "get vpn ipsec tunnel summary"
     ];
     const commandSpecs = [
       spec({ template: "config vpn ipsec phase1-interface/edit <phase1Name>", command: withVdom(phase1Command, vdom), target: { vpnName: name, phase1Name, wanInterface, remoteGateway, vdom }, rollbackSteps: [`delete phase1-interface ${phase1Name}`], warnings: [] }),
       spec({ template: "config vpn ipsec phase2-interface/edit <phase2Name>", command: withVdom(block(phase2Lines), vdom), target: { vpnName: name, phase1Name, phase2Name, localSubnet: localSubnet.cidr, remoteSubnet: remoteSubnet.cidr, vdom }, rollbackSteps: [`delete phase2-interface ${phase2Name}`], warnings: [] }),
+      spec({ template: "config system interface/set VPN administrative status", command: withVdom(block(["config system interface", `edit ${quote(phase1Name)}`, `set status ${enableAfterCreate ? "up" : "down"}`, "next", "end"]), vdom), target: { phase1Name, enableAfterCreate, vdom }, rollbackSteps: [], warnings: [] }),
       ...(createStaticRoute ? [spec({ template: "config router static/edit 0 remote VPN route", command: withVdom(routeCommand, vdom), target: { vpnName: name, phase1Name, remoteSubnet: remoteSubnet.cidr, vdom }, rollbackSteps: ["Remove created static route for the remote VPN subnet by route ID from config snapshot."], warnings: [] })] : []),
       ...(createFirewallPolicy ? [
         spec({ template: "config firewall address/edit managed VPN address objects", command: withVdom(addressCommand, vdom), target: { localAddressNames, remoteAddressNames, vdom }, rollbackSteps: [...localAddressNames, ...remoteAddressNames].map((item) => `delete firewall address ${item}`), warnings: [] }),
         spec({ template: "config firewall policy/edit 0 guided VPN policies", command: withVdom(policyCommand, vdom), target: { lanInterface, tunnelInterface: phase1Name, natEnabled, logTraffic, vdom }, rollbackSteps: ["Delete created firewall policies by name from config snapshot."], warnings: [] })
       ] : []),
-      ...verificationCommands.map((command) => spec({ template: `verify ${command}`, command: withVdom(command, vdom), write: false, target: { vpnName: name, phase1Name, vdom }, rollbackSteps: [], warnings: [] }))
+      ...verificationCommands.map((command) => spec({ template: `verify ${command.replace("show full-configuration", "show")}`, command: withVdom(command, vdom), write: false, target: { vpnName: name, phase1Name, vdom }, rollbackSteps: [], warnings: [] }))
     ];
     return result({
       category: "vpn",
@@ -163,6 +167,7 @@ export function compileFortiGateGuidedVpnSetup(input: {
         vpnName: name,
         phase1Name,
         phase2Name,
+        policyName: policyBaseName,
         wanInterface,
         lanInterface,
         remoteGateway,
@@ -185,7 +190,8 @@ export function compileFortiGateGuidedVpnSetup(input: {
       lockoutSensitive: false,
       warnings: [
         "Backup is disabled for Quick Controlled execution; create a manual backup first if your change window requires it.",
-        "PSK is resolved from an ephemeral secret reference at execution time and is redacted in preview."
+        "PSK is resolved from an ephemeral secret reference at execution time and is redacted in preview.",
+        "Configuration verification does not prove an established IPsec SA. Configure the peer and verify tunnel traffic separately."
       ],
       commandSpecs,
       rollbackJson: {

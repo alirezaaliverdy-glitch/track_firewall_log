@@ -59,7 +59,7 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "cisco_custom_connector_command", actionType: "custom_vendor_action", connectorType: "cisco-ios-xe-ssh", handler: "ciscoIosXePlanner" }
   ,...[
     "sophos_inventory", "sophos_enable_interface", "sophos_disable_interface", "sophos_set_interface_ipv4",
-    "sophos_enable_firewall_rule", "sophos_disable_firewall_rule"
+    "sophos_enable_firewall_rule", "sophos_disable_firewall_rule", "sophos_create_ipsec_tunnel"
   ].map((id) => ({ id, actionType: "generic_security_action", connectorType: "sophos-api" as const, handler: "sophosPlanner" }))
   ,...["esxi_inventory","esxi_enter_maintenance","esxi_exit_maintenance","esxi_start_service","esxi_stop_service","esxi_set_ntp"].map((id) => ({ id, actionType: "generic_security_action", connectorType: "esxi-soap" as const, handler: "esxiPlanner" }))
   ,...executableCiscoOperations().map((operation) => ({ id: operation.executionTemplateRef!, actionType: "generic_security_action", connectorType: "cisco-ios-xe-ssh" as const, handler: "ciscoIosXePlanner" }))

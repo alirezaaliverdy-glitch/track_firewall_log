@@ -56,7 +56,7 @@ export function validateGuidedValues(fields: GuidedActionField[], values: Record
       continue;
     }
     if (isBlank(value)) continue;
-    if (field.placeholderFa && typeof value === "string" && value.trim() === field.placeholderFa.trim()) {
+    if (!field.validation?.allowExampleValue && field.placeholderFa && typeof value === "string" && value.trim() === field.placeholderFa.trim()) {
       issues.push({ field: field.key, messageFa: `${field.labelFa} نباید همان مقدار نمونه باشد.` });
       continue;
     }

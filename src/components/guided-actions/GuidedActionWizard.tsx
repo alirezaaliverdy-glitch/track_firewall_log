@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { answerGuidedSession, buildGuidedPlan, cancelGuidedSession, getGuidedSession, startGuidedSession, type GuidedSession } from "@/lib/guidedActions";
 import type { GuidedActionField } from "@/lib/commandCatalog";
@@ -69,6 +69,7 @@ export default function GuidedActionWizard(props: {
   const [busy, setBusy] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [ciscoPorts, setCiscoPorts] = useState<string[]>([]);
+  const [sophosFacts, setSophosFacts] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     void listDevices().then(setDevices).catch(() => setDevices([]));
@@ -105,6 +106,10 @@ export default function GuidedActionWizard(props: {
   useEffect(() => {
     let active = true;
     setCiscoPorts([]);
+    setSophosFacts({});
+    if (/sophos|sfos/i.test(selectedDevice?.vendor ?? "")) void getDeviceWorkspace(selectedDevice!.id).then(workspace => {
+      if (active) setSophosFacts(object(workspace.capabilities?.facts));
+    }).catch(() => undefined);
     if (selectedDevice?.vendor === "cisco") void getDeviceWorkspace(selectedDevice.id).then(workspace => {
       const facts = object(workspace.capabilities?.facts);
       const rows = Array.isArray(facts.interfaces) ? facts.interfaces : Array.isArray(facts.interfaceStatus) ? facts.interfaceStatus : [];
@@ -113,6 +118,15 @@ export default function GuidedActionWizard(props: {
     }).catch(() => undefined);
     return () => { active = false; };
   }, [selectedDevice?.id, selectedDevice?.vendor]);
+
+  function sophosOptions(field: GuidedActionField) {
+    const provider = field.dynamicOptions?.provider;
+    const rows = (key: string) => Array.isArray(sophosFacts[key]) ? (sophosFacts[key] as unknown[]).map(object) : [];
+    if (provider === "sophos_wan_interfaces") return rows("interfaces").filter(row => String(row.zone).toUpperCase() === "WAN").map(row => ({ value: String(row.hardware ?? row.name), label: `${row.hardware ?? row.name} · ${row.zone} · ${arrayOfStrings(row.ipAddresses).join(", ")}` }));
+    if (provider === "sophos_networks") return rows("ipHosts").filter(row => row.ipFamily === "IPv4" && String(row.hostType).toLowerCase() === "network").map(row => ({ value: String(row.name), label: `${row.name} · ${row.address ?? ""} / ${row.netmask ?? ""}` }));
+    if (provider === "sophos_vpn_profiles") return rows("vpnProfiles").map(row => ({ value: String(row.name), label: `${row.name} · ${arrayOfStrings(row.phase1Encryption).join("/")} · ${arrayOfStrings(row.phase1Authentication).join("/")} · IKE ${row.ikeVersion ?? "نیازمند بررسی در پنل"}` }));
+    return [];
+  }
 
   async function saveStep() {
     if (!session || !currentStep) return;
@@ -156,15 +170,15 @@ export default function GuidedActionWizard(props: {
   }
 
   return (
-    <section dir={i18n.dir()} className={`mb-5 rounded-xl border border-cyan-800 bg-slate-950 p-5 text-slate-100 ${i18n.dir() === "rtl" ? "text-right" : "text-left"}`}>
+    <section dir={i18n.dir()} className={`mb-5 min-w-0 rounded-2xl border border-slate-700 bg-slate-950 p-4 text-slate-100 sm:p-6 ${i18n.dir() === "rtl" ? "text-right" : "text-left"}`}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs text-cyan-300">ساخت مرحله‌ای اکشن</p>
+          <p className="text-sm text-slate-400">تنظیم مرحله‌ای · ابتدا پیش‌نمایش، سپس تأیید اجرا</p>
           <h2 className="text-lg font-bold">{session?.blueprint.titleFa ?? "Workflow"}</h2>
           <p className="mt-1 text-sm text-slate-400">{session?.blueprint.descriptionFa}</p>
           {session && (
             <p className="mt-2 text-xs text-slate-500">
-              Vendor: {session.blueprint.vendor} | Device: {session.deviceId ?? props.deviceId ?? ""} | State: {session.blueprint.implementationState}
+              {selectedDevice?.name ?? "دستگاه انتخاب‌شده"} · {session.blueprint.vendor}
             </p>
           )}
         </div>
@@ -172,6 +186,10 @@ export default function GuidedActionWizard(props: {
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      {session && <ol className="mb-5 grid gap-2 sm:grid-cols-2" aria-label="مراحل تنظیم">
+        {session.blueprint.steps.map((step, index) => <li key={step.id} className={`rounded-lg border px-3 py-2 text-sm ${currentStep?.id === step.id ? "border-slate-400 bg-slate-800 text-white" : "border-slate-800 text-slate-400"}`} aria-current={currentStep?.id === step.id ? "step" : undefined}>{index + 1}. {step.titleFa.replace(/^\d+[.،] ?|^[۰-۹]+[.،] ?/, "")}</li>)}
+      </ol>}
 
       {message && <p className="mb-3 rounded-lg bg-cyan-950/50 p-3 text-sm text-cyan-200">{message}</p>}
       {busy && <p className="text-sm text-slate-400">در حال پردازش...</p>}
@@ -186,7 +204,12 @@ export default function GuidedActionWizard(props: {
               return (
                 <label key={field.key} className="block text-sm text-slate-200">
                   {field.labelFa}
-                  {field.type === "deviceObjectSelect" ? (
+                  {field.dynamicOptions?.provider?.startsWith("sophos_") ? (
+                    <><select value={raw} disabled={busy} onChange={event => setValues(current => ({ ...current, [field.key]: event.target.value }))} className="mt-2 min-h-11 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 p-2.5">
+                      <option value="">انتخاب از اطلاعات دستگاه</option>
+                      {sophosOptions(field).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>{!sophosOptions(field).length && <span className="mt-2 block text-sm text-slate-400">فهرست موجود نیست؛ اتصال، مجوز API و جمع‌آوری اطلاعات دستگاه را بررسی کنید.</span>}</>
+                  ) : field.type === "deviceObjectSelect" ? (
                     <select
                       value={raw}
                       onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
@@ -257,7 +280,7 @@ export default function GuidedActionWizard(props: {
                     />
                   )}
                   {field.options?.length ? <span className="mt-1 block text-xs text-slate-500">مقادیر مجاز: {field.options.map((option) => option.labelFa).join("، ")}</span> : null}
-                  {field.helpFa && <span className="mt-1 block text-xs text-slate-500">{field.helpFa}</span>}
+                  {field.helpFa && <span className="mt-2 block text-sm leading-6 text-slate-400">{field.helpFa}</span>}
                 </label>
               );
             })}
@@ -268,16 +291,9 @@ export default function GuidedActionWizard(props: {
       {session?.status === "ready_to_build" && <p className="text-sm text-emerald-300">همه فیلدهای لازم جمع‌آوری شد.</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button disabled className="inline-flex items-center gap-1 rounded border border-slate-700 px-3 py-2 text-sm opacity-50">
-          <ArrowRight className="h-4 w-4" />
-          مرحله قبل
-        </button>
         <button onClick={() => void saveStep()} disabled={!currentStep || busy} className="inline-flex items-center gap-1 rounded bg-cyan-700 px-3 py-2 text-sm disabled:opacity-50">
           ذخیره و ادامه
           <ArrowLeft className="h-4 w-4" />
-        </button>
-        <button onClick={() => void saveStep()} disabled={!currentStep || busy} className="rounded border border-cyan-700 px-3 py-2 text-sm disabled:opacity-50">
-          مرحله بعد
         </button>
         <button onClick={() => void buildPlan()} disabled={!session || session.status !== "ready_to_build" || busy} className="inline-flex items-center gap-1 rounded bg-emerald-700 px-3 py-2 text-sm disabled:opacity-50">
           <Check className="h-4 w-4" />

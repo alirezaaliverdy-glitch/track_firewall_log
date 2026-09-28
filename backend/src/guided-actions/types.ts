@@ -25,6 +25,9 @@ export type GuidedFieldType =
 
 export type GuidedDynamicOptionProvider =
   | "fortigate_interfaces"
+  | "sophos_wan_interfaces"
+  | "sophos_networks"
+  | "sophos_vpn_profiles"
   | "fortigate_address_objects"
   | "fortigate_service_objects"
   | "fortigate_user_groups"
@@ -50,6 +53,7 @@ export type GuidedActionField = {
     max?: number;
     allowedValues?: string[];
     allowCustom?: boolean;
+    allowExampleValue?: boolean;
   };
   dependsOn?: Record<string, unknown>;
 };

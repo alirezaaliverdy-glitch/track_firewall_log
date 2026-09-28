@@ -1,6 +1,8 @@
 import https from "node:https";
 import { vendorHttpsAgent } from "../services/shared-https-agent.service.js";
 import net from "node:net";
+import { SaxesParser } from "saxes";
+import { buildSophosVpnXml, preflightSophosVpn, resolveSophosVpnSecret, verifySophosVpn } from "./sophos-vpn.js";
 import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, DeviceConnectionTestResult, DeviceConnector, SophosDiscovery } from "./types.js";
@@ -8,9 +10,9 @@ import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, Dev
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 20_000;
 const SUPPORTED_ACTIONS = [ActionType.generic_security_action] as const;
-const DISCOVERY_ENTITIES = ["Interface", "Zone", "Gateway", "FirewallRule", "IPHost", "Services", "IPSecConnection"] as const;
+const DISCOVERY_ENTITIES = ["Interface", "Zone", "Gateway", "FirewallRule", "IPHost", "Services"] as const;
 
-type SophosOperation = "inventory" | "enable-interface" | "disable-interface" | "set-interface-ipv4" | "enable-firewall-rule" | "disable-firewall-rule";
+type SophosOperation = "inventory" | "enable-interface" | "disable-interface" | "set-interface-ipv4" | "enable-firewall-rule" | "disable-firewall-rule" | "create-ipsec-tunnel";
 
 export class SophosApiError extends Error {
   constructor(public readonly code: string, message: string, public readonly statusCode = 502) {
@@ -52,6 +54,7 @@ function blocks(xml: string, tag: string) {
   const stack: number[] = [];
   const result: string[] = [];
   for (const token of tokens) {
+    if (token[0].endsWith("/>")) continue;
     if (!token[0].startsWith("</")) {
       stack.push(token.index ?? 0);
       continue;
@@ -93,7 +96,9 @@ function operationFromPlan(plan: ActionPlan): SophosOperation {
     "sophos.disable-interface": "disable-interface",
     "sophos.set-interface-ipv4": "set-interface-ipv4",
     "sophos.enable-firewall-rule": "enable-firewall-rule",
-    "sophos.disable-firewall-rule": "disable-firewall-rule"
+    "sophos.disable-firewall-rule": "disable-firewall-rule",
+    "sophos.create-ipsec-tunnel": "create-ipsec-tunnel",
+    "sophos_create_ipsec_tunnel": "create-ipsec-tunnel"
   };
   const operation = table[id];
   if (!operation) throw new SophosApiError("SOPHOS_OPERATION_NOT_REGISTERED", "Sophos operation is not registered for controlled execution.", 400);
@@ -108,7 +113,7 @@ async function credential(device: Device) {
 
 function tlsVerification(device: Device) {
   const capabilities = record(device.capabilities);
-  return capabilities.sophosTlsVerify === true;
+  return capabilities.sophosTlsVerify !== false;
 }
 
 async function postXml(device: Device, bodyXml: string) {
@@ -121,6 +126,7 @@ async function postXml(device: Device, bodyXml: string) {
       path: "/webconsole/APIController",
       method: "POST",
       rejectUnauthorized: tlsVerification(device),
+      ca: typeof record(device.capabilities).sophosCaCertificate === "string" && record(device.capabilities).sophosCaCertificate ? String(record(device.capabilities).sophosCaCertificate) : undefined,
       timeout: REQUEST_TIMEOUT_MS,
       headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": Buffer.byteLength(encoded), Accept: "application/xml,text/xml" }
     }, (response) => {
@@ -136,9 +142,11 @@ async function postXml(device: Device, bodyXml: string) {
         if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) return reject(new SophosApiError("SOPHOS_HTTP_ERROR", `Sophos API returned HTTP ${response.statusCode ?? "unknown"}.`));
         resolve(text);
       });
+      response.once("aborted", () => reject(new SophosApiError("SOPHOS_RESPONSE_ABORTED", "Sophos API response was incomplete.")));
+      response.once("error", () => reject(new SophosApiError("SOPHOS_RESPONSE_FAILED", "Sophos API response could not be read.")));
     });
     request.once("timeout", () => request.destroy(new SophosApiError("SOPHOS_API_TIMEOUT", "Sophos API request timed out.", 504)));
-    request.once("error", (error) => reject(error instanceof SophosApiError ? error : new SophosApiError("SOPHOS_API_UNREACHABLE", "Sophos API endpoint is unreachable.")));
+    request.once("error", (error) => reject(error instanceof SophosApiError ? error : /CERT|SELF_SIGNED|UNABLE_TO_VERIFY/i.test(String((error as NodeJS.ErrnoException).code ?? "")) ? new SophosApiError("SOPHOS_TLS_UNTRUSTED", "گواهی HTTPS سوفوس معتبر نیست؛ گواهی عمومی CA/هاست را در فرم اتصال وارد کنید و آدرس را با نام/IP گواهی تطبیق دهید.", 400) : new SophosApiError("SOPHOS_API_UNREACHABLE", "Sophos API endpoint is unreachable.")));
     request.end(encoded);
   });
 }
@@ -147,17 +155,33 @@ async function call(device: Device, operationXml = "") {
   const auth = await credential(device);
   const xml = `<Request><Login><Username>${escapeXml(auth.username)}</Username><Password>${escapeXml(auth.password)}</Password></Login>${operationXml}</Request>`;
   const response = await postXml(device, xml);
+  assertSophosResponse(response);
   if (/authentication\s+(failed|failure)|invalid\s+(user|password|credential)|login\s+failed/i.test(response)) {
     throw new SophosApiError("SOPHOS_AUTH_FAILED", "Sophos administrator authentication failed.", 401);
   }
   const failure = [...response.matchAll(/<Status\s+code=["'](\d+)["'][^>]*>([\s\S]*?)<\/Status>/gi)]
     .map((match) => ({ code: Number(match[1]), message: decodeXml(match[2].replace(/<[^>]+>/g, " ")) }))
     .find((status) => status.code >= 400);
-  if (failure) throw new SophosApiError("SOPHOS_OPERATION_FAILED", `Sophos rejected the operation (${failure.code}): ${failure.message.slice(0, 240)}`, 409);
+  // Failed API operations may echo secret fields. Never return the vendor payload.
+  if (failure) throw new SophosApiError("SOPHOS_OPERATION_FAILED", `Sophos rejected the operation (API status ${failure.code}). Check API permission, dependencies and firmware compatibility.`, 409);
+  if (/^<Set\b/i.test(operationXml) && !/<Status\s+code=["']20[01]["']/i.test(response)) throw new SophosApiError("SOPHOS_WRITE_UNCONFIRMED", "Sophos did not acknowledge the write; check the device before retrying.", 409);
   return response;
 }
 
+export function assertSophosResponse(xml: string) {
+  if (Buffer.byteLength(xml) > MAX_RESPONSE_BYTES || /<!DOCTYPE|<!ENTITY/i.test(xml) || !/<Response\b/i.test(xml)) throw new SophosApiError("SOPHOS_INVALID_XML", "Sophos did not return a valid API response.");
+  try {
+    const parser = new SaxesParser({ xmlns: false });
+    let root: string | undefined;
+    parser.on("opentag", tag => { root ??= tag.name; });
+    parser.write(xml).close();
+    if (root !== "Response") throw new Error("Unexpected XML root");
+  }
+  catch { throw new SophosApiError("SOPHOS_INVALID_XML", "Sophos returned malformed XML."); }
+}
+
 export function parseSophosDiscovery(xml: string): SophosDiscovery {
+  assertSophosResponse(xml);
   const interfaces = blocks(xml, "Interface").map((entry) => {
     const hardware = tagValue(entry, "Hardware") ?? tagValue(entry, "Name") ?? "unknown";
     return {
@@ -187,9 +211,14 @@ export function parseSophosDiscovery(xml: string): SophosDiscovery {
     zones: unique(blocks(xml, "Zone").map((entry) => xmlName(entry)).filter(Boolean)),
     gateways: blocks(xml, "Gateway").map((entry) => tagValue(entry, "Name") ?? tagValue(entry, "GatewayName") ?? "").filter(Boolean),
     firewallRules,
-    ipHosts: blocks(xml, "IPHost").map((entry) => ({ name: tagValue(entry, "Name") ?? "unnamed", address: tagValue(entry, "IPAddress"), hostType: tagValue(entry, "HostType") })),
+    ipHosts: blocks(xml, "IPHost").map((entry) => ({ name: tagValue(entry, "Name") ?? "unnamed", address: tagValue(entry, "IPAddress"), hostType: tagValue(entry, "HostType"), netmask: tagValue(entry, "Subnet")?.match(/\((\d+\.\d+\.\d+\.\d+)\)/)?.[1] ?? tagValue(entry, "Subnet") ?? tagValue(entry, "Netmask"), ipFamily: tagValue(entry, "IPFamily") })),
     services: blocks(xml, "Services").map((entry) => ({ name: tagValue(entry, "Name") ?? "unnamed", protocol: tagValue(entry, "Protocol"), ports: [...tagValues(entry, "SourcePort"), ...tagValues(entry, "DestinationPort"), ...tagValues(entry, "Port")] })),
-    vpnConnections: blocks(xml, "IPSecConnection").map((entry) => ({ name: tagValue(entry, "Name") ?? "unnamed", status: tagValue(entry, "Status") })),
+    vpnConnections: blocks(xml, "VPNIPSecConnection").flatMap((entry) => blocks(entry, "Configuration")).map((entry) => ({ name: tagValue(entry, "Name") ?? "unnamed", status: tagValue(entry, "Status"), runtimeState: "unknown" as const, connectionType: tagValue(entry, "ConnectionType"), profile: tagValue(entry, "Policy"), wanInterface: tagValue(entry, "LocalWANPort"), remoteGateway: tagValue(entry, "RemoteHost"), localSubnet: tagValue(entry, "LocalSubnet"), remoteNetworks: tagValues(tagInner(entry, "RemoteNetwork") ?? "", "Network"), localId: tagValue(entry, "LocalID"), remoteId: tagValue(entry, "RemoteID"), startupMode: tagValue(entry, "ActionOnVPNRestart"), authenticationType: tagValue(entry, "AuthenticationType") })),
+    vpnProfiles: blocks(xml, "VPNProfile").map((entry) => {
+      const phase1 = tagInner(entry, "Phase1") ?? "", phase2 = tagInner(entry, "Phase2") ?? "";
+      const algorithms = (phase: string, name: string) => [1, 2, 3].flatMap(index => tagValues(phase, `${name}${index}`)).filter(value => !/^(none|n\/a|-)$/i.test(value));
+      return { name: tagValue(entry, "Name") ?? "unnamed", keyingMethod: tagValue(entry, "KeyingMethod"), ikeVersion: tagValue(entry, "IKEVersion"), phase1Encryption: algorithms(phase1, "EncryptionAlgorithm"), phase2Encryption: algorithms(phase2, "EncryptionAlgorithm"), phase1Authentication: algorithms(phase1, "AuthenticationAlgorithm"), phase2Authentication: algorithms(phase2, "AuthenticationAlgorithm"), dhGroups: tagValues(phase1, "DHGroup") };
+    }),
     collectedAt: new Date().toISOString()
   };
 }
@@ -205,7 +234,31 @@ function findEntity(xml: string, tag: string, name: string, alternate = "Name") 
 function getXml(entities: readonly string[]) { return `<Get>${entities.map((entity) => `<${entity}></${entity}>`).join("")}</Get>`; }
 
 async function discover(device: Device) {
-  return parseSophosDiscovery(await call(device, getXml(DISCOVERY_ENTITIES)));
+  const base = parseSophosDiscovery(await call(device, getXml(DISCOVERY_ENTITIES)));
+  base.collectionWarnings = [];
+  for (const entity of ["VPNIPSecConnection", "VPNProfile"] as const) {
+    try {
+      const extra = parseSophosDiscovery(await call(device, getXml([entity])));
+      if (entity === "VPNIPSecConnection") base.vpnConnections = extra.vpnConnections;
+      else base.vpnProfiles = extra.vpnProfiles;
+    } catch (error) {
+      if (!(error instanceof SophosApiError) || error.code !== "SOPHOS_OPERATION_FAILED") throw error;
+      base.collectionWarnings.push(`${entity}: API permission or firmware support unavailable.`);
+    }
+  }
+  return base;
+}
+
+export async function createSophosVpn(device: Device, values: Record<string, unknown>, invoke = call) {
+  if (!tlsVerification(device)) throw new SophosApiError("SOPHOS_VPN_TLS_REQUIRED", "Verified HTTPS is required for VPN PSK writes.", 409);
+  const before = parseSophosDiscovery(await invoke(device, getXml(["Interface", "IPHost", "VPNProfile", "VPNIPSecConnection"])));
+  const preflight = preflightSophosVpn(values, before);
+  const secret = resolveSophosVpnSecret(values);
+  const reply = await invoke(device, buildSophosVpnXml(values, secret));
+  assertSophosResponse(reply);
+  if (!/<Status\s+code=["']20[01]["']/i.test(reply)) throw new SophosApiError("SOPHOS_WRITE_UNCONFIRMED", "Sophos did not acknowledge creation; check the device before retrying.", 409);
+  const after = parseSophosDiscovery(await invoke(device, getXml(["VPNIPSecConnection"])));
+  return { ...verifySophosVpn(values, after), networks: preflight.networks };
 }
 
 async function setInterface(device: Device, parameters: Record<string, unknown>, enabled?: boolean) {
@@ -257,7 +310,7 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
         { name: "ssh_handshake", status: "ok", message: "HTTPS/TLS API channel established." }, { name: "ssh_auth", status: "ok", message: "Sophos API authentication succeeded." },
         { name: "readonly_discovery", status: "ok", message: `${sophos.interfaces.length} interfaces and ${sophos.firewallRules.length} firewall rules collected.` }
       ],
-      warnings: tlsWarning,
+      warnings: [...tlsWarning, ...(sophos.collectionWarnings ?? []).map(message => ({ code: "SOPHOS_DISCOVERY_PARTIAL", message }))],
       capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: true, canReadInterfaces: true, canReadFirewall: true, canExecuteWriteActions: true },
       message: "Sophos XML API authentication and read-only discovery succeeded."
     };
@@ -279,8 +332,14 @@ export const sophosApiConnector: DeviceConnector = {
   testConnection: connection,
   async getCapabilities(): Promise<DeviceCapabilities> { return { canTestConnection: true, canCollectStatus: true, canReadSystem: true, canReadInterfaces: true, canReadFirewall: true, canExecuteWriteActions: true, canExecuteChangeSshPort: false, supportedActions: [...SUPPORTED_ACTIONS] }; },
   collectStatus: connection,
-  async dryRun(plan): Promise<ConnectorDryRun> {
+  async dryRun(plan, device): Promise<ConnectorDryRun> {
     const operation = operationFromPlan(plan); const values = params(plan); const target = operation.includes("interface") ? { interfaceName: values.interfaceName ?? values.name } : operation.includes("rule") ? { ruleName: values.ruleName ?? values.name } : {};
+    if (operation === "create-ipsec-tunnel") {
+      if (!tlsVerification(device)) throw new SophosApiError("SOPHOS_VPN_TLS_REQUIRED", "Configure a trusted HTTPS certificate before VPN writes.", 409);
+      const preflight = preflightSophosVpn(values, await discover(device));
+      resolveSophosVpnSecret(values);
+      return { plannedCommands: ["Sophos XML API: create Site-to-Site IPsec configuration (PSK hidden)", JSON.stringify({ ...preflight.parameters, pskSecretRef: "[secret reference]", networks: preflight.networks })], validationWarnings: ["پروفایل IKEv2 باید در هر دو طرف تطبیق داشته باشد. قوانین عبور LAN ↔ VPN جداگانه بررسی شوند.", "ذخیره تنظیمات به معنی برقراری SA یا عبور ترافیک نیست.", "بازگردانی خودکار ندارد؛ بک‌آپ و مسیر مدیریت جایگزین داشته باشید."], affectedPorts: [500, 4500], affectedServices: ["IPsec"], rollbackSteps: [], riskLevel: plan.riskLevel, requiresApproval: true, exactTarget: { deviceId: device.id, vpnName: values.vpnName, networks: preflight.networks }, commandSpecs: [{ template: "sophos_create_ipsec_tunnel", command: "POST /webconsole/APIController (add VPNIPSecConnection; PSK hidden)", write: true, target: { vpnName: values.vpnName } }] };
+    }
     return { plannedCommands: [`Sophos XML API: ${operation}`], validationWarnings: ["The current object is read first; only the registered field is changed and the API response is verified."], affectedPorts: [], affectedServices: [], rollbackSteps: operation === "inventory" ? [] : ["Restore the previous object value captured immediately before execution."], riskLevel: plan.riskLevel, requiresApproval: true, commandSpecs: [{ template: `sophos_${operation.replace(/-/g, "_")}`, command: `POST /webconsole/APIController (${operation})`, write: operation !== "inventory", target }], exactTarget: { deviceId: plan.deviceId, ...target } };
   },
   async execute(plan, device, audit): Promise<ConnectorExecutionResult> {
@@ -289,10 +348,11 @@ export const sophosApiConnector: DeviceConnector = {
     let output: Record<string, unknown>;
     if (operation === "inventory") { const snapshot = await discover(device); output = { product: snapshot.product, apiVersion: snapshot.apiVersion, interfaces: snapshot.interfaces.length, firewallRules: snapshot.firewallRules.length, ipHosts: snapshot.ipHosts.length, services: snapshot.services.length, vpnConnections: snapshot.vpnConnections.length, collectedAt: snapshot.collectedAt }; }
     else if (operation === "enable-interface" || operation === "disable-interface" || operation === "set-interface-ipv4") output = await setInterface(device, values, operation === "enable-interface" ? true : operation === "disable-interface" ? false : undefined);
+    else if (operation === "create-ipsec-tunnel") output = await createSophosVpn(device, values);
     else output = await setFirewallRule(device, values, operation === "enable-firewall-rule");
     const safeOutput = { ...output }; delete safeOutput.response;
     await audit?.("sophos.api.succeeded", `Sophos controlled API operation ${operation} succeeded.`, { deviceId: device.id, operation, result: safeOutput });
-    return { executed: true, actionType: plan.actionType, deviceId: device.id, commands: [{ template: `sophos_${operation.replace(/-/g, "_")}`, stdout: JSON.stringify(safeOutput), stderr: "", exitCode: 0 }], warnings: [], rollbackJson: operation === "inventory" ? { available: false, outcome: "read_only" } : { available: true, ...record(output.before), verification: safeOutput } };
+    return { executed: true, actionType: plan.actionType, deviceId: device.id, commands: [{ template: `sophos_${operation.replace(/-/g, "_")}`, stdout: JSON.stringify(safeOutput), stderr: "", exitCode: 0 }], warnings: operation === "create-ipsec-tunnel" ? ["تنظیمات تأیید شد؛ وضعیت SA نامشخص است و قوانین عبور ترافیک باید بررسی شوند."] : [], rollbackJson: operation === "inventory" ? { available: false, outcome: "read_only" } : operation === "create-ipsec-tunnel" ? { available: false, automatic: false, vpnName: values.vpnName, guidance: "Review the newly created connection in Sophos before removing it; configuration backup is recommended." } : { available: true, ...record(output.before), verification: safeOutput } };
   },
-  async rollback(plan, device): Promise<ConnectorExecutionResult> { return { executed: false, actionType: plan.actionType, deviceId: device.id, commands: [], warnings: ["Use the captured previous Sophos object state through a reviewed follow-up ActionPlan."], rollbackJson: { available: true, automatic: false } }; }
+  async rollback(plan, device): Promise<ConnectorExecutionResult> { return { executed: false, actionType: plan.actionType, deviceId: device.id, commands: [], warnings: ["Use a separately reviewed ActionPlan and the saved backup; automatic rollback is not implemented."], rollbackJson: { available: false, automatic: false } }; }
 };

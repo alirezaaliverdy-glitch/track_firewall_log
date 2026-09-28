@@ -62,7 +62,7 @@ export const actionSessionRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string }; Body: { requestedBy?: string } }>("/api/action-sessions/:id/build-plan", async (request, reply) => {
-    return sendResult(reply, await buildGuidedActionPlan(request.params.id, request.body?.requestedBy));
+    return sendResult(reply, await buildGuidedActionPlan(request.params.id, request.authUser ? `${request.authUser.username}:${request.authUser.role}` : undefined));
   });
 
   app.post<{ Params: { id: string } }>("/api/action-sessions/:id/cancel", async (request, reply) => {

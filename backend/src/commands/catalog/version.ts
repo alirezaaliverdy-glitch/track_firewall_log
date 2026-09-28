@@ -1,1 +1,1 @@
-export const COMMAND_CATALOG_VERSION = "2026.07.05.1";
+export const COMMAND_CATALOG_VERSION = "2026.09.28.1";

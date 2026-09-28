@@ -24,6 +24,15 @@ export type GuidedActionSession = {
 };
 
 const sessions = new Map<string, GuidedActionSession>();
+// Incomplete wizard answers can contain a PSK. Bound their in-memory lifetime.
+const SESSION_TTL_MS = 30 * 60_000;
+function pruneExpiredSessions() {
+  for (const [id, session] of sessions) if (Date.now() - Date.parse(session.createdAt) >= SESSION_TTL_MS) {
+    session.answers = {};
+    sessions.delete(id);
+  }
+}
+setInterval(pruneExpiredSessions, 60_000).unref();
 
 const DEVICE_SELECTION_STEP = {
   id: "device_selection",
@@ -176,6 +185,9 @@ function deviceVendor(device: { type: string; vendor: string }) {
   if (device.type === "fortigate" || vendor.includes("forti")) return "fortigate";
   if (device.type === "mikrotik" || vendor.includes("mikrotik") || vendor.includes("routeros")) return "mikrotik";
   if (device.type === "linux_edge" || vendor.includes("linux")) return "linux";
+  if (/sophos|sfos|cyberoam/.test(vendor)) return "sophos";
+  if (/esxi|vmware/.test(vendor)) return "esxi";
+  if (/cisco/.test(vendor)) return "cisco";
   if (device.type === "generic_firewall" || device.type === "generic_syslog_source") return "generic";
   return device.type;
 }
@@ -188,7 +200,7 @@ function shape(session: GuidedActionSession, blueprint: GuidedActionBlueprint) {
     status: session.status,
     blueprint: publicBlueprint(blueprint),
     currentStep: session.status === "collecting_inputs" ? (!session.deviceId ? DEVICE_SELECTION_STEP : blueprint.steps[session.currentStepIndex] ?? null) : null,
-    answers: maskGuidedSecrets(session.answers, activeGuidedFields(blueprint.steps, session.answers)),
+    answers: maskGuidedSecrets(session.answers, blueprint.steps.flatMap(step => step.fields)),
     actionPlanId: session.actionPlanId,
   };
 }
@@ -269,8 +281,10 @@ export async function answerGuidedActionStep(id: string, input: { stepId: string
 }
 
 export async function buildGuidedActionPlan(id: string, requestedBy?: string) {
+  pruneExpiredSessions();
   const session = sessions.get(id);
   if (!session) return { ok: false as const, code: 404, error: "SESSION_NOT_FOUND", messageFa: "جلسه Workflow پیدا نشد." };
+  if (session.status === "built" || session.status === "cancelled") return { ok: false as const, code: 409, error: "SESSION_CLOSED", messageFa: "این جلسه بسته شده است؛ برای پیش‌نمایش تازه یک فرم جدید باز کنید." };
   const blueprint = getGuidedActionBlueprint(session.blueprintId);
   if (!blueprint) return { ok: false as const, code: 404, error: "BLUEPRINT_NOT_FOUND", messageFa: "Workflow مرحله‌ای پیدا نشد." };
   if (!session.deviceId || !session.vendor) return { ok: false as const, code: 422, error: "DEVICE_REQUIRED", messageFa: "ابتدا دستگاه هدف را در فرم مرحله‌ای انتخاب کن." };
@@ -294,6 +308,8 @@ export async function buildGuidedActionPlan(id: string, requestedBy?: string) {
   const previewOnly = parameters.executionSupport === "planned_or_partial" || metadata.executable === false || parameters.executable === false;
   const persistedPlan = previewOnly ? await persistPreviewOnlyPlan(plan.id, result.ok ? result.preview : object(actionPlanInput.parametersJson).structuredPreview as Record<string, unknown>, parameters) : plan;
   session.status = "built";
+  // Secrets are now held only by an expiring purpose-bound reference, not the completed session.
+  for (const field of blueprint.steps.flatMap(step => step.fields)) if (field.secret) delete session.answers[field.key];
   session.actionPlanId = plan.id;
   session.updatedAt = now();
   return { ok: true as const, value: { ...shape(session, blueprint), actionPlanId: plan.id, preview: result.ok ? result.preview : object(actionPlanInput.parametersJson).structuredPreview as Record<string, unknown>, actionPlan: persistedPlan ?? plan } };
@@ -304,6 +320,7 @@ export function cancelGuidedActionSession(id: string) {
   if (!session) return null;
   const blueprint = getGuidedActionBlueprint(session.blueprintId);
   session.status = "cancelled";
+  if (blueprint) for (const field of blueprint.steps.flatMap(step => step.fields)) if (field.secret) delete session.answers[field.key];
   session.updatedAt = now();
   return blueprint ? shape(session, blueprint) : null;
 }
