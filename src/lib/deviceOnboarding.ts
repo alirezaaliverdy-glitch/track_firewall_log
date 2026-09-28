@@ -13,6 +13,7 @@ export type OnboardingDraft = {
   ciscoLegacyCompatibilityApproved?: boolean;
   esxiCaCertificate?: string;
   sophosCaCertificate?: string;
+  sophosTlsFingerprint?: string;
   esxiSshFingerprint?: string;
   site: string;
   location: string;

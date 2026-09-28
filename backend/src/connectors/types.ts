@@ -206,7 +206,8 @@ export type SophosDiscovery = {
   services: Array<{ name: string; protocol?: string; ports: string[] }>;
   vpnConnections: Array<{ name: string; status?: string; runtimeState?: "unknown"; connectionType?: string; profile?: string; wanInterface?: string; remoteGateway?: string; localSubnet?: string; remoteNetworks?: string[]; localId?: string; remoteId?: string; startupMode?: string; authenticationType?: string }>;
   vpnProfiles?: Array<{ name: string; keyingMethod?: string; ikeVersion?: string; phase1Encryption: string[]; phase2Encryption: string[]; phase1Authentication: string[]; phase2Authentication: string[]; dhGroups: string[] }>;
-  collectionWarnings?: string[];
+    collectionWarnings?: string[];
+    collectedModules?: string[];
   collectedAt: string;
 };
 

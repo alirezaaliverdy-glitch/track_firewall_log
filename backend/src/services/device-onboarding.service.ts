@@ -9,6 +9,7 @@ import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js
 import { getDeviceById } from "./device.service.js";
 import { resolveCredentialById } from "./credential.service.js";
 import { esxiSshFingerprint } from "../connectors/esxi-ssh.transport.js";
+import { normalizeSophosFingerprint } from "../connectors/sophos-api.connector.js";
 import { getConnectionProfile, type ConnectionMethodKey } from "../vendors/connection-method.registry.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
@@ -75,6 +76,7 @@ type Draft = {
   ciscoLegacyCompatibilityApproved?: boolean;
   esxiCaCertificate?: string;
   sophosCaCertificate?: string;
+  sophosTlsFingerprint?: string;
   esxiSshFingerprint?: string;
   site: string;
   location: string;
@@ -235,7 +237,7 @@ function asDevice(session: OnboardingSession, compatibilityProfile?: "modern" | 
     environment: draft.environment as DeviceEnvironment,
     tags: [],
     status: DeviceStatus.unknown,
-    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}), ...(draft.sophosCaCertificate ? { sophosCaCertificate: draft.sophosCaCertificate } : {}), ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
+    capabilities: { onboarding: true, vendor: draft.vendor, platform: draft.platform, ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}), ...(draft.sophosCaCertificate ? { sophosCaCertificate: draft.sophosCaCertificate } : {}), ...(draft.sophosTlsFingerprint ? { sophosTlsFingerprint: normalizeSophosFingerprint(draft.sophosTlsFingerprint) } : {}), ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(compatibilityProfile === "legacy_cisco" ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -268,6 +270,8 @@ function requireConnectionDraft(session: OnboardingSession) {
     if (draft.sophosCaCertificate.length > 16_384 || !/^\s*-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\r\n]+-----END CERTIFICATE-----\s*$/.test(draft.sophosCaCertificate)) throw new Error("Provide exactly one public PEM certificate; private keys are forbidden.");
     try { new X509Certificate(draft.sophosCaCertificate); } catch { throw new Error("Provide a valid Sophos CA/host certificate."); }
   }
+  if (draft.vendor === "sophos" && draft.sophosTlsFingerprint) normalizeSophosFingerprint(draft.sophosTlsFingerprint);
+  if (draft.vendor === "sophos" && draft.sophosCaCertificate && draft.sophosTlsFingerprint) throw new Error("Choose either a trusted CA certificate or a pinned SHA-256 fingerprint, not both.");
 }
 
 async function assertOnboardingCompany(companyId: string, ownerId?: string) {
@@ -298,6 +302,7 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
       esxiCaCertificate: String(input.esxiCaCertificate ?? record(existing?.capabilities).esxiCaCertificate ?? ""),
       sophosCaCertificate: String(input.sophosCaCertificate ?? record(existing?.capabilities).sophosCaCertificate ?? ""),
+      sophosTlsFingerprint: String(input.sophosTlsFingerprint ?? record(existing?.capabilities).sophosTlsFingerprint ?? "").trim(),
       esxiSshFingerprint: String(input.esxiSshFingerprint ?? record(existing?.capabilities).esxiSshFingerprint ?? "").trim(),
       enableCredentialId: String(input.enableCredentialId ?? ((existing?.capabilities && typeof existing.capabilities === "object" && !Array.isArray(existing.capabilities) ? existing.capabilities as Record<string, unknown> : {}).enableCredentialId ?? "")),
       site: String(input.site ?? ""),
@@ -339,6 +344,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
     sophosCaCertificate: String(input.sophosCaCertificate ?? session.draft.sophosCaCertificate ?? "").trim(),
+    sophosTlsFingerprint: String(input.sophosTlsFingerprint ?? session.draft.sophosTlsFingerprint ?? "").trim(),
     esxiSshFingerprint: String(input.esxiSshFingerprint ?? session.draft.esxiSshFingerprint ?? "").trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
@@ -749,6 +755,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
     sophosCaCertificate: String(input.sophosCaCertificate ?? session.draft.sophosCaCertificate ?? "").trim(),
+    sophosTlsFingerprint: String(input.sophosTlsFingerprint ?? session.draft.sophosTlsFingerprint ?? "").trim(),
     esxiSshFingerprint: String(input.esxiSshFingerprint ?? session.draft.esxiSshFingerprint ?? "").trim(),
     enableCredentialId: String(input.enableCredentialId ?? session.draft.enableCredentialId ?? "").trim(),
     ciscoLegacyCompatibilityApproved: input.ciscoLegacyCompatibilityApproved === undefined ? session.draft.ciscoLegacyCompatibilityApproved === true : input.ciscoLegacyCompatibilityApproved === true,
@@ -771,6 +778,7 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   const nextCapabilities: Record<string, unknown> = {
     ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
     ...(draft.sophosCaCertificate ? { sophosCaCertificate: draft.sophosCaCertificate, sophosTlsVerify: true } : {}),
+    ...(draft.sophosTlsFingerprint ? { sophosTlsFingerprint: normalizeSophosFingerprint(draft.sophosTlsFingerprint), sophosTlsVerify: true } : {}),
     ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}),
     connectionArchitecture: connectionArchitecture(draft, false),
     onboarding: {
@@ -880,6 +888,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
   const capabilities: Record<string, unknown> = {
     ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
     ...(draft.sophosCaCertificate ? { sophosCaCertificate: draft.sophosCaCertificate, sophosTlsVerify: true } : {}),
+    ...(draft.sophosTlsFingerprint ? { sophosTlsFingerprint: normalizeSophosFingerprint(draft.sophosTlsFingerprint), sophosTlsVerify: true } : {}),
     ...(draft.esxiSshFingerprint ? { esxiSshFingerprint: draft.esxiSshFingerprint } : {}),
     connectionArchitecture: connectionArchitecture(draft, true),
     onboarding: { sessionId: session.id, platform: draft.platform, connectorType: session.test.connectorType, verifiedAt: now(), ...(draft.enableCredentialId ? { enableCredentialId: draft.enableCredentialId } : {}), ...(draft.ciscoLegacyCompatibilityApproved ? { sshCompatibilityProfile: "legacy_cisco" } : {}) },

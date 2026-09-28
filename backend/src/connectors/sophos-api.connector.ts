@@ -1,4 +1,5 @@
 import https from "node:https";
+import tls from "node:tls";
 import { vendorHttpsAgent } from "../services/shared-https-agent.service.js";
 import net from "node:net";
 import { SaxesParser } from "saxes";
@@ -10,7 +11,9 @@ import type { ConnectorDryRun, ConnectorExecutionResult, DeviceCapabilities, Dev
 const MAX_RESPONSE_BYTES = 12 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 20_000;
 const SUPPORTED_ACTIONS = [ActionType.generic_security_action] as const;
-const DISCOVERY_ENTITIES = ["Interface", "Zone", "Gateway", "FirewallRule", "IPHost", "Services"] as const;
+const DISCOVERY_ENTITIES = ["Interface", "Zone", "Gateway", "FirewallRule", "IPHost", "Services", "VPNIPSecConnection", "VPNProfile"] as const;
+const VPN_REQUIRED_ENTITIES = ["Interface", "IPHost", "VPNIPSecConnection", "VPNProfile"] as const;
+const pinnedAgents = new Map<string, https.Agent>();
 
 type SophosOperation = "inventory" | "enable-interface" | "disable-interface" | "set-interface-ipv4" | "enable-firewall-rule" | "disable-firewall-rule" | "create-ipsec-tunnel";
 
@@ -116,17 +119,64 @@ function tlsVerification(device: Device) {
   return capabilities.sophosTlsVerify !== false;
 }
 
+export function normalizeSophosFingerprint(value: unknown): string {
+  const raw = String(value ?? "").trim().replace(/^SHA256:/i, "").replace(/:/g, "").toUpperCase();
+  if (!/^[A-F0-9]{64}$/.test(raw)) throw new SophosApiError("SOPHOS_INVALID_FINGERPRINT", "Enter the complete SHA-256 certificate fingerprint (64 hex digits).", 400);
+  return raw;
+}
+
+function certFingerprint(value: string) { return value.replace(/:/g, "").toUpperCase(); }
+
+async function pinnedAgent(device: Device): Promise<https.Agent> {
+  const pin = normalizeSophosFingerprint(record(device.capabilities).sophosTlsFingerprint);
+  const cacheKey = `${device.host}:${device.managementPort}:${pin}`;
+  const existing = pinnedAgents.get(cacheKey);
+  if (existing) return existing;
+  // No credentials or HTTP request are sent before this certificate-only handshake.
+  const rootPem = await new Promise<string>((resolve, reject) => {
+    const socket = tls.connect({ host: device.host, port: device.managementPort, rejectUnauthorized: false, servername: net.isIP(device.host) ? undefined : device.host, timeout: REQUEST_TIMEOUT_MS });
+    socket.once("secureConnect", () => {
+      const leaf = socket.getPeerCertificate(true);
+      if (!leaf?.raw || certFingerprint(leaf.fingerprint256 ?? "") !== pin) {
+        socket.destroy();
+        reject(new SophosApiError("SOPHOS_TLS_FINGERPRINT_MISMATCH", "Sophos HTTPS certificate differs from the approved fingerprint. No credentials were sent.", 400));
+        return;
+      }
+      let root = leaf;
+      const seen = new Set<string>();
+      while (root.issuerCertificate?.raw && !seen.has(root.issuerCertificate.fingerprint256)) {
+        seen.add(root.fingerprint256);
+        root = root.issuerCertificate;
+      }
+      const encoded = root.raw.toString("base64").match(/.{1,64}/g)?.join("\n");
+      socket.end();
+      if (!encoded) reject(new SophosApiError("SOPHOS_TLS_UNTRUSTED", "Sophos certificate chain could not be read.", 400));
+      else resolve(`-----BEGIN CERTIFICATE-----\n${encoded}\n-----END CERTIFICATE-----`);
+    });
+    socket.once("timeout", () => socket.destroy(new SophosApiError("SOPHOS_API_TIMEOUT", "Sophos TLS handshake timed out.", 504)));
+    socket.once("error", error => reject(error));
+  });
+  const agent = new https.Agent({ keepAlive: true, maxSockets: 2, maxFreeSockets: 1, ca: rootPem, rejectUnauthorized: true,
+    checkServerIdentity: (_host, certificate) => certFingerprint(certificate.fingerprint256 ?? "") === pin
+      ? undefined : new SophosApiError("SOPHOS_TLS_FINGERPRINT_MISMATCH", "Sophos HTTPS certificate differs from the approved fingerprint. No credentials were sent.", 400) });
+  if (pinnedAgents.size >= 64) { const oldest = pinnedAgents.keys().next().value; if (oldest) { pinnedAgents.get(oldest)?.destroy(); pinnedAgents.delete(oldest); } }
+  pinnedAgents.set(cacheKey, agent);
+  return agent;
+}
+
 async function postXml(device: Device, bodyXml: string) {
   const encoded = new URLSearchParams({ reqxml: bodyXml }).toString();
+  const pin = record(device.capabilities).sophosTlsFingerprint;
+  const agent = pin ? await pinnedAgent(device) : vendorHttpsAgent(tlsVerification(device));
   return await new Promise<string>((resolve, reject) => {
     const request = https.request({
       hostname: device.host,
       port: device.managementPort,
-      agent: vendorHttpsAgent(tlsVerification(device)),
+      agent,
       path: "/webconsole/APIController",
       method: "POST",
-      rejectUnauthorized: tlsVerification(device),
-      ca: typeof record(device.capabilities).sophosCaCertificate === "string" && record(device.capabilities).sophosCaCertificate ? String(record(device.capabilities).sophosCaCertificate) : undefined,
+      rejectUnauthorized: pin ? true : tlsVerification(device),
+      ca: pin ? undefined : typeof record(device.capabilities).sophosCaCertificate === "string" && record(device.capabilities).sophosCaCertificate ? String(record(device.capabilities).sophosCaCertificate) : undefined,
       timeout: REQUEST_TIMEOUT_MS,
       headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": Buffer.byteLength(encoded), Accept: "application/xml,text/xml" }
     }, (response) => {
@@ -156,9 +206,7 @@ async function call(device: Device, operationXml = "") {
   const xml = `<Request><Login><Username>${escapeXml(auth.username)}</Username><Password>${escapeXml(auth.password)}</Password></Login>${operationXml}</Request>`;
   const response = await postXml(device, xml);
   assertSophosResponse(response);
-  if (/authentication\s+(failed|failure)|invalid\s+(user|password|credential)|login\s+failed/i.test(response)) {
-    throw new SophosApiError("SOPHOS_AUTH_FAILED", "Sophos administrator authentication failed.", 401);
-  }
+  assertSophosLogin(response);
   const failure = [...response.matchAll(/<Status\s+code=["'](\d+)["'][^>]*>([\s\S]*?)<\/Status>/gi)]
     .map((match) => ({ code: Number(match[1]), message: decodeXml(match[2].replace(/<[^>]+>/g, " ")) }))
     .find((status) => status.code >= 400);
@@ -178,6 +226,16 @@ export function assertSophosResponse(xml: string) {
     if (root !== "Response") throw new Error("Unexpected XML root");
   }
   catch { throw new SophosApiError("SOPHOS_INVALID_XML", "Sophos returned malformed XML."); }
+}
+
+export function assertSophosLogin(response: string) {
+  assertSophosResponse(response);
+  if (/authentication\s+(failed|failure)|invalid\s+(user|password|credential)|login\s+failed/i.test(response)) {
+    throw new SophosApiError("SOPHOS_AUTH_FAILED", "Sophos administrator authentication failed.", 401);
+  }
+  if (!/<Login(?:\s[^>]*)?>\s*<status>\s*Authentication Successful\s*<\/status>\s*<\/Login>/i.test(response)) {
+    throw new SophosApiError("SOPHOS_AUTH_UNCONFIRMED", "Sophos did not confirm API authentication.", 401);
+  }
 }
 
 export function parseSophosDiscovery(xml: string): SophosDiscovery {
@@ -233,25 +291,49 @@ function replaceTag(xml: string, tag: string, value: string) { const node = `<${
 function findEntity(xml: string, tag: string, name: string, alternate = "Name") { return blocks(xml, tag).find((entry) => tagValue(entry, alternate) === name || tagValue(entry, "Name") === name); }
 function getXml(entities: readonly string[]) { return `<Get>${entities.map((entity) => `<${entity}></${entity}>`).join("")}</Get>`; }
 
-async function discover(device: Device) {
-  const base = parseSophosDiscovery(await call(device, getXml(DISCOVERY_ENTITIES)));
+export async function discoverSophos(device: Device, invoke = call): Promise<SophosDiscovery> {
+  // SFOS rejects a whole multi-module Get with 529 when even one tag is unavailable.
+  // Ask for each documented module separately; never treat a rejected section as empty inventory.
+  const base = parseSophosDiscovery("<Response/>");
   base.collectionWarnings = [];
-  for (const entity of ["VPNIPSecConnection", "VPNProfile"] as const) {
+  base.collectedModules = [];
+  for (const entity of DISCOVERY_ENTITIES) {
     try {
-      const extra = parseSophosDiscovery(await call(device, getXml([entity])));
-      if (entity === "VPNIPSecConnection") base.vpnConnections = extra.vpnConnections;
+      const xml = await invoke(device, getXml([entity]));
+      assertSophosResponse(xml);
+      if (!new RegExp(`<${entity}(?=\\s|>|/)`, "i").test(xml)) throw new SophosApiError("SOPHOS_MODULE_UNCONFIRMED", `${entity}: API did not return the requested module.`, 409);
+      const extra = parseSophosDiscovery(xml);
+      base.apiVersion ??= extra.apiVersion;
+      if (entity === "Interface") base.interfaces = extra.interfaces;
+      else if (entity === "Zone") base.zones = extra.zones;
+      else if (entity === "Gateway") base.gateways = extra.gateways;
+      else if (entity === "FirewallRule") base.firewallRules = extra.firewallRules;
+      else if (entity === "IPHost") base.ipHosts = extra.ipHosts;
+      else if (entity === "Services") base.services = extra.services;
+      else if (entity === "VPNIPSecConnection") base.vpnConnections = extra.vpnConnections;
       else base.vpnProfiles = extra.vpnProfiles;
+      base.collectedModules.push(entity);
     } catch (error) {
-      if (!(error instanceof SophosApiError) || error.code !== "SOPHOS_OPERATION_FAILED") throw error;
-      base.collectionWarnings.push(`${entity}: API permission or firmware support unavailable.`);
+      if (!(error instanceof SophosApiError) || !["SOPHOS_OPERATION_FAILED", "SOPHOS_MODULE_UNCONFIRMED"].includes(error.code)) throw error;
+      const status = error.message.match(/API status (\d+)/)?.[1];
+      base.collectionWarnings.push(`${entity}: API module unavailable${status ? ` (status ${status})` : ""}; check SFOS version and account permission.`);
     }
   }
+  if (!["Interface", "FirewallRule", "IPHost"].some(entity => base.collectedModules!.includes(entity))) {
+    throw new SophosApiError("SOPHOS_DISCOVERY_UNAVAILABLE", `Authentication succeeded, but no core inventory module was readable. Check SFOS API version and account permissions. Modules: ${base.collectionWarnings.join(" ")}`, 409);
+  }
   return base;
+}
+const discover = discoverSophos;
+function assertVpnInventory(snapshot: SophosDiscovery) {
+  const missing = VPN_REQUIRED_ENTITIES.filter(entity => !snapshot.collectedModules?.includes(entity));
+  if (missing.length) throw new SophosApiError("SOPHOS_VPN_INVENTORY_INCOMPLETE", `VPN preview needs supported API modules: ${missing.join(", ")}. Check SFOS version and account permissions.`, 409);
 }
 
 export async function createSophosVpn(device: Device, values: Record<string, unknown>, invoke = call) {
   if (!tlsVerification(device)) throw new SophosApiError("SOPHOS_VPN_TLS_REQUIRED", "Verified HTTPS is required for VPN PSK writes.", 409);
-  const before = parseSophosDiscovery(await invoke(device, getXml(["Interface", "IPHost", "VPNProfile", "VPNIPSecConnection"])));
+  const before = await discoverSophos(device, invoke);
+  assertVpnInventory(before);
   const preflight = preflightSophosVpn(values, before);
   const secret = resolveSophosVpnSecret(values);
   const reply = await invoke(device, buildSophosVpnXml(values, secret));
@@ -302,24 +384,28 @@ function params(plan: ActionPlan) { const { parameters, normalized } = actionMet
 async function connection(device: Device): Promise<DeviceConnectionTestResult> {
   try {
     const sophos = await discover(device);
+    const collected = new Set(sophos.collectedModules ?? []);
+    const partial = (sophos.collectionWarnings?.length ?? 0) > 0;
     const tlsWarning = tlsVerification(device) ? [] : [{ code: "SOPHOS_SELF_SIGNED_TLS", message: "TLS certificate verification is disabled for this private Sophos endpoint. Install a trusted certificate and enable sophosTlsVerify for strict validation." }];
     return {
       connected: true, deviceId: device.id, vendor: "sophos", host: device.host, port: device.managementPort, credentialResolved: true, sophos,
       stages: [
         { name: "resolve_device", status: "ok" }, { name: "resolve_credential", status: "ok" }, { name: "tcp_connect", status: "ok" },
         { name: "ssh_handshake", status: "ok", message: "HTTPS/TLS API channel established." }, { name: "ssh_auth", status: "ok", message: "Sophos API authentication succeeded." },
-        { name: "readonly_discovery", status: "ok", message: `${sophos.interfaces.length} interfaces and ${sophos.firewallRules.length} firewall rules collected.` }
+        { name: "readonly_discovery", status: partial ? "warning" : "ok", message: `${collected.size}/${DISCOVERY_ENTITIES.length} API modules read; ${sophos.interfaces.length} interfaces and ${sophos.firewallRules.length} firewall rules collected.` }
       ],
       warnings: [...tlsWarning, ...(sophos.collectionWarnings ?? []).map(message => ({ code: "SOPHOS_DISCOVERY_PARTIAL", message }))],
-      capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: true, canReadInterfaces: true, canReadFirewall: true, canExecuteWriteActions: true },
-      message: "Sophos XML API authentication and read-only discovery succeeded."
+      capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: true, canReadInterfaces: collected.has("Interface"), canReadFirewall: collected.has("FirewallRule"), canExecuteWriteActions: collected.has("Interface") || collected.has("FirewallRule") || VPN_REQUIRED_ENTITIES.every(entity => collected.has(entity)) },
+      message: partial ? "Sophos API authenticated; some inventory modules are unavailable. Review collection warnings before actions." : "Sophos XML API authentication and read-only discovery succeeded."
     };
   } catch (error) {
     const failure = error instanceof SophosApiError ? error : new SophosApiError("SOPHOS_API_FAILED", "Sophos API connection failed.");
     return {
       connected: false, deviceId: device.id, vendor: "sophos", host: device.host, port: device.managementPort,
       credentialResolved: failure.code !== "SOPHOS_CREDENTIAL_MISSING",
-      stages: [{ name: "resolve_device", status: "ok" }, { name: "resolve_credential", status: failure.code.includes("CREDENTIAL") ? "failed" : "ok" }, { name: "tcp_connect", status: "failed", code: failure.code, message: failure.message }],
+      stages: failure.code === "SOPHOS_DISCOVERY_UNAVAILABLE"
+        ? [{ name: "resolve_device", status: "ok" }, { name: "resolve_credential", status: "ok" }, { name: "tcp_connect", status: "ok" }, { name: "ssh_handshake", status: "ok", message: "HTTPS/TLS API channel established." }, { name: "ssh_auth", status: "ok", message: "Sophos API authentication succeeded." }, { name: "readonly_discovery", status: "failed", code: failure.code, message: failure.message }]
+        : [{ name: "resolve_device", status: "ok" }, { name: "resolve_credential", status: failure.code.includes("CREDENTIAL") ? "failed" : "ok" }, { name: "tcp_connect", status: "failed", code: failure.code, message: failure.message }],
       warnings: [], capabilities: { canConnect: false, canRunBasicReadOnly: false, canReadInterfaces: false, canReadFirewall: false, canExecuteWriteActions: false }, errorCode: failure.code, message: failure.message
     };
   }
@@ -336,7 +422,9 @@ export const sophosApiConnector: DeviceConnector = {
     const operation = operationFromPlan(plan); const values = params(plan); const target = operation.includes("interface") ? { interfaceName: values.interfaceName ?? values.name } : operation.includes("rule") ? { ruleName: values.ruleName ?? values.name } : {};
     if (operation === "create-ipsec-tunnel") {
       if (!tlsVerification(device)) throw new SophosApiError("SOPHOS_VPN_TLS_REQUIRED", "Configure a trusted HTTPS certificate before VPN writes.", 409);
-      const preflight = preflightSophosVpn(values, await discover(device));
+      const snapshot = await discover(device);
+      assertVpnInventory(snapshot);
+      const preflight = preflightSophosVpn(values, snapshot);
       resolveSophosVpnSecret(values);
       return { plannedCommands: ["Sophos XML API: create Site-to-Site IPsec configuration (PSK hidden)", JSON.stringify({ ...preflight.parameters, pskSecretRef: "[secret reference]", networks: preflight.networks })], validationWarnings: ["پروفایل IKEv2 باید در هر دو طرف تطبیق داشته باشد. قوانین عبور LAN ↔ VPN جداگانه بررسی شوند.", "ذخیره تنظیمات به معنی برقراری SA یا عبور ترافیک نیست.", "بازگردانی خودکار ندارد؛ بک‌آپ و مسیر مدیریت جایگزین داشته باشید."], affectedPorts: [500, 4500], affectedServices: ["IPsec"], rollbackSteps: [], riskLevel: plan.riskLevel, requiresApproval: true, exactTarget: { deviceId: device.id, vpnName: values.vpnName, networks: preflight.networks }, commandSpecs: [{ template: "sophos_create_ipsec_tunnel", command: "POST /webconsole/APIController (add VPNIPSecConnection; PSK hidden)", write: true, target: { vpnName: values.vpnName } }] };
     }
