@@ -1,3 +1,7 @@
+## 2026-09-28 - ESXi SSH password-method compatibility
+
+- Fixed missing keyboard-interactive support for ESXi password credentials; passed 18 tests, including a real loopback PAM challenge. Built/redeployed the local API. After independent user certificate confirmation, verified live Host Client login and SSH-enabled state; observed a non-Administrator built-in role and no Shell Access control in the old UI. No remote changes or successful SSH collection claimed. Administrator-role promotion requires separate explicit approval; credentials stayed memory-only and browser session was logged out/closed.
+
 ## 2026-09-28 - ESXi SSH registration and connection guide
 
 - Implemented a pinned-host-key, read-only ESXi SSH connector sharing its session with monitoring; added onboarding fields and embedded API/SSH setup instructions. Preserved the richer SOAP path and blocked unsupported SSH mutations. Missing usage/health metrics are not fabricated.

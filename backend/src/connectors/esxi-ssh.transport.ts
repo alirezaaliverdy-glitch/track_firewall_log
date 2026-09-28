@@ -21,6 +21,9 @@ export function esxiSshConfig(device: SshDevice, host: string, port: number, cre
     throw new EsxiSoapError("ESXI_SSH_CREDENTIAL_REQUIRED", "A stored SSH username and password or private key are required.");
   return {
     host, port, username: credential.username, password: credential.password,
+    // ESXi commonly advertises publickey + keyboard-interactive, not password.
+    // The shared session responder handles its PAM password challenge.
+    tryKeyboard: Boolean(credential.password),
     privateKey: credential.privateKey, passphrase: credential.passphrase,
     readyTimeout: 15_000, hostHash: "sha256",
     // Match the RSA host key whose fingerprint the onboarding form requests.

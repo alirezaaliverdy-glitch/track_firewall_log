@@ -30,6 +30,8 @@ test("SSH requires a canonical pinned RSA fingerprint, with no weak key algorith
   const config = esxiSshConfig(device, device.host, 22022, {username: "monitor", password: "dummy", sudo: false});
   assert.equal(config.port, 22022);
   assert.equal(config.hostHash, "sha256");
+  assert.equal(config.tryKeyboard, true);
+  assert.equal(esxiSshConfig(device, device.host, 22, {username:"monitor",privateKey:"test-placeholder",sudo:false}).tryKeyboard, false);
   const verify = config.hostVerifier as (hash: string) => boolean;
   assert.equal(verify(Buffer.alloc(32, 1).toString("hex")), true);
   assert.equal(verify(Buffer.alloc(32, 2).toString("hex")), false);
@@ -92,7 +94,8 @@ test("SSH command reader limits output, requires exit success and enforces a dea
   await assert.rejects(esxiExec(fake.client, "vmware -v", 5), /timed out/);
 });
 
-test("Real loopback SSH handshake verifies the pinned host and reuses one authenticated session", async () => {
+for (const method of ["password", "keyboard-interactive"] as const) {
+test(`Real loopback SSH ${method} verifies the pinned host and reuses one authenticated session`, async () => {
   const keys = generateKeyPairSync("rsa", {modulusLength: 2048});
   const privateKey = keys.privateKey.export({type:"pkcs1",format:"pem"}).toString();
   const parsed = utils.parseKey(privateKey);
@@ -102,7 +105,14 @@ test("Real loopback SSH handshake verifies the pinned host and reuses one authen
   const server = new Server({hostKeys:[privateKey]}, client => {
     connections++;
     client.on("error", () => undefined);
-    client.on("authentication", ctx => ctx.method === "password" && ctx.username === "monitor" && ctx.password === "test-only" ? ctx.accept() : ctx.reject());
+    client.on("authentication", ctx => {
+      if (ctx.username !== "monitor") return ctx.reject([method]);
+      if (method === "keyboard-interactive" && ctx.method === "keyboard-interactive") {
+        return ctx.prompt([{prompt:"Password: ",echo:false}], answers => answers[0] === "test-only" ? ctx.accept() : ctx.reject([method]));
+      }
+      if (method === "password" && ctx.method === "password" && ctx.password === "test-only") return ctx.accept();
+      ctx.reject([method]);
+    });
     client.on("ready", () => client.on("session", accept => {
       const session = accept();
       session.on("exec", (acceptExec, _reject, info) => {
@@ -129,3 +139,4 @@ test("Real loopback SSH handshake verifies the pinned host and reuses one authen
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
+}

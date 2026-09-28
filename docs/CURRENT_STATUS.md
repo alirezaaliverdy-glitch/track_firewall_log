@@ -1,3 +1,9 @@
+## 2026-09-28 - ESXi keyboard-interactive authentication follow-up
+
+- Enabled ESXi PAM/keyboard-interactive password authentication in the pinned-host-key SSH config. Private-key-only connections do not activate password challenges; existing shared-session identity includes the authentication policy.
+- Backend build and 18 targeted API/SSH/session/profile tests passed, including real loopback password and keyboard-interactive SSH with reuse and wrong-key rejection. Local API rebuilt/redeployed and healthy.
+- User confirmed the default HTTPS certificate independently; a certificate-pinned, memory-only browser login succeeded. Standalone ESXi 7.0 U3 reports SSH enabled. Host permissions show alireza assigned No Trusted Infrastructure administrator, not Administrator; the old edit-user dialog has no Shell Access control. This supports a role/shell restriction but is not a verified successful SSH diagnosis. No host, account, role, firewall or VM changes were made. Logged out/closed the browser; requesting explicit approval before any Administrator-role promotion. No secrets written to project files or printed.
+
 ## 2026-09-28 - Verified ESXi SSH connection and API setup guidance
 
 - Added selectable ESXi SSH registration, password/private-key credentials and mandatory verified RSA SHA256 fingerprint. The separate fixed read-only ESXCLI collector uses the shared authenticated SSH pool, including connectivity probes; SHA-1 host keys, arbitrary commands and SSH writes are not exposed.
