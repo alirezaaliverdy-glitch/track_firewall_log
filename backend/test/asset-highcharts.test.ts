@@ -25,14 +25,35 @@ test("response duration omits failed, passive, grace and unspecified zero readin
   ];
   assert.deepEqual(latencyReadings(checks).map(point => point.value), [24]);
 });
-test("all vendors have traffic, CPU, availability and response-time charts without substitutions", () => {
+test("all vendors share compact CPU, RAM, traffic and availability charts at the top of overview", () => {
   const page = readFileSync("/src/features/assets/pages/AssetDetailPage.tsx", "utf8");
   const overview = page.split("function renderOverviewTrends()")[1].split("function renderOverviewFirstViewport()")[0];
-  assert.equal((overview.match(/<AssetMetricCard /g) ?? []).length, 4);
+  assert.equal((overview.match(/<AssetLiveCharts /g) ?? []).length, 1);
   assert.match(overview, /cpu.usage_percent/);
-  assert.match(overview, /latencyReadings/);
+  assert.match(overview, /memory.usage_percent/);
+  assert.doesNotMatch(overview, /AssetMetricCard|latencyReadings/);
+  assert.match(page, /className="asset-device-overview">\s*\{renderOverviewTrends\(\)\}/);
+  const panel = readFileSync("/src/features/assets/components/AssetLiveCharts.tsx", "utf8");
+  assert.equal((panel.match(/key: "(cpu|memory|traffic|availability)"/g) ?? []).length, 4);
+  assert.match(panel, /Historical \/ unverified/);
+  assert.match(panel, /data-motion=\{motion\}/);
   assert.doesNotMatch(overview, /const preferred|sessions.count|vpn.active_count/);
   const chart = readFileSync("/src/features/assets/components/AssetChartPlot.tsx", "utf8");
   assert.match(chart, /timezone: "Asia\/Tehran"/);
   assert.doesNotMatch(chart, /export.highcharts|code.highcharts|fetch\(/);
+  const mini = readFileSync("/src/features/assets/components/AssetMiniChart.tsx", "utf8");
+  assert.match(mini, /chartReadings\(s.points,binary\)/);
+  assert.match(mini, /duration:900/);
+  assert.match(mini, /prefers-reduced-motion/);
+  assert.match(mini, /connectNulls:false/);
+  assert.doesNotMatch(mini, /Math.random|fetch\(/);
+});
+test("dashboard retains paged resource summary rings rather than detailed line charts", () => {
+  const dashboard = readFileSync("/src/features/dashboard/pages/FleetHealthPanel.tsx", "utf8");
+  assert.match(dashboard, /fleet-summary-dial/);
+  assert.match(dashboard, /memory.usage_percent/);
+  assert.match(dashboard, /disk.usage_percent/);
+  assert.match(dashboard, /datastore.usage_percent/);
+  assert.match(dashboard, /device.score:null/);
+  assert.doesNotMatch(dashboard, /AssetMiniChart|FleetMiniChart|fleet-device-plots/);
 });

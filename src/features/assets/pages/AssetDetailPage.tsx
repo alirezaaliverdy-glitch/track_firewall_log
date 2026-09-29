@@ -22,8 +22,7 @@ import "../components/CiscoAssetDashboard.css";
 
 import { AssetChartPlot, orderedReadings } from "../components/AssetChartPlot";
 import { AssetHistory } from "../components/AssetHistory";
-import { AssetMetricCard } from "../components/AssetMetricCard";
-import { latencyReadings } from "../components/assetChartData";
+import { AssetLiveCharts } from "../components/AssetLiveCharts";
 import "./AssetWorkspace.css";
 const sections = [
   { key: "overview", labelKey: "workspace.tabs.overview" },
@@ -275,19 +274,10 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
   function renderOverviewTrends() {
     const traffic = currentWorkspace.traffic ?? { interface: null, method: "counter_delta", rx: [], tx: [] };
-    const available = chart(currentWorkspace.charts.availability);
-    const cpu = orderedReadings(currentWorkspace.charts.resources.filter((item) => item.label === "cpu.usage_percent" && item.value >= 0 && item.value <= 100));
-    const latency = latencyReadings(currentWorkspace.statusChecks);
-    const end = Date.now();
-    const noData = isFa ? "در این بازه نمونهٔ معتبر ثبت نشده است" : "No verified sample in this range";
-    return <section className="asset-overview-trends" aria-label={isFa ? "روند وضعیت دارایی" : "Asset status trends"}>
-      <header><div><small>{isFa ? "داده‌های ثبت‌شده" : "Recorded measurements"}</small><h2>{isFa ? "روند وضعیت" : "Status trends"}</h2></div><div className="asset-overview-trends__tools"><div role="group" aria-label={isFa ? "بازه زمانی" : "Time range"}><button type="button" aria-pressed={timeRange === "24h"} onClick={() => setTimeRange("24h")}>{isFa ? "۲۴ ساعت" : "24h"}</button><button type="button" aria-pressed={timeRange === "7d"} onClick={() => setTimeRange("7d")}>{isFa ? "۷ روز" : "7d"}</button></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات پایش" : "Monitoring details"}<ArrowUpLeft aria-hidden="true" /></Link></div></header>
-      <div className="asset-overview-trends__grid">
-        <AssetMetricCard title={isFa ? "ترافیک عبوری" : "Network traffic"} series={[{ points: chart(traffic.rx), label: isFa ? "دریافت" : "Receive", color: "#65bfce" }, { points: chart(traffic.tx), label: isFa ? "ارسال" : "Transmit", color: "#a69bcf" }]} locale={locale} unit="Mbps" empty={noData} subtitle={`${traffic.interface ?? "—"} · ${traffic.method === "device_5m_average" ? (isFa ? "میانگین ۵ دقیقه‌ای" : "5-minute average") : (isFa ? "نرخ شمارندهٔ اینترفیس" : "Interface counter rate")}`} start={since} end={end} />
-        <AssetMetricCard title={isFa ? "مصرف CPU" : "CPU usage"} series={[{ points: chart(cpu), label: "CPU", color: "#7bb4d5" }]} locale={locale} unit="%" empty={isFa ? "CPU از این تجهیز هنوز دریافت نشده است" : "CPU readings have not been collected"} staleReading={chart(cpu).length ? undefined : cpu.at(-1)} start={since} end={end} />
-        <AssetMetricCard title={isFa ? "دسترسی دستگاه" : "Device availability"} series={[{ points: available, label: isFa ? "دسترسی" : "Availability", color: "#76b8aa" }]} locale={locale} binary empty={noData} start={since} end={end} />
-        <AssetMetricCard title={isFa ? "زمان بررسی اتصال" : "Connection check duration"} series={[{ points: chart(latency), label: isFa ? "کانال مدیریتی" : "Management channel", color: "#c2ae85" }]} locale={locale} unit="ms" empty={noData} subtitle={isFa ? "مدت بررسی موفق کانال؛ نه تأخیر ICMP" : "Successful channel check; not ICMP latency"} start={since} end={end} />
-      </div>
+    const resource = (key: string) => chart(currentWorkspace.charts.resources.filter(item => item.label === key));
+    return <section className="asset-overview-trends" aria-label={isFa ? "نمودارهای زندهٔ تجهیز" : "Device live charts"}>
+      <header><div><small>{isFa ? "پایش تجهیز" : "Device monitoring"}</small><h2>{isFa ? "منابع و دسترسی" : "Resources & availability"}</h2></div><div className="asset-overview-trends__tools"><div role="group" aria-label={isFa ? "بازه زمانی" : "Time range"}>{(["1h", "6h", "24h", "7d"] as TimeRange[]).map(range => <button key={range} type="button" aria-pressed={timeRange === range} onClick={() => setTimeRange(range)}>{({ "1h": isFa ? "۱ ساعت" : "1h", "6h": isFa ? "۶ ساعت" : "6h", "24h": isFa ? "۲۴ ساعت" : "24h", "7d": isFa ? "۷ روز" : "7d" } as Record<string, string>)[range]}</button>)}</div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "همهٔ سنسورها" : "All sensors"}<ArrowUpLeft aria-hidden="true" /></Link></div></header>
+      <AssetLiveCharts cpu={resource("cpu.usage_percent")} memory={resource("memory.usage_percent")} availability={chart(currentWorkspace.charts.availability)} traffic={{ ...traffic, rx: chart(traffic.rx), tx: chart(traffic.tx) }} connection={overview.availability} isFa={isFa} refreshFailed={!!error} />
     </section>;
   }
 
@@ -317,6 +307,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     const openFindings = currentWorkspace.findings.filter((item) => !["resolved", "closed", "false_positive"].includes(String(item.status ?? "open")));
     const dataTime = vendorOverview.collectedAt ?? overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt;
     return <section className="asset-device-overview">
+      {renderOverviewTrends()}
       <section className={`asset-device-overview__hero is-${stateTone(overview.healthState)}`}>
         <div className="asset-device-overview__identity"><Clock3 aria-hidden="true" /><strong>{isFa ? "آخرین جمع‌آوری" : "Latest collection"}</strong></div>
         <div className={`asset-device-overview__live is-${overview.availability}`}><span><i />{statusLabel(overview.availability, t)}</span><small><Clock3 />{date(dataTime, locale, isFa ? "هنوز جمع‌آوری نشده" : "Not collected yet")}</small><button type="button" disabled={collecting} onClick={() => void collectLiveData()}>{collecting ? <RefreshCw className="is-spinning" /> : <RefreshCw />}{collecting ? (isFa ? "در حال بررسی" : "Checking") : supportsVendorCollection ? (isFa ? "جمع‌آوری جدید" : "Collect now") : (isFa ? "تست اتصال" : "Test connection")}</button></div>
@@ -330,8 +321,6 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
         <article><span><AlertTriangle /></span><div><small>{isFa ? "یافته باز" : "Open findings"}</small><strong>{openFindings.length.toLocaleString(locale)}</strong></div></article>
         <article><span><Activity /></span><div><small>{isFa ? "اقدام در انتظار" : "Pending actions"}</small><strong>{overview.pendingActions.toLocaleString(locale)}</strong></div></article>
       </section>
-
-      {renderOverviewTrends()}
 
       {currentWorkspace.vendor.key === "esxi" ? <EsxiHostOverview facts={facts} deviceId={deviceId} isFa={isFa} locale={locale} ssh={currentWorkspace.capabilities?.connectorType === "esxi-ssh" || currentWorkspace.device?.protocol === "ssh"} available={overview.availability === "online"} /> : null}
 

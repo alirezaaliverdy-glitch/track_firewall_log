@@ -1,0 +1,41 @@
+.asset-live-charts{min-width:0}
+.asset-live-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;color:#8f9fb3;font-size:12px}
+.asset-live-toolbar button{min-height:34px;border:1px solid #344459;border-radius:9px;background:#152234;color:#c2d1e4;padding:6px 10px;font:inherit;font-size:11px;cursor:pointer}
+.asset-live-toolbar button:focus-visible{outline:2px solid #86aee5;outline-offset:3px}
+.asset-live-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.asset-live-metric{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #2a394c;border-radius:15px;background:linear-gradient(150deg,#121e2d,#0d1825);padding:14px 12px 10px;box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.asset-live-metric>header{display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:25px}
+.asset-live-metric>header>span{display:flex;gap:7px;align-items:center;color:#b8c6d8;font-size:13px;font-weight:650}
+.asset-live-metric>header svg{color:#859ab6;flex-shrink:0}
+.asset-live-metric>header>small{font-size:10px;color:#93a6bc}
+.asset-live-reading{display:flex;align-items:center;min-height:44px;margin:4px 0 5px}
+.asset-live-reading>strong{font-size:23px;font-variant-numeric:tabular-nums;color:#e0eaf5}
+.asset-live-rates{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;color:#9fb0c5;font-size:10px}
+.asset-live-rates>span{display:flex;align-items:center;gap:4px}
+.asset-live-rates i{width:6px;height:6px;border-radius:50%}
+.asset-live-rates strong{color:#e0eaf5;font-size:15px;font-variant-numeric:tabular-nums}
+.asset-mini-plot{width:100%;min-width:0;height:160px}
+.asset-live-empty{display:flex;flex-direction:column;gap:8px;justify-content:center;align-items:center;text-align:center;min-height:160px;color:#a3b4c9;font-size:12px;background:repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(148,163,184,.06) 40px);padding:12px}
+.asset-live-empty small{font-size:10px;line-height:1.8;color:#8497b0}
+.asset-live-metric>footer{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 10px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(148,163,184,.1);color:#8296b0;font-size:9px}
+.asset-live-freshness{display:flex;align-items:center;gap:5px;color:#9aa9bb}
+.asset-live-freshness i{width:5px;height:5px;border-radius:50%;background:#6e7e94}
+.asset-live-freshness.is-current{color:#a6c5b6}
+.asset-live-freshness.is-current i{background:#94bea9}
+.asset-live-charts[data-motion=true] .asset-live-metric.is-live .asset-live-freshness i{animation:asset-live-pulse 3s ease-in-out infinite}
+.asset-live-charts[data-motion=true] .asset-live-metric{animation:asset-chart-enter .5s ease-out both}
+.asset-live-charts[data-motion=true] .asset-live-metric:nth-child(2){animation-delay:.06s}
+.asset-live-charts[data-motion=true] .asset-live-metric:nth-child(3){animation-delay:.12s}
+.asset-live-charts[data-motion=true] .asset-live-metric:nth-child(4){animation-delay:.18s}
+.asset-live-interface{color:#91a3bb;font-size:11px;margin:12px 0 0;line-height:1.8;overflow-wrap:anywhere}
+.asset-live-interface b{color:#bdcce0;font-weight:550}
+.asset-overview-trends:has(.asset-live-charts){background:linear-gradient(135deg,#101b29,#0a1623);border-color:#29374b;padding:18px}
+.asset-overview-trends:has(.asset-live-charts)>header{gap:12px}
+.asset-overview-trends:has(.asset-live-charts) h2{font-size:18px;color:#dbe7f4}
+.asset-overview-trends:has(.asset-live-charts)>header small{font-size:11px;color:#99aec7}
+.asset-overview-trends:has(.asset-live-charts) .asset-overview-trends__tools button{font-size:12px}
+@keyframes asset-live-pulse{50%{opacity:.4}}
+@keyframes asset-chart-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:1150px){.asset-live-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.asset-live-grid{grid-template-columns:1fr}.asset-live-toolbar{align-items:flex-start;flex-direction:column}.asset-overview-trends:has(.asset-live-charts){padding:12px}.asset-live-metric>header>span{font-size:14px}.asset-live-metric>footer{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.asset-live-charts[data-motion=true] .asset-live-metric,.asset-live-charts[data-motion=true] .asset-live-metric.is-live .asset-live-freshness i{animation:none}}

@@ -1,3 +1,10 @@
+## 2026-09-29 - Restore dashboard summaries and relocate animated device charts
+
+- Restored the previous ring-and-resource-bar dashboard layout without reverting real measured sensors; all paged vendors retain explicit freshness/coverage and a device detail link.
+- Replaced the asset overview large chart grid with the four compact real-history Highcharts at the top of the content. CPU/RAM, separately labelled RX/TX, availability; responsive compact cards, clear units/source/time and meaningful missing/stale states.
+- Added smooth ring fill, staggered card entry, initial line drawing, actual-data transitions and last-sample markers. Both animation toggles and runtime reduced-motion changes are respected; no artificial samples or periodic vendor connections added.
+- Verified frontend production build/deploy healthy, 9 focused unit/source tests and intercepted Chromium flows for six vendor fixtures at 1440/1024/390/320px. Checks include no chart remount on polling, current/historical/empty states, motion off/reduced motion, summary pagination and sticky sidebar. No configuration writes, credential edits, backend/schema changes or push. User guide: docs/ASSET_CHART_LAYOUT_FA.md.
+
 ## 2026-09-29 - Dashboard Highcharts and sticky-sidebar refinement
 
 - Replaced large dials with four compact per-device plots, real histories, muted color palette, controlled animation and reduced-motion handling. Added honest collection-error guidance rather than showing absent sensors as zero. Fixed sticky sidebar by removing the unintended scroll-container ancestor (overflow:clip).

@@ -1,3 +1,9 @@
+## 2026-09-29 - Summary rings on dashboard; live charts inside assets
+
+- User-requested layout restored: dashboard shows compact resource-health rings with CPU, RAM and disk/Datastore bars for all paged devices; missing or stale telemetry cannot produce a current score.
+- Asset overview now starts with four compact Highcharts for CPU, memory, separate RX/TX and availability; removed its old large chart block. Quiet palette, clearer values/units/interface source, 4/2/1-column responsive layout, initial reveal and smooth real-data update animations with off/reduced-motion controls.
+- Frontend build and local deployment healthy. Nine chart/workspace regressions passed; intercepted Chromium tests cover six vendor fixtures, desktop/tablet/390/320px, polling without remount, animation controls, historical/empty readings, sidebar and pagination, no writes. No backend/vendor changes or new live acceptance; pre-existing ESXi authentication limitation remains. Guide: docs/ASSET_CHART_LAYOUT_FA.md.
+
 ## 2026-09-29 - Compact fleet charts and sticky sidebar
 
 - Four compact real-data Highcharts per device, quiet palette, real-update animations with off/reduced-motion controls, missing/historical measurements visible; no synthetic telemetry or universal health-100 inference.
