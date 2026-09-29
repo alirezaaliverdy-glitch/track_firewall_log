@@ -9,7 +9,6 @@ import {
 } from "@/lib/dashboard";
 import {
   getLinuxMonitoringSummary,
-  refreshLinuxMonitoringDevice,
   type LinuxHealthSnapshot,
   type LinuxMonitoringDevice,
   type LinuxSummary,
@@ -32,9 +31,6 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
-  Cpu,
-  HardDrive,
-  MemoryStick,
   Network,
   RefreshCw,
   Server,
@@ -42,8 +38,8 @@ import {
   ShieldCheck,
   Siren,
 } from "lucide-react";
-import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
@@ -58,7 +54,7 @@ import {
 import "./DashboardPage.css";
 import "./DashboardCommandCenter.css";
 
-type MetricRow = { metricKey?: unknown; value?: unknown };
+import { FleetHealthPanel } from "./FleetHealthPanel";
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
 type AttentionItem = { id: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone };
 
@@ -108,22 +104,6 @@ function relativeDate(value: string | null | undefined, language: string, fallba
   return formatter.format(-Math.round(hours / 24), "day");
 }
 
-function metrics(snapshot: LinuxHealthSnapshot | null) {
-  if (!Array.isArray(snapshot?.metricsJson)) return [];
-  return snapshot.metricsJson.filter((item): item is MetricRow => Boolean(item) && typeof item === "object");
-}
-
-function metricValue(snapshot: LinuxHealthSnapshot | null, key: string) {
-  const row = metrics(snapshot).find((item) => item.metricKey === key);
-  const value = Number(row?.value);
-  return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
-}
-
-function hasResourceMetrics(snapshot: LinuxHealthSnapshot | null) {
-  const keys = new Set(metrics(snapshot).map((item) => item.metricKey));
-  return ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent"].every((key) => keys.has(key));
-}
-
 function snapshotWarnings(snapshot: LinuxHealthSnapshot | null) {
   return Array.isArray(snapshot?.warningsJson)
     ? snapshot.warningsJson.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
@@ -142,27 +122,11 @@ function linuxAttentionReason(device: LinuxMonitoringDevice, isFa: boolean) {
   return copy(isFa, "هنوز Snapshot معتبر سلامت برای این سرور ثبت نشده است.", "No valid health snapshot has been recorded for this server yet.");
 }
 
-function needsHealthCollection(device: LinuxMonitoringDevice) {
-  const snapshot = device.latestHealth;
-  if (!snapshot || !hasResourceMetrics(snapshot)) return true;
-  const staleAt = snapshot.staleAt ? new Date(snapshot.staleAt).getTime() : Number.NaN;
-  if (Number.isFinite(staleAt) && staleAt <= Date.now()) return true;
-  const collectedAt = new Date(snapshot.collectedAt).getTime();
-  return Number.isFinite(collectedAt) && Date.now() - collectedAt > 15 * 60 * 1000;
-}
-
 function stateTone(state: string): DashboardTone {
   if (["healthy", "online", "connected"].includes(state)) return "good";
   if (["critical", "offline", "error"].includes(state)) return "danger";
   if (["warning", "stale", "degraded"].includes(state)) return "warning";
   return "neutral";
-}
-
-function stateColor(state: string) {
-  if (stateTone(state) === "good") return "#2dd4bf";
-  if (stateTone(state) === "danger") return "#fb7185";
-  if (stateTone(state) === "warning") return "#fbbf24";
-  return "#64748b";
 }
 
 function stateLabel(state: string, isFa: boolean) {
@@ -223,43 +187,6 @@ function portService(port: string, isFa: boolean) {
   return PORT_SERVICES[port] ?? copy(isFa, "سرویس سفارشی", "Custom service");
 }
 
-function LinuxServerChart({ device, language, isFa }: { device: LinuxMonitoringDevice; language: string; isFa: boolean }) {
-  const snapshot = device.latestHealth;
-  const healthState = device.healthState ?? snapshot?.state ?? "unknown";
-  const score = snapshot ? Math.max(0, Math.min(100, snapshot.score)) : null;
-  const cpu = metricValue(snapshot, "cpu.usage_percent");
-  const memory = metricValue(snapshot, "memory.usage_percent");
-  const disk = metricValue(snapshot, "disk.usage_percent");
-  const legend = [
-    { key: "cpu", label: "CPU", value: cpu, color: "#22d3ee", icon: <Cpu /> },
-    { key: "memory", label: copy(isFa, "حافظه", "Memory"), value: memory, color: "#a78bfa", icon: <MemoryStick /> },
-    { key: "disk", label: copy(isFa, "دیسک", "Disk"), value: disk, color: "#f59e0b", icon: <HardDrive /> },
-  ];
-  const dialStyle = {
-    "--health-angle": `${(score ?? 0) * 3.6}deg`,
-    "--health-color": stateColor(healthState),
-  } as CSSProperties;
-  return (
-    <article className={`linux-server-card command-linux-card linux-server-card--${stateTone(healthState)}`}>
-      <header className="linux-server-card__header"><div><h3>{device.name}</h3><span dir="ltr">{device.host}</span></div><span className={`dashboard-status dashboard-status--${stateTone(healthState)}`}>{stateLabel(healthState, isFa)}</span></header>
-      <div className="linux-health-visual">
-        <div className="linux-health-dial" style={dialStyle} role="img" aria-label={`${copy(isFa, "امتیاز سلامت", "Health score")}: ${score ?? "—"}`}>
-          <div><span>{copy(isFa, "امتیاز سلامت", "Health score")}</span><strong>{score === null ? "—" : number(score, language)}<small>/ {number(100, language)}</small></strong><em><i />{snapshot ? copy(isFa, "تله‌متری متصل", "Telemetry connected") : copy(isFa, "منتظر داده", "Awaiting data")}</em></div>
-        </div>
-        <dl className="linux-resource-chart">{legend.map((item) => {
-          const value = item.value === null ? 0 : Math.round(item.value);
-          return <div key={item.key} style={{ "--metric-color": item.color } as CSSProperties}>
-            <dt><span>{item.icon}</span><b>{item.label}</b><strong>{item.value === null ? "—" : `${number(value, language)}%`}</strong></dt>
-            <dd><i style={{ width: `${value}%` }} /></dd>
-          </div>;
-        })}</dl>
-      </div>
-      <footer><span><Clock3 size={14} />{shortDate(snapshot?.collectedAt, language, copy(isFa, "ثبت نشده", "Not recorded"))}</span><Link to={`/monitoring/linux/${device.id}`}>{copy(isFa, "جزئیات", "Details")}<ArrowUpLeft size={15} /></Link></footer>
-    </article>
-  );
-}
-
-
 function TrendTooltip({ active, payload, label, isFa, language }: { active?: boolean; payload?: Array<{ name?: string; value?: number; color?: string }>; label?: string; isFa: boolean; language: string }) {
   if (!active || !payload?.length) return null;
   return <div className="command-chart-tooltip"><strong>{label}</strong>{payload.map((item) => <span key={item.name} style={{ color: item.color }}><i style={{ background: item.color }} />{item.name}: {number(item.value ?? 0, language)}</span>)}<small>{copy(isFa, "بر پایه زمان آخرین مشاهده یافته‌ها", "Based on finding last-seen time")}</small></div>;
@@ -302,27 +229,11 @@ export default function DashboardPage() {
   const [eventSummary, setEventSummary] = useState<EventsSummary>(EMPTY_EVENT_SUMMARY);
   const [dataRefreshing, setDataRefreshing] = useState(false);
   const [activityError, setActivityError] = useState(false);
-  const [linuxError, setLinuxError] = useState(false);
-  const [linuxRefreshing, setLinuxRefreshing] = useState(false);
-  const [linuxRefreshError, setLinuxRefreshError] = useState(false);
+  const [, setLinuxError] = useState(false);
 
-  const loadLinuxHealth = useCallback(async (collectAll = false) => {
-    try {
-      const current = await getLinuxMonitoringSummary();
-      setLinux(current);
-      setLinuxError(false);
-      const targets = collectAll ? current.devices : current.devices.filter(needsHealthCollection);
-      if (!targets.length) return;
-      setLinuxRefreshing(true);
-      setLinuxRefreshError(false);
-      const results = await Promise.allSettled(targets.map((device) => refreshLinuxMonitoringDevice(device.id)));
-      setLinuxRefreshError(results.some((result) => result.status === "rejected"));
-      setLinux(await getLinuxMonitoringSummary());
-    } catch {
-      setLinuxError(true);
-    } finally {
-      setLinuxRefreshing(false);
-    }
+  const loadLinuxHealth = useCallback(async () => {
+    try { setLinux(await getLinuxMonitoringSummary()); setLinuxError(false); }
+    catch { setLinuxError(true); }
   }, []);
 
   const loadOperationalData = useCallback(async (showBusy = false) => {
@@ -378,10 +289,6 @@ export default function DashboardPage() {
   }).slice(0, 6), [assets.assets]);
 
   const latestFindings = useMemo(() => [...openFindings].sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime()).slice(0, 5), [openFindings]);
-  const visibleLinuxDevices = useMemo(() => [...(linux?.devices ?? [])].sort((a, b) => {
-    const rank: Record<DashboardTone, number> = { danger: 0, warning: 1, neutral: 2, good: 3 };
-    return rank[stateTone(a.healthState ?? a.latestHealth?.state ?? "unknown")] - rank[stateTone(b.healthState ?? b.latestHealth?.state ?? "unknown")];
-  }).slice(0, 3), [linux]);
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
@@ -444,7 +351,7 @@ export default function DashboardPage() {
     assets.refresh();
     findings.refresh();
     void loadOperationalData(true);
-    void loadLinuxHealth(false);
+    void loadLinuxHealth();
   };
 
   if ((assets.loading || findings.loading) && !activity) return <LoadingState label={copy(isFa, "در حال آماده‌سازی مرکز فرمان...", "Preparing command center...")} />;
@@ -455,7 +362,7 @@ export default function DashboardPage() {
     <section className="page-stack dashboard-command-center">
       <header className="command-center-header">
         <div><span><Activity size={15} />{copy(isFa, "مرکز فرمان زنده", "Live command center")}</span><h1>{copy(isFa, "داشبورد عملیات امنیت", "Security Operations Dashboard")}</h1></div>
-        <div className="command-center-header__tools"><span><i className={activityError ? "is-danger" : ""} />{activityError ? copy(isFa, "بخشی از داده‌ها در دسترس نیست", "Some data is unavailable") : copy(isFa, "داده عملیاتی متصل", "Operational data connected")}</span><small>{copy(isFa, "آخرین به‌روزرسانی", "Updated")}: {shortDate(activity?.generatedAt, language, "—")}</small><button type="button" onClick={refreshAll} disabled={dataRefreshing || linuxRefreshing}><RefreshCw size={16} className={dataRefreshing ? "is-spinning" : undefined} />{copy(isFa, "تازه‌سازی", "Refresh")}</button></div>
+        <div className="command-center-header__tools"><span><i className={activityError ? "is-danger" : ""} />{activityError ? copy(isFa, "بخشی از داده‌ها در دسترس نیست", "Some data is unavailable") : copy(isFa, "داده عملیاتی متصل", "Operational data connected")}</span><small>{copy(isFa, "آخرین به‌روزرسانی", "Updated")}: {shortDate(activity?.generatedAt, language, "—")}</small><button type="button" onClick={refreshAll} disabled={dataRefreshing}><RefreshCw size={16} className={dataRefreshing ? "is-spinning" : undefined} />{copy(isFa, "تازه‌سازی", "Refresh")}</button></div>
       </header>
 
       <div className="command-workspace-shell">
@@ -541,12 +448,7 @@ export default function DashboardPage() {
         <article className="command-panel recent-actions-panel"><header className="command-panel-heading"><div><span className="command-panel__icon"><CheckCircle2 /></span><div><h2>{copy(isFa, "آخرین اجراها", "Recent executions")}</h2><p>{copy(isFa, "ردپای واقعی Action Center", "Real Action Center trail")}</p></div></div><Link to="/actions">{copy(isFa, "مرکز اقدام", "Action Center")}<ArrowUpLeft size={14} /></Link></header><ActionRows items={activity?.recentExecutions ?? []} language={language} isFa={isFa} /></article>
       </div>
 
-      <section className="command-linux-section">
-        <header className="command-section-heading"><div><span>{copy(isFa, "تله‌متری واقعی", "Real telemetry")}</span><h2>{copy(isFa, "سلامت سرورهای Linux", "Linux server health")}</h2><p>{copy(isFa, "امتیاز کلی و مصرف واقعی CPU، حافظه و دیسک از آخرین Snapshot معتبر، در یک نمای مقایسه‌پذیر.", "Overall score and real CPU, memory and disk usage from the latest valid snapshot in one comparable view.")}</p></div><div><button type="button" onClick={() => void loadLinuxHealth(true)} disabled={linuxRefreshing}><RefreshCw size={15} className={linuxRefreshing ? "is-spinning" : undefined} />{linuxRefreshing ? copy(isFa, "در حال دریافت...", "Collecting...") : copy(isFa, "دریافت داده زنده", "Collect live data")}</button><Link to="/monitoring/linux">{copy(isFa, "پایش Linux", "Linux monitoring")}<ArrowUpLeft size={14} /></Link></div></header>
-        {linuxError ? <div className="command-warning"><CircleAlert />{copy(isFa, "وضعیت سرورهای Linux در دسترس نیست.", "Linux server health is unavailable.")}</div> : null}
-        {linuxRefreshError ? <div className="command-warning"><CircleAlert />{copy(isFa, "داده برخی سرورها تازه نشد؛ آخرین Snapshot معتبر نمایش داده می‌شود.", "Some servers did not refresh; the latest valid snapshot is shown.")}</div> : null}
-        {!linuxError && visibleLinuxDevices.length ? <div className="linux-server-grid command-linux-grid">{visibleLinuxDevices.map((device) => <LinuxServerChart key={device.id} device={device} language={language} isFa={isFa} />)}</div> : !linuxError ? <div className="command-empty command-empty--large"><Server /><div><strong>{copy(isFa, "هنوز سرور Linux ثبت نشده است", "No Linux server registered")}</strong><p>{copy(isFa, "پس از ثبت و جمع‌آوری، نمودار واقعی اینجا ظاهر می‌شود.", "After registration and collection, real charts appear here.")}</p></div><Link to="/assets/devices/new">{copy(isFa, "ثبت تجهیز", "Register device")}</Link></div> : null}
-      </section>
+      <FleetHealthPanel isFa={isFa} />
     </section>
   );
 }
