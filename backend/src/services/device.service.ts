@@ -502,8 +502,9 @@ export async function testDeviceConnection(id: string, ownerId?: string) {
     const persistedResult = connector.name === "linux_edge"
       ? {
           ...result,
-          listeningPortsCollected: result.connected && typeof result.listeningPorts === "string",
-          listeningPortsCheckedAt: statusCheck.checkedAt.toISOString()
+          listeningPortsCollected: result.connected && result.listeningPortsCollected === true,
+          listeningPortsCheckedAt: statusCheck.checkedAt.toISOString(),
+          listeningPortsError: result.connected && result.listeningPortsCollected === true ? null : result.connected ? "LISTENER_COLLECTION_FAILED" : result.errorCode ?? "LISTENER_PROBE_FAILED"
         }
       : result;
     const recoveredManagementPort = result.connected

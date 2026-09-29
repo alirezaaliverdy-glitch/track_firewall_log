@@ -309,35 +309,49 @@ function ServiceEndpointEditor({ device, endpoint, fa, editable, onClose, onSave
 
 export default function PortTopologyPage() {
   const { i18n } = useTranslation(); const { user } = useAuth(); const fa = i18n.language.startsWith("fa");
-  const [devices, setDevices] = useState<PortMapDevice[]>([]); const [deviceId, setDeviceId] = useState("");
+  const [devices, setDevices] = useState<PortMapDevice[]>([]); const [deviceId, setDeviceId] = useState(() => new URLSearchParams(window.location.search).get("deviceId") ?? "");
   const [selectedPort, setSelectedPort] = useState<DisplayPort | null>(null); const [loading, setLoading] = useState(true);
   const [selectedService, setSelectedService] = useState<ServiceEndpoint | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
   const [liveSyncing, setLiveSyncing] = useState(false);
-  const liveSyncInFlight = useRef(false);
+  const [showHistoricalServices, setShowHistoricalServices] = useState(false);
+  const [serviceFilter, setServiceFilter] = useState<"listeners" | "policies" | "other">("listeners");
+  const liveSyncInFlight = useRef(new Map<string, Promise<{ topology: { devices: PortMapDevice[] }; connected?: boolean; liveConnected?: boolean }>>());
+  const lastInterfaceRefresh = useRef(new Map<string, number>());
   const editable = user?.role === "admin" || user?.role === "operator";
   const device = useMemo(() => devices.find((item) => item.id === deviceId) ?? devices[0], [deviceId, devices]);
   const liveLinuxDeviceId = device && vendorKey(device) === "linux" ? device.id : "";
-  const load = useCallback(async (keepSelection = true) => { try { setError(""); const result = await listPortTopology(); setDevices(result.devices); setDeviceId((current) => !keepSelection || !result.devices.some((item) => item.id === current) ? result.devices[0]?.id ?? "" : current); } catch (e) { setError(e instanceof Error ? e.message : "LOAD_FAILED"); } finally { setLoading(false); setBusy(false); } }, []);
-  useEffect(() => { void load(false); }, [load]);
+  const activeDeviceId = device?.id ?? "";
+  useEffect(() => { setShowHistoricalServices(false); setSelectedService(null); }, [deviceId]);
+  const load = useCallback(async (keepSelection = true) => { try { const result = await listPortTopology(); setDevices(result.devices); setDeviceId((current) => !keepSelection || !result.devices.some((item) => item.id === current) ? result.devices[0]?.id ?? "" : current); } catch (e) { setError(e instanceof Error ? e.message : "LOAD_FAILED"); } finally { setLoading(false); setBusy(false); } }, []);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 45_000);
     return () => window.clearInterval(timer);
   }, [load]);
   useEffect(() => {
-    if (!liveLinuxDeviceId || !editable) return;
+    if (!activeDeviceId || !editable) return;
     let cancelled = false;
     const refreshLiveListeners = async () => {
-      if (document.visibilityState !== "visible" || liveSyncInFlight.current) return;
-      liveSyncInFlight.current = true;
+      if (document.visibilityState !== "visible") return;
       setLiveSyncing(true);
+      let pending = liveSyncInFlight.current.get(activeDeviceId);
+      if (!pending) {
+        const refreshInterfaces = !liveLinuxDeviceId || Date.now() - (lastInterfaceRefresh.current.get(activeDeviceId) ?? 0) >= 300_000;
+        pending = refreshInterfaces ? discoverPortTopology(activeDeviceId) : refreshLinuxServicePorts(liveLinuxDeviceId);
+        liveSyncInFlight.current.set(activeDeviceId, pending);
+        if (refreshInterfaces) lastInterfaceRefresh.current.set(activeDeviceId, Date.now());
+      }
       try {
-        await refreshLinuxServicePorts(liveLinuxDeviceId);
-        if (!cancelled) await load();
-      } catch {
-        // The last trustworthy snapshot remains visible when the lightweight probe is unavailable.
+        const result = await pending;
+        if (!cancelled) {
+          setDevices((current) => current.map((item) => result.topology.devices.find((next) => next.id === item.id) ?? item));
+          if (result.connected ?? result.liveConnected) setError("");
+        }
+      } catch (failure) {
+        if (!cancelled) setError(failure instanceof Error ? failure.message : "LISTENER_REFRESH_FAILED");
       } finally {
-        liveSyncInFlight.current = false;
+        if (liveSyncInFlight.current.get(activeDeviceId) === pending) liveSyncInFlight.current.delete(activeDeviceId);
         if (!cancelled) setLiveSyncing(false);
       }
     };
@@ -347,10 +361,11 @@ export default function PortTopologyPage() {
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
+      setLiveSyncing(false);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [liveLinuxDeviceId, editable, load]);
+  }, [activeDeviceId, liveLinuxDeviceId, editable]);
   const discover = async () => {
     if (!device) return;
     setBusy(true); setNotice(""); setError("");
@@ -384,14 +399,22 @@ export default function PortTopologyPage() {
     await load();
   };
   const ports = device ? displayPorts(device) : [];
-  const services = device?.serviceEndpoints ?? [];
+  const historicalServicesHidden = device?.serviceFreshness !== "current" && !showHistoricalServices;
+  const services = (device?.serviceEndpoints ?? []).filter((endpoint) => !historicalServicesHidden || endpoint.manualOverride);
+  const serviceGroups = {
+    listeners: services.filter((endpoint) => !endpoint.manualOverride && endpoint.state === "listening" && endpoint.exposure !== "policy"),
+    policies: services.filter((endpoint) => !endpoint.manualOverride && (endpoint.exposure === "policy" || endpoint.state === "allowed" || endpoint.bindings?.some((binding) => binding.exposure === "policy"))),
+    other: services.filter((endpoint) => endpoint.manualOverride || (endpoint.state !== "listening" && endpoint.exposure !== "policy" && endpoint.state !== "allowed"))
+  };
+  const visibleServices = serviceGroups[serviceFilter];
+  const serviceCheckedAt = device?.serviceSnapshotAt ? new Date(device.serviceSnapshotAt).toLocaleString(fa ? "fa-IR" : "en-US") : null;
   const linked = ports.filter((port) => port.peerName).length; const active = ports.filter((port) => port.operationalStatus === "up").length;
   const addManualService = () => {
     setSelectedPort(null);
     setSelectedService({ key: "new", protocol: "tcp", address: "0.0.0.0", port: 8080, state: "unknown", exposure: "all_interfaces", source: "manual", confidence: 1, manualOverride: true });
   };
   return <section className="page-stack port-topology-page">
-    <header className="port-topology-hero"><div><span><Network />{fa ? "نقشه فیزیکی شبکه" : "Physical network map"}</span><h1>{fa ? "پورت‌ها و اتصالات" : "Ports & connections"}</h1><p>{fa ? "پنل هر تجهیز را ببینید، اتصال‌های کشف‌شده را بررسی کنید و موارد اشتباه را اصلاح کنید." : "Inspect each device faceplate, review discovered links, and correct mismatches."}</p></div><Router /></header>
+    <header className="port-topology-hero"><div><span><Network />{fa ? "نقشه فیزیکی شبکه" : "Physical network map"}</span><h1>{fa ? "پورت‌ها و اتصالات" : "Ports & connections"}</h1><p>{fa ? "تجهیز را انتخاب کنید؛ پورت‌های فعال، قوانین فایروال و اتصال‌ها را جداگانه ببینید. هنگام باز بودن صفحه، سرویس‌ها هر دقیقه و اینترفیس‌های لینوکس هر ۵ دقیقه خوانده می‌شوند." : "Select a device to inspect listeners, firewall rules and links separately. While this page is visible, services refresh each minute; Linux interfaces refresh every 5 minutes."}</p></div><Router /></header>
     <div className="port-topology-toolbar"><label><span>{fa ? "تجهیز" : "Device"}</span><select value={device?.id ?? ""} onChange={(e) => { setDeviceId(e.target.value); setSelectedPort(null); setSelectedService(null); }}>{devices.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.vendor}</option>)}</select></label><button type="button" disabled={!device || busy || liveSyncing || !editable} onClick={() => void discover()}><RefreshCw className={busy || liveSyncing ? "is-spinning" : ""} />{liveSyncing ? (fa ? "همگام‌سازی زنده" : "Live sync") : (fa ? "کشف دوباره" : "Rediscover")}</button></div>
     {error ? <div className="port-topology-message is-error">{error}</div> : null}{notice ? <div className="port-topology-message"><CheckCircle2 />{notice}</div> : null}
     {loading ? <div className="port-topology-empty"><RefreshCw className="is-spinning" /></div> : !device ? <div className="port-topology-empty"><Server /><h2>{fa ? "هنوز دستگاهی ثبت نشده" : "No devices registered"}</h2></div> : <>
@@ -401,11 +424,14 @@ export default function PortTopologyPage() {
       <section className={`service-port-workspace ${selectedService ? "has-editor" : ""}`}>
         <div className="service-port-panel">
           <header><div><span><Radio />{fa ? "پایش سبک سرویس‌ها" : "Lightweight service watch"}</span><h2>{fa ? "پورت‌های سرویس و Listenerها" : "Service ports & listeners"}</h2></div>{editable ? <button type="button" onClick={addManualService}><Plus />{fa ? "ثبت دستی" : "Add manually"}</button> : null}</header>
+          {device.serviceFirewallAvailable === false ? <div className="service-evidence is-stale"><small>{fa ? "قوانین فایروال خوانده نشد؛ صفر بودن این دسته به معنی نبودن قانون نیست. مجوز مشاهدهٔ فایروالِ حساب اتصال را بررسی کنید." : "Firewall rules could not be read; an empty group does not mean no rules exist. Check the connection account's firewall read permissions."}</small></div> : null}
+          <div className={`service-evidence is-${device.serviceFreshness ?? "unknown"}`} role="status"><span>{device.serviceFreshness === "current" ? (fa ? "دادهٔ تازه از دستگاه" : "Fresh device data") : device.serviceFreshness === "stale" ? (fa ? "دادهٔ قبلی؛ وضعیت فعلی تأیید نشده" : "Previous data; current state unverified") : (fa ? "زمان جمع‌آوری نامشخص" : "Collection time unknown")}</span><small>{serviceCheckedAt ? (fa ? `آخرین خواندن موفق: ${serviceCheckedAt}` : `Last successful read: ${serviceCheckedAt}`) : (fa ? "هنوز خواندن موفق ثبت نشده" : "No successful read yet")}</small>{device.serviceErrorCode ? <small>{fa ? `آخرین تلاش ناموفق: ${device.serviceErrorCode}` : `Last attempt failed: ${device.serviceErrorCode}`}</small> : null}{historicalServicesHidden && device.serviceEndpoints.length ? <button type="button" onClick={() => setShowHistoricalServices(true)}>{fa ? "نمایش دادهٔ قبلی" : "Show previous data"}</button> : null}{showHistoricalServices && device.serviceFreshness !== "current" ? <button type="button" onClick={() => { setShowHistoricalServices(false); setSelectedService(null); }}>{fa ? "پنهان کردن دادهٔ قبلی" : "Hide previous data"}</button> : null}</div>
+          <div className="service-filter" role="group" aria-label={fa ? "نوع پورت سرویس" : "Service port type"}>{(["listeners", "policies", "other"] as const).map((key) => <button key={key} type="button" aria-pressed={serviceFilter === key} className={serviceFilter === key ? "is-active" : ""} onClick={() => { setServiceFilter(key); setSelectedService(null); }}>{key === "listeners" ? (fa ? "در حال گوش‌دادن" : "Listening") : key === "policies" ? (fa ? "قوانین فایروال" : "Firewall rules") : (fa ? "سایر/دستی" : "Other/manual")} <b>{serviceGroups[key].length}</b></button>)}</div>
           <div className="service-port-rail" aria-label={fa ? "پورت‌های سرویس شناسایی‌شده" : "Detected service ports"}>
-            {services.map((endpoint) => <button type="button" key={endpoint.key} className={`service-node is-${endpoint.exposure} ${selectedService?.key === endpoint.key ? "is-selected" : ""}`} onClick={() => { setSelectedPort(null); setSelectedService(endpoint); }}>
-              <i><AppWindow /></i><strong>{endpoint.port}</strong><small>{endpoint.protocol.toUpperCase()}</small><span>{endpoint.serviceName ?? endpoint.process ?? (fa ? "سرویس ناشناس" : "Unknown service")}</span><em>{exposureLabel(endpoint.exposure, fa)}{(endpoint.bindings?.length ?? 0) > 1 ? ` · ${endpoint.bindings?.length} Bind` : ""}</em>
+            {visibleServices.map((endpoint) => <button type="button" key={endpoint.key} className={`service-node is-${endpoint.exposure} ${selectedService?.key === endpoint.key ? "is-selected" : ""}`} onClick={() => { setSelectedPort(null); setSelectedService(endpoint); }}>
+              <i><AppWindow /></i><strong>{endpoint.port}</strong><small>{endpoint.protocol.toUpperCase()}{endpoint.manualOverride ? (fa ? " · ثبت دستی" : " · Manual") : ""}</small><span>{endpoint.serviceName ?? endpoint.process ?? (fa ? "سرویس ناشناس" : "Unknown service")}</span><em>{exposureLabel(endpoint.exposure, fa)}{(endpoint.bindings?.length ?? 0) > 1 ? ` · ${endpoint.bindings?.length} Bind` : ""}</em>
             </button>)}
-            {!services.length ? <div className="service-port-empty"><Radio /><strong>{fa ? "هنوز Listener قابل اتکایی ثبت نشده" : "No reliable listener data yet"}</strong><span>{fa ? "«کشف دوباره» را بزنید؛ در Linux خروجی ss خوانده می‌شود." : "Run Rediscover; Linux reads the current ss inventory."}</span></div> : null}
+            {!visibleServices.length ? <div className="service-port-empty"><Radio /><strong>{historicalServicesHidden ? (fa ? "وضعیت فعلی پورت‌ها هنوز تأیید نشده" : "Current ports are not verified yet") : (fa ? "موردی در این دسته نیست" : "No ports in this group")}</strong><span>{historicalServicesHidden ? (fa ? "پس از جمع‌آوری تازه، پورت‌های واقعی نمایش داده می‌شوند؛ دادهٔ قبلی را می‌توانید جداگانه ببینید." : "Freshly collected ports appear here; previous data is available separately.") : (fa ? "پورت شنونده با قانون فایروال یکی نیست؛ دسته‌های دیگر را هم بررسی کنید." : "A listener is different from a firewall rule; check the other groups.")}</span></div> : null}
           </div>
         </div>
         {selectedService ? <ServiceEndpointEditor key={selectedService.key} device={device} endpoint={selectedService} fa={fa} editable={editable} onClose={() => setSelectedService(null)} onSaved={async () => { setSelectedService(null); await load(); }} onApplied={refreshAfterAction} onError={setError} /> : null}

@@ -14,6 +14,10 @@ export type PortMapDevice = {
   id: string; name: string; vendor: string; type: string; host: string; status: string; model: string | null; ports: PortMapPort[];
   serviceEndpoints: ServiceEndpoint[]; serviceSnapshotAt?: string | null;
   serviceDataSource?: "live" | "snapshot" | "inventory" | "unavailable";
+  serviceFreshness?: "current" | "stale" | "unknown";
+  serviceLastAttemptAt?: string | null;
+  serviceErrorCode?: string | null;
+  serviceFirewallAvailable?: boolean;
 };
 
 export type ServiceEndpoint = {

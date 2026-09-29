@@ -339,7 +339,10 @@ export function collectServiceEndpoints(device: Device, snapshot?: unknown, opti
   const linuxStatus = object(root.linuxStatus);
   if (options.includeLiveStatus !== false) {
     for (const line of text(linuxStatus.listeningPorts, 100_000).split(/\r?\n/).slice(0, SERVICE_LIMIT)) add(parseListeningLine(line));
-    for (const item of parseLinuxFirewallPorts(`${text(linuxStatus.firewallPorts, 300_000)}\n__UFW__\n${text(linuxStatus.ufwStatus, 100_000)}`)) add(item);
+    // A lightweight probe must not resurrect an older UFW rule after it was removed.
+    const firewallEvidence = linuxStatus.firewallPortsCollected === true ? text(linuxStatus.firewallPorts, 300_000)
+      : linuxStatus.firewallPortsCollected === false ? "" : `${text(linuxStatus.firewallPorts, 300_000)}\n__UFW__\n${text(linuxStatus.ufwStatus, 100_000)}`;
+    for (const item of parseLinuxFirewallPorts(firewallEvidence)) add(item);
   }
 
   const snapshotNetwork = object(object(snapshot).network);
@@ -409,33 +412,55 @@ export function collectServiceEndpoints(device: Device, snapshot?: unknown, opti
 
 type ServiceSnapshot = { dataJson: unknown; collectedAt: Date };
 
+function withEvidenceTime(endpoints: ServiceEndpoint[], observedAt: Date) {
+  const timestamp = observedAt.toISOString();
+  return endpoints.map((endpoint) => ({ ...endpoint, discoveredAt: timestamp, bindings: endpoint.bindings?.map((binding) => ({ ...binding, discoveredAt: timestamp })) }));
+}
+
 export function collectFreshServiceEndpoints(device: Device, snapshot?: ServiceSnapshot) {
   const isLinux = /linux/i.test(`${device.vendor} ${device.type}`);
   if (!isLinux) {
-    return { endpoints: collectServiceEndpoints(device, snapshot?.dataJson), source: "inventory" as const, observedAt: snapshot?.collectedAt ?? null };
+    const root = object(device.capabilities);
+    const timestamp = new Date(text(root.portTopologyCollectedAt, 64));
+    const observedAt = Number.isFinite(timestamp.getTime()) ? timestamp : null;
+    const errorCode = text(root.portTopologyError, 80) || null;
+    const lastAttempt = new Date(text(root.portTopologyLastAttemptAt, 64));
+    const age = observedAt ? Date.now() - observedAt.getTime() : Infinity;
+    return { endpoints: observedAt ? withEvidenceTime(collectServiceEndpoints(device), observedAt) : collectServiceEndpoints(device).map((endpoint) => ({ ...endpoint, discoveredAt: undefined, bindings: endpoint.bindings?.map((binding) => ({ ...binding, discoveredAt: undefined })) })), source: "inventory" as const, observedAt,
+      freshness: observedAt ? (device.status === "online" && age >= -30_000 && age <= 120_000 && !errorCode ? "current" as const : "stale" as const) : "unknown" as const,
+      lastAttemptAt: Number.isFinite(lastAttempt.getTime()) ? lastAttempt : null, errorCode };
   }
 
   const linuxStatus = object(object(device.capabilities).linuxStatus);
+  const snapshotData = object(snapshot?.dataJson);
+  const networkResult = Array.isArray(snapshotData.rawCommandResultsMetadata) ? snapshotData.rawCommandResultsMetadata.map(object).find((entry) => entry.commandId === "network") : undefined;
+  const reliableSnapshot = snapshot && Array.isArray(object(snapshotData.network).listeningPorts) && networkResult?.ok !== false && networkResult?.skipped !== true ? snapshot : undefined;
   const liveObservedAt = new Date(text(linuxStatus.listeningPortsCheckedAt, 64));
   const liveObservedMs = Number.isFinite(liveObservedAt.getTime()) ? liveObservedAt.getTime() : 0;
-  const snapshotObservedMs = snapshot?.collectedAt.getTime() ?? 0;
-  const hasReliableLiveInventory = linuxStatus.listeningPortsCollected === true && typeof linuxStatus.listeningPorts === "string";
+  const snapshotObservedMs = reliableSnapshot?.collectedAt.getTime() ?? 0;
+  const hasReliableLiveInventory = liveObservedMs > 0 && linuxStatus.listeningPortsCollected === true && typeof linuxStatus.listeningPorts === "string";
+  const lastAttemptAt = liveObservedMs ? liveObservedAt : null;
+  const errorCode = text(linuxStatus.listeningPortsError, 80) || null;
+  const freshness = (observedMs: number) => observedMs > 0 && Date.now() - observedMs >= -30_000 && Date.now() - observedMs <= 120_000 && !errorCode
+    ? "current" as const : "stale" as const;
 
-  if (hasReliableLiveInventory && (!snapshot || liveObservedMs >= snapshotObservedMs)) {
+  if (hasReliableLiveInventory && (!reliableSnapshot || liveObservedMs >= snapshotObservedMs)) {
     return {
-      endpoints: collectServiceEndpoints(device, undefined, { includeLiveStatus: true, includeExplicitInventory: false }),
+      endpoints: withEvidenceTime(collectServiceEndpoints(device, undefined, { includeLiveStatus: true, includeExplicitInventory: false }), liveObservedAt),
       source: "live" as const,
-      observedAt: liveObservedAt
+      observedAt: liveObservedAt,
+      freshness: freshness(liveObservedMs), lastAttemptAt, errorCode
     };
   }
-  if (snapshot) {
+  if (reliableSnapshot) {
     return {
-      endpoints: collectServiceEndpoints(device, snapshot.dataJson, { includeLiveStatus: false, includeExplicitInventory: false }),
+      endpoints: withEvidenceTime(collectServiceEndpoints(device, reliableSnapshot.dataJson, { includeLiveStatus: false, includeExplicitInventory: false }), reliableSnapshot.collectedAt),
       source: "snapshot" as const,
-      observedAt: snapshot.collectedAt
+      observedAt: reliableSnapshot.collectedAt,
+      freshness: freshness(snapshotObservedMs), lastAttemptAt, errorCode
     };
   }
-  return { endpoints: [], source: "unavailable" as const, observedAt: null };
+  return { endpoints: [], source: "unavailable" as const, observedAt: null, freshness: "unknown" as const, lastAttemptAt, errorCode };
 }
 
 function candidate(nameValue: unknown, details: Record<string, unknown> = {}) {
@@ -476,7 +501,7 @@ function candidate(nameValue: unknown, details: Record<string, unknown> = {}) {
 function linuxInterfaceLine(line: string) {
   const match = line.trim().match(/^(\S+)\s+(UP|DOWN|UNKNOWN|LOWERLAYERDOWN|DORMANT|NOTPRESENT)\s*(.*)$/i);
   if (!match) return null;
-  return candidate(match[1], { status: match[2], addresses: match[3], sourceProtocol: "ip-brief-address", confidence: 0.94 });
+  return candidate(match[1].split("@")[0], { status: match[2], addresses: match[3], sourceProtocol: "ip-brief-address", confidence: 0.94 });
 }
 
 function routerOsLine(line: string) {
@@ -524,6 +549,22 @@ export function collectPortCandidates(device: Device) {
     });
   };
   const root = object(device.capabilities);
+
+  // Linux SS output, service ports and timestamps are not physical interfaces.
+  // Read only the fixed ip-brief inventory; never recursively interpret arbitrary status text.
+  if (/linux/i.test(`${device.vendor} ${device.type}`)) {
+    const linuxStatus = object(root.linuxStatus);
+    const inventories = linuxStatus.interfacesCollected === false ? [] : linuxStatus.interfacesCollected === true ? [linuxStatus.interfaces] : [linuxStatus.interfaces, root.interfaces];
+    for (const value of inventories) {
+      for (const row of typeof value === "string" ? value.split(/\r?\n/).slice(0, 256) : Array.isArray(value) ? value.slice(0, 256) : []) {
+        if (typeof row === "string") add(linuxInterfaceLine(row));
+        else if (row && typeof row === "object") { const item = object(row); add(candidate(item.name ?? item.interface, item)); }
+      }
+    }
+    if (found.size) return [...found.values()];
+    const inferred = candidate("eth0", { description: "Management path inferred from the registered device", confidence: 0.25 });
+    return inferred ? [{ ...inferred, meta: { ...inferred.meta, source: "inferred" as const } }] : [];
+  }
 
   // Cisco inventory contains raw command output, timestamps and several representations of
   // the same interface. Read only the two normalized tables and merge Gi/Fa abbreviations
@@ -618,6 +659,7 @@ async function ensureAsset(device: Device) {
 async function mergeDiscoveredPorts(device: Device) {
   const asset = await ensureAsset(device);
   const entries = collectPortCandidates(device);
+  if (!entries.some((entry) => entry.meta.source === "discovered")) return 0;
   const now = new Date().toISOString();
   const existingInterfaces = await prisma.assetInterface.findMany({ where: { assetId: asset.id } });
   const existingByName = new Map(existingInterfaces.map((item) => [item.name, item]));
@@ -714,7 +756,11 @@ export async function listPortTopology(deviceId?: string, ownerId?: string) {
         ports: (device.asset?.interfaces ?? []).map(portResponse),
         serviceEndpoints: effectiveServiceEndpoints(serviceEvidence.endpoints, device.asset?.metadataJson),
         serviceSnapshotAt: serviceEvidence.observedAt,
-        serviceDataSource: serviceEvidence.source
+        serviceDataSource: serviceEvidence.source,
+        serviceFreshness: serviceEvidence.freshness,
+        serviceLastAttemptAt: serviceEvidence.lastAttemptAt,
+        serviceErrorCode: serviceEvidence.errorCode,
+        serviceFirewallAvailable: serviceEvidence.source === "live" ? object(object(device.capabilities).linuxStatus).firewallPortsCollected : undefined
       };
     })
   };
@@ -773,7 +819,20 @@ export async function clearServiceEndpointOverride(deviceId: string, rawKey: unk
   return { cleared: true, key };
 }
 
-export async function discoverDevicePorts(deviceId: string, userId?: string) {
+const topologyRefreshes = new Map<string, Promise<unknown>>();
+async function singleTopologyRefresh<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const pending = topologyRefreshes.get(key);
+  if (pending) return pending as Promise<T>;
+  const next = work().finally(() => { if (topologyRefreshes.get(key) === next) topologyRefreshes.delete(key); });
+  topologyRefreshes.set(key, next);
+  return next;
+}
+
+export function discoverDevicePorts(deviceId: string, userId?: string) {
+  return singleTopologyRefresh(`discovery:${userId ?? "internal"}:${deviceId}`, () => discoverDevicePortsNow(deviceId, userId));
+}
+
+async function discoverDevicePortsNow(deviceId: string, userId?: string) {
   const device = await prisma.device.findFirst({ where: { id: deviceId, deletedAt: null, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!device) return null;
   const ciscoDevice = /cisco/i.test(`${device.vendor} ${device.type}`);
@@ -792,19 +851,30 @@ export async function discoverDevicePorts(deviceId: string, userId?: string) {
     connectionErrorCode = liveResult && "errorCode" in liveResult ? text(liveResult.errorCode, 80) || null : null;
   }
   const refreshed = await prisma.device.findUniqueOrThrow({ where: { id: deviceId } });
-  const discoveredCount = await mergeDiscoveredPorts(refreshed);
-  const serviceEndpointCount = collectServiceEndpoints(refreshed).length;
+  // Failed probes must never delete old interfaces or stamp old inventory as newly discovered.
+  const discoveredCount = liveConnected ? await mergeDiscoveredPorts(refreshed) : 0;
+  const attemptAt = new Date().toISOString();
+  await prisma.device.update({ where: { id: deviceId }, data: { capabilities: toJson({ ...object(refreshed.capabilities), ...(liveConnected ? { portTopologyCollectedAt: attemptAt } : {}), portTopologyLastAttemptAt: attemptAt, portTopologyError: liveConnected ? null : connectionErrorCode ?? "PORT_COLLECTION_FAILED" }) } });
+  const services = /linux/i.test(`${device.vendor} ${device.type}`) && liveConnected ? await refreshLinuxServicePorts(deviceId, userId) : null;
+  if (services && !services.connected) { liveConnected = false; connectionErrorCode = "LISTENER_PROBE_FAILED"; }
+  const topology = services?.topology ?? await listPortTopology(deviceId, userId);
+  const serviceEndpointCount = topology.devices[0]?.serviceEndpoints.length ?? 0;
   await prisma.auditLog.create({ data: { deviceId, action: "asset.port_topology.discovered", targetType: "device", targetId: deviceId, dryRun: true, approvalStatus: "not_required", metadata: toJson({ discoveredCount, serviceEndpointCount, connected: liveConnected, connectionErrorCode, userId, source: "read_only_inventory" }) } });
-  return { discoveredCount, serviceEndpointCount, liveConnected, connectionErrorCode, topology: await listPortTopology(deviceId, userId) };
+  return { discoveredCount, serviceEndpointCount, liveConnected, connectionErrorCode, topology };
 }
 
-export async function refreshLinuxServicePorts(deviceId: string, userId?: string) {
+export function refreshLinuxServicePorts(deviceId: string, userId?: string) {
+  return singleTopologyRefresh(`listeners:${userId ?? "internal"}:${deviceId}`, () => refreshLinuxServicePortsNow(deviceId, userId));
+}
+
+async function refreshLinuxServicePortsNow(deviceId: string, userId?: string) {
   const device = await prisma.device.findFirst({ where: { id: deviceId, deletedAt: null, ...(userId ? { company: { ownerId: userId, deletedAt: null } } : {}) } });
   if (!device) return null;
   if (!/linux/i.test(`${device.vendor} ${device.type}`)) throw new Error("LINUX_DEVICE_REQUIRED");
 
   const result = await probeLinuxListeningPorts(device);
-  const capabilities = object(device.capabilities);
+  const latest = await prisma.device.findUniqueOrThrow({ where: { id: deviceId } });
+  const capabilities = object(latest.capabilities);
   const previousLinuxStatus = object(capabilities.linuxStatus);
   await prisma.device.update({
     where: { id: deviceId },
@@ -819,6 +889,7 @@ export async function refreshLinuxServicePorts(deviceId: string, userId?: string
               listeningPortsCollected: true,
               firewallPorts: result.firewallPorts,
               firewallPortsCollected: result.firewallPortsCollected,
+              ufwStatus: "",
               listeningPortsCheckedAt: result.checkedAt,
               listeningPortsError: null
             }
@@ -833,19 +904,8 @@ export async function refreshLinuxServicePorts(deviceId: string, userId?: string
       })
     }
   });
-  const serviceEndpointCount = result.connected
-    ? collectServiceEndpoints({
-        ...device,
-        capabilities: {
-          ...capabilities,
-          linuxStatus: {
-            ...previousLinuxStatus,
-            listeningPorts: result.listeningPorts,
-            firewallPorts: result.firewallPorts
-          }
-        }
-      } as Device).length
-    : 0;
+  const topology = await listPortTopology(deviceId, userId);
+  const serviceEndpointCount = result.connected ? topology.devices[0]?.serviceEndpoints.length ?? 0 : 0;
   await prisma.auditLog.create({
     data: {
       deviceId,
@@ -857,7 +917,7 @@ export async function refreshLinuxServicePorts(deviceId: string, userId?: string
       metadata: toJson({ connected: result.connected, serviceEndpointCount, userId, source: "linux_ss_lightweight" })
     }
   });
-  return { connected: result.connected, serviceEndpointCount, checkedAt: result.checkedAt, topology: await listPortTopology(deviceId, userId) };
+  return { connected: result.connected, serviceEndpointCount, checkedAt: result.checkedAt, topology };
 }
 
 export async function savePortOverride(deviceId: string, rawPortName: unknown, input: Record<string, unknown>, userId?: string) {

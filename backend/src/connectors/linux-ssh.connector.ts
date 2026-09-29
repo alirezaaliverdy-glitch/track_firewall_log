@@ -551,12 +551,13 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
     }
     stages.push({ name: "basic_commands", status: "ok" });
 
-    const [ufwPath, ufwStatus, ports, sshStatus, sshdPort] = await Promise.all([
+    const [ufwPath, ufwStatus, ports, sshStatus, sshdPort, interfaces] = await Promise.all([
       exec(client, "command -v ufw"),
       exec(client, `${sudo}/usr/sbin/ufw status verbose`),
       exec(client, "ss -lntup"),
       exec(client, "systemctl is-active ssh || systemctl is-active sshd"),
-      exec(client, "grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config | tail -n 1")
+      exec(client, "grep -E '^[[:space:]]*Port[[:space:]]+[0-9]+' /etc/ssh/sshd_config | tail -n 1"),
+      exec(client, "ip -brief address")
     ]);
 
     if (ufwPath.exitCode !== 0 || !ufwPath.stdout) warnings.push({ code: "UFW_NOT_FOUND", message: "ufw command not available" });
@@ -577,7 +578,10 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
       os: os.stdout,
       ufwAvailable: canUseUfw,
       ufwStatus: ufwStatus.stdout || ufwStatus.stderr,
-      listeningPorts: ports.stdout || ports.stderr,
+      listeningPorts: ports.exitCode === 0 ? ports.stdout : "",
+      listeningPortsCollected: ports.exitCode === 0,
+      interfaces: interfaces.exitCode === 0 ? interfaces.stdout : "",
+      interfacesCollected: interfaces.exitCode === 0,
       sshServiceStatus: sshStatus.stdout || sshStatus.stderr,
       currentSshPort: parseCurrentSshPort(sshdPort.stdout),
       capabilities: {

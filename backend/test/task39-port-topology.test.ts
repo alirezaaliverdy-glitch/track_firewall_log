@@ -47,6 +47,12 @@ test("interface discovery preserves valid assigned addresses", () => {
   assert.deepEqual(ports[0].meta.ipAddresses, ["192.168.20.15/24", "fe80::1/64"]);
 });
 
+test("Linux interface inventory never turns SS headers, port numbers or timestamps into NICs", () => {
+  const ports = collectPortCandidates(device({ linuxStatus: { interfaces: "lo UNKNOWN 127.0.0.1/8\nens18 UP 192.0.2.10/24\nveth0@if4 UP fe80::1/64", listeningPorts: "Netid State Recv-Q Send-Q Local Address\ntcp LISTEN 0 128 0.0.0.0:22022 0.0.0.0:*", listeningPortsCheckedAt: new Date().toISOString(), firewallPorts: "__UFW__\n443/tcp ALLOW Anywhere" } }, "linux"));
+  assert.deepEqual(ports.map((port) => port.name), ["ens18", "veth0"]);
+  assert.equal(ports[0].meta.operationalStatus, "up");
+});
+
 test("Cisco interface inventory is canonical, deduplicated, and keeps admin and link state", () => {
   const ports = collectPortCandidates(device({ cisco: { collection: { interfaces: {
     summary: [
@@ -145,6 +151,35 @@ test("newer Linux security snapshots replace older live inventories", () => {
   assert.deepEqual(result.endpoints.map((item) => item.port), [22]);
 });
 
+test("listener timestamps are evidence times, not page-read times, and old data is stale", () => {
+  const at = "2026-01-01T00:00:00.000Z";
+  const result = collectFreshServiceEndpoints(device({ linuxStatus: { listeningPortsCollected: true, listeningPortsCheckedAt: at, listeningPorts: "tcp LISTEN 0 128 0.0.0.0:22022 0.0.0.0:*" } }, "linux"));
+  assert.equal(result.freshness, "stale");
+  assert.equal(result.endpoints[0].discoveredAt, at);
+  assert.equal(result.endpoints[0].bindings?.[0].discoveredAt, at);
+});
+
+test("a fresh empty inventory removes previous ports and cannot resurrect older UFW rules", () => {
+  const now = new Date();
+  const result = collectFreshServiceEndpoints(device({ linuxStatus: { listeningPortsCollected: true, listeningPortsCheckedAt: now.toISOString(), listeningPorts: "", firewallPortsCollected: true, firewallPorts: "__UFW__\nStatus: active", ufwStatus: "443/tcp ALLOW Anywhere" } }, "linux"), { collectedAt: new Date(now.getTime() - 60_000), dataJson: { network: { listeningPorts: ["tcp LISTEN 0 128 0.0.0.0:8080 0.0.0.0:*"] } } });
+  assert.equal(result.freshness, "current");
+  assert.deepEqual(result.endpoints, []);
+});
+
+test("failed listener checks label even recent fallback data as historical", () => {
+  const result = collectFreshServiceEndpoints(device({ linuxStatus: { listeningPortsCollected: false, listeningPortsCheckedAt: new Date().toISOString(), listeningPortsError: "SSH_AUTH_FAILED" } }, "linux"), { collectedAt: new Date(Date.now() - 1_000), dataJson: { network: { listeningPorts: ["tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"] } } });
+  assert.equal(result.freshness, "stale");
+  assert.equal(result.errorCode, "SSH_AUTH_FAILED");
+  assert.equal(result.endpoints[0].port, 22);
+});
+
+test("a failed security snapshot cannot replace a valid listener probe with a fake empty inventory", () => {
+  const now = new Date();
+  const result = collectFreshServiceEndpoints(device({ linuxStatus: { listeningPortsCollected: true, listeningPortsCheckedAt: new Date(now.getTime() - 1000).toISOString(), listeningPorts: "tcp LISTEN 0 128 0.0.0.0:22022 0.0.0.0:*" } }, "linux"), { collectedAt: now, dataJson: { network: { listeningPorts: [] }, rawCommandResultsMetadata: [{ commandId: "network", ok: false, skipped: true }] } });
+  assert.equal(result.source, "live");
+  assert.equal(result.endpoints[0].port, 22022);
+});
+
 test("IPv4 and IPv6 binds collapse into one card without losing binding details", () => {
   const endpoints = collectServiceEndpoints(device({ linuxStatus: { listeningPorts: [
     'tcp LISTEN 0 4096 0.0.0.0:80 0.0.0.0:* users:(("nginx",pid=42,fd=8))',
@@ -160,6 +195,20 @@ test("IPv4 and IPv6 binds collapse into one card without losing binding details"
   assert.deepEqual(http.bindings?.map((binding) => binding.address), ["0.0.0.0", "[::]"]);
   assert.ok(endpoints.some((item) => item.protocol === "udp" && item.port === 53));
   assert.ok(endpoints.some((item) => item.protocol === "tcp" && item.port === 53));
+});
+
+test("vendor inventory timestamps are never invented and failed reads stay historical", () => {
+  const unknown = collectFreshServiceEndpoints(device({ mikrotikStatus: { mikrotik: { services: ["0 name=ssh port=22 disabled=false"] } } }));
+  assert.equal(unknown.freshness, "unknown");
+  assert.equal(unknown.observedAt, null);
+  assert.equal(unknown.endpoints[0].discoveredAt, undefined);
+  const observedAt = new Date().toISOString();
+  const failed = collectFreshServiceEndpoints(device({ portTopologyCollectedAt: observedAt, portTopologyLastAttemptAt: observedAt, portTopologyError: "AUTH_FAILED" }));
+  assert.equal(failed.freshness, "stale");
+  assert.equal(failed.observedAt?.toISOString(), observedAt);
+  assert.equal(failed.errorCode, "AUTH_FAILED");
+  const current = collectFreshServiceEndpoints(device({ portTopologyCollectedAt: observedAt }));
+  assert.equal(current.freshness, "current");
 });
 
 test("vendor service inventories stay semantically distinct", () => {
