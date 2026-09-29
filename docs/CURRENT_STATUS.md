@@ -1,3 +1,10 @@
+## 2026-09-29 - Vivid fleet summary and concise attacker IP view
+
+- Restored vivid yellow dashboard resource rings and CPU/RAM/storage bars in readable two-column device cards, with measured coverage and missing-sensor states preserved.
+- Removed the three broad Detection coverage, Geo/ASN and Event volume panels from Attackers. Per-IP detail instead shows a localized country flag/name/code, ASN and network owner from the existing offline DB-IP lookup, including explicit private-IP and unavailable-database states. This is approximate source-IP network attribution, not a verified person or blocking rationale.
+- Reduced evidence to three concise collapsed entries initially; readers can expand an entry or show all. The underlying stored events, retention policy and detection logic are unchanged. Kept the Geo database update as a compact admin action.
+- Frontend production build/deployment and focused source/browser regressions passed, including desktop/mobile layouts and no write requests. No live vendor acceptance or device configuration change was claimed. Guide: docs/ATTACKER_IP_DISPLAY_FA.md.
+
 ## 2026-09-29 - Compact gold dashboard cards and corrected spacing
 
 - Moved the paged fleet resource cards into the former alert-trend position and removed that redundant trend chart and the old bottom fleet copy. Kept alert totals and latest findings.

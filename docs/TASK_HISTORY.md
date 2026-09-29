@@ -1,3 +1,10 @@
+## 2026-09-29 - Fleet yellow reference and simplified Attackers
+
+- Adjusted fleet cards to the reference's bright yellow ring and resource bars, preserving labels, sensor coverage and unknown states.
+- Removed three redundant informational cards and made the per-IP country/ASN area the focused place for network attribution. Added a local emoji flag and localized country name beside public source IPs; no third-party request is made for an individual IP.
+- Show three short latest evidence previews by default, expandable one-by-one or all together. Kept raw stored evidence intact and preserved retention. Admin Geo database update remains available in a small row.
+- Verified focused tests, intercepted Chromium at 1440/390/320px with no writes, frontend build and healthy web deployment. No vendor changes.
+
 ## 2026-09-29 - Dashboard density and placement correction
 
 - Replaced the dashboard's full-width alert-trend chart with compact, paged gold-toned fleet health cards and removed the bottom duplicate; retained alert totals/findings lists.

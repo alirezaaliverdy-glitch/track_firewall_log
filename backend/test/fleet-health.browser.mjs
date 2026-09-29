@@ -46,13 +46,13 @@ try {
   assert.ok((await page.$eval(".fleet-health",el=>el.textContent)).includes("منتظر دادهٔ معتبر"));
   assert.equal(await page.$$eval(".alert-trend-panel",items=>items.length),0);
   assert.equal(await page.$$eval(".fleet-controls button",items=>items.length),1);
-  assert.ok(await page.$eval(".fleet-summary-dial",el=>getComputedStyle(el).backgroundImage.includes("234, 191, 91")));
+  assert.ok(await page.$eval(".fleet-summary-dial",el=>getComputedStyle(el).backgroundImage.includes("251, 191, 36")));
   assert.ok(await page.$eval(".fleet-health",el=>el.closest(".command-primary-workspace")!==null));
   assert.ok(await page.$eval(".command-detail-grid .device-status-panel",el=>el.getBoundingClientRect().height<el.closest(".command-detail-grid").getBoundingClientRect().height));
   assert.ok(await page.$eval(".command-detail-grid .device-status-panel",el=>Math.abs(el.getBoundingClientRect().width-el.closest(".command-detail-grid").getBoundingClientRect().width)<2));
   assert.equal(await page.$eval(".command-side-stack",el=>getComputedStyle(el).gridTemplateColumns.split(" ").length),2);
-  assert.ok(await page.$eval(".fleet-summary",el=>el.getBoundingClientRect().height<260));
-  assert.equal(await page.$eval(".fleet-health-grid",el=>getComputedStyle(el).gridTemplateColumns.split(" ").length),3);
+  assert.ok(await page.$eval(".fleet-summary",el=>el.getBoundingClientRect().height<380));
+  assert.equal(await page.$eval(".fleet-health-grid",el=>getComputedStyle(el).gridTemplateColumns.split(" ").length),2);
   const top=await page.$eval(".platform-sidebar",el=>el.getBoundingClientRect().top);
   await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
   assert.ok(Math.abs(top-await page.$eval(".platform-sidebar",el=>el.getBoundingClientRect().top))<2);
@@ -110,5 +110,5 @@ try {
   assert.equal(await page.$$eval(".asset-live-grid .highcharts-container",items=>items.length),0);
   assert.ok(!await page.$eval(".asset-live-grid",el=>el.textContent.includes("NaN")));
   assert.deepEqual(errors,[]); assert.deepEqual(writes,[]);
-  console.log("Passed: compact gold rings in alert-trend slot, no empty stretched panel, six vendor detail charts, 1440/1024/390/320px, no motion controls, reduced motion, stale/empty data, pagination and no writes.");
+  console.log("Passed: bright yellow detailed rings in alert-trend slot, no empty stretched panel, six vendor detail charts, 1440/1024/390/320px, no motion controls, reduced motion, stale/empty data, pagination and no writes.");
 } finally { await browser.close(); }

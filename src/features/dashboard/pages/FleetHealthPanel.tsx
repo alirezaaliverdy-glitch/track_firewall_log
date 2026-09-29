@@ -37,13 +37,13 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       const current=(row?:Row)=>connected&&!!row?.fresh&&recent(row.measuredAt)&&row.value!==null;
       const disk=resource("disk.usage_percent"),storage=disk?.value!=null?disk:resource("datastore.usage_percent");
       const rows=[
-        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#eabf5b"},
-        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#d5ae53"},
-        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#bea052"}
+        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#fbbf24"},
+        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#fbbf24"},
+        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#fbbf24"}
       ];
       const coverage=rows.filter(item=>current(item.row)).length;
       const score=coverage&&connected&&Number.isFinite(device.score)?device.score:null;
-      const color=score===null?"#52687a":"#eabf5b";
+      const color=score===null?"#52687a":"#fbbf24";
       return <article className="fleet-device fleet-summary" key={device.id}>
         <header><div><h3>{device.name}</h3><span dir="ltr">{device.vendor} · {device.host}</span></div><span className={`fleet-status is-${state}`}><i/>{state==="online"?t("آنلاین","Online"):state==="offline"?t("آفلاین","Offline"):t("نامشخص","Unknown")}</span></header>
         <div className="fleet-summary-visual">

@@ -30,7 +30,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { createFindingActionPlan, getAttackerDetails, listAttackers, type AttackerDetails, type AttackerSummary, type AttackerListResponse } from "@/lib/platform";
 import { useAuth } from "@/context/AuthContext";
 import { createTrustedSourceIp, deleteTrustedSourceIp, listTrustedSourceIps, type TrustedSourceIp } from "@/lib/attackerAllowlist";
-import { getAttackerGeoStatus, getEventRetentionStatus, refreshAttackerGeo, type GeoStatus, type RetentionStatus } from "@/lib/attackerGeo";
+import { getAttackerGeoStatus, refreshAttackerGeo, type GeoStatus } from "@/lib/attackerGeo";
+import { countryInfo } from "./attackerCountry";
 import "./AttackersPage.css";
 
 const severityOrder = ["critical", "high", "medium", "low"];
@@ -78,12 +79,14 @@ function observedActionLabel(value: string, isFa: boolean) {
 }
 
 function AttackerCard({ attacker, selected, onSelect, isFa, locale }: { attacker: AttackerSummary; selected: boolean; onSelect: () => void; isFa: boolean; locale: string }) {
+  const country = countryInfo(attacker.enrichment.geo, locale);
   return (
     <button type="button" className={`attacker-card attacker-card--${attacker.severity} ${selected ? "is-selected" : ""}`} onClick={onSelect}>
       <span className="attacker-card__score"><strong>{attacker.riskScore.toLocaleString(locale)}</strong><small>{isFa ? "ریسک" : "risk"}</small></span>
       <span className="attacker-card__body">
         <span className="attacker-card__identity">
           <code dir="ltr">{attacker.ip}</code>
+          {country ? <span className="attacker-country" title={`${country.name} (${country.code})`}><span aria-hidden="true">{country.flag}</span>{country.name}</span> : null}
           <i>{severityLabel(attacker.severity, isFa)}</i>
           <i>{scopeLabel(attacker.scope, isFa)}</i>
           {attacker.assessment.bruteForceDetected ? <i className="is-bruteforce"><KeyRound />{isFa ? "Brute Force" : "Brute force"}</i> : null}
@@ -114,8 +117,11 @@ function DetailPanel({ attacker, loading, onClose, onRespond, responseBusy, resp
   isFa: boolean;
   locale: string;
 }) {
+  const [allEvidence, setAllEvidence] = useState(false);
+  useEffect(() => setAllEvidence(false), [attacker?.ip]);
   if (loading) return <aside className="attacker-detail"><LoadingState /></aside>;
   if (!attacker) return null;
+  const country = countryInfo(attacker.enrichment.geo, locale);
   const verdictTitle = attacker.assessment.verdict === "confirmed_threat"
     ? (isFa ? "تهدید توسط موتور امنیتی وندور تأیید شد" : "Threat confirmed by the vendor security engine")
     : attacker.assessment.verdict === "likely_attack"
@@ -219,11 +225,12 @@ function DetailPanel({ attacker, loading, onClose, onRespond, responseBusy, resp
       <section className="attacker-detail__section">
         <header><Database /><div><h3>{isFa ? "آخرین شواهد" : "Latest evidence"}</h3><p>{isFa ? "متن‌ها پیش از نمایش از نظر اطلاعات حساس پاک‌سازی شده‌اند" : "Evidence text is redacted before display"}</p></div></header>
         <div className="attacker-evidence-list">
-          {attacker.latestEvidence.length ? attacker.latestEvidence.map((event) => <article key={event.id}><header><span>{event.eventType}</span><time>{formatDate(event.timestamp, locale)}</time></header><code dir="ltr">{event.message || `${event.action ?? "event"} → ${event.dstIp ?? "target"}:${event.dstPort ?? "—"}`}</code><footer>{event.device?.name ?? event.asset?.name ?? (isFa ? "دارایی نامشخص" : "Unknown asset")} · {event.vendor ?? "unknown"}</footer></article>) : <p className="attacker-empty-inline">{isFa ? "رویداد خام نگهداری‌شده‌ای برای نمایش وجود ندارد؛ تشخیص بر پایه Finding ثبت‌شده معتبر است." : "No retained raw event is available; qualification remains backed by the stored finding."}</p>}
+          {attacker.latestEvidence.length ? attacker.latestEvidence.slice(0, allEvidence ? undefined : 3).map((event) => <article key={event.id}><header><span>{event.eventType}</span><time>{formatDate(event.timestamp, locale)}</time></header><details><summary>{(event.message || `${event.action ?? "event"} → ${event.dstIp ?? "target"}:${event.dstPort ?? "—"}`).slice(0, 140)}{(event.message?.length ?? 0) > 140 ? "…" : ""}</summary><code dir="ltr">{event.message || `${event.action ?? "event"} → ${event.dstIp ?? "target"}:${event.dstPort ?? "—"}`}</code></details><footer>{event.device?.name ?? event.asset?.name ?? (isFa ? "دارایی نامشخص" : "Unknown asset")} · {event.vendor ?? "unknown"}</footer></article>) : <p className="attacker-empty-inline">{isFa ? "رویداد خام نگهداری‌شده‌ای برای نمایش وجود ندارد؛ تشخیص بر پایه Finding ثبت‌شده معتبر است." : "No retained raw event is available; qualification remains backed by the stored finding."}</p>}
+          {attacker.latestEvidence.length > 3 ? <button className="attacker-evidence-more" type="button" onClick={() => setAllEvidence((value) => !value)}>{allEvidence ? (isFa ? "نمایش کمتر" : "Show less") : (isFa ? `نمایش همهٔ ${attacker.latestEvidence.length.toLocaleString(locale)} لاگ` : `Show all ${attacker.latestEvidence.length} logs`)}</button> : null}
         </div>
       </section>
 
-      <section className="attacker-enrichment-note"><Globe2 /><div><strong>{isFa ? "موقعیت شبکه و ASN" : "Network location and ASN"}</strong><p>{attacker.enrichment.status === "not_public" ? (isFa ? "IP عمومی نیست؛ مکان و ASN اینترنتی برای آن معنی ندارد." : "Not a public IP; internet Geo/ASN is not applicable.") : attacker.enrichment.status === "database_unavailable" ? (isFa ? "پایگاه آفلاین Geo/ASN آماده نیست؛ مدیر سامانه می‌تواند آن را دریافت کند." : "Offline Geo/ASN database is unavailable; an admin can install it.") : <>{attacker.enrichment.geo ? `${attacker.enrichment.geo.countryName} (${attacker.enrichment.geo.countryCode})` : (isFa ? "کشور نامشخص" : "Country unknown")} · {attacker.enrichment.asn ? `AS${attacker.enrichment.asn}` : "ASN —"} · {attacker.enrichment.networkOwner || (isFa ? "مالک شبکه نامشخص" : "Network owner unknown")}</>}</p><small>{isFa ? "کشور و ASN تقریبی‌اند؛ هویت فرد یا دلیل کافی برای مسدودسازی نیستند." : "Approximate network metadata, not a person's identity or a blocking reason."}</small></div></section>
+      <section className="attacker-enrichment-note" aria-label={isFa ? "اطلاعات شبکهٔ IP" : "IP network information"}><Globe2 /><div><strong>{isFa ? "کشور و شبکهٔ IP" : "IP country and network"}</strong>{attacker.enrichment.status === "not_public" ? <p>{isFa ? "IP داخلی یا غیرعمومی است؛ کشور اینترنتی ندارد." : "Private or non-public IP; no internet country applies."}</p> : attacker.enrichment.status === "database_unavailable" ? <p>{isFa ? "پایگاه مکان‌یابی نصب نشده؛ کشور و ASN هنوز معلوم نیست." : "The local Geo/ASN database is not installed."}</p> : <><p className="attacker-enrichment-note__country">{country ? <><span className="attacker-country-flag" aria-hidden="true">{country.flag}</span><b>{country.name}</b><code dir="ltr">{country.code}</code></> : <b>{isFa ? "کشور نامشخص" : "Country unknown"}</b>}</p><p className="attacker-enrichment-note__network"><span dir="ltr">{attacker.enrichment.asn ? `AS${attacker.enrichment.asn}` : "ASN —"}</span>{attacker.enrichment.networkOwner ? <span>{attacker.enrichment.networkOwner}</span> : null}</p></>}<small>{isFa ? "بر اساس IP مبدأ و پایگاه آفلاین DB-IP؛ تقریبی است و محل واقعی فرد را اثبات نمی‌کند." : "Based on the source IP and local DB-IP data; approximate, not a person's verified location."}</small></div></section>
     </aside>
   );
 }
@@ -255,10 +262,9 @@ export default function AttackersPage() {
   const [responseBusy, setResponseBusy] = useState("");
   const [responseError, setResponseError] = useState("");
   const [geoStatus,setGeoStatus]=useState<GeoStatus|null>(null);
-  const [retention,setRetention]=useState<RetentionStatus|null>(null);
   const [geoBusy,setGeoBusy]=useState(false);
   const [geoError,setGeoError]=useState(false);
-  useEffect(()=>{void getAttackerGeoStatus().then(setGeoStatus).catch(()=>setGeoError(true));void getEventRetentionStatus().then(setRetention).catch(()=>undefined);},[]);
+  useEffect(()=>{void getAttackerGeoStatus().then(setGeoStatus).catch(()=>setGeoError(true));},[]);
   const updateGeo=async()=>{setGeoBusy(true);setGeoError(false);try{setGeoStatus(await refreshAttackerGeo());load();if(selectedIp)openDetails(selectedIp);}catch{setGeoError(true);}finally{setGeoBusy(false);}};
 
   const load = useCallback(() => {
@@ -343,12 +349,6 @@ export default function AttackersPage() {
         <article className="is-bruteforce"><KeyRound /><span>{isFa ? "Brute Force شناسایی‌شده" : "Detected brute force"}</span><strong>{(data?.summary.bruteForce ?? 0).toLocaleString(locale)}</strong></article>
       </section>
 
-      <section className="attacker-operations" aria-label={isFa ? "وضعیت مرکز امنیت" : "Security center status"}>
-        <div><strong>{isFa ? "پوشش تشخیص" : "Detection coverage"}</strong><p>{isFa ? "همبستگی یافته‌ها و لاگ‌های دریافت‌شده؛ بدون لاگ یا IPS فعال، حملهٔ نامرئی قابل تشخیص نیست." : "Correlates received findings and logs; attacks without observable logs or IPS are not detectable."}</p></div>
-        <div><strong>Geo / ASN</strong><p>{geoStatus?.ready ? (isFa ? "پایگاه آفلاین آماده است؛ هر IP بدون درخواست بیرونی بررسی می‌شود." : "Offline database ready; no per-IP external lookup.") : (isFa ? "پایگاه آماده نیست." : "Database not ready.")}</p>{isAdmin&&<button type="button" disabled={geoBusy} onClick={()=>void updateGeo()}>{geoBusy?(isFa?"در حال دریافت…":"Downloading…"):(isFa?"دریافت/به‌روزرسانی پایگاه":"Update database")}</button>}{geoError&&<small role="alert">{isFa?"دریافت پایگاه ناموفق بود؛ تنظیم اتصال خروجی سرور را بررسی کنید.":"Database download failed; check server egress."}</small>}</div>
-        <div><strong>{isFa ? "حجم داده" : "Event volume"}</strong><p>{retention ? `${retention.totalEvents.toLocaleString(locale)} ${isFa?"رویداد ذخیره‌شده":"stored events"} · ${isFa?"سقف سیاست":"policy cap"} ${retention.maxRows.toLocaleString(locale)}` : (isFa?"سیاست نگهداری در دسترس نیست":"Retention status unavailable")}</p><small>{isFa?"فهرست زیر نمونهٔ محدود است؛ حذف دستیِ شواهد انجام نشده است.":"The list below is a bounded sample; no evidence was manually deleted."}</small></div>
-      </section>
-
       <section className="attacker-toolbar">
         <label className="attacker-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={isFa ? "جست‌وجوی IP، وندور، دستگاه یا نوع تهدید" : "Search IP, vendor, device, or threat"} /></label>
         <label><span>{isFa ? "وندور" : "Vendor"}</span><select value={vendor} onChange={(event) => setVendor(event.target.value)}><option value="all">{isFa ? "همه وندورها" : "All vendors"}</option>{vendors.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -378,6 +378,7 @@ export default function AttackersPage() {
         </section>
         {selectedIp ? <DetailPanel attacker={details} loading={detailsLoading} onClose={() => { setSelectedIp(""); setDetails(null); }} onRespond={(findingId) => void createResponsePreview(findingId)} responseBusy={responseBusy} responseError={responseError} isFa={isFa} locale={locale} /> : null}
       </div>
+      {isAdmin ? <div className="attacker-geo-setup"><Globe2 /><span>{geoStatus?.ready ? (isFa ? "اطلاعات کشور و ASN آماده است" : "Country and ASN data ready") : (isFa ? "اطلاعات کشور و ASN هنوز آماده نیست" : "Country and ASN data not ready")}</span><button type="button" disabled={geoBusy} onClick={() => void updateGeo()}>{geoBusy ? (isFa ? "در حال دریافت…" : "Updating…") : (isFa ? "به‌روزرسانی پایگاه" : "Update database")}</button>{geoError ? <small role="alert">{isFa ? "به‌روزرسانی ناموفق بود؛ دسترسی خروجی سرور را بررسی کنید." : "Update failed; check server egress."}</small> : null}</div> : null}
 
       <footer className="attacker-coverage"><Database /><span>{isFa ? "نمونهٔ بررسی‌شده" : "Scanned sample"}</span><strong>{(data?.coverage.findingsScanned ?? 0).toLocaleString(locale)} {isFa ? "یافته" : "findings"} · {(data?.coverage.eventsScanned ?? 0).toLocaleString(locale)} {isFa ? "ردیف رویداد" : "event rows"}</strong><small>{isFa ? `رویدادها: ${data?.coverage.eventWindowDays??30} روز اخیر؛ سقف ۱۰۰۰ ردیف. ${data?.coverage.eventSampleLimitReached?"سقف نمونه پر شده؛ نتایج ممکن است ناقص باشند.":""}` : `Events: last ${data?.coverage.eventWindowDays??30} days; 1000-row cap. ${data?.coverage.eventSampleLimitReached?"Sample cap reached; results may be incomplete.":""}`}</small><a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">IP Geolocation by DB-IP</a></footer>
     </section>
