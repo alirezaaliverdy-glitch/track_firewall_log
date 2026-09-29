@@ -1,3 +1,8 @@
+## 2026-09-29 - Dashboard Highcharts and sticky-sidebar refinement
+
+- Replaced large dials with four compact per-device plots, real histories, muted color palette, controlled animation and reduced-motion handling. Added honest collection-error guidance rather than showing absent sensors as zero. Fixed sticky sidebar by removing the unintended scroll-container ancestor (overflow:clip).
+- Fixed MikroTik RAM/storage projections and interface statistics parsing/explicit REST properties; added Cisco memory reads. Build/unit/browser verification and live read-only checks performed; ESXi credentials rejected by host, no host mutation or successful ESXi sensor collection claimed. Guide: docs/FLEET_CHART_REFINEMENT_FA.md.
+
 ## 2026-09-29 - Honest, automatically refreshed ports and connections
 
 - Fixed stale topology evidence being given page-read timestamps, legacy UFW rules surviving fresh empty collections, and failed listener commands being treated as successful inventories. Timestamped Linux live/security evidence is selected without merging closed ports; failed security-network reads cannot overwrite valid listeners. Non-Linux discovery retains last-success time and records failures separately. Failed discoveries do not delete interfaces or stamp old inventory as newly collected.

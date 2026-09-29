@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { parseMikroTikInterfaceCounters } from "./mikrotik-interface-counters.js";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
 import { SharedSshConnectionError, withSharedSsh } from "../services/shared-ssh-session.service.js";
@@ -57,7 +58,7 @@ const BASIC_COMMANDS = [
 ] as const;
 
 const READONLY_DISCOVERY_COMMANDS = [
-  "/interface print stats terse",
+  "/interface print stats-detail without-paging",
   "/ip firewall filter print terse",
   "/ip firewall nat print terse",
   "/ip firewall mangle print terse",
@@ -307,13 +308,10 @@ function discoveryFrom(results: Record<string, ExecResult>): MikroTikDiscovery {
     uptime: resource.uptime,
     cpuLoad: resource["cpu-load"],
     memoryFree: resource["free-memory"],
-    interfaceCounters: lines(results["/interface print stats terse"]?.stdout ?? "").flatMap((line) => {
-      const name = line.match(/(?:^|\s)name=([^\s]+)/)?.[1];
-      const rxBytes = Number(line.match(/(?:^|\s)rx-byte=(\d+)/)?.[1]);
-      const txBytes = Number(line.match(/(?:^|\s)tx-byte=(\d+)/)?.[1]);
-      return name && Number.isSafeInteger(rxBytes) && Number.isSafeInteger(txBytes) && rxBytes >= 0 && txBytes >= 0
-        ? [{ name, rxBytes, txBytes }] : [];
-    }),
+    memoryTotal: resource["total-memory"],
+    storageFree: resource["free-hdd-space"],
+    storageTotal: resource["total-hdd-space"],
+    interfaceCounters: parseMikroTikInterfaceCounters(results["/interface print stats-detail without-paging"]?.stdout ?? ""),
     interfaces: lines(results["/interface print terse"]?.stdout ?? ""),
     ipAddresses: lines(results["/ip address print terse"]?.stdout ?? ""),
     routes: lines(results["/ip route print terse"]?.stdout ?? ""),

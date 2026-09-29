@@ -1,3 +1,9 @@
+## 2026-09-29 - Compact fleet charts and sticky sidebar
+
+- Four compact real-data Highcharts per device, quiet palette, real-update animations with off/reduced-motion controls, missing/historical measurements visible; no synthetic telemetry or universal health-100 inference.
+- Fixed sticky sidebar's overflow-hidden ancestor with overflow:clip. Browser regression passed desktop/390/320px, sticky viewport coordinates, pagination, actual Highcharts rendering and no writes.
+- Added MikroTik measured total/free RAM/storage, valid SSH stats-detail and REST explicit byte-counter reads; Cisco processor-pool RAM. Focused 8 sensor/projection tests passed. Live ESXi SSH authentication fails; sensor completeness cannot be claimed until stored credentials are corrected. No credentials or configuration changed.
+
 ## 2026-09-29 - Honest, automatically refreshed ports and connections
 
 - Fixed stale topology evidence being given page-read timestamps, legacy UFW rules surviving fresh empty collections, and failed listener commands being treated as successful inventories. Timestamped Linux live/security evidence is selected without merging closed ports; failed security-network reads cannot overwrite valid listeners. Non-Linux discovery retains last-success time and records failures separately. Failed discoveries do not delete interfaces or stamp old inventory as newly collected.

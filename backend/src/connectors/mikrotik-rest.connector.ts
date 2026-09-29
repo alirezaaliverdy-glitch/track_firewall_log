@@ -142,7 +142,7 @@ async function optional(device: Device, path: string, warnings: DeviceConnection
 }
 
 async function discover(device: Device, warnings: DeviceConnectionTestResult["warnings"]): Promise<MikroTikDiscovery> {
-  const [identityValue, resourceValue, packagesValue, interfacesValue, addressesValue, routesValue, filtersValue, natValue, mangleValue, listsValue, servicesValue, logsValue] = await Promise.all([
+  const [identityValue, resourceValue, packagesValue, interfacesValue, addressesValue, routesValue, filtersValue, natValue, mangleValue, listsValue, servicesValue, logsValue, interfaceStats] = await Promise.all([
     requestJson(device, "/rest/system/identity"),
     requestJson(device, "/rest/system/resource"),
     optional(device, "/rest/system/package", warnings),
@@ -154,7 +154,8 @@ async function discover(device: Device, warnings: DeviceConnectionTestResult["wa
     optional(device, "/rest/ip/firewall/mangle", warnings),
     optional(device, "/rest/ip/firewall/address-list", warnings),
     optional(device, "/rest/ip/service", warnings),
-    optional(device, "/rest/log", warnings)
+    optional(device, "/rest/log", warnings),
+    optional(device, "/rest/interface?.proplist=name,rx-byte,tx-byte", warnings)
   ]);
   const identity = rows(identityValue)[0] ?? {};
   const resource = rows(resourceValue)[0] ?? {};
@@ -167,7 +168,10 @@ async function discover(device: Device, warnings: DeviceConnectionTestResult["wa
     uptime: String(resource.uptime ?? "") || undefined,
     cpuLoad: String(resource["cpu-load"] ?? "") || undefined,
     memoryFree: String(resource["free-memory"] ?? "") || undefined,
-    interfaceCounters: rows(interfacesValue).flatMap((item) => {
+    memoryTotal: String(resource["total-memory"] ?? "") || undefined,
+    storageFree: String(resource["free-hdd-space"] ?? "") || undefined,
+    storageTotal: String(resource["total-hdd-space"] ?? "") || undefined,
+    interfaceCounters: rows(interfaceStats).flatMap((item) => {
       const name = String(item.name ?? "").trim();
       const rxBytes = Number(item["rx-byte"]);
       const txBytes = Number(item["tx-byte"]);

@@ -139,6 +139,9 @@ export type MikroTikDiscovery = {
   uptime?: string;
   cpuLoad?: string;
   memoryFree?: string;
+  memoryTotal?: string;
+  storageFree?: string;
+  storageTotal?: string;
   interfaceCounters?: Array<{ name: string; rxBytes: number; txBytes: number }>;
   interfaces: string[];
   ipAddresses: string[];

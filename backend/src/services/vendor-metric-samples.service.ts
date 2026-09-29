@@ -3,6 +3,17 @@ import type { DeviceConnectionTestResult } from "../connectors/types.js";
 import { prisma } from "../db/prisma.js";
 
 type Measurement = { metricKey: string; value: number; unit: string; labels?: Record<string, string> };
+export function routerOsBytes(value: unknown) {
+  const match = String(value ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*(B|KiB|MiB|GiB|TiB)?$/i);
+  if (!match) return null;
+  const power = ({ b:0, kib:1, mib:2, gib:3, tib:4 } as Record<string,number>)[(match[2] ?? "B").toLowerCase()];
+  const bytes = Number(match[1]) * 1024 ** power;
+  return Number.isFinite(bytes) ? bytes : null;
+}
+function usedPercent(freeValue: unknown, totalValue: unknown) {
+  const free = routerOsBytes(freeValue), total = routerOsBytes(totalValue);
+  return free !== null && total !== null && total > 0 && free <= total ? (1-free/total)*100 : null;
+}
 function numeric(value: unknown) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   const number = typeof value === "number" ? value : Number(String(value ?? "").replace(/%$/, ""));
@@ -32,6 +43,8 @@ export function vendorMeasurements(result: DeviceConnectionTestResult): Measurem
   }
   if (result.mikrotik) {
     add(measurements, "cpu.usage_percent", result.mikrotik.cpuLoad, "percent");
+    add(measurements, "memory.usage_percent", usedPercent(result.mikrotik.memoryFree,result.mikrotik.memoryTotal), "percent");
+    add(measurements, "disk.usage_percent", usedPercent(result.mikrotik.storageFree,result.mikrotik.storageTotal), "percent");
     for (const item of result.mikrotik.interfaceCounters?.slice(0, 32) ?? []) {
       add(measurements, "network.rx_bytes", item.rxBytes, "bytes", { interface: item.name });
       add(measurements, "network.tx_bytes", item.txBytes, "bytes", { interface: item.name });
@@ -82,6 +95,9 @@ export function ciscoMeasurements(outputs: Record<string, string>): Measurement[
   const measurements: Measurement[] = [];
   const cpu = outputs.cpu?.match(/five seconds:\s*(\d+)%/i)?.[1];
   add(measurements, "cpu.usage_percent", cpu, "percent");
+  const memory = outputs.memory?.match(/Processor\s+Pool\s+Total:\s*(\d+)\s+Used:\s*(\d+)\s+Free:\s*(\d+)/i);
+  if (memory && Number(memory[1]) > 0 && Number(memory[2]) <= Number(memory[1]))
+    add(measurements, "memory.usage_percent", Number(memory[2])/Number(memory[1])*100, "percent", {pool:"processor"});
   const sections = (outputs.interfacesDetailed ?? "").split(/(?=^\S+\s+is\s+(?:up|down|administratively down)\b)/gim);
   for (const section of sections.slice(0, 32)) {
     const name = section.match(/^(\S+)\s+is\s+(?:up|down|administratively down)/im)?.[1];

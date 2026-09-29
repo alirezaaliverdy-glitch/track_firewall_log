@@ -16,7 +16,7 @@ body {
 }
 
 /* Authenticated command center */
-.authenticated-app { position: relative; min-height: 100vh; isolation: isolate; overflow: hidden; background: #07111a; }
+.authenticated-app { position: relative; min-height: 100vh; isolation: isolate; overflow: clip; background: #07111a; }
 .app-background { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: radial-gradient(circle at 12% 8%,rgba(12,92,126,.16),transparent 30rem),radial-gradient(circle at 88% 30%,rgba(54,124,255,.1),transparent 36rem),linear-gradient(145deg,#07111a,#050c14 60%,#080d19); }
 .app-background__grid { position:absolute;inset:-80px;opacity:.12;background-image:linear-gradient(rgba(44,230,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(44,230,255,.12) 1px,transparent 1px);background-size:72px 72px;mask-image:linear-gradient(to bottom,#000,transparent 88%);animation:app-grid-drift 40s linear infinite; }
 .app-background__glow { position:absolute;border-radius:50%;filter:blur(90px);opacity:.18;will-change:transform,opacity; }
