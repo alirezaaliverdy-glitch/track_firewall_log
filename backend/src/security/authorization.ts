@@ -32,6 +32,7 @@ export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "DELETE", path: "/api/reports/company-status/history", permission: "users.manage" },
   { method: "DELETE", path: "/api/admin/companies/:id/permanent", permission: "users.manage" },
   { method: "POST", path: "/api/security/attackers-allowlist", permission: "security.policy.manage" },
+  { method: "POST", path: "/api/security/attackers-geoip/refresh", permission: "security.policy.manage" },
   { method: "DELETE", path: "/api/security/attackers-allowlist/:id", permission: "security.policy.manage" },
   { method: "POST", path: "/api/action-sessions/start", permission: "actions.propose" },
   { method: "POST", path: "/api/action-sessions/:id/answers", permission: "actions.propose" },

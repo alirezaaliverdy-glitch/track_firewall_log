@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { lookupAttackerGeo } from "./attacker-geoip.service.js";
 import type { Finding, SecurityEvent } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { redactForPersistence, redactText } from "../security/redaction.js";
@@ -8,8 +9,9 @@ import { authenticationFailureService, isAuthenticationFailureEvent } from "../s
 
 const CLOSED_FINDING_STATUSES = ["resolved", "false_positive", "accepted_risk", "suppressed"];
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 88, high: 70, medium: 48, low: 28, info: 12 };
-const EVENT_SAMPLE_LIMIT = 5_000;
+const EVENT_SAMPLE_LIMIT = 1_000;
 const FINDING_LIMIT = 2_000;
+const EVENT_WINDOW_DAYS = 30;
 
 type FindingWithContext = Finding & {
   device: { id: string; name: string; vendor: string; host: string; type: string };
@@ -22,6 +24,7 @@ type EventWithContext = SecurityEvent & {
 };
 
 export type AttackerFilters = {
+  ownerId?: string;
   query?: string;
   vendor?: string;
   deviceId?: string;
@@ -289,13 +292,8 @@ function buildAttacker(ip: string, findings: FindingWithContext[], events: Event
     assessment,
     attackFamilies: [...families.values()].sort((left, right) => (SEVERITY_WEIGHT[right.severity.toLowerCase()] ?? 0) - (SEVERITY_WEIGHT[left.severity.toLowerCase()] ?? 0)),
     responseReadiness,
-    latestEvidence: latestEvents.slice(0, includeDetails ? 100 : 3).map(mapEvidenceEvent),
-    enrichment: {
-      status: "local_telemetry_only",
-      geo: null,
-      asn: null,
-      networkOwner: null
-    },
+    latestEvidence: latestEvents.slice(0, includeDetails ? 20 : 3).map(mapEvidenceEvent),
+    enrichment: { status: "local_telemetry_only", geo: null, asn: null, networkOwner: null },
     ...(includeDetails ? { findings: findings.map(mapFinding) } : {})
   };
 }
@@ -305,6 +303,7 @@ async function loadAttackers(filters: AttackerFilters, exactIp?: string) {
   const deviceId = normalize(filters.deviceId);
   const findingWhere = {
     srcIp: exactIp ? exactIp : { not: null },
+    ...(filters.ownerId ? { device: { company: { ownerId: filters.ownerId, deletedAt: null }, deletedAt: null } } : {}),
     ...(!filters.includeResolved ? { status: { notIn: CLOSED_FINDING_STATUSES } } : {}),
     ...(vendor ? { vendor: { equals: vendor, mode: "insensitive" as const } } : {}),
     ...(deviceId ? { deviceId } : {})
@@ -335,6 +334,8 @@ async function loadAttackers(filters: AttackerFilters, exactIp?: string) {
   const candidateEvents = await prisma.securityEvent.findMany({
     where: {
       srcIp: { in: ips },
+      receivedAt: { gte: new Date(Date.now() - EVENT_WINDOW_DAYS * 86_400_000) },
+      ...(filters.ownerId ? { device: { company: { ownerId: filters.ownerId, deletedAt: null }, deletedAt: null } } : {}),
       ...(deviceId ? { deviceId } : {}),
       ...(vendor ? { vendor: { equals: vendor, mode: "insensitive" as const } } : {})
     },
@@ -361,7 +362,8 @@ export async function listAttackers(filters: AttackerFilters = {}) {
     if (bucket) bucket.push(event);
     else eventsByIp.set(event.srcIp, [event]);
   }
-  const attackers = loaded.ips.map((ip) => buildAttacker(ip, loaded.findingsByIp.get(ip) ?? [], eventsByIp.get(ip) ?? [], false)).filter((attacker) => {
+  const enriched = await Promise.all(loaded.ips.map(async ip => ({...buildAttacker(ip,loaded.findingsByIp.get(ip)??[],eventsByIp.get(ip)??[],false),enrichment:await lookupAttackerGeo(ip)})));
+  const attackers = enriched.filter((attacker) => {
     if (severity && attacker.severity !== severity) return false;
     if (scope && attacker.scope !== scope) return false;
     if (!query) return true;
@@ -392,7 +394,9 @@ export async function listAttackers(filters: AttackerFilters = {}) {
       eventsScanned: loaded.events.length,
       findingLimitReached: loaded.findings.length >= FINDING_LIMIT,
       eventSampleLimitReached: loaded.events.length >= EVENT_SAMPLE_LIMIT,
-      enrichment: "local_telemetry_only"
+      enrichment: "local_mmdb_optional",
+      eventWindowDays: EVENT_WINDOW_DAYS,
+      sampled: true
     },
     attackers
   };
@@ -407,6 +411,6 @@ export async function getAttackerDetails(ip: string, filters: AttackerFilters = 
   return {
     generatedAt: new Date(),
     qualification: "actionable_open_security_finding_with_valid_source_ip",
-    attacker: buildAttacker(normalizedIp, findings, loaded.events.filter((event) => event.srcIp === normalizedIp), true)
+    attacker: {...buildAttacker(normalizedIp, findings, loaded.events.filter((event) => event.srcIp === normalizedIp), true), enrichment:await lookupAttackerGeo(normalizedIp)}
   };
 }

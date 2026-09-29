@@ -59,9 +59,17 @@ test("every implemented command creates a plan or explicitly requests input; man
   const mikrotik = await prisma.device.create({ data: { name: "Task 14.1 all MikroTik", vendor: "MikroTik", type: "mikrotik", host: "192.0.2.145", managementPort: 22, protocol: "ssh", environment: "lab" } });
   const fortigate = await prisma.device.create({ data: { name: "Task 17 FortiGate", vendor: "FortiGate", type: "fortigate", host: "192.0.2.146", managementPort: 22, protocol: "ssh", environment: "lab" } });
   const cisco = await prisma.device.create({ data: { name: "Task operator Cisco", vendor: "Cisco", type: "generic_firewall", host: "192.0.2.147", managementPort: 22, protocol: "ssh", environment: "lab" } });
-  t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: { in: [linux.id, mikrotik.id, fortigate.id, cisco.id] } } }); await prisma.device.deleteMany({ where: { id: { in: [linux.id, mikrotik.id, fortigate.id, cisco.id] } } }); await app.close(); });
+  const sophos = await prisma.device.create({ data: { name: "Task operator Sophos", vendor: "Sophos", type: "generic_firewall", host: "192.0.2.148", managementPort: 4444, protocol: "api", environment: "lab" } });
+  const esxi = await prisma.device.create({ data: { name: "Task operator ESXi", vendor: "ESXi", type: "esxi", host: "192.0.2.149", managementPort: 443, protocol: "api", environment: "lab" } });
+  const deviceIds = [linux.id, mikrotik.id, fortigate.id, cisco.id, sophos.id, esxi.id];
+  t.after(async () => { await prisma.actionPlan.deleteMany({ where: { deviceId: { in: deviceIds } } }); await prisma.device.deleteMany({ where: { id: { in: deviceIds } } }); await app.close(); });
   for (const item of COMMAND_CATALOG.filter((entry) => entry.implementationState === "implemented")) {
-    const response = await app.inject({ method: "POST", url: `/api/commands/catalog/${item.id}/create-action-plan`, payload: { deviceId: item.vendor === "linux" ? linux.id : item.vendor === "fortigate" ? fortigate.id : item.vendor === "cisco" ? cisco.id : mikrotik.id, params: {} } });
+    const response = await app.inject({ method: "POST", url: `/api/commands/catalog/${item.id}/create-action-plan`, payload: { deviceId: item.vendor === "linux" ? linux.id : item.vendor === "fortigate" ? fortigate.id : item.vendor === "cisco" ? cisco.id : item.vendor === "sophos" ? sophos.id : item.vendor === "esxi" ? esxi.id : mikrotik.id, params: {} } });
+    if (["sophos.create-ipsec-tunnel", "fortigate.guided-ipsec-site-to-site"].includes(item.id)) {
+      assert.equal(response.statusCode, 409, item.id);
+      assert.equal(response.json().error, "GUIDED_VPN_REQUIRED", item.id);
+      continue;
+    }
     assert.ok([201, 422].includes(response.statusCode), `${item.id}:${response.statusCode}:${response.body}`);
     if (response.statusCode === 201) assert.equal(response.json().status, "proposed", item.id);
   }

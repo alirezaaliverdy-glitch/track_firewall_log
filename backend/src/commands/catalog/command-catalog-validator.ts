@@ -29,7 +29,7 @@ export function validateCommandCatalog(items: readonly CommandCatalogItem[]) {
       else if (template.actionType !== item.actionType || template.connectorType !== item.connectorType) errors.push(`${prefix}: template/action/connector mismatch`);
       else {
         const connectorVendor = template.connectorType === "linux-ssh" ? "linux_edge" : template.connectorType === "fortigate-ssh" ? "fortigate" : template.connectorType === "cisco-ios-xe-ssh" ? "cisco" : template.connectorType === "sophos-api" ? "sophos" : template.connectorType === "esxi-soap" ? "esxi" : "mikrotik";
-        const connector = getDeviceConnectors().find((candidate) => candidate.name === connectorVendor);
+        const connector = getDeviceConnectors().find((candidate) => candidate.name === connectorVendor && candidate.supportedActions.includes(item.actionType as ActionType));
         const planner = getVendorPlanners().find((candidate) => candidate.vendor === connectorVendor);
         if (!connector?.supportedActions.includes(item.actionType as ActionType)) errors.push(`${prefix}: action is absent from real connector`);
         if (!planner?.supportedActions.includes(item.actionType as ActionType)) errors.push(`${prefix}: action is absent from real planner`);

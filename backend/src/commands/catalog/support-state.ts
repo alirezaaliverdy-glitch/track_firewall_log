@@ -102,7 +102,9 @@ function missingChecks(item: Pick<CommandCatalogItem, "actionType" | "connectorT
   if (!template || template.actionType !== item.actionType || template.connectorType !== item.connectorType) missing.push("template");
 
   const vendor = connectorVendor(item.connectorType);
-  const connector = vendor ? getDeviceConnectors().find((candidate) => candidate.name === vendor) : null;
+  // One vendor can have a read-only connector before its SSH action connector.
+  // Verification must require an actual handler, not the first registry entry.
+  const connector = vendor ? getDeviceConnectors().find((candidate) => candidate.name === vendor && candidate.supportedActions.includes(item.actionType as ActionType)) : null;
   const planner = vendor ? getVendorPlanners().find((candidate) => candidate.vendor === vendor) : null;
   const actionType = item.actionType as ActionType;
   if (!connector?.supportedActions.includes(actionType) || !planner?.supportedActions.includes(actionType)) missing.push("connector");

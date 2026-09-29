@@ -261,7 +261,7 @@ export type AttackerSummary = {
     interfaceOut: string | null;
   }>;
   latestEvidence: AttackerEvidenceEvent[];
-  enrichment: { status: "local_telemetry_only"; geo: null; asn: null; networkOwner: null };
+  enrichment: { status: "dbip_lite" | "database_unavailable" | "not_found" | "not_public" | "local_telemetry_only"; geo: {countryCode:string;countryName:string}|null; asn: number|null; networkOwner: string|null };
 };
 
 export type AttackerDetails = AttackerSummary & {
@@ -289,7 +289,7 @@ export type AttackerListResponse = {
   generatedAt: string;
   qualification: string;
   summary: { total: number; critical: number; high: number; public: number; private: number; affectedDevices: number; affectedAssets: number; vendors: string[]; confirmed: number; contained: number; bruteForce: number; fortigate: number; linux: number };
-  coverage: { findingsScanned: number; eventsScanned: number; findingLimitReached: boolean; eventSampleLimitReached: boolean; enrichment: string };
+  coverage: { findingsScanned: number; eventsScanned: number; findingLimitReached: boolean; eventSampleLimitReached: boolean; enrichment: string; eventWindowDays?:number; sampled?:boolean };
   attackers: AttackerSummary[];
 };
 

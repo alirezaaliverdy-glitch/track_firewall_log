@@ -13,6 +13,7 @@ import { mockWazuhAssets, mockWazuhEvents, mockWazuhHealth } from "../integratio
 import { applyAssetImport, previewAssetImport } from "../assets/asset-intelligence.service.js";
 import { getFindingEvidence, listPublicVendorTelemetryProfiles } from "../services/finding-evidence.service.js";
 import { getAttackerDetails, listAttackers } from "../services/attacker-intelligence.service.js";
+  import { getAttackerGeoStatus, refreshAttackerGeoDatabase } from "../services/attacker-geoip.service.js";
 import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityEmailAlertSettings, sendSecurityEmailTest, sendSecurityVendorEmailTests, updateSecurityEmailAlertSettings } from "../services/security-alert-email.service.js";
 import { getSecurityMonitorStatus } from "../services/security-monitor.service.js";
 import { createTrustedSourceIp, deleteTrustedSourceIp, listTrustedSourceIps, TRUSTED_SOURCE_VENDORS } from "../services/trusted-source-ip.service.js";
@@ -34,6 +35,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { query?: string; vendor?: string; deviceId?: string; severity?: string; scope?: string; includeResolved?: string } }>("/api/security/attackers", async (request) => {
     return listAttackers({
       ...request.query,
+      ownerId: request.authUser?.id,
       includeResolved: request.query?.includeResolved === "true"
     });
   });
@@ -41,9 +43,17 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { ip: string }; Querystring: { vendor?: string; deviceId?: string; includeResolved?: string } }>("/api/security/attackers/:ip", async (request, reply) => {
     const result = await getAttackerDetails(request.params.ip, {
       ...request.query,
+      ownerId: request.authUser?.id,
       includeResolved: request.query?.includeResolved === "true"
     });
     return result ?? reply.code(404).send({ error: "Qualified attacker IP not found" });
+  });
+
+  app.get("/api/security/attackers-geoip/status", async () => getAttackerGeoStatus());
+  app.post("/api/security/attackers-geoip/refresh", async (request,reply) => {
+    if(request.authUser?.role!=="admin")return reply.code(403).send({error:"ADMIN_REQUIRED"});
+    try{return await refreshAttackerGeoDatabase();}
+    catch{return reply.code(502).send({error:"GEOIP_UPDATE_FAILED"});}
   });
 
   app.get("/api/security/attackers-allowlist", async (request, reply) => {
