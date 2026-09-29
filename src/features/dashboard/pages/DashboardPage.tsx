@@ -42,15 +42,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import "./DashboardPage.css";
 import "./DashboardCommandCenter.css";
 
@@ -185,11 +176,6 @@ const PORT_SERVICES: Record<string, string> = {
 
 function portService(port: string, isFa: boolean) {
   return PORT_SERVICES[port] ?? copy(isFa, "سرویس سفارشی", "Custom service");
-}
-
-function TrendTooltip({ active, payload, label, isFa, language }: { active?: boolean; payload?: Array<{ name?: string; value?: number; color?: string }>; label?: string; isFa: boolean; language: string }) {
-  if (!active || !payload?.length) return null;
-  return <div className="command-chart-tooltip"><strong>{label}</strong>{payload.map((item) => <span key={item.name} style={{ color: item.color }}><i style={{ background: item.color }} />{item.name}: {number(item.value ?? 0, language)}</span>)}<small>{copy(isFa, "بر پایه زمان آخرین مشاهده یافته‌ها", "Based on finding last-seen time")}</small></div>;
 }
 
 function buildFindingTrend(findings: SecurityFinding[], isFa: boolean) {
@@ -398,13 +384,7 @@ export default function DashboardPage() {
         </Link>)}</div>
       </article> : null}
 
-      <article className="command-panel alert-trend-panel">
-        <header className="command-panel-heading"><div><span className="command-panel__icon"><Activity /></span><div><h2>{copy(isFa, "روند هشدارها", "Alert trend")}</h2><p>{copy(isFa, "یافته‌های باز بر اساس آخرین مشاهده در ۲۴ ساعت گذشته", "Open findings by last-seen time over 24 hours")}</p></div></div><Link to="/security/findings">{copy(isFa, "همه یافته‌ها", "All findings")}<ArrowUpLeft size={14} /></Link></header>
-        <div className="alert-trend-chart" dir="ltr">
-          <ResponsiveContainer width="100%" height="100%"><BarChart data={trend} barCategoryGap="25%"><CartesianGrid vertical={false} stroke="rgba(110,145,170,.13)" strokeDasharray="3 5" /><XAxis dataKey="label" tick={{ fill: "#617b8e", fontSize: 11 }} tickLine={false} axisLine={false} /><YAxis allowDecimals={false} tick={{ fill: "#617b8e", fontSize: 11 }} tickLine={false} axisLine={false} /><Tooltip cursor={{ fill: "rgba(56,189,248,.035)" }} content={<TrendTooltip isFa={isFa} language={language} />} /><Bar dataKey="critical" name={copy(isFa, "بحرانی", "Critical")} stackId="alerts" fill="#fb5d77" radius={[3, 3, 0, 0]} /><Bar dataKey="high" name={copy(isFa, "مهم", "High")} stackId="alerts" fill="#ff9f43" /><Bar dataKey="medium" name={copy(isFa, "هشدار", "Medium")} stackId="alerts" fill="#8b6df6" /><Bar dataKey="low" name={copy(isFa, "اطلاع", "Low")} stackId="alerts" fill="#3bbbd4" radius={[3, 3, 0, 0]} /></BarChart></ResponsiveContainer>
-        </div>
-        <div className="alert-trend-legend"><span><i className="is-critical" />{copy(isFa, "بحرانی", "Critical")}</span><span><i className="is-high" />{copy(isFa, "مهم", "High")}</span><span><i className="is-medium" />{copy(isFa, "هشدار", "Medium")}</span><span><i className="is-info" />{copy(isFa, "اطلاع", "Low")}</span></div>
-      </article>
+      <FleetHealthPanel isFa={isFa} />
 
       <div className="command-detail-grid">
         <article className="command-panel device-status-panel">
@@ -448,7 +428,6 @@ export default function DashboardPage() {
         <article className="command-panel recent-actions-panel"><header className="command-panel-heading"><div><span className="command-panel__icon"><CheckCircle2 /></span><div><h2>{copy(isFa, "آخرین اجراها", "Recent executions")}</h2><p>{copy(isFa, "ردپای واقعی Action Center", "Real Action Center trail")}</p></div></div><Link to="/actions">{copy(isFa, "مرکز اقدام", "Action Center")}<ArrowUpLeft size={14} /></Link></header><ActionRows items={activity?.recentExecutions ?? []} language={language} isFa={isFa} /></article>
       </div>
 
-      <FleetHealthPanel isFa={isFa} />
     </section>
   );
 }

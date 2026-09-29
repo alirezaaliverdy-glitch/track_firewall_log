@@ -390,7 +390,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   }
 
   const latestFailure = verification?.history.find((attempt) => !attempt.connected && Boolean(attempt.error));
-  const connectionTone = verification?.connected ? "connected" : verification?.error ? "failed" : "unknown";
+  const currentFailure = verification?.connected ? null : verification?.error;
+  const connectionTone = verification?.connected ? "connected" : currentFailure ? "failed" : "unknown";
   const pages = Math.max(1, Math.ceil(total / 10));
   const currentPage = Math.floor(offset / 10) + 1;
   const selectedActionName = selected ? actionDisplayName(selected, isFa) : "";
@@ -442,11 +443,11 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
       {!selected && <div className="operations-compose-grid">
       <section className={`operator-connection operator-connection--${connectionTone}`} aria-label={copy.connection}>
         <header>
-          <div><p className="operator-eyebrow">{isFa ? "آمادگی اجرا" : "Execution readiness"}</p><h2>{!selectedDevice ? (isFa ? "یک دستگاه انتخاب کنید" : "Select a device") : verification?.connected ? copy.connected : verification?.error ? copy.failed : copy.notTested}</h2><span>{!selectedDevice ? (isFa ? "پس از انتخاب دستگاه، وضعیت واقعی اتصال اینجا نمایش داده می‌شود." : "Live connection readiness appears here after selecting a device.") : copy.connectionHelp}</span></div>
+          <div><p className="operator-eyebrow">{isFa ? "آمادگی اجرا" : "Execution readiness"}</p><h2>{!selectedDevice ? (isFa ? "یک دستگاه انتخاب کنید" : "Select a device") : verification?.connected ? copy.connected : currentFailure ? copy.failed : copy.notTested}</h2><span>{!selectedDevice ? (isFa ? "پس از انتخاب دستگاه، وضعیت واقعی اتصال اینجا نمایش داده می‌شود." : "Live connection readiness appears here after selecting a device.") : copy.connectionHelp}</span></div>
           <div className="operator-connection__actions">
             <button className="secondary-button" type="button" disabled={!selectedDevice || !credentialId || connectionBusy} onClick={() => void runConnection(false)}>{connectionBusy ? copy.testing : copy.test}</button>
             <button className="secondary-button" type="button" disabled={!selectedDevice || connectionBusy} onClick={() => void refreshConnection()}>{copy.refresh}</button>
-            {verification?.error && <button className="primary-button" type="button" disabled={connectionBusy} onClick={() => void runConnection(true)}>{copy.retry}</button>}
+            {currentFailure && <button className="primary-button" type="button" disabled={connectionBusy} onClick={() => void runConnection(true)}>{copy.retry}</button>}
           </div>
         </header>
         {selectedDevice && <div className="operator-device-identity"><span>{selectedDevice.name}</span><strong dir="ltr">{selectedDevice.host}</strong><small>{selectedDevice.vendor} · {selectedDevice.protocol}</small></div>}
@@ -457,7 +458,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
           <div><span>{copy.ssh}</span><strong>{verification?.sshReachability ?? "unknown"}</strong></div>
           <div><span>{copy.auth}</span><strong>{verification?.authenticationStatus ?? "unknown"}</strong></div>
         </div>}
-        {verification?.error && <div className="operator-connection__error" role="alert">{verification.error}</div>}
+        {currentFailure && <div className="operator-connection__error" role="alert">{currentFailure}</div>}
       </section>
 
       <section className="operator-run-card" aria-label={copy.operatorAction}>

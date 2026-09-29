@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Activity, Cpu, MemoryStick, Network } from "lucide-react";
 import { AssetMiniChart } from "./AssetMiniChart";
 import { orderedReadings, type Reading } from "./assetChartData";
@@ -12,7 +11,6 @@ type Props = {
 };
 
 export function AssetLiveCharts({ cpu, memory, availability, traffic, connection, isFa, refreshFailed = false }: Props) {
-  const [motion, setMotion] = useState(true);
   const locale = isFa ? "fa-IR" : "en-US", t = (fa: string, en: string) => isFa ? fa : en;
   const percent = (points: Reading[]) => orderedReadings(points.filter(p => p.value >= 0 && p.value <= 100));
   const rate = (points: Reading[]) => orderedReadings(points.filter(p => p.value >= 0));
@@ -26,8 +24,8 @@ export function AssetLiveCharts({ cpu, memory, availability, traffic, connection
     { key: "traffic", title: t("ترافیک عبوری", "Network traffic"), icon: Network, unit: "Mbps", series: [{ name: t("دریافت", "RX"), color: "#88b5bf", points: resources.rx }, { name: t("ارسال", "TX"), color: "#c9b387", points: resources.tx }] },
     { key: "availability", title: t("دسترسی دستگاه", "Device availability"), icon: Activity, unit: "", series: [{ name: t("دسترسی", "Availability"), color: "#94bea9", points: states }] }
   ];
-  return <div className="asset-live-charts" data-motion={motion}>
-    <div className="asset-live-toolbar"><span>{t("CPU و حافظه: درصد مصرف · ترافیک: Mbps", "CPU & RAM: utilization % · traffic: Mbps")}</span><button type="button" aria-pressed={motion} onClick={() => setMotion(v => !v)}>{t("انیمیشن", "Animation")}: {motion ? t("روشن", "On") : t("خاموش", "Off")}</button></div>
+  return <div className="asset-live-charts" data-motion="true">
+    <div className="asset-live-toolbar"><span>{t("CPU و حافظه: درصد مصرف · ترافیک: Mbps", "CPU & RAM: utilization % · traffic: Mbps")}</span></div>
     <div className="asset-live-grid">{plots.map(plot => {
       const latest = orderedReadings(plot.series.flatMap(s => s.points)).at(-1);
       const recent = !!latest && Date.now() - Date.parse(latest.timestamp) <= 300_000 && Date.parse(latest.timestamp) <= Date.now() + 30_000;
@@ -37,7 +35,7 @@ export function AssetLiveCharts({ cpu, memory, availability, traffic, connection
       return <article key={plot.key} className={`asset-live-metric ${live ? "is-live" : ""}`}>
         <header><span><Icon size={17} aria-hidden="true" />{plot.title}</span>{plot.unit === "Mbps" && <small>Mbps</small>}</header>
         <div className="asset-live-reading">{plot.key === "traffic" ? <div className="asset-live-rates">{plot.series.map(s => <span key={s.name}><i style={{ background: s.color }} />{s.name}<strong>{number(s.points.at(-1)?.value, "Mbps")}</strong></span>)}</div> : <strong>{value}</strong>}</div>
-        {latest ? <AssetMiniChart title={plot.title} series={plot.series} unit={plot.unit} binary={plot.key === "availability"} motion={motion && live} locale={locale} /> : <div className="asset-live-empty">{t("هنوز دادهٔ معتبر نداریم", "No verified readings yet")}<small>{t("اتصال و مجوز خواندن سنسورها را بررسی کنید.", "Check connection and sensor read permissions.")}</small></div>}
+        {latest ? <AssetMiniChart title={plot.title} series={plot.series} unit={plot.unit} binary={plot.key === "availability"} motion={live} locale={locale} /> : <div className="asset-live-empty">{t("هنوز دادهٔ معتبر نداریم", "No verified readings yet")}<small>{t("اتصال و مجوز خواندن سنسورها را بررسی کنید.", "Check connection and sensor read permissions.")}</small></div>}
         <footer><span className={`asset-live-freshness ${live ? "is-current" : ""}`}><i />{latest ? live ? t("به‌روز", "Current") : t("تاریخی / تأییدنشده", "Historical / unverified") : t("بدون نمونه", "No sample")}</span>{latest && <time dateTime={latest.timestamp}>{new Date(latest.timestamp).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</time>}</footer>
       </article>;
     })}</div>

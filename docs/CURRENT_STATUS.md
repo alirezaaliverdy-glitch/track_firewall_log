@@ -1,3 +1,11 @@
+## 2026-09-29 - Compact gold dashboard cards and corrected spacing
+
+- Moved the paged fleet resource cards into the former alert-trend position and removed that redundant trend chart and the old bottom fleet copy. Kept alert totals and latest findings.
+- Minimized fleet cards to three columns on wide screens, two on medium and one on mobile; restored warm gold ring/bars. Removed visible animation switches in dashboard and asset detail. Subtle real-data transitions in asset charts still honor system reduced-motion.
+- Reflowed status, port and finding panels into full-width status followed by two equal cards, avoiding a stretched empty status panel or a vacant adjacent column. No collector or vendor configuration changes.
+- Corrected Action Center SSH verification: successful Linux connector text was incorrectly written to `test.error`, so the page showed a red alert beneath a Connected state. Successful future attempts now keep it as a message; previously persisted successful attempts have their false error suppressed on read, while real failures remain visible. The UI also refuses to render an error when the current verification is connected.
+- Backend/frontend production builds and local deployments are healthy. Eleven chart/layout regressions, three SSH verification/Action Center regressions, and intercepted Chromium across six vendor fixtures at 1440/1024/390/320px passed. Browser fixtures do not prove live compatibility for every vendor; no device configuration command was sent.
+
 ## 2026-09-29 - Summary rings on dashboard; live charts inside assets
 
 - User-requested layout restored: dashboard shows compact resource-health rings with CPU, RAM and disk/Datastore bars for all paged devices; missing or stale telemetry cannot produce a current score.

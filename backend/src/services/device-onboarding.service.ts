@@ -433,7 +433,7 @@ export async function testOnboardingConnection(id: string, ownerId?: string) {
         warnings: result.warnings,
         capabilities: result.capabilities,
         ...(result.errorCode ? { errorCode: result.errorCode } : {}),
-        ...(result.message ? { error: result.message } : {})
+        ...(result.connected ? (result.message ? { message: result.message } : {}) : (result.message ? { error: result.message } : {}))
       };
       if (result.connected !== true) throw new OnboardingConnectionTestError(result);
     }

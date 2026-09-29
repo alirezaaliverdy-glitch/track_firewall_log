@@ -138,18 +138,9 @@
 .is-medium { background: var(--command-violet); }
 .is-info { background: #3bbbd4; }
 
-.alert-trend-panel { min-height: 330px; }
-.alert-trend-chart { position: relative; z-index: 2; height: 230px; padding: 4px 12px 0 4px; }
-.alert-trend-legend { position: relative; z-index: 2; display: flex; justify-content: center; gap: 18px; padding: 3px 16px 14px; color: #6f8796; font-size: .51rem; }
-.alert-trend-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.command-chart-tooltip { display: grid; min-width: 150px; gap: 6px; padding: 11px; border: 1px solid rgba(94, 159, 186, .2); border-radius: 11px; background: rgba(3, 14, 23, .95); box-shadow: 0 15px 40px rgba(0,0,0,.35); direction: rtl; }
-.command-chart-tooltip strong { color: #dceaf0; font-size: .62rem; }
-.command-chart-tooltip span { display: flex; align-items: center; gap: 6px; font-size: .54rem; }
-.command-chart-tooltip span i { width: 6px; height: 6px; border-radius: 50%; }
-.command-chart-tooltip small { color: #5d7685; font-size: .46rem; }
 
-.command-detail-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(330px, .65fr); gap: 12px; }
-.command-side-stack { display: grid; min-width: 0; gap: 12px; }
+.command-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+.command-side-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; align-items: start; gap: 12px; }
 .device-status-table { position: relative; z-index: 2; display: grid; padding: 0 19px 12px; }
 .device-status-table__head,
 .device-status-table__row { display: grid; grid-template-columns: minmax(190px, 1.4fr) minmax(90px, .72fr) minmax(80px, .6fr) minmax(90px, .65fr); align-items: center; gap: 10px; }
@@ -420,8 +411,6 @@
   .command-assistant-panel__context { grid-template-columns: 1fr; }
   .command-assistant-panel > footer { grid-template-columns: 18px 1fr; }
   .command-assistant-panel > footer a { grid-column: 2; }
-  .alert-trend-chart { height: 205px; padding-inline: 0; }
-  .alert-trend-legend { gap: 10px; flex-wrap: wrap; }
   .command-panel-heading { align-items: flex-start; padding: 15px; }
   .command-panel-heading > a { font-size: 0; }
   .command-panel-heading > a svg { width: 17px; height: 17px; }
@@ -469,8 +458,7 @@
 .daily-check-panel > header em,
 .daily-check-panel__attention-link { font-size: .72rem; }
 .alert-count-panel > span,
-.alert-count-panel dt,
-.alert-trend-legend { font-size: .7rem; }
+.alert-count-panel dt { font-size: .7rem; }
 .alert-count-panel dd { font-size: .82rem; }
 .device-status-table__head,
 .device-status-table__row { font-size: .72rem; }

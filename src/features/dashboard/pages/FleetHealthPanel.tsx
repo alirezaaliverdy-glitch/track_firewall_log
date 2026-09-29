@@ -11,7 +11,7 @@ const recent = (at:string|null) => !!at && Date.now()-Date.parse(at)<=300_000 &&
 
 export function FleetHealthPanel({isFa}:{isFa:boolean}) {
   const [fleet,setFleet]=useState<Fleet|null>(null),[page,setPage]=useState(0),[revision,setRevision]=useState(0);
-  const [error,setError]=useState(false),[busy,setBusy]=useState(false),[motion,setMotion]=useState(true);
+  const [error,setError]=useState(false),[busy,setBusy]=useState(false);
   const t=(fa:string,en:string)=>isFa?fa:en,locale=isFa?"fa-IR":"en-US";
   useEffect(()=>{
     let disposed=false,running=false;const controller=new AbortController();
@@ -25,8 +25,8 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
     return()=>{disposed=true;controller.abort();window.clearInterval(interval);document.removeEventListener("visibilitychange",visible);};
   },[page,revision]);
   const date=(at:string|null)=>at?new Date(at).toLocaleString(locale,{dateStyle:"short",timeStyle:"short"}):t("ثبت نشده","Not recorded");
-  return <section className="command-linux-section fleet-health" aria-busy={busy} data-motion={motion}>
-    <header className="fleet-heading"><div><span className="fleet-live-indicator"><i/>{t("تلمتری تجهیزات","Device telemetry")}</span><h2>{t("سلامت دارایی‌ها","Asset health")}</h2><p>{t("خلاصهٔ منابع؛ برای نمودارهای زنده، جزئیات هر تجهیز را باز کنید.","Resource summary; open a device for live charts.")}</p></div><div className="fleet-controls"><button type="button" aria-pressed={motion} onClick={()=>setMotion(v=>!v)}>{t("انیمیشن","Animation")}: {motion?t("روشن","On"):t("خاموش","Off")}</button><button type="button" disabled={busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={15}/>{t("تازه‌سازی","Refresh")}</button></div></header>
+  return <section className="command-linux-section fleet-health" aria-busy={busy}>
+    <header className="fleet-heading"><div><span className="fleet-live-indicator"><i/>{t("وضعیت تجهیزات","Device status")}</span><h2>{t("سلامت دارایی‌ها","Asset health")}</h2><p>{t("CPU، حافظه و فضای ذخیره‌سازیِ اندازه‌گیری‌شده","Measured CPU, memory and storage")}</p></div><div className="fleet-controls"><button type="button" disabled={busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={15}/>{t("تازه‌سازی","Refresh")}</button></div></header>
     {error&&<p role="alert">{t("تازه‌سازی ناموفق؛ اطلاعات ممکن است قدیمی باشد.","Refresh failed; data may be outdated.")}</p>}
     {!fleet&&!error&&<p>{t("در حال دریافت…","Loading…")}</p>}
     {fleet?.total===0&&<p>{t("تجهیزی ثبت نشده است.","No devices registered.")}</p>}
@@ -37,13 +37,13 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       const current=(row?:Row)=>connected&&!!row?.fresh&&recent(row.measuredAt)&&row.value!==null;
       const disk=resource("disk.usage_percent"),storage=disk?.value!=null?disk:resource("datastore.usage_percent");
       const rows=[
-        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#82afd3"},
-        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#b09bda"},
-        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#c4ac80"}
+        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#eabf5b"},
+        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#d5ae53"},
+        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#bea052"}
       ];
       const coverage=rows.filter(item=>current(item.row)).length;
       const score=coverage&&connected&&Number.isFinite(device.score)?device.score:null;
-      const color=score===null?"#52687a":score>=75?"#70c7bc":score>=40?"#d3ad73":"#d19498";
+      const color=score===null?"#52687a":"#eabf5b";
       return <article className="fleet-device fleet-summary" key={device.id}>
         <header><div><h3>{device.name}</h3><span dir="ltr">{device.vendor} · {device.host}</span></div><span className={`fleet-status is-${state}`}><i/>{state==="online"?t("آنلاین","Online"):state==="offline"?t("آفلاین","Offline"):t("نامشخص","Unknown")}</span></header>
         <div className="fleet-summary-visual">

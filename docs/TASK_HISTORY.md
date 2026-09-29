@@ -1,3 +1,10 @@
+## 2026-09-29 - Dashboard density and placement correction
+
+- Replaced the dashboard's full-width alert-trend chart with compact, paged gold-toned fleet health cards and removed the bottom duplicate; retained alert totals/findings lists.
+- Removed visible animation controls. Corrected the large empty status panel/column by making equipment status full-width and placing port/finding cards side by side below.
+- Fixed the separate SSH success warning in Action Center: successful connector messages no longer populate the verification error field, old successful rows are read safely, and a Connected UI state cannot show a red failure alert. Real failed SSH messages still show.
+- Verified backend/frontend production builds and healthy local deployments, 14 focused tests and intercepted Chromium at 1440/1024/390/320px for six vendor fixtures; visually reviewed the compact dashboard screenshot. No configuration writes, collector changes or live all-vendor acceptance. See docs/ASSET_CHART_LAYOUT_FA.md.
+
 ## 2026-09-29 - Restore dashboard summaries and relocate animated device charts
 
 - Restored the previous ring-and-resource-bar dashboard layout without reverting real measured sensors; all paged vendors retain explicit freshness/coverage and a device detail link.

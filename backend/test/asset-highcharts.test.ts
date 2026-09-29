@@ -36,7 +36,7 @@ test("all vendors share compact CPU, RAM, traffic and availability charts at the
   const panel = readFileSync("/src/features/assets/components/AssetLiveCharts.tsx", "utf8");
   assert.equal((panel.match(/key: "(cpu|memory|traffic|availability)"/g) ?? []).length, 4);
   assert.match(panel, /Historical \/ unverified/);
-  assert.match(panel, /data-motion=\{motion\}/);
+  assert.doesNotMatch(panel, /انیمیشن|Animation/);
   assert.doesNotMatch(overview, /const preferred|sessions.count|vpn.active_count/);
   const chart = readFileSync("/src/features/assets/components/AssetChartPlot.tsx", "utf8");
   assert.match(chart, /timezone: "Asia\/Tehran"/);

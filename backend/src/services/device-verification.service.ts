@@ -43,11 +43,13 @@ async function latestRows(deviceId: string) {
   });
 }
 
-function publicAttempt(row: Awaited<ReturnType<typeof latestRows>>[number]) {
+export function publicAttempt(row: Awaited<ReturnType<typeof latestRows>>[number]) {
   const test = object(row.testJson);
   const detection = object(row.detectionJson);
   const result = object(row.resultJson);
-  const error = object(result).error ?? test.error;
+  // Older successful sessions stored the connector's success message in test.error.
+  // A connected attempt must never be presented as a failure, even for those rows.
+  const error = test.connected === true ? null : result.error ?? test.error;
   return {
     sessionId: row.id,
     status: row.status,
