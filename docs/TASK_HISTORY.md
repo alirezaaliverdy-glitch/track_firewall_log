@@ -1817,3 +1817,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Replaced Linux-only, three-device health card with paged fleet cards. Resource samples are bounded to supported measured fields, fetched by owner-scoped API, and labeled with timestamps. Browser polling does not make vendor connections. Background collection reuses read-only connectors with two concurrent tasks and a minimum two-minute per-device interval; connectivity checks remain separate.
 - Backend/frontend production builds and focused projector/mobile-browser tests passed. No vendor configuration mutation. Live-vendor acceptance and the requested attack/security-center follow-up are tracked separately in docs/FLEET_HEALTH_AND_SECURITY_CENTER_FA.md.
+## 2026-09-30 - Clone-to-container release check
+
+- Verified GitHub `main` and local `main` are identical at `fdea0b1` and completed a real shallow remote clone.
+- Built API/web images from a clean tracked snapshot; Compose lockfile installs, Prisma generation/migrations and frontend/backend builds passed.
+- Booted a clean isolated stack with new named volumes: all services healthy, ۵۴ migrations applied, HTTPS/UI/readiness smoke checks passed. The initial test used a loopback CORS override and was correctly rejected by production hardening; the repository defaults then passed without weakening validation.
+- Replaced the root Vite template README with reproducible Persian-first server instructions and secret/data safety notes. No live stack or vendor configuration changed.

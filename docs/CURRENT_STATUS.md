@@ -1734,3 +1734,9 @@ In this lab mode, one user confirmation is enough for supported Linux/MikroTik t
 # 2026-09-29 — Fleet health dashboard
 
 The dashboard now shows paged health cards for all registered device vendors. CPU/RAM/storage only appear when a supported sensor actually produced a fresh value; the pressure indicator is not a blanket security/availability score. The 10-second browser refresh is read-only and the backend uses bounded, independent collection. Build, projection and intercepted mobile-browser regression passed. Attackers Geo/ASN, event-volume work, prior isolated database tests and MikroTik catalog regression remain pending in the next commit. See docs/FLEET_HEALTH_AND_SECURITY_CENTER_FA.md.
+## 2026-09-30 - Fresh clone and container startup verified
+
+- Local `main` and `origin/main` match commit `fdea0b1`; a separate shallow clone from GitHub completed at the same commit.
+- From only tracked files, both API and web images built with `pnpm install --frozen-lockfile`, frontend environment validation, TypeScript/Vite build, Prisma client generation and backend TypeScript build.
+- A new isolated Compose project booted with fresh secrets and PostgreSQL volumes. `firewall-api`, `firewall-web`, `firewall-db` and `gateway` all became healthy; ۵۴ migrations applied, bootstrap admin file created, HTTPS UI returned 200, readiness returned 200 and HTTP redirected 308. No existing containers, production data or vendor settings were changed.
+- Root `README.md` now describes the actual clone/build/start/update flow, health checks, first-login secret handling and the production CORS requirement. Test-only temporary directories are untracked and must not be committed.

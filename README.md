@@ -1,99 +1,34 @@
-# React + TypeScript + Vite
+# Firewall SOAR
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+این مخزن با Docker Compose از یک clone تازه قابل اجراست. فایل پیش‌فرض `docker-compose.yml` وب، API، PostgreSQL و درگاه HTTPS را راه می‌اندازد؛ در اولین اجرا secretهای تصادفی، مهاجرت‌های دیتابیس و حساب مدیر اولیه ساخته می‌شوند. راهنمای فارسی کامل‌تر در [README_FA.md](README_FA.md) است.
 
-Currently, two official plugins are available:
+## نصب روی سرور تازه
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-## Linux SSH Diagnostics
-
-Manual Windows checks:
-
-```powershell
-Test-NetConnection HOST -Port PORT
-ssh -p PORT USER@HOST
-```
-
-Backend API checks:
-
-```powershell
-curl.exe http://127.0.0.1:4000/api/devices
-curl.exe -X POST http://127.0.0.1:4000/api/devices/DEVICE_ID/test-connection
-curl.exe http://127.0.0.1:4000/api/devices/DEVICE_ID/capabilities
-```
-
-Server-side read-only checks:
+پیش‌نیاز: Docker Engine و Compose v2، دسترسی به GitHub/Docker Hub/npm برای دریافت وابستگی‌ها، و پورت‌های آزاد ۸۰ و ۴۴۳.
 
 ```bash
-whoami
-hostname
-which ufw
-sudo -n /usr/sbin/ufw status numbered
+git clone --depth 1 --branch main --single-branch https://github.com/alirezaaliverdy-glitch/track_firewall_log.git
+cd track_firewall_log
+docker compose up -d --build --wait
+docker compose ps
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+پس از healthy شدن چهار سرویس اصلی، `https://SERVER_IP/firewall/` را باز کنید. گواهی پیش‌فرض Caddy داخلی است؛ برای محیط عملیاتی، دامنه و گواهی مورداعتماد تنظیم کنید. حساب مدیر اولیه در volume خصوصی ساخته می‌شود. فقط روی خود سرور و در ترمینال امن آن را بخوانید:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+docker compose exec firewall-api cat /app/storage/bootstrap/initial-admin.json
 ```
+
+رمز اولیه را پس از ورود تغییر دهید؛ آن را در تیکت، لاگ یا مخزن قرار ندهید. فایل `.env` برای اجرای پیش‌فرض لازم نیست. در صورت تنظیم `CORS_ORIGIN` برای production، مقدار آن باید مبدأ HTTPS واقعی باشد؛ `localhost` و IP خصوصی به‌درستی توسط محافظ امنیتی رد می‌شوند.
+
+## به‌روزرسانی و بررسی
+
+```bash
+git pull --ff-only
+docker compose up -d --build --wait
+docker compose ps
+```
+
+برای خطاهای راه‌اندازی، `docker compose logs --tail=100 firewall-api gateway` را در محیط امن بررسی کنید و خروجی حاوی اطلاعات حساس را منتشر نکنید. `docker compose down -v` را روی سرور دارای داده اجرا نکنید؛ این گزینه volumeهای دیتابیس و اطلاعات پایدار را حذف می‌کند.
+
+`docker-compose.production.yml` مسیر جداگانهٔ انتشار imageهای نسخه‌دار از CI است و به متغیرها و imageهای تعیین‌شده نیاز دارد؛ دستور نصب بالای این صفحه عمداً از Compose پیش‌فرضِ قابل‌ساخت از کد استفاده می‌کند.
