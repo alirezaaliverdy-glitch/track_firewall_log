@@ -3,7 +3,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { PlatformAsset } from "@/lib/platform";
-import { ArrowUpLeft, CircleAlert, RefreshCw, Search } from "lucide-react";
+import { ArrowUpLeft, CircleAlert, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -80,7 +80,6 @@ export default function AssetsOverviewPage() {
       <section className="asset-inventory-panel">
         <header className="asset-inventory-panel__header">
           <div><span>{t("assets.inventory.eyebrow")}</span><h2>{t("assets.inventory.title")}</h2><p>{t("assets.inventory.description")}</p></div>
-          <button className="asset-refresh-button" type="button" onClick={refresh}><RefreshCw size={15} />{t("assets.actions.refresh")}</button>
         </header>
 
         <div className="asset-inventory-toolbar">

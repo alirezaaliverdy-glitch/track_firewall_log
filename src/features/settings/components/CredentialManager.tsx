@@ -16,14 +16,19 @@ export function CredentialManager({ isFa }: Props) {
   const [notice, setNotice] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError("");
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError("");
     try { setItems(await listCredentials()); }
     catch { setError(isFa ? "دریافت اعتبارنامه‌ها ناموفق بود." : "Could not load credentials."); }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   }, [isFa]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible" && !editor && !busyId) void load(true); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [busyId, editor, load]);
   const assignedCount = useMemo(() => items.filter((item) => item.deviceCount > 0).length, [items]);
 
   function edit(item?: DeviceCredential) {
@@ -80,7 +85,7 @@ export function CredentialManager({ isFa }: Props) {
       <div><ShieldCheck /><span>{isFa ? "نمایش رمز" : "Secret exposure"}<strong>{isFa ? "هرگز" : "Never"}</strong></span></div>
     </section>
     <section className="credential-panel">
-      <header><div><h2>{isFa ? "اعتبارنامه‌های دستگاه" : "Device credentials"}</h2><p>{isFa ? "مرجع‌های رمزگذاری‌شده اتصال به تجهیزات را از اینجا مدیریت کنید." : "Manage encrypted device connection references here."}</p></div><div><button className="icon-button" type="button" onClick={() => void load()} disabled={loading}><RefreshCw className={loading ? "is-spinning" : ""} /></button><button className="primary-button" type="button" onClick={() => edit()}><Plus />{isFa ? "اعتبارنامه جدید" : "New credential"}</button></div></header>
+      <header><div><h2>{isFa ? "اعتبارنامه‌های دستگاه" : "Device credentials"}</h2><p>{isFa ? "مرجع‌های رمزگذاری‌شده اتصال به تجهیزات را از اینجا مدیریت کنید." : "Manage encrypted device connection references here."}</p></div><div><button className="primary-button" type="button" onClick={() => edit()}><Plus />{isFa ? "اعتبارنامه جدید" : "New credential"}</button></div></header>
       {error ? <p className="credential-message is-error" role="alert">{error}</p> : null}
       {notice ? <p className="credential-message is-success" role="status">{notice}</p> : null}
       {loading ? <div className="credential-empty"><RefreshCw className="is-spinning" />{isFa ? "در حال دریافت..." : "Loading..."}</div> : null}

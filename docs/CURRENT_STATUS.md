@@ -1,3 +1,11 @@
+# 2026-10-03 — Simpler detection UI and evidence-bound attacker targets
+
+- Detection Rules now focuses on vendor rules and thresholds; redundant counters, worker status card and manual run control are removed. The detection worker itself is unchanged.
+- The misleading top-level Monitoring page was an on-demand Daily Check, not the live asset feed. It is hidden and `/monitoring` redirects to Assets; `/monitoring/daily-check` remains a deliberate diagnostic workflow.
+- Attacker vendor/device attribution is based on actionable open findings for that exact source IP and device. Corroborating events must match the device, time window and destination; ordinary same-IP traffic on another vendor cannot create an attack target. Per-target finding counts and times are visible. Vendor-block claims require matching security-event evidence, not a denied login alone.
+- Removed generic reload controls from the primary live views and added/retained visible-page polling where relevant. Kept explicit device checks, connection/error retries and offline Geo database maintenance because those perform real work. AI summary is refreshed on entry/interaction, not automatically: periodic external AI calls were not authorized.
+- Builds and isolated PostgreSQL attacker regression passed. No claim of instantaneous streaming, complete vendor coverage, live vendor acceptance, or remote device changes.
+
 ## 2026-10-03 - Security overview freshness and alert triage
 
 - Removed the redundant company data-ownership sentence without changing company selection or access rules.

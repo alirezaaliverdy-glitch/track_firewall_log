@@ -41,7 +41,7 @@ function FrameworkCard({ icon, title, code, description, metric, state, to }: { 
 
 export default function SecurityOverviewPage() {
   const { t, i18n } = useTranslation();
-  const { findings, rules, incidents, assets, stats, loading, refreshing, lastUpdatedAt, monitoring, emailSettings, error, refresh } = useSecurityOperations();
+  const { findings, rules, incidents, assets, stats, loading, lastUpdatedAt, monitoring, emailSettings, error, refresh } = useSecurityOperations();
   const locale = (i18n.resolvedLanguage ?? i18n.language).startsWith("fa") ? "fa-IR" : "en-US";
 
   const priorityFindings = useMemo(() => [...stats.openFindings].sort((a, b) => findingPriority(b) - findingPriority(a)).slice(0, 6), [stats.openFindings]);
@@ -80,7 +80,7 @@ export default function SecurityOverviewPage() {
         title={t("security.overview.title")}
         eyebrow={t("security.overview.eyebrow")}
         description={t("security.overview.description")}
-        actions={<><button type="button" className="secondary-button security-refresh-button" onClick={() => void refresh()} disabled={refreshing}><RefreshCw size={16} />{refreshing ? t("security.live.refreshing") : t("security.actions.refresh")}</button><Link className="primary-link" to="/security/findings"><FileSearch2 size={16} />{t("security.actions.openQueue")}</Link></>}
+        actions={<Link className="primary-link" to="/security/findings"><FileSearch2 size={16} />{t("security.actions.openQueue")}</Link>}
       />
 
       <div className="security-live-status" aria-live="polite">

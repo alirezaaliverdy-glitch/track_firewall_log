@@ -32,11 +32,12 @@ test("integration UI routes are removed and the replacement attacker tab is regi
   assert.match(shell, /attackers:\s*Crosshair/);
   assert.match(page, /listAttackers\(\)/);
   assert.match(page, /getAttackerDetails\(ip\)/);
-  assert.match(page, /فقط یافته معتبر/);
+  assert.match(page, /یافته‌های معتبر/);
   assert.match(page, /attacker-hero/);
   assert.match(page, /مشاهده یافته‌های امنیتی/);
   const navigation = getProductNavigation();
   assert.ok(navigation.some((group) => group.key === "attackers" && group.route === "/attackers"));
+  assert.ok(!navigation.some((group) => group.key === "monitoring"));
   assert.ok(!navigation.some((group) => group.key === "integrations"));
   assert.ok(PRODUCT_FEATURES.some((feature) => feature.key === "attackers.overview" && feature.state === "implemented"));
   assert.ok(!PRODUCT_FEATURES.some((feature) => feature.key.startsWith("integrations.")));

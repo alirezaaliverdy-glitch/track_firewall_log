@@ -222,6 +222,7 @@ export type AttackerSummary = {
   observationCount: number;
   eventCount: number;
   vendors: string[];
+  targets: Array<{ deviceId: string; name: string; vendor: string; host: string; findingCount: number; observationCount: number; lastSeen: string; categories: string[]; findingIds: string[] }>;
   devices: Array<{ id: string; name: string; vendor: string; host: string; type: string }>;
   assets: Array<{ id: string; name: string; managementIp: string | null; healthState: string }>;
   categories: string[];

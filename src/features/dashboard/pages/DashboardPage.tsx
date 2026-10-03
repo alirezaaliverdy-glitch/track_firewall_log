@@ -32,7 +32,6 @@ import {
   CircleAlert,
   Clock3,
   Network,
-  RefreshCw,
   Server,
   ShieldAlert,
   ShieldCheck,
@@ -213,7 +212,6 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<OperationalDashboardActivity | null>(null);
   const [monitoring, setMonitoring] = useState<SecurityMonitoringStatus | null>(null);
   const [eventSummary, setEventSummary] = useState<EventsSummary>(EMPTY_EVENT_SUMMARY);
-  const [dataRefreshing, setDataRefreshing] = useState(false);
   const [activityError, setActivityError] = useState(false);
   const [, setLinuxError] = useState(false);
 
@@ -222,8 +220,7 @@ export default function DashboardPage() {
     catch { setLinuxError(true); }
   }, []);
 
-  const loadOperationalData = useCallback(async (showBusy = false) => {
-    if (showBusy) setDataRefreshing(true);
+  const loadOperationalData = useCallback(async () => {
     const from = new Date(Date.now() - 86_400_000).toISOString();
     const [activityResult, monitoringResult, summaryResult] = await Promise.allSettled([
       getOperationalDashboardActivity(), getSecurityMonitoringStatus(), getSecurityEventsSummary({ from }),
@@ -231,7 +228,6 @@ export default function DashboardPage() {
     if (activityResult.status === "fulfilled") { setActivity(activityResult.value); setActivityError(false); } else setActivityError(true);
     if (monitoringResult.status === "fulfilled") setMonitoring(monitoringResult.value);
     if (summaryResult.status === "fulfilled") setEventSummary(summaryResult.value);
-    setDataRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -333,13 +329,6 @@ export default function DashboardPage() {
   const maxPortCount = Math.max(1, ...eventSummary.topDestinationPorts.map((item) => item.count));
   const observedPortEvents = eventSummary.topDestinationPorts.reduce((sum, item) => sum + item.count, 0);
 
-  const refreshAll = () => {
-    assets.refresh();
-    findings.refresh();
-    void loadOperationalData(true);
-    void loadLinuxHealth();
-  };
-
   if ((assets.loading || findings.loading) && !activity) return <LoadingState label={copy(isFa, "در حال آماده‌سازی مرکز فرمان...", "Preparing command center...")} />;
   if (assets.error) return <ErrorState title={copy(isFa, "داشبورد در دسترس نیست", "Dashboard unavailable")} message={copy(isFa, "دریافت اطلاعات تجهیزات ناموفق بود.", "Could not load equipment data.")} onRetry={assets.refresh} />;
   if (findings.error) return <ErrorState title={copy(isFa, "داشبورد در دسترس نیست", "Dashboard unavailable")} message={copy(isFa, "دریافت یافته‌های امنیتی ناموفق بود.", "Could not load security findings.")} onRetry={findings.refresh} />;
@@ -348,7 +337,7 @@ export default function DashboardPage() {
     <section className="page-stack dashboard-command-center">
       <header className="command-center-header">
         <div><span><Activity size={15} />{copy(isFa, "مرکز فرمان زنده", "Live command center")}</span><h1>{copy(isFa, "داشبورد عملیات امنیت", "Security Operations Dashboard")}</h1></div>
-        <div className="command-center-header__tools"><span><i className={activityError ? "is-danger" : ""} />{activityError ? copy(isFa, "بخشی از داده‌ها در دسترس نیست", "Some data is unavailable") : copy(isFa, "داده عملیاتی متصل", "Operational data connected")}</span><small>{copy(isFa, "آخرین به‌روزرسانی", "Updated")}: {shortDate(activity?.generatedAt, language, "—")}</small><button type="button" onClick={refreshAll} disabled={dataRefreshing}><RefreshCw size={16} className={dataRefreshing ? "is-spinning" : undefined} />{copy(isFa, "تازه‌سازی", "Refresh")}</button></div>
+        <div className="command-center-header__tools"><span><i className={activityError ? "is-danger" : ""} />{activityError ? copy(isFa, "بخشی از داده‌ها در دسترس نیست", "Some data is unavailable") : copy(isFa, "داده عملیاتی متصل", "Operational data connected")}</span><small>{copy(isFa, "آخرین دریافت", "Last received")}: {shortDate(activity?.generatedAt, language, "—")}</small></div>
       </header>
 
       <div className="command-workspace-shell">

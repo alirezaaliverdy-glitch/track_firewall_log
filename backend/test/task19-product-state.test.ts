@@ -30,7 +30,8 @@ test("Task 19A navigation excludes planned, mock-only, not-configured and unveri
   assert.ok(routes.includes("/assets/devices/new"));
   assert.ok(routes.includes("/security/rules"));
   assert.ok(routes.includes("/security/email-alerts"));
-  assert.ok(routes.includes("/monitoring/linux"));
+  assert.ok(!routes.includes("/monitoring/linux"));
+  assert.ok(!groups.includes("monitoring"));
   assert.ok(routes.includes("/settings"));
   assert.ok(!routes.includes("/assets/sync"));
   assert.ok(!routes.includes("/assets/vendors/cisco"));

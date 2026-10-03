@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -14,7 +14,6 @@ import {
   Globe2,
   Network,
   Plus,
-  RefreshCw,
   Route,
   Search,
   Server,
@@ -98,7 +97,8 @@ function AttackerCard({ attacker, selected, onSelect, isFa, locale }: { attacker
           <span><Clock3 />{formatDate(attacker.lastSeen, locale)}</span>
         </span>
         <span className="attacker-card__tags">
-          {attacker.vendors.map((vendor) => <i key={vendor}>{vendor}</i>)}
+          {attacker.targets.slice(0, 2).map((target) => <i key={target.deviceId} title={`${target.findingCount} findings`}>{target.vendor} · {target.name}</i>)}
+          {attacker.targets.length > 2 ? <i>+{attacker.targets.length - 2}</i> : null}
           {attacker.categories.slice(0, 2).map((category) => <i key={category}>{category}</i>)}
         </span>
       </span>
@@ -196,9 +196,9 @@ function DetailPanel({ attacker, loading, onClose, onRespond, responseBusy, resp
       </section> : null}
 
       <section className="attacker-detail__section">
-        <header><Server /><div><h3>{isFa ? "دارایی‌ها و وندورها" : "Assets and vendors"}</h3><p>{isFa ? "همه مقصدهایی که این مبدأ در آن‌ها شناسایی شده" : "All targets where this source was identified"}</p></div></header>
+        <header><Server /><div><h3>{isFa ? "تجهیزات هدف" : "Targeted devices"}</h3><p>{isFa ? "فقط تجهیزاتی که یافتهٔ امنیتی قابل‌اقدام برای این IP دارند؛ حضور IP در لاگ‌های دیگر کافی نیست." : "Only devices with actionable findings for this IP; other log appearances do not count."}</p></div></header>
         <div className="attacker-target-list">
-          {attacker.devices.map((device) => <Link key={device.id} to={`/assets/devices/${device.id}`}><span><Server /></span><div><strong>{device.name}</strong><small>{device.vendor} · <b dir="ltr">{device.host}</b></small></div><ExternalLink /></Link>)}
+          {attacker.targets.map((target) => <Link key={target.deviceId} to={`/assets/devices/${target.deviceId}`}><span><Server /></span><div><strong>{target.vendor} · {target.name}</strong><small><b dir="ltr">{target.host}</b> · {target.findingCount.toLocaleString(locale)} {isFa ? "یافته معتبر" : "actionable findings"} · {formatDate(target.lastSeen, locale)}</small></div><ExternalLink /></Link>)}
         </div>
       </section>
 
@@ -243,6 +243,7 @@ export default function AttackersPage() {
   const locale = isFa ? "fa-IR" : "en-US";
   const isAdmin = user?.role === "admin";
   const [data, setData] = useState<AttackerListResponse | null>(null);
+  const listRequestRunning = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -267,12 +268,28 @@ export default function AttackersPage() {
   useEffect(()=>{void getAttackerGeoStatus().then(setGeoStatus).catch(()=>setGeoError(true));},[]);
   const updateGeo=async()=>{setGeoBusy(true);setGeoError(false);try{setGeoStatus(await refreshAttackerGeo());load();if(selectedIp)openDetails(selectedIp);}catch{setGeoError(true);}finally{setGeoBusy(false);}};
 
-  const load = useCallback(() => {
-    setLoading(true);
-    listAttackers().then((result) => { setData(result); setError(""); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : isFa ? "فهرست مهاجمان بارگذاری نشد." : "Attacker list failed to load.")).finally(() => setLoading(false));
+  const load = useCallback((initial = false) => {
+    if (listRequestRunning.current) return;
+    listRequestRunning.current = true;
+    if (initial) setLoading(true);
+    listAttackers().then((result) => { setData(result); setError(""); }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : isFa ? "فهرست مهاجمان بارگذاری نشد." : "Attacker list failed to load.")).finally(() => { listRequestRunning.current = false; if (initial) setLoading(false); });
   }, [isFa]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load(true);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") load(); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  useEffect(() => {
+    if (!selectedIp) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void getAttackerDetails(selectedIp).then((result) => { if (active) setDetails(result.attacker); }).catch(() => {});
+    }, 30_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [selectedIp]);
 
   const loadAllowlist = useCallback(() => {
     if (!isAdmin) return;
@@ -332,13 +349,13 @@ export default function AttackersPage() {
 
   const vendors = data?.summary.vendors ?? [];
   if (loading && !data) return <LoadingState />;
-  if (error && !data) return <ErrorState message={error} onRetry={load} />;
+  if (error && !data) return <ErrorState message={error} onRetry={() => load(true)} />;
 
   return (
     <section className="page-stack attackers-page">
       <header className="attacker-hero">
         <div className="attacker-hero__title"><span><Crosshair /></span><div><small>{isFa ? "مرکز شناسایی مبدأ تهدید" : "Threat source center"}</small><h1>{isFa ? "مبدأهای مشکوک" : "Suspicious sources"}</h1><p>{isFa ? "IPهای نیازمند بررسی بر پایه شواهد واقعی وندورها؛ فعالیت عادی به‌تنهایی مهاجم محسوب نمی‌شود." : "Source IPs that require review based on real vendor evidence; ordinary activity alone is not treated as an attacker."}</p></div></div>
-        <div className="attacker-hero__actions"><span><ShieldCheck />{isFa ? "فقط یافته معتبر" : "Verified findings only"}</span><button type="button" onClick={load} disabled={loading}><RefreshCw className={loading ? "is-spinning" : ""} />{isFa ? "به‌روزرسانی" : "Refresh"}</button></div>
+        <div className="attacker-hero__actions"><span><ShieldCheck />{error ? (isFa ? "دریافت تازه ناموفق؛ آخرین داده نمایش داده می‌شود" : "Update failed; showing last data") : (isFa ? "یافته‌های معتبر · دریافت خودکار" : "Verified findings · auto-updated")}</span></div>
       </header>
 
       <section className="attacker-summary-grid">
@@ -378,7 +395,7 @@ export default function AttackersPage() {
         </section>
         {selectedIp ? <DetailPanel attacker={details} loading={detailsLoading} onClose={() => { setSelectedIp(""); setDetails(null); }} onRespond={(findingId) => void createResponsePreview(findingId)} responseBusy={responseBusy} responseError={responseError} isFa={isFa} locale={locale} /> : null}
       </div>
-      {isAdmin ? <div className="attacker-geo-setup"><Globe2 /><span>{geoStatus?.ready ? (isFa ? "اطلاعات کشور و ASN آماده است" : "Country and ASN data ready") : (isFa ? "اطلاعات کشور و ASN هنوز آماده نیست" : "Country and ASN data not ready")}</span><button type="button" disabled={geoBusy} onClick={() => void updateGeo()}>{geoBusy ? (isFa ? "در حال دریافت…" : "Updating…") : (isFa ? "به‌روزرسانی پایگاه" : "Update database")}</button>{geoError ? <small role="alert">{isFa ? "به‌روزرسانی ناموفق بود؛ دسترسی خروجی سرور را بررسی کنید." : "Update failed; check server egress."}</small> : null}</div> : null}
+      {isAdmin ? <div className="attacker-geo-setup"><Globe2 /><span>{geoStatus?.ready ? (isFa ? "اطلاعات کشور و ASN آماده است" : "Country and ASN data ready") : (isFa ? "اطلاعات کشور و ASN هنوز آماده نیست" : "Country and ASN data not ready")}</span><button type="button" disabled={geoBusy} onClick={() => void updateGeo()}>{geoBusy ? (isFa ? "در حال دریافت…" : "Downloading…") : (isFa ? "دریافت پایگاه Geo / ASN" : "Download Geo / ASN database")}</button>{geoError ? <small role="alert">{isFa ? "دریافت پایگاه ناموفق بود؛ دسترسی خروجی سرور را بررسی کنید." : "Download failed; check server egress."}</small> : null}</div> : null}
 
       <footer className="attacker-coverage"><Database /><span>{isFa ? "نمونهٔ بررسی‌شده" : "Scanned sample"}</span><strong>{(data?.coverage.findingsScanned ?? 0).toLocaleString(locale)} {isFa ? "یافته" : "findings"} · {(data?.coverage.eventsScanned ?? 0).toLocaleString(locale)} {isFa ? "ردیف رویداد" : "event rows"}</strong><small>{isFa ? `رویدادها: ${data?.coverage.eventWindowDays??30} روز اخیر؛ سقف ۱۰۰۰ ردیف. ${data?.coverage.eventSampleLimitReached?"سقف نمونه پر شده؛ نتایج ممکن است ناقص باشند.":""}` : `Events: last ${data?.coverage.eventWindowDays??30} days; 1000-row cap. ${data?.coverage.eventSampleLimitReached?"Sample cap reached; results may be incomplete.":""}`}</small><a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">IP Geolocation by DB-IP</a></footer>
     </section>

@@ -395,8 +395,8 @@ export default function PortTopologyPage() {
   };
   const refreshAfterAction = async (message: string) => {
     setNotice(message); setError(""); setSelectedPort(null); setSelectedService(null);
-    if (device) await discoverPortTopology(device.id).catch(() => undefined);
-    await load();
+    if (device) await discover();
+    setNotice(message);
   };
   const ports = device ? displayPorts(device) : [];
   const historicalServicesHidden = device?.serviceFreshness !== "current" && !showHistoricalServices;
@@ -415,7 +415,7 @@ export default function PortTopologyPage() {
   };
   return <section className="page-stack port-topology-page">
     <header className="port-topology-hero"><div><span><Network />{fa ? "نقشه فیزیکی شبکه" : "Physical network map"}</span><h1>{fa ? "پورت‌ها و اتصالات" : "Ports & connections"}</h1><p>{fa ? "تجهیز را انتخاب کنید؛ پورت‌های فعال، قوانین فایروال و اتصال‌ها را جداگانه ببینید. هنگام باز بودن صفحه، سرویس‌ها هر دقیقه و اینترفیس‌های لینوکس هر ۵ دقیقه خوانده می‌شوند." : "Select a device to inspect listeners, firewall rules and links separately. While this page is visible, services refresh each minute; Linux interfaces refresh every 5 minutes."}</p></div><Router /></header>
-    <div className="port-topology-toolbar"><label><span>{fa ? "تجهیز" : "Device"}</span><select value={device?.id ?? ""} onChange={(e) => { setDeviceId(e.target.value); setSelectedPort(null); setSelectedService(null); }}>{devices.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.vendor}</option>)}</select></label><button type="button" disabled={!device || busy || liveSyncing || !editable} onClick={() => void discover()}><RefreshCw className={busy || liveSyncing ? "is-spinning" : ""} />{liveSyncing ? (fa ? "همگام‌سازی زنده" : "Live sync") : (fa ? "کشف دوباره" : "Rediscover")}</button></div>
+    <div className="port-topology-toolbar"><label><span>{fa ? "تجهیز" : "Device"}</span><select value={device?.id ?? ""} onChange={(e) => { setDeviceId(e.target.value); setSelectedPort(null); setSelectedService(null); }}>{devices.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.vendor}</option>)}</select></label>{liveSyncing ? <span role="status">{fa ? "در حال خواندن دادهٔ دستگاه…" : "Reading device data…"}</span> : null}</div>
     {error ? <div className="port-topology-message is-error">{error}</div> : null}{notice ? <div className="port-topology-message"><CheckCircle2 />{notice}</div> : null}
     {loading ? <div className="port-topology-empty"><RefreshCw className="is-spinning" /></div> : !device ? <div className="port-topology-empty"><Server /><h2>{fa ? "هنوز دستگاهی ثبت نشده" : "No devices registered"}</h2></div> : <>
       <div className="port-topology-stats"><article><Cpu /><span>{fa ? "وندور" : "Vendor"}</span><strong>{device.vendor}</strong></article><article><Cable /><span>{fa ? "پورت دیده‌شده" : "Visible ports"}</span><strong>{ports.length}</strong></article><article><CircleDot /><span>{fa ? "لینک فعال" : "Active links"}</span><strong>{active}</strong></article><article><Network /><span>{fa ? "اتصال مشخص" : "Mapped peers"}</span><strong>{linked}</strong></article></div>

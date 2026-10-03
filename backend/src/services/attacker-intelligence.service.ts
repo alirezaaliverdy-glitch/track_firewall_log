@@ -161,6 +161,22 @@ function hasSuccessEvidence(event: EventWithContext) {
   return /auth_success|accepted (?:password|publickey)|login success/i.test(`${event.eventType} ${event.action ?? ""} ${event.rawMessage ?? ""} ${event.rawSnippet ?? ""}`);
 }
 
+function matchingTargetEvidence(finding: FindingWithContext, event: EventWithContext) {
+  const time = eventTime(event).getTime();
+  const tolerance = 15 * 60_000;
+  return event.deviceId === finding.deviceId
+    && time >= finding.firstSeen.getTime() - tolerance
+    && time <= finding.lastSeen.getTime() + tolerance
+    && (!finding.dstIp || !event.dstIp || finding.dstIp === event.dstIp);
+}
+
+function matchingBlockEvidence(finding: FindingWithContext, event: EventWithContext) {
+  return matchingTargetEvidence(finding, event)
+    && (!finding.dstPort || !event.dstPort || finding.dstPort === event.dstPort)
+    && /block|deny|drop|reset|quarantine/i.test(event.action ?? "")
+    && /ips|intrusion|threat|malware|firewall|filter|acl|utm|security|port_scan/i.test(event.eventType);
+}
+
 function buildAssessment(findings: FindingWithContext[], events: EventWithContext[]) {
   const actionableFindings = findings.filter(isActionableFinding);
   const authFailureEvents = events.filter(hasFailureEvidence);
@@ -181,7 +197,8 @@ function buildAssessment(findings: FindingWithContext[], events: EventWithContex
     const rule = VENDOR_DETECTION_RULES.find((candidate) => candidate.name === finding.title);
     return Boolean(rule && rule.logicalEventFamily !== "authentication_failure" && finding.count >= rule.threshold);
   });
-  const blockedByVendor = confirmedThreat && events.some((event) => /block|deny|drop|reset|quarantine/i.test(event.action ?? ""));
+  const blockedByVendor = actionableFindings.some((finding) => /threat-prevention|intrusion-detection|malware_threat/i.test(finding.category)
+    && finding.confidence >= 0.8 && events.some((event) => matchingBlockEvidence(finding, event)));
   const verdict = onlyNewSourceAnomaly ? "activity_anomaly" : confirmedThreat ? "confirmed_threat" : authThresholdReached || correlationThresholdReached ? "likely_attack" : "needs_review";
   const authenticationServices = unique(authFailureEvents.map(authenticationFailureService));
   const authenticationFailureVendors = unique(authFailureEvents.map((event) => event.vendor));
@@ -209,17 +226,21 @@ function buildAssessment(findings: FindingWithContext[], events: EventWithContex
 }
 
 function buildAttacker(ip: string, findings: FindingWithContext[], events: EventWithContext[], includeDetails: boolean) {
-  const assessment = buildAssessment(findings, events);
   const actionableFindings = findings.filter(isActionableFinding);
+  const targetIds = new Set(actionableFindings.map((finding) => finding.deviceId));
+  // A shared source IP alone is not proof that another device was attacked.
+  const targetEvents = events.filter((event) => event.deviceId && targetIds.has(event.deviceId)
+    && actionableFindings.some((finding) => matchingTargetEvidence(finding, event)));
+  const assessment = buildAssessment(findings, targetEvents);
   const scoringFindings = actionableFindings.length ? actionableFindings : findings;
   const maxFindingWeight = scoringFindings.length ? Math.max(...scoringFindings.map((finding) => SEVERITY_WEIGHT[finding.severity.toLowerCase()] ?? 20)) : 15;
   const observationCount = scoringFindings.reduce((sum, finding) => sum + Math.max(1, finding.count), 0);
-  const eventCount = events.reduce((sum, event) => sum + Math.max(1, event.count), 0);
-  const deviceIds = unique([...findings.map((finding) => finding.deviceId), ...events.map((event) => event.deviceId)]);
-  const vendors = unique([...findings.map((finding) => finding.vendor.toLowerCase()), ...events.map((event) => event.vendor?.toLowerCase())]);
-  const confidence = findings.reduce((maximum, finding) => Math.max(maximum, finding.confidence), 0);
-  const lastSeenMs = Math.max(...findings.map((finding) => finding.lastSeen.getTime()), ...events.map((event) => eventTime(event).getTime()));
-  const firstSeenMs = Math.min(...findings.map((finding) => finding.firstSeen.getTime()), ...events.map((event) => eventTime(event).getTime()));
+  const eventCount = targetEvents.reduce((sum, event) => sum + Math.max(1, event.count), 0);
+  const deviceIds = unique(actionableFindings.map((finding) => finding.deviceId));
+  const vendors = unique(actionableFindings.map((finding) => finding.device.vendor.toLowerCase()));
+  const confidence = actionableFindings.reduce((maximum, finding) => Math.max(maximum, finding.confidence), 0);
+  const lastSeenMs = Math.max(...actionableFindings.map((finding) => finding.lastSeen.getTime()));
+  const firstSeenMs = Math.min(...actionableFindings.map((finding) => finding.firstSeen.getTime()));
   const recentBonus = Date.now() - lastSeenMs <= 24 * 60 * 60 * 1000 ? 4 : 0;
   const volumeBonus = Math.min(8, Math.round(Math.log2(Math.max(1, observationCount + eventCount)) * 1.5));
   const spreadBonus = Math.min(6, Math.max(0, deviceIds.length - 1) * 2 + Math.max(0, vendors.length - 1) * 2);
@@ -228,20 +249,23 @@ function buildAttacker(ip: string, findings: FindingWithContext[], events: Event
   const scope = ipScope(ip);
   const devices = new Map<string, FindingWithContext["device"]>();
   const assets = new Map<string, NonNullable<FindingWithContext["asset"]>>();
-  findings.forEach((finding) => {
+  actionableFindings.forEach((finding) => {
     devices.set(finding.device.id, finding.device);
     if (finding.asset) assets.set(finding.asset.id, finding.asset);
   });
-  events.forEach((event) => {
-    if (event.device) devices.set(event.device.id, event.device);
-    if (event.asset && !assets.has(event.asset.id)) assets.set(event.asset.id, { ...event.asset, healthState: "unknown" });
-  });
-  const latestEvents = [...events].sort((left, right) => eventTime(right).getTime() - eventTime(left).getTime());
+  const latestEvents = [...targetEvents].sort((left, right) => eventTime(right).getTime() - eventTime(left).getTime());
+  const targets = [...devices.values()].map((device) => {
+    const evidence = actionableFindings.filter((finding) => finding.deviceId === device.id);
+    return { deviceId: device.id, name: device.name, vendor: device.vendor, host: device.host,
+      findingCount: evidence.length, observationCount: evidence.reduce((sum, finding) => sum + Math.max(1, finding.count), 0),
+      lastSeen: new Date(Math.max(...evidence.map((finding) => finding.lastSeen.getTime()))),
+      categories: unique(evidence.map((finding) => finding.category)), findingIds: evidence.map((finding) => finding.id) };
+  }).sort((left, right) => right.lastSeen.getTime() - left.lastSeen.getTime());
   const families = new Map<string, { key: string; title: string; severity: string; count: number; blocked: boolean }>();
   for (const finding of actionableFindings) {
     const key = finding.category || "security";
     const previous = families.get(key);
-    const blocked = events.some((event) => event.deviceId === finding.deviceId && /block|deny|drop|reset|quarantine/i.test(event.action ?? ""));
+    const blocked = targetEvents.some((event) => matchingBlockEvidence(finding, event));
     const currentWeight = SEVERITY_WEIGHT[finding.severity.toLowerCase()] ?? 0;
     const previousWeight = SEVERITY_WEIGHT[previous?.severity.toLowerCase() ?? ""] ?? 0;
     families.set(key, {
@@ -254,7 +278,7 @@ function buildAttacker(ip: string, findings: FindingWithContext[], events: Event
   }
   const responseReadiness = [...devices.values()].map((device) => {
     const vendor = device.vendor.toLowerCase();
-    const deviceEvents = events.filter((event) => event.deviceId === device.id);
+    const deviceEvents = targetEvents.filter((event) => event.deviceId === device.id);
     const finding = actionableFindings.find((item) => item.deviceId === device.id);
     const interfaceIn = unique(deviceEvents.map((event) => event.interfaceIn))[0];
     const interfaceOut = unique(deviceEvents.map((event) => event.interfaceOut))[0];
@@ -271,30 +295,31 @@ function buildAttacker(ip: string, findings: FindingWithContext[], events: Event
     riskScore,
     severity: severityForScore(riskScore),
     confidence,
-    status: assessment.containmentStatus === "blocked_by_vendor" ? "contained" : findings.some((finding) => finding.status === "investigating") ? "investigating" : "active",
+    status: assessment.containmentStatus === "blocked_by_vendor" ? "contained" : actionableFindings.some((finding) => finding.status === "investigating") ? "investigating" : "active",
     firstSeen: new Date(firstSeenMs),
     lastSeen: new Date(lastSeenMs),
-    findingCount: findings.length,
+    findingCount: actionableFindings.length,
     observationCount,
     eventCount,
     vendors,
+    targets,
     devices: [...devices.values()],
     assets: [...assets.values()],
-    categories: unique(findings.map((finding) => finding.category)),
-    sources: unique([...findings.map((finding) => finding.source), ...events.map((event) => event.sourceType)]),
-    actions: unique(events.map((event) => event.action)),
-    protocols: unique(events.map((event) => event.protocol)),
-    targetedIps: unique([...findings.map((finding) => finding.dstIp), ...events.map((event) => event.dstIp)]),
-    targetedPorts: [...new Set([...findings.map((finding) => finding.dstPort), ...events.map((event) => event.dstPort)].filter((port): port is number => typeof port === "number"))].sort((a, b) => a - b),
-    usernames: unique([...findings.map((finding) => finding.actor), ...events.map((event) => event.username)]),
-    eventTypes: unique(events.map((event) => event.eventType)),
-    mitreTags: unique(findings.flatMap((finding) => finding.mitreTags)),
+    categories: unique(actionableFindings.map((finding) => finding.category)),
+    sources: unique([...actionableFindings.map((finding) => finding.source), ...targetEvents.map((event) => event.sourceType)]),
+    actions: unique(targetEvents.map((event) => event.action)),
+    protocols: unique(targetEvents.map((event) => event.protocol)),
+    targetedIps: unique([...actionableFindings.map((finding) => finding.dstIp), ...targetEvents.map((event) => event.dstIp)]),
+    targetedPorts: [...new Set([...actionableFindings.map((finding) => finding.dstPort), ...targetEvents.map((event) => event.dstPort)].filter((port): port is number => typeof port === "number"))].sort((a, b) => a - b),
+    usernames: unique([...actionableFindings.map((finding) => finding.actor), ...targetEvents.map((event) => event.username)]),
+    eventTypes: unique(targetEvents.map((event) => event.eventType)),
+    mitreTags: unique(actionableFindings.flatMap((finding) => finding.mitreTags)),
     assessment,
     attackFamilies: [...families.values()].sort((left, right) => (SEVERITY_WEIGHT[right.severity.toLowerCase()] ?? 0) - (SEVERITY_WEIGHT[left.severity.toLowerCase()] ?? 0)),
     responseReadiness,
     latestEvidence: latestEvents.slice(0, includeDetails ? 20 : 3).map(mapEvidenceEvent),
     enrichment: { status: "local_telemetry_only", geo: null, asn: null, networkOwner: null },
-    ...(includeDetails ? { findings: findings.map(mapFinding) } : {})
+    ...(includeDetails ? { findings: actionableFindings.map(mapFinding) } : {})
   };
 }
 
@@ -327,7 +352,7 @@ async function loadAttackers(filters: AttackerFilters, exactIp?: string) {
     if (bucket) bucket.push(finding);
     else findingsByIp.set(finding.srcIp, [finding]);
   }
-  const ips = exactIp && findingsByIp.has(exactIp)
+  const ips = exactIp && findingsByIp.get(exactIp)?.some(isActionableFinding)
     ? [exactIp]
     : [...findingsByIp.entries()].filter(([, entries]) => entries.some(isActionableFinding)).map(([ip]) => ip);
   if (!ips.length) return { findings, events: [] as EventWithContext[], ips, findingsByIp };
@@ -407,7 +432,7 @@ export async function getAttackerDetails(ip: string, filters: AttackerFilters = 
   if (!isIP(normalizedIp)) return null;
   const loaded = await loadAttackers(filters, normalizedIp);
   const findings = loaded.findings.filter((finding) => finding.srcIp === normalizedIp);
-  if (!findings.length) return null;
+  if (!findings.some(isActionableFinding)) return null;
   return {
     generatedAt: new Date(),
     qualification: "actionable_open_security_finding_with_valid_source_ip",

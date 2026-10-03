@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { Cpu, HardDrive, MemoryStick, RefreshCw } from "lucide-react";
+import { Cpu, HardDrive, MemoryStick } from "lucide-react";
 import { API_BASE_URL } from "@/config/frontendEnv";
 import "./FleetHealthPanel.css";
 
@@ -10,7 +10,7 @@ type Fleet = { devices:Device[]; total:number; pageSize:number };
 const recent = (at:string|null) => !!at && Date.now()-Date.parse(at)<=300_000 && Date.parse(at)<=Date.now()+30_000;
 
 export function FleetHealthPanel({isFa}:{isFa:boolean}) {
-  const [fleet,setFleet]=useState<Fleet|null>(null),[page,setPage]=useState(0),[revision,setRevision]=useState(0);
+  const [fleet,setFleet]=useState<Fleet|null>(null),[page,setPage]=useState(0);
   const [error,setError]=useState(false),[busy,setBusy]=useState(false);
   const t=(fa:string,en:string)=>isFa?fa:en,locale=isFa?"fa-IR":"en-US";
   useEffect(()=>{
@@ -23,10 +23,10 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
     void load();const interval=window.setInterval(()=>{if(document.visibilityState==="visible")void load();},10_000);
     const visible=()=>{if(document.visibilityState==="visible")void load();};document.addEventListener("visibilitychange",visible);
     return()=>{disposed=true;controller.abort();window.clearInterval(interval);document.removeEventListener("visibilitychange",visible);};
-  },[page,revision]);
+  },[page]);
   const date=(at:string|null)=>at?new Date(at).toLocaleString(locale,{dateStyle:"short",timeStyle:"short"}):t("ثبت نشده","Not recorded");
   return <section className="command-linux-section fleet-health" aria-busy={busy}>
-    <header className="fleet-heading"><div><span className="fleet-live-indicator"><i/>{t("وضعیت تجهیزات","Device status")}</span><h2>{t("سلامت دارایی‌ها","Asset health")}</h2><p>{t("CPU، حافظه و فضای ذخیره‌سازیِ اندازه‌گیری‌شده","Measured CPU, memory and storage")}</p></div><div className="fleet-controls"><button type="button" disabled={busy} onClick={()=>setRevision(v=>v+1)}><RefreshCw size={15}/>{t("تازه‌سازی","Refresh")}</button></div></header>
+    <header className="fleet-heading"><div><span className="fleet-live-indicator"><i/>{t("وضعیت تجهیزات","Device status")}</span><h2>{t("سلامت دارایی‌ها","Asset health")}</h2><p>{t("CPU، حافظه و فضای ذخیره‌سازیِ اندازه‌گیری‌شده","Measured CPU, memory and storage")}</p></div></header>
     {error&&<p role="alert">{t("تازه‌سازی ناموفق؛ اطلاعات ممکن است قدیمی باشد.","Refresh failed; data may be outdated.")}</p>}
     {!fleet&&!error&&<p>{t("در حال دریافت…","Loading…")}</p>}
     {fleet?.total===0&&<p>{t("تجهیزی ثبت نشده است.","No devices registered.")}</p>}

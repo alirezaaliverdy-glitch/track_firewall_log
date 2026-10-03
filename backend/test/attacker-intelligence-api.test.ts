@@ -46,6 +46,10 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
         status: "online"
       }
     });
+    const unrelated = await prisma.device.create({ data: {
+      name: `${runId}-unrelated-sophos`, vendor: "Sophos", type: "generic_firewall", host: "192.0.2.244",
+      managementPort: 4444, protocol: "api", environment: "lab", status: "online"
+    } });
     const linuxAsset = await prisma.asset.create({ data: { name: `${runId}-linux-asset`, hostname: "linux-lab", managementIp: linux.host, deviceId: linux.id, healthState: "warning" } });
     const mikrotikAsset = await prisma.asset.create({ data: { name: `${runId}-mikrotik-asset`, hostname: "router-lab", managementIp: mikrotik.host, deviceId: mikrotik.id, healthState: "healthy" } });
     const now = new Date();
@@ -204,6 +208,12 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
           rawSnippet: "ordinary connection",
           normalizedJson: { result: "allowed" },
           dedupeKey: `${runId}-event-unqualified`
+        },
+        {
+          deviceId: unrelated.id, timestamp: now, sourceType: "sophos_log", vendor: "sophos",
+          eventType: "ordinary_connection", action: "allow", severity: "info", srcIp: publicIp,
+          dstIp: unrelated.host, dstPort: 443, protocol: "tcp", rawSnippet: "ordinary shared-source traffic",
+          normalizedJson: {}, dedupeKey: `${runId}-event-unrelated-sophos`
         }
       ]
     });
@@ -218,6 +228,9 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
     assert.equal(body.attackers.some((item: { ip: string }) => item.ip === unqualifiedIp), false);
     assert.equal(body.attackers.some((item: { ip: string }) => item.ip === sessionNoiseIp), false);
     assert.deepEqual(new Set(publicAttacker.vendors), new Set(["linux", "mikrotik"]));
+    assert.deepEqual(new Set(publicAttacker.targets.map((target: { vendor: string }) => target.vendor.toLowerCase())), new Set(["linux", "mikrotik"]));
+    assert.equal(publicAttacker.targets.some((target: { deviceId: string }) => target.deviceId === unrelated.id), false);
+    assert.equal(publicAttacker.attackFamilies.find((family: { key: string }) => family.key === "authentication_attack")?.blocked, false);
     assert.equal(publicAttacker.devices.length, 2);
     assert.equal(publicAttacker.assets.length, 2);
     assert.deepEqual(publicAttacker.targetedPorts, [22, 8291]);
@@ -235,6 +248,7 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
     const detail = detailResponse.json().attacker;
     assert.equal(detail.findings.length >= 2, true);
     assert.equal(detail.latestEvidence.length >= 2, true);
+    assert.equal(detail.latestEvidence.some((event: { device: { id: string } | null }) => event.device?.id === unrelated.id), false);
     assert.match(detail.latestEvidence[0].message + detail.latestEvidence[1].message, /\[REDACTED\]/);
     assert.doesNotMatch(JSON.stringify(detail), /super-secret|must-not-leak|token=hidden/);
 

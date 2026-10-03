@@ -138,7 +138,7 @@ export function CiscoAssetDashboard({ details, deviceId, availability, lastColle
   return <section className="cisco-asset-dashboard">
     <header className="cisco-command-deck">
       <div className="cisco-command-deck__brand"><span className="cisco-mark" aria-hidden="true"><i /><i /><i /><i /><i /></span><div><small>{isFa ? "نمای عملیاتی دستگاه" : "Device operational view"}</small><h2>Cisco {text(details.platformFamily ?? system.platformFamily, "IOS")}</h2><p>{text(system.hostname)} · {text(system.model)} · {text(system.iosVersion)}</p></div></div>
-      <div className="cisco-command-deck__state"><span className={availability === "online" ? "is-online" : "is-warning"}>{availability === "online" ? (isFa ? "آنلاین" : "Online") : (isFa ? "نیازمند بررسی" : "Needs review")}</span><small>{isFa ? `آخرین داده: ${readableDate}` : `Last data: ${readableDate}`}</small><button className="secondary-button" type="button" disabled={collecting} onClick={onCollect}>{collecting ? (isFa ? "در حال دریافت…" : "Refreshing…") : (isFa ? "تازه‌سازی داده زنده" : "Refresh live data")}</button></div>
+      <div className="cisco-command-deck__state"><span className={availability === "online" ? "is-online" : "is-warning"}>{availability === "online" ? (isFa ? "آنلاین" : "Online") : (isFa ? "نیازمند بررسی" : "Needs review")}</span><small>{isFa ? `آخرین داده: ${readableDate}` : `Last data: ${readableDate}`}</small></div>
     </header>
 
     <div className="cisco-kpi-grid">

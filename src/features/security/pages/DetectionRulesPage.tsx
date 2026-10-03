@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CircleGauge, Play, Power, Radar, RefreshCw, ShieldAlert, SlidersHorizontal } from "lucide-react";
+import { Power, SlidersHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { getSecurityMonitoringStatus, runSecurityDetections, type SecurityMonitoringStatus } from "@/lib/platform";
 import { useDetectionRules } from "../hooks/useDetectionRules";
 import "./DetectionRulesPage.css";
 
@@ -29,29 +28,13 @@ export default function DetectionRulesPage() {
   const isFa = (i18n.resolvedLanguage ?? i18n.language).startsWith("fa");
   const { rules, loading, error, actionError, busyId, refresh, updateEnabled } = useDetectionRules();
   const [vendor, setVendor] = useState<(typeof VENDORS)[number]>("linux");
-  const [monitor, setMonitor] = useState<SecurityMonitoringStatus | null>(null);
-  const [runBusy, setRunBusy] = useState(false); const [runMessage, setRunMessage] = useState("");
-
-  useEffect(() => {
-    let mounted = true;
-    const load = () => void getSecurityMonitoringStatus().then((value) => { if (mounted) setMonitor(value); }).catch(() => { if (mounted) setMonitor(null); });
-    load();
-    const timer = window.setInterval(load, 10_000);
-    return () => { mounted = false; window.clearInterval(timer); };
-  }, []);
   const vendorRules = useMemo(() => rules.filter((rule) => vendor === "general" ? !queryValue(rule, "vendor") : queryValue(rule, "vendor") === vendor), [rules, vendor]);
-  const operationalRules = rules; const enabled = operationalRules.filter((rule) => rule.enabled).length; const highImpact = operationalRules.filter((rule) => ["critical", "high"].includes(rule.severity)).length;
   const counts = Object.fromEntries(VENDORS.map((item) => [item, rules.filter((rule) => item === "general" ? !queryValue(rule, "vendor") : queryValue(rule, "vendor") === item).length]));
-
-  async function runNow() { setRunBusy(true); setRunMessage(""); try { const result = await runSecurityDetections(); setRunMessage(isFa ? `${result.eventsEvaluated} رخداد بررسی شد؛ ${result.findingsCreated} یافته جدید و ${result.findingsUpdated} یافته به‌روزرسانی شد.` : `${result.eventsEvaluated} events checked; ${result.findingsCreated} created and ${result.findingsUpdated} updated.`); refresh(); } catch (reason) { setRunMessage(reason instanceof Error ? reason.message : "DETECTION_RUN_FAILED"); } finally { setRunBusy(false); } }
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   return <section className="page-stack security-rules-page">
     <PageHeader title={t("security.rules.title")} eyebrow={t("security.rules.eyebrow")} description={isFa ? "قوانین هر وندور، آستانه‌ها و وضعیت فعال‌بودن آن‌ها را در یک نمای متمرکز مدیریت کنید." : "Manage vendor rules, thresholds, and enabled state in one focused workspace."} />
-    <section className="security-rules-commandbar"><div><Radar size={20} /><span><small>{isFa ? "قوانین عملیاتی" : "Operational rules"}</small><strong>{enabled} / {operationalRules.length}</strong></span></div><div><ShieldAlert size={20} /><span><small>{isFa ? "بحرانی و پراهمیت" : "Critical and high"}</small><strong>{highImpact}</strong></span></div><div><CircleGauge size={20} /><span><small>{isFa ? "دستگاه‌های تحت پایش" : "Monitored devices"}</small><strong>{monitor ? `${monitor.collectors.enabled} / ${monitor.collectors.supportedDevices}` : "—"}</strong></span></div><button type="button" onClick={() => void runNow()} disabled={runBusy}><Play size={17} />{runBusy ? (isFa ? "در حال بررسی…" : "Running…") : (isFa ? "بررسی رخدادها" : "Run detection")}</button></section>
-    {runMessage ? <p className="security-rules-inline-status" role="status">{runMessage}</p> : null}
-    <section className={`security-monitor-health ${monitor?.running && !monitor.lastErrorCode ? "is-ready" : "is-warning"}`}><span><RefreshCw size={21} className={monitor?.cycleRunning ? "is-spinning" : ""} /></span><div><h2>{isFa ? "پایش مداوم وندورها" : "Continuous vendor monitoring"}</h2><p>{monitor?.running ? (isFa ? `Worker فعال است؛ هر ${monitor.tickSeconds} ثانیه رخدادها را بررسی می‌کند و collector هر دستگاه در فاصله ثبت‌شده اجرا می‌شود.` : `Worker is active; detections run every ${monitor.tickSeconds}s and each device collector follows its saved interval.`) : (isFa ? "Worker پایش در API فعال نیست؛ وضعیت اجرای سرویس را بررسی کنید." : "The API monitoring worker is not active; check the service runtime.")}</p></div><dl><div><dt>{isFa ? "آخرین بررسی" : "Last detection"}</dt><dd>{monitor?.lastDetectionAt ? new Date(monitor.lastDetectionAt).toLocaleString(isFa ? "fa-IR" : "en-US") : "—"}</dd></div><div><dt>{isFa ? "ایمیل فعال" : "Email channels"}</dt><dd>{monitor?.email.enabledChannels ?? 0}</dd></div><div><dt>{isFa ? "خطای collector" : "Collector failures"}</dt><dd>{monitor?.collectors.failed ?? 0}</dd></div></dl>{monitor?.lastErrorCode ? <p role="alert">{monitor.lastErrorCode}</p> : null}</section>
     <section className="security-rule-library"><header><div><SlidersHorizontal size={20} /><div><h2>{isFa ? "قوانین هر وندور" : "Rules by vendor"}</h2><p>{isFa ? "هر قانون به رخداد واقعی، آستانه زمانی و Finding قابل پیگیری متصل است." : "Each rule is connected to real events, a time window, and a traceable finding."}</p></div></div></header><div className="security-rule-vendors" role="tablist" aria-label={isFa ? "وندورها" : "Vendors"}>{VENDORS.map((item) => <button key={item} type="button" role="tab" aria-selected={vendor === item} className={vendor === item ? "is-active" : ""} onClick={() => setVendor(item)}><strong>{item === "general" && isFa ? "عمومی" : VENDOR_LABELS[item]}</strong><span>{counts[item] ?? 0} {isFa ? "قانون" : "rules"}</span></button>)}</div>{actionError ? <div role="alert" className="state-card is-error">{actionError}</div> : null}<div className="security-rule-list">{vendorRules.map((rule) => { const key = String(queryValue(rule, "ruleKey") ?? ""); const localized = RULE_FA[key] ?? LEGACY_FA[rule.name]; const threshold = Number(rule.thresholdJson?.count ?? 1); const windowMinutes = Number(rule.thresholdJson?.windowMinutes ?? 15); return <article key={rule.id} className={`security-rule-row security-rule-row--${rule.severity} ${rule.enabled ? "is-enabled" : "is-disabled"}`}><span className="security-rule-row__signal"><i /></span><div className="security-rule-row__content"><div><h3>{isFa && localized ? localized[0] : rule.name}</h3><span className={`security-severity security-severity--${rule.severity}`}>{t(`security.severity.${rule.severity}`, { defaultValue: rule.severity })}</span></div><p>{isFa && localized ? localized[1] : rule.description}</p><div className="security-rule-row__refs">{standards(rule).slice(0, 3).map((item) => <span key={item}>{item}</span>)}</div></div><div className="security-rule-row__threshold"><small>{isFa ? "آستانه" : "Threshold"}</small><strong>{threshold} {isFa ? `رخداد / ${windowMinutes} دقیقه` : `events / ${windowMinutes} min`}</strong></div><button type="button" className={rule.enabled ? "is-on" : ""} disabled={busyId === rule.id} aria-pressed={rule.enabled} onClick={() => void updateEnabled(rule.id, !rule.enabled)}><Power size={16} /><span>{busyId === rule.id ? t("security.rules.saving") : rule.enabled ? t("security.rules.active") : t("security.rules.inactive")}</span></button></article>; })}</div></section>
   </section>;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Clock3, ExternalLink, Eye, EyeOff, Inbox, KeyRound, Mail, Pencil, Plus, RefreshCw, Send, ShieldCheck, Unplug, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Clock3, ExternalLink, Eye, EyeOff, Inbox, KeyRound, Mail, Pencil, Plus, Send, ShieldCheck, Unplug, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityEmailAlertSettings, testSecurityEmailAlert, testSecurityVendorEmails, updateSecurityEmailAlertSettings, type SecurityEmailAlertSettings } from "@/lib/platform";
@@ -299,7 +299,7 @@ export default function EmailAlertsPage() {
     </div> : null}
 
     <section className="email-delivery-history">
-      <header><div><BellRing size={20} /><span><h2>{isFa ? "تاریخچه ارسال ایمیل" : "Email delivery history"}</h2><p>{isFa ? "علت هشدار، گیرنده و نتیجه هر تلاش را شفاف ببینید." : "See the alert reason, recipient, and result of every attempt."}</p></span></div><button type="button" onClick={() => void loadSettings()} disabled={Boolean(busy)}><RefreshCw size={16} />{isFa ? "به‌روزرسانی" : "Refresh"}</button></header>
+      <header><div><BellRing size={20} /><span><h2>{isFa ? "تاریخچه ارسال ایمیل" : "Email delivery history"}</h2><p>{isFa ? "علت هشدار، گیرنده و نتیجه هر تلاش را شفاف ببینید." : "See the alert reason, recipient, and result of every attempt."}</p></span></div></header>
       {email?.deliveries.length ? <><nav className="email-history-filters" aria-label={isFa ? "فیلتر تاریخچه" : "History filters"}>{(["all", "sent", "queued", "blocked"] as const).map((filter) => <button key={filter} type="button" className={historyFilter === filter ? "is-active" : ""} onClick={() => setHistoryFilter(filter)}>{filter === "all" ? (isFa ? "همه" : "All") : filter === "sent" ? (isFa ? "ارسال‌شده" : "Sent") : filter === "queued" ? (isFa ? "در صف" : "Queued") : (isFa ? "نیازمند بررسی" : "Needs attention")}</button>)}</nav>
       {filteredDeliveries.length ? <div className="email-history-list">{filteredDeliveries.map((delivery) => {
         const queued = delivery.status === "pending" || delivery.status === "failed" || delivery.status === "sending";

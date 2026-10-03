@@ -1,3 +1,11 @@
+# 2026-10-03 — Detection workspace, Monitoring navigation, attacker targets, reload controls
+
+- Removed redundant Detection Rules status widgets and manual run; kept per-vendor toggles and the automatic backend worker.
+- Hid the misleading Daily Check-based Monitoring overview from navigation; direct route redirects to Assets, while the on-demand check remains under its dedicated route.
+- Scoped attacker targets, risk spread, response candidates and displayed evidence to actionable finding devices; added per-target vendor/name/host/finding count/time. A new isolated DB test proves that benign Sophos traffic from an IP attacking Linux/MikroTik does not become a Sophos target, and an auth denial is not a vendor block.
+- Removed generic refresh buttons from main live pages; retained explicit diagnostics, retry and offline Geo database download. No periodic AI egress was introduced after safety review rejected that expansion.
+- Backend/frontend production builds and isolated attacker API test passed; no vendor-side mutation. This is bounded polling, not true push streaming.
+
 ## 2026-10-03 - Security alert overview and company copy
 
 - Removed the small ownership explanation in the company flow.

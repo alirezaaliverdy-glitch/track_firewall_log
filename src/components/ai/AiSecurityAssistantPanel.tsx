@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Activity, Bot, ChevronDown, MessageCircle, RefreshCw, ScanSearch, Send, Server, ShieldAlert, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Activity, Bot, ChevronDown, MessageCircle, ScanSearch, Send, Server, ShieldAlert, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import {
   getAiProviderStatus,
   getSecuritySummary,
@@ -76,7 +76,6 @@ export default function AiSecurityAssistantPanel() {
   const [summary, setSummary] = useState<SecuritySummary | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [technicalError, setTechnicalError] = useState<string | null>(null);
   const [createdPlanId, setCreatedPlanId] = useState<string | null>(null);
@@ -98,7 +97,6 @@ export default function AiSecurityAssistantPanel() {
   const [recommendationWorking, setRecommendationWorking] = useState<string | null>(null);
 
   const refreshSummary = () => {
-    setSummaryLoading(true);
     setSummary(null);
     setProviderStatus(null);
     setError(null);
@@ -112,8 +110,7 @@ export default function AiSecurityAssistantPanel() {
       .catch((err: unknown) => {
         setError("دریافت خلاصه امنیتی انجام نشد. جزئیات خطا در بخش Details قابل مشاهده است.");
         setTechnicalError(err instanceof Error ? err.message : "خطای ناشناخته در دریافت خلاصه امنیتی");
-      })
-      .finally(() => setSummaryLoading(false));
+      });
   };
 
   const clearChat = () => {
@@ -429,15 +426,6 @@ export default function AiSecurityAssistantPanel() {
         </label>
 
         <div className="grid grid-cols-2 gap-2 lg:flex">
-          <button
-            type="button"
-            onClick={refreshSummary}
-            disabled={summaryLoading}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:border-cyan-500/30 hover:text-cyan-200 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${summaryLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-            {isFa ? "تازه‌سازی" : "Refresh"}
-          </button>
           <button
             type="button"
             onClick={clearChat}

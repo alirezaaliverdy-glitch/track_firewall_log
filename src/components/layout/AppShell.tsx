@@ -41,7 +41,6 @@ const fallbackNavigation: ProductNavigationGroup[] = [
   { key: "dashboard", titleFa: "داشبورد", titleEn: "Dashboard", iconKey: "dashboard", route: "/dashboard", mobilePrimary: true, items: [] },
   { key: "assets", titleFa: "دارایی‌ها", titleEn: "Assets", iconKey: "assets", route: "/assets", mobilePrimary: true, items: [] },
   { key: "security", titleFa: "امنیت", titleEn: "Security", iconKey: "security", route: "/security", mobilePrimary: false, items: [] },
-  { key: "monitoring", titleFa: "پایش", titleEn: "Monitoring", iconKey: "monitoring", route: "/monitoring", mobilePrimary: true, items: [] },
   { key: "actions", titleFa: "اقدامات", titleEn: "Actions", iconKey: "actions", route: "/actions", mobilePrimary: true, items: [] },
   { key: "assistant", titleFa: "دستیار هوشمند", titleEn: "Assistant", iconKey: "assistant", route: "/assistant", mobilePrimary: false, items: [] },
   { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", route: "/attackers", mobilePrimary: false, items: [] },
@@ -92,7 +91,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
   )), [user?.allowedSections, user?.role]);
   const visibleNavigation = navigation.length ? navigation : localNavigation;
   const connectionHealthy = online && navigation.length > 0 && !navigationError;
-  const mobileNavigation = ["dashboard", "assets", "monitoring", "actions"]
+  const mobileNavigation = ["dashboard", "assets", "security", "actions"]
     .map((key) => visibleNavigation.find((group) => group.key === key))
     .filter((group): group is ProductNavigationGroup => Boolean(group));
   const moreNavigationActive = !mobileNavigation.some((group) => group.key === activeGroup);
