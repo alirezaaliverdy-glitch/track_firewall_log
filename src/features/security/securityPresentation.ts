@@ -73,10 +73,48 @@ const faSecurityText: Record<string, string> = {
 
 const genericExposureSuffix = "can indicate security exposure, compromise, or loss of control.";
 
+const faVendorRuleTitles: Record<string, string> = {
+  "Linux: repeated authentication failures": "لینوکس: شکست‌های تکراری ورود",
+  "Linux: remote root login": "لینوکس: ورود از راه دور با حساب root",
+  "Linux: repeated sudo failures": "لینوکس: شکست‌های تکراری sudo",
+  "Linux: host firewall disabled": "لینوکس: غیرفعال‌شدن فایروال میزبان",
+  "Linux: audit trail tampering": "لینوکس: دست‌کاری ردپای ممیزی",
+  "Linux: web exploit probe burst": "لینوکس: تلاش‌های تکراری برای کشف آسیب‌پذیری وب",
+  "Linux: inbound firewall denial burst": "لینوکس: افزایش ترافیک ورودی ردشده",
+  "MikroTik: repeated login failures": "میکروتیک: شکست‌های تکراری ورود",
+  "MikroTik: administrator account changed": "میکروتیک: تغییر حساب مدیر",
+  "MikroTik: insecure management service enabled": "میکروتیک: فعال‌شدن سرویس مدیریت ناامن",
+  "MikroTik: firewall policy changed": "میکروتیک: تغییر سیاست فایروال",
+  "MikroTik: repeated VPN failures": "میکروتیک: شکست‌های تکراری VPN",
+  "MikroTik: port scan detected": "میکروتیک: شناسایی اسکن پورت",
+  "FortiGate: repeated administrator login failures": "فورتی‌گیت: شکست‌های تکراری ورود مدیر",
+  "FortiGate: administrator account changed": "فورتی‌گیت: تغییر حساب مدیر",
+  "FortiGate: repeated SSL-VPN failures": "فورتی‌گیت: شکست‌های تکراری SSL-VPN",
+  "FortiGate: high-severity security threat": "فورتی‌گیت: تهدید امنیتی شدید",
+  "FortiGate: repeated denied traffic from one source": "فورتی‌گیت: ترافیک ردشدهٔ تکراری از یک مبدأ",
+  "FortiGate: security policy changed": "فورتی‌گیت: تغییر سیاست امنیتی",
+  "FortiGate: management-plane probe": "فورتی‌گیت: تلاش برای شناسایی سرویس مدیریت",
+  "Cisco: repeated AAA/login failures": "سیسکو: شکست‌های تکراری ورود و AAA",
+  "Cisco: configuration changed": "سیسکو: تغییر پیکربندی",
+  "Cisco: insecure management access enabled": "سیسکو: فعال‌شدن دسترسی مدیریت ناامن",
+  "Cisco: ACL deny spike": "سیسکو: افزایش رد ترافیک توسط ACL",
+  "Cisco: repeated VPN negotiation failures": "سیسکو: شکست‌های تکراری مذاکره VPN",
+  "Cisco: repeated SNMP authentication failures": "سیسکو: شکست‌های تکراری احراز هویت SNMP",
+  "pfSense: repeated management login failures": "پی‌اف‌سنس: شکست‌های تکراری ورود مدیریتی",
+  "pfSense: sshguard block spike": "پی‌اف‌سنس: افزایش مسدودسازی توسط sshguard",
+  "pfSense: firewall block spike": "پی‌اف‌سنس: افزایش مسدودسازی فایروال",
+  "pfSense: NAT or port-forward changed": "پی‌اف‌سنس: تغییر NAT یا انتقال پورت",
+  "pfSense: repeated VPN failures": "پی‌اف‌سنس: شکست‌های تکراری VPN",
+  "pfSense: IDS/IPS high-confidence alert": "پی‌اف‌سنس: هشدار معتبر IDS/IPS",
+};
+
 export function securityDisplayText(value: string, language: string) {
   if (!language.toLowerCase().startsWith("fa")) return value;
   const exact = faSecurityText[value];
   if (exact) return exact;
+  if (faVendorRuleTitles[value]) return faVendorRuleTitles[value];
+  const matchedEvents = value.match(/^.+? \((\d+) matching events in (\d+) minutes\)$/);
+  if (matchedEvents) return `در ${matchedEvents[2]} دقیقه، ${matchedEvents[1]} رویداد مطابق این قانون ثبت شده است.`;
   if (value.endsWith(genericExposureSuffix)) {
     const rawTitle = value.split(". ")[0].trim();
     const title = faSecurityText[rawTitle] ?? rawTitle;

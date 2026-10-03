@@ -28,7 +28,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
     return reply.code(201).send({ event, detection });
   });
 
-  app.get<{ Querystring: { vendor?: string; deviceId?: string; status?: string } }>("/api/security/findings", async (request) => listSecurityFindings(request.query ?? {}));
+  app.get<{ Querystring: { vendor?: string; deviceId?: string; status?: string; scope?: string } }>("/api/security/findings", async (request) => listSecurityFindings(request.query ?? {}));
 
   app.get("/api/security/vendor-profiles", async () => ({ profiles: listPublicVendorTelemetryProfiles() }));
 

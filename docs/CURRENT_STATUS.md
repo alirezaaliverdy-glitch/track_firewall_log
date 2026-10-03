@@ -1,3 +1,10 @@
+## 2026-10-03 - Security overview freshness and alert triage
+
+- Removed the redundant company data-ownership sentence without changing company selection or access rules.
+- Security overview polls read-only data every 30 seconds while visible, retains the last successful view on refresh failure, displays fetch/monitor/email readiness, and avoids claiming a clean estate when collection is unverified.
+- Overview-only finding query returns up to 100 open findings ordered by explicit severity, plus exact aggregate counts; the capped list is labeled. Persian vendor rule names and generated event-count summaries are translated for display, while raw evidence stays unchanged.
+- Finding detail guides evidence review, reviewable action planning and manual resolution confirmation. No device change or email test was triggered. Builds, focused tests and local health checks passed; local read-only query observed 45 open findings (5 high, 0 critical). Live email delivery remains to be verified by the user with their configured recipient.
+
 ## 2026-10-03 - Distinct dashboard sensor colors
 
 - Kept the vivid yellow health ring; CPU icon/bar is cyan, memory icon/bar violet, and disk or datastore icon/bar amber on every fleet card. Missing values still have no filled bar.

@@ -624,10 +624,29 @@ export function runSecurityDetection(input: { deviceId?: string; assetId?: strin
   return run;
 }
 
-export async function listSecurityFindings(filters: { vendor?: string; deviceId?: string; status?: string } = {}) {
+export async function listSecurityFindings(filters: { vendor?: string; deviceId?: string; status?: string; scope?: string } = {}) {
   const vendor = cleanText(filters.vendor).toLowerCase();
   const deviceId = cleanText(filters.deviceId);
   const status = cleanText(filters.status);
+  if (filters.scope === "overview") {
+    const where = { status: { notIn: ["resolved", "false_positive", "accepted_risk", "suppressed"] } };
+    const groupsPromise = prisma.finding.groupBy({ by: ["severity"], where, _count: { _all: true } });
+    const affectedPromise = prisma.finding.findMany({ where, select: { assetId: true, deviceId: true }, distinct: ["assetId", "deviceId"] });
+    const bySeverity = await Promise.all(["critical", "high", "medium", "low"].map((severity) => prisma.finding.findMany({
+        where: { ...where, severity }, orderBy: { lastSeen: "desc" }, take: 100,
+        include: { asset: { select: { id: true, name: true, managementIp: true, healthState: true } }, device: { select: { id: true, name: true, vendor: true, host: true } } }
+      })));
+    const [groups, affected] = await Promise.all([groupsPromise, affectedPromise]);
+    return {
+      findings: bySeverity.flat().slice(0, 100),
+      summary: {
+        open: groups.reduce((total, item) => total + item._count._all, 0),
+        critical: groups.find((item) => item.severity === "critical")?._count._all ?? 0,
+        high: groups.find((item) => item.severity === "high")?._count._all ?? 0,
+        affectedAssets: new Set(affected.map((item) => item.assetId ?? item.deviceId)).size,
+      }
+    };
+  }
   return {
     findings: await prisma.finding.findMany({
       where: {

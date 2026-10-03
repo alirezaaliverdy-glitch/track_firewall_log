@@ -318,9 +318,9 @@ export const netboxPreview = () => request<Record<string, unknown>>("/integratio
 export const netboxSync = () => request<Record<string, unknown>>("/integrations/netbox/sync", { method: "POST", body: JSON.stringify({ idempotencyKey: "ui-netbox-sync" }) });
 export const wazuhPreview = () => request<Record<string, unknown>>("/integrations/wazuh/sync-preview");
 export const wazuhSync = () => request<Record<string, unknown>>("/integrations/wazuh/sync", { method: "POST", body: JSON.stringify({ idempotencyKey: "ui-wazuh-sync" }) });
-export const listSecurityFindings = (filters: { vendor?: string; deviceId?: string; status?: string } = {}) => {
+export const listSecurityFindings = (filters: { vendor?: string; deviceId?: string; status?: string; scope?: string } = {}) => {
   const query = new URLSearchParams(Object.entries(filters).filter((entry): entry is [string, string] => Boolean(entry[1])));
-  return request<{ findings: SecurityFinding[] }>(`/security/findings${query.size ? `?${query}` : ""}`);
+  return request<{ findings: SecurityFinding[]; summary?: { open: number; critical: number; high: number; affectedAssets: number } }>(`/security/findings${query.size ? `?${query}` : ""}`);
 };
 export const listVendorFindingProfiles = () => request<{ profiles: VendorFindingProfile[] }>("/security/vendor-profiles");
 export const getFindingEvidence = (id: string) => request<FindingEvidence>(`/security/findings/${id}/evidence`);

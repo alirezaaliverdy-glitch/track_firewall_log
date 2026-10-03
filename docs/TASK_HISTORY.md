@@ -1,3 +1,10 @@
+## 2026-10-03 - Security alert overview and company copy
+
+- Removed the small ownership explanation in the company flow.
+- Added visible-page 30-second security refresh, monitor/collector and user-scoped email readiness, fetch freshness and explicit stale state. Open findings are prioritized by severity in a dedicated API query, with full aggregate counts and a visible 100-row cap disclosure.
+- Localized vendor detection titles and count-window summaries in Persian. Added an evidence-first review and operator-confirmed resolution path in finding detail, with existing preview/confirmation controls preserved for any device action.
+- Backend/frontend builds, seven focused tests, locale parity and UTF-8 checks passed. Local read-only DB query returned 45 open findings, including 5 high and no critical. API/web health HTTP 200 after deployment; no external notification delivery or live vendor response was tested.
+
 ## 2026-10-03 - Correct individual sensor palette
 
 - Retained the yellow dashboard health ring while restoring per-metric icon and bar colors: cyan CPU, violet memory, amber disk/datastore.

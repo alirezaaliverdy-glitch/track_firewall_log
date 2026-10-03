@@ -65,7 +65,6 @@ export function CompanyManager({ companies, archived, selectedId, onSelect, onCh
       </header>
       <div className="company-ownership-flow" aria-label="ساختار مالکیت داده">
         <span>حساب کاربری شما</span><b>←</b><span>شرکت انتخاب‌شده</span><b>←</b><span>دارایی و دستگاه‌ها</span>
-        <small>هر درخواست فقط داده‌های شرکت‌های متعلق به همین حساب را می‌بیند.</small>
       </div>
       <div className="company-switcher" role="tablist" aria-label="انتخاب شرکت">
         {companies.map((company) => (

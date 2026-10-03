@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Crosshair, Database, FileCode2, Fingerprint, Network, Server, ShieldCheck, Tags } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Activity, AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Database, FileCode2, Fingerprint, Network, Server, ShieldCheck, Tags } from "lucide-react";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -47,6 +48,14 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
   const setInvestigating = () => {
     if (!finding) return;
     updateFindingStatus(finding.id, "investigating").then(() => { setMessage(t("security.detail.investigatingSet")); refresh(); }).catch((reason: unknown) => setMessage(reason instanceof Error ? reason.message : t("security.detail.statusError")));
+  };
+  const markResolved = () => {
+    if (!finding) return;
+    if (!evidence) { setMessage(t("security.detail.verifyFirst")); return; }
+    if (!window.confirm(t("security.detail.resolveConfirm"))) return;
+    updateFindingStatus(finding.id, "resolved")
+      .then(() => { setMessage(t("security.detail.resolvedSet")); refresh(); })
+      .catch((reason: unknown) => setMessage(reason instanceof Error ? reason.message : t("security.detail.statusError")));
   };
   const technicalContext = useMemo(() => finding ? [
     finding.actor ? [t("security.detail.actor"), finding.actor] : null,
@@ -105,7 +114,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
         </> : <div className="security-evidence-placeholder"><Database size={32} /><strong>{t("security.detail.evidenceReady")}</strong><p>{t("security.detail.evidenceReadyDescription")}</p></div>}
       </section>
 
-      <section className="security-recommendation-panel"><div><span><Crosshair size={19} /></span><div><small>{t("security.detail.nextStepEyebrow")}</small><h2>{t("security.detail.nextStep")}</h2><p>{t("security.detail.planSafety")}</p></div></div><button type="button" onClick={createPlan}>{t("security.detail.createPlan")}</button></section>
+      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><ol><li>{t("security.detail.resolutionStep1")}</li><li>{t("security.detail.resolutionStep2")}</li><li>{t("security.detail.resolutionStep3")}</li></ol><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button><button type="button" onClick={createPlan}>{t("security.detail.createPlan")}</button><Link to="/actions">{t("dashboard.actions.actionCenter")}</Link><button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
       {message ? <p className="security-detail-message">{message}</p> : null}
     </section>
   );

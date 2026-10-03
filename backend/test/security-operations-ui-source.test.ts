@@ -40,5 +40,5 @@ test("Persian presentation localizes stored security evidence without changing r
   assert.match(presentation, /"Repeated SSH authentication failures": "شکست تکراری احراز هویت SSH"/);
   assert.match(overview, /securityDisplayText\(finding\.title/);
   assert.match(findings, /securityDisplayText\(finding\.summary/);
-  assert.match(rules, /securityDisplayText\(rule\.name/);
+  assert.match(rules, /RULE_FA\[key\] \?\? LEGACY_FA\[rule\.name\]/);
 });
