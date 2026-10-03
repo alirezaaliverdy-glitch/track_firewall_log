@@ -1,3 +1,8 @@
+## 2026-10-03 - Correct individual sensor palette
+
+- Retained the yellow dashboard health ring while restoring per-metric icon and bar colors: cyan CPU, violet memory, amber disk/datastore.
+- Added computed-style browser assertions; frontend built and local web deployed healthy. Six-vendor responsive browser regression passed with no write requests. No backend or vendor operations.
+
 ## 2026-09-29 - Fleet yellow reference and simplified Attackers
 
 - Adjusted fleet cards to the reference's bright yellow ring and resource bars, preserving labels, sensor coverage and unknown states.

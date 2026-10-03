@@ -1,3 +1,8 @@
+## 2026-10-03 - Distinct dashboard sensor colors
+
+- Kept the vivid yellow health ring; CPU icon/bar is cyan, memory icon/bar violet, and disk or datastore icon/bar amber on every fleet card. Missing values still have no filled bar.
+- Frontend build/deployment healthy. Intercepted Chromium verified computed icon/bar colors, six vendor cards, desktop/mobile widths and no writes. Backend collection and vendor configuration unchanged.
+
 ## 2026-09-29 - Vivid fleet summary and concise attacker IP view
 
 - Restored vivid yellow dashboard resource rings and CPU/RAM/storage bars in readable two-column device cards, with measured coverage and missing-sensor states preserved.

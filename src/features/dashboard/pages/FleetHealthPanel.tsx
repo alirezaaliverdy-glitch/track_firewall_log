@@ -37,9 +37,9 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       const current=(row?:Row)=>connected&&!!row?.fresh&&recent(row.measuredAt)&&row.value!==null;
       const disk=resource("disk.usage_percent"),storage=disk?.value!=null?disk:resource("datastore.usage_percent");
       const rows=[
-        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#fbbf24"},
-        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#fbbf24"},
-        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#fbbf24"}
+        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#22d3ee"},
+        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#a78bfa"},
+        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#f59e0b"}
       ];
       const coverage=rows.filter(item=>current(item.row)).length;
       const score=coverage&&connected&&Number.isFinite(device.score)?device.score:null;

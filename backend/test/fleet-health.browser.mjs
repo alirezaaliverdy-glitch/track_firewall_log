@@ -47,6 +47,11 @@ try {
   assert.equal(await page.$$eval(".alert-trend-panel",items=>items.length),0);
   assert.equal(await page.$$eval(".fleet-controls button",items=>items.length),1);
   assert.ok(await page.$eval(".fleet-summary-dial",el=>getComputedStyle(el).backgroundImage.includes("251, 191, 36")));
+  assert.deepEqual(await page.$$eval(".fleet-summary:first-child .fleet-summary-resources>div",items=>items.map(el=>({icon:getComputedStyle(el.querySelector("svg")).color,bar:getComputedStyle(el.querySelector("dd i")).backgroundColor}))),[
+    {icon:"rgb(34, 211, 238)",bar:"rgb(34, 211, 238)"},
+    {icon:"rgb(167, 139, 250)",bar:"rgb(167, 139, 250)"},
+    {icon:"rgb(245, 158, 11)",bar:"rgb(245, 158, 11)"}
+  ]);
   assert.ok(await page.$eval(".fleet-health",el=>el.closest(".command-primary-workspace")!==null));
   assert.ok(await page.$eval(".command-detail-grid .device-status-panel",el=>el.getBoundingClientRect().height<el.closest(".command-detail-grid").getBoundingClientRect().height));
   assert.ok(await page.$eval(".command-detail-grid .device-status-panel",el=>Math.abs(el.getBoundingClientRect().width-el.closest(".command-detail-grid").getBoundingClientRect().width)<2));
