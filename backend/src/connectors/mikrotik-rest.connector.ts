@@ -63,8 +63,10 @@ function lineRows(value: unknown, limit = 1_000) {
   return rows(value).slice(0, limit).map((item) => compact(item));
 }
 
-function boolCapability(device: Device, key: string) {
-  return record(device.capabilities)[key] === true;
+export function assertMikroTikRestTlsPolicy(device: Device) {
+  if (record(device.capabilities).mikrotikTlsVerify === false) {
+    throw new MikroTikRestError("MIKROTIK_REST_TLS_VERIFICATION_REQUIRED", "RouterOS REST certificate verification is disabled. Install a trusted HTTPS certificate or use the SSH/CLI connection before sending credentials.", 409);
+  }
 }
 
 async function credentials(device: Device) {
@@ -81,16 +83,17 @@ async function credentials(device: Device) {
 
 async function requestJson(device: Device, path: string) {
   if (!path.startsWith("/rest/") || path.includes("..")) throw new MikroTikRestError("MIKROTIK_REST_PATH_BLOCKED", "RouterOS REST path is not allowed.", 400);
+  assertMikroTikRestTlsPolicy(device);
   const auth = await credentials(device);
   return await new Promise<unknown>((resolve, reject) => {
     const request = https.request({
       hostname: device.host,
       port: device.managementPort,
-      agent: vendorHttpsAgent(boolCapability(device, "mikrotikTlsVerify")),
+      agent: vendorHttpsAgent(true),
       path,
       method: "GET",
       timeout: REQUEST_TIMEOUT_MS,
-      rejectUnauthorized: boolCapability(device, "mikrotikTlsVerify"),
+      rejectUnauthorized: true,
       headers: {
         Accept: "application/json",
         Authorization: `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString("base64")}`
@@ -123,7 +126,7 @@ async function requestJson(device: Device, path: string) {
       if (error instanceof MikroTikRestError) return reject(error);
       const source = error as NodeJS.ErrnoException;
       if (source.code === "DEPTH_ZERO_SELF_SIGNED_CERT" || source.code === "SELF_SIGNED_CERT_IN_CHAIN" || source.code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE") {
-        return reject(new MikroTikRestError("MIKROTIK_REST_TLS_UNTRUSTED", "RouterOS HTTPS certificate is not trusted. Install a trusted certificate or explicitly allow the stored device certificate.", 502));
+        return reject(new MikroTikRestError("MIKROTIK_REST_TLS_UNTRUSTED", "RouterOS HTTPS certificate is not trusted. Install a trusted certificate or use the SSH/CLI connection.", 502));
       }
       reject(new MikroTikRestError("MIKROTIK_REST_UNREACHABLE", "RouterOS REST endpoint is unreachable.", 502));
     });
@@ -225,7 +228,6 @@ function capabilitiesFrom(discovery?: MikroTikDiscovery, warnings: DeviceConnect
 
 async function connection(device: Device): Promise<DeviceConnectionTestResult> {
   const warnings: DeviceConnectionTestResult["warnings"] = [];
-  if (!boolCapability(device, "mikrotikTlsVerify")) warnings.push({ code: "MIKROTIK_REST_TLS_VERIFICATION_DISABLED", message: "HTTPS is encrypted, but certificate verification is disabled for this RouterOS device. Install a trusted certificate before production use." });
   try {
     const discovery = await discover(device, warnings);
     return {

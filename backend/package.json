@@ -29,7 +29,7 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.2.3",
     "exceljs": "^4.4.0",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.5",
     "maxmind": "5.0.7",
     "pg": "^8.22.0",
     "prisma": "7.10.0",
@@ -49,13 +49,20 @@
   },
   "pnpm": {
     "overrides": {
-      "@fastify/ajv-compiler>fast-uri": "3.1.5",
+      "@fastify/ajv-compiler>fast-uri": "3.1.8",
       "@prisma/config>deepmerge-ts": "8.0.0",
       "@visx/responsive>lodash": "4.18.0",
       "@visx/shape>lodash": "4.18.0",
-      "ajv>fast-uri": "3.1.5",
-      "fast-json-stringify>fast-uri": "3.1.5",
-      "fastify>find-my-way": "9.7.0"
+      "ajv>fast-uri": "3.1.8",
+      "fast-json-stringify>fast-uri": "3.1.8",
+      "fastify>find-my-way": "9.7.0",
+      "fastify>@fastify/proxy-addr": "5.1.1",
+      "@fastify/multipart>@fastify/busboy": "3.2.1",
+      "minimatch@3>brace-expansion": "1.1.21",
+      "prisma>mysql2": "3.23.1",
+      "exceljs>uuid": "11.1.1",
+      "minimatch@10.2.5>brace-expansion": "5.0.12",
+      "js-yaml@4": "4.3.2"
     }
   }
 }

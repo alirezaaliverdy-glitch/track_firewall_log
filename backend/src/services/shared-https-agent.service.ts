@@ -13,8 +13,8 @@ const options: https.AgentOptions = {
 };
 
 const verified = new https.Agent(options);
-const legacyUnverified = new https.Agent(options);
 
 export function vendorHttpsAgent(verifyCertificate: boolean) {
-  return verifyCertificate ? verified : legacyUnverified;
+  if (!verifyCertificate) throw new Error("Unverified vendor HTTPS connections are not allowed.");
+  return verified;
 }

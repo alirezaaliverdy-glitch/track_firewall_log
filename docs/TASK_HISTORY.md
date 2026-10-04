@@ -1,3 +1,9 @@
+# 2026-10-04 - Security audit remediation
+
+- Reproduced dependency advisories with pnpm audit, upgraded Fastify and vulnerable transitive packages in both lockfiles, and verified frozen Docker builds. Backend full audit: 0; frontend production audit: 0. One frontend dev-only `braces` advisory remains because no patched release exists.
+- Fail-closed TLS for Sophos and MikroTik REST before credentials are transmitted. Sophos certificate pin/CA support is retained. Added regression tests for vendor TLS policy, shared HTTPS policy, ExcelJS/uuid compatibility and Vite env-file secret detection; 17 focused tests passed.
+- No production deployment, device configuration operation, database migration or change to protected ActionPlan/PolicyGuard behavior. Self-signed MikroTik REST endpoints require a trusted certificate or SSH/CLI.
+
 # 2026-10-03 — Detection workspace, Monitoring navigation, attacker targets, reload controls
 
 - Removed redundant Detection Rules status widgets and manual run; kept per-vendor toggles and the automatic backend worker.

@@ -1,3 +1,9 @@
+# 2026-10-04 - Security dependency and vendor TLS hardening
+
+- Updated vulnerable production dependencies and pinned tested transitives. Full backend dependency audit reports 0 findings; frontend production audit reports 0. Full frontend audit retains one development-only `braces` advisory without a patched release.
+- Removed credential-bearing vendor HTTPS paths with disabled certificate verification. Sophos accepts system trust, a configured CA, or a verified SHA-256 leaf pin; MikroTik REST requires a trusted HTTPS certificate, with SSH/CLI available as an alternative for self-signed deployments.
+- Frontend build validation now reads Vite `.env` files, rejects secret-like public variables and credentials embedded in the API URL; the dev server defaults to loopback. Frozen-lockfile Docker builds and 17 focused tests passed. No deployment or live-device changes.
+
 # 2026-10-03 — Simpler detection UI and evidence-bound attacker targets
 
 - Detection Rules now focuses on vendor rules and thresholds; redundant counters, worker status card and manual run control are removed. The detection worker itself is unchanged.

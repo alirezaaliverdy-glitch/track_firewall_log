@@ -116,7 +116,13 @@ async function credential(device: Device) {
 
 function tlsVerification(device: Device) {
   const capabilities = record(device.capabilities);
-  return capabilities.sophosTlsVerify !== false;
+  return capabilities.sophosTlsVerify !== false || Boolean(capabilities.sophosTlsFingerprint) || Boolean(capabilities.sophosCaCertificate);
+}
+
+export function assertSophosTlsPolicy(device: Device) {
+  if (!tlsVerification(device)) {
+    throw new SophosApiError("SOPHOS_TLS_VERIFICATION_REQUIRED", "Sophos HTTPS certificate verification is disabled. Configure a trusted CA certificate or an independently verified SHA-256 fingerprint before sending credentials.", 409);
+  }
 }
 
 export function normalizeSophosFingerprint(value: unknown): string {
@@ -165,6 +171,7 @@ async function pinnedAgent(device: Device): Promise<https.Agent> {
 }
 
 async function postXml(device: Device, bodyXml: string) {
+  assertSophosTlsPolicy(device);
   const encoded = new URLSearchParams({ reqxml: bodyXml }).toString();
   const pin = record(device.capabilities).sophosTlsFingerprint;
   const agent = pin ? await pinnedAgent(device) : vendorHttpsAgent(tlsVerification(device));
@@ -386,7 +393,6 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
     const sophos = await discover(device);
     const collected = new Set(sophos.collectedModules ?? []);
     const partial = (sophos.collectionWarnings?.length ?? 0) > 0;
-    const tlsWarning = tlsVerification(device) ? [] : [{ code: "SOPHOS_SELF_SIGNED_TLS", message: "TLS certificate verification is disabled for this private Sophos endpoint. Install a trusted certificate and enable sophosTlsVerify for strict validation." }];
     return {
       connected: true, deviceId: device.id, vendor: "sophos", host: device.host, port: device.managementPort, credentialResolved: true, sophos,
       stages: [
@@ -394,7 +400,7 @@ async function connection(device: Device): Promise<DeviceConnectionTestResult> {
         { name: "ssh_handshake", status: "ok", message: "HTTPS/TLS API channel established." }, { name: "ssh_auth", status: "ok", message: "Sophos API authentication succeeded." },
         { name: "readonly_discovery", status: partial ? "warning" : "ok", message: `${collected.size}/${DISCOVERY_ENTITIES.length} API modules read; ${sophos.interfaces.length} interfaces and ${sophos.firewallRules.length} firewall rules collected.` }
       ],
-      warnings: [...tlsWarning, ...(sophos.collectionWarnings ?? []).map(message => ({ code: "SOPHOS_DISCOVERY_PARTIAL", message }))],
+      warnings: (sophos.collectionWarnings ?? []).map(message => ({ code: "SOPHOS_DISCOVERY_PARTIAL", message })),
       capabilities: { canConnect: true, canRunBasicReadOnly: true, canReadSystem: true, canReadInterfaces: collected.has("Interface"), canReadFirewall: collected.has("FirewallRule"), canExecuteWriteActions: collected.has("Interface") || collected.has("FirewallRule") || VPN_REQUIRED_ENTITIES.every(entity => collected.has(entity)) },
       message: partial ? "Sophos API authenticated; some inventory modules are unavailable. Review collection warnings before actions." : "Sophos XML API authentication and read-only discovery succeeded."
     };

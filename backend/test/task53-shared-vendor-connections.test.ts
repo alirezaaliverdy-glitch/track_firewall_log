@@ -18,8 +18,7 @@ afterEach(() => closeSharedSshSessions());
 
 test("API vendors reuse a bounded HTTPS agent per certificate policy", () => {
   assert.equal(vendorHttpsAgent(true), vendorHttpsAgent(true));
-  assert.equal(vendorHttpsAgent(false), vendorHttpsAgent(false));
-  assert.notEqual(vendorHttpsAgent(true), vendorHttpsAgent(false));
+  assert.throws(() => vendorHttpsAgent(false), /Unverified vendor HTTPS connections are not allowed/);
   assert.equal(vendorHttpsAgent(true).maxSockets, 2);
 });
 
