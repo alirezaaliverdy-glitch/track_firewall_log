@@ -1843,3 +1843,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Built API/web images from a clean tracked snapshot; Compose lockfile installs, Prisma generation/migrations and frontend/backend builds passed.
 - Booted a clean isolated stack with new named volumes: all services healthy, ۵۴ migrations applied, HTTPS/UI/readiness smoke checks passed. The initial test used a loopback CORS override and was correctly rejected by production hardening; the repository defaults then passed without weakening validation.
 - Replaced the root Vite template README with reproducible Persian-first server instructions and secret/data safety notes. No live stack or vendor configuration changed.
+# 2026-10-04 — Action Center operation picker
+
+- Replaced the full catalog native select with searchable, category-filtered, progressively revealed inline action cards, preserving keyboard-focus styling and selected-action state.
+- Isolated frontend Docker build passed. No vendor actions were executed.

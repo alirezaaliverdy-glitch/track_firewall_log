@@ -233,7 +233,26 @@
 
 .operations-center-page .operator-run-card__selectors {
   gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+
+.operator-action-picker { display: grid; gap: 10px; min-width: 0; border-top: 1px solid rgba(103, 158, 181, .18); padding-top: 14px; }
+.operator-action-picker__heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+.operator-action-picker__heading strong { color: #e5f4f7; font-size: .83rem; }
+.operator-action-picker__heading span { color: #8ca8b8; font-size: .72rem; }
+.operator-action-picker__categories { display: flex; gap: 6px; flex-wrap: wrap; }
+.operator-action-picker__categories button, .operator-action-picker__more { border: 1px solid rgba(103, 158, 181, .27); border-radius: 999px; background: rgba(7, 27, 40, .8); color: #a9c2cf; padding: 6px 11px; font: inherit; font-size: .72rem; cursor: pointer; }
+.operator-action-picker__categories button[aria-pressed="true"] { color: #9df3e3; border-color: rgba(67, 212, 155, .48); background: rgba(67, 212, 155, .12); }
+.operator-action-picker__results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.operator-action-picker__results > p { grid-column: 1 / -1; margin: 0; color: #91aebb; font-size: .78rem; }
+.operator-action-picker__item { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid rgba(103, 158, 181, .22); border-radius: 10px; background: rgba(4, 19, 30, .7); color: #d9edf1; padding: 9px 11px; text-align: start; font: inherit; cursor: pointer; }
+.operator-action-picker__item:hover, .operator-action-picker__item:focus-visible { border-color: rgba(67, 212, 155, .55); outline: none; }
+.operator-action-picker__item[aria-pressed="true"] { border-color: #43d49b; background: rgba(67, 212, 155, .13); }
+.operator-action-picker__item span { display: grid; gap: 2px; min-width: 0; }
+.operator-action-picker__item strong { font-size: .76rem; overflow-wrap: anywhere; }
+.operator-action-picker__item small { color: #84a0ae; font-size: .65rem; }
+.operator-action-picker__item em { flex: 0 0 auto; color: #9bb3bf; font-size: .65rem; font-style: normal; }
+.operator-action-picker__more { justify-self: start; }
 
 .operations-center-page .operator-run-card__selectors label {
   gap: 7px;
@@ -580,6 +599,7 @@
 }
 
 @media (max-width: 520px) {
+  .operations-center-page .operator-run-card__selectors, .operator-action-picker__results { grid-template-columns: 1fr; }
   .operations-hero__actions { display: grid; grid-template-columns: 1fr; }
   .operations-hero__actions button { width: 100%; }
   .operations-summary { grid-template-columns: 1fr 1fr; }

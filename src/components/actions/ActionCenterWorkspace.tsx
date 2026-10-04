@@ -148,6 +148,9 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   const [deviceId, setDeviceId] = useState("");
   const [credentialId, setCredentialId] = useState("");
   const [actionId, setActionId] = useState("");
+  const [actionQuery, setActionQuery] = useState("");
+  const [actionCategory, setActionCategory] = useState("");
+  const [visibleActionCount, setVisibleActionCount] = useState(6);
   const [parameters, setParameters] = useState<Record<string, string>>({});
   const [verification, setVerification] = useState<DeviceVerification | null>(null);
   const [selected, setSelected] = useState<ActionCenterItem | null>(null);
@@ -169,11 +172,12 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
 
   const selectedDevice = useMemo(() => devices.find((device) => device.id === deviceId) ?? null, [deviceId, devices]);
   const selectedAction = useMemo(() => actions.find((action) => action.id === actionId) ?? null, [actionId, actions]);
-  const actionGroups = useMemo(() => {
-    const grouped = new Map<string, CatalogItem[]>();
-    for (const action of actions) grouped.set(action.category, [...(grouped.get(action.category) ?? []), action]);
-    return [...grouped];
-  }, [actions]);
+  const actionCategories = useMemo(() => [...new Set(actions.map((action) => action.category))], [actions]);
+  const filteredActions = useMemo(() => {
+    const query = actionQuery.trim().toLocaleLowerCase();
+    return actions.filter((action) => (!actionCategory || action.category === actionCategory) && (!query ||
+      [action.titleFa, action.titleEn, action.descriptionFa, ...action.tagsFa].some((value) => value.toLocaleLowerCase().includes(query))));
+  }, [actions, actionCategory, actionQuery]);
   const allFields = useMemo(() => selectedAction ? [...selectedAction.requiredParams, ...selectedAction.optionalParams] : [], [selectedAction]);
   const requiredComplete = useMemo(() => selectedAction?.requiredParams.every((field) => field.key === "acknowledgeDisruption" ? parameters[field.key] === "true" : Boolean(parameters[field.key]?.trim())) ?? false, [parameters, selectedAction]);
 
@@ -228,6 +232,9 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
   useEffect(() => {
     setActionId("");
     setActions([]);
+    setActionQuery("");
+    setActionCategory("");
+    setVisibleActionCount(6);
     setParameters({});
     setVerification(null);
     setError("");
@@ -466,8 +473,22 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         <div className="operator-run-card__selectors">
           <label>{copy.selectDevice}<select aria-label={copy.selectDevice} value={deviceId} onChange={(event) => setDeviceId(event.target.value)}><option value="">{copy.choose}</option>{devices.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.vendor}</option>)}</select></label>
           <label>{copy.selectCredential}<select aria-label={copy.selectCredential} value={credentialId} disabled={!selectedDevice} onChange={(event) => setCredentialId(event.target.value)}><option value="">{copy.choose}</option>{credentials.map((credential) => <option key={credential.id} value={credential.id}>{credential.name} · {credential.type}</option>)}</select></label>
-          <label>{copy.selectAction}<select aria-label={copy.selectAction} value={actionId} disabled={!selectedDevice} onChange={(event) => setActionId(event.target.value)}><option value="">{copy.choose}</option>{actionGroups.map(([category, group]) => <optgroup key={category} label={isFa ? ACTION_CATEGORY_FA[category] ?? category : category}>{group.map((action) => <option key={action.id} value={action.id}>{isFa ? action.titleFa : action.titleEn}</option>)}</optgroup>)}</select></label>
         </div>
+        <section className="operator-action-picker" aria-label={copy.selectAction}>
+          <div className="operator-action-picker__heading"><strong>{copy.selectAction}</strong><span>{selectedAction ? (isFa ? `انتخاب‌شده: ${selectedAction.titleFa}` : `Selected: ${selectedAction.titleEn}`) : selectedDevice ? (isFa ? `${actions.length.toLocaleString(locale)} عملیات برای این دستگاه` : `${actions.length.toLocaleString(locale)} actions for this device`) : (isFa ? "ابتدا دستگاه را انتخاب کنید" : "Select a device first")}</span></div>
+          {selectedDevice && <>
+            <input type="search" aria-label={isFa ? "جست‌وجوی عملیات" : "Search actions"} placeholder={isFa ? "نام کار یا فرمان را جست‌وجو کنید…" : "Search an action or command…"} value={actionQuery} onChange={(event) => { setActionQuery(event.target.value); setVisibleActionCount(6); }} />
+            <div className="operator-action-picker__categories" role="group" aria-label={isFa ? "دستهٔ عملیات" : "Action category"}>
+              <button type="button" aria-pressed={!actionCategory} onClick={() => { setActionCategory(""); setVisibleActionCount(6); }}>{isFa ? "همه" : "All"}</button>
+              {actionCategories.map((category) => <button key={category} type="button" aria-pressed={actionCategory === category} onClick={() => { setActionCategory(category); setVisibleActionCount(6); }}>{isFa ? ACTION_CATEGORY_FA[category] ?? category : category}</button>)}
+            </div>
+            <div className="operator-action-picker__results" role="group" aria-label={isFa ? "عملیات مطابق جست‌وجو" : "Matching actions"}>
+              {filteredActions.slice(0, visibleActionCount).map((action) => <button key={action.id} type="button" className="operator-action-picker__item" aria-pressed={actionId === action.id} onClick={() => setActionId(action.id)}><span><strong>{isFa ? action.titleFa : action.titleEn}</strong><small>{isFa ? ACTION_CATEGORY_FA[action.category] ?? action.category : action.category}</small></span><em>{action.readOnly ? (isFa ? "فقط خواندن" : "Read only") : (isFa ? "تغییر دستگاه" : "Device change")}</em></button>)}
+              {!filteredActions.length && <p>{actions.length ? (isFa ? "عملیاتی با این جست‌وجو پیدا نشد." : "No matching action found.") : (isFa ? "عملیات قابل اجرا برای این دستگاه موجود نیست." : "No executable actions for this device.")}</p>}
+            </div>
+            {filteredActions.length > visibleActionCount && <button className="operator-action-picker__more" type="button" onClick={() => setVisibleActionCount((count) => count + 6)}>{isFa ? `نمایش بیشتر (${(filteredActions.length - visibleActionCount).toLocaleString(locale)} مورد)` : `Show more (${(filteredActions.length - visibleActionCount).toLocaleString(locale)})`}</button>}
+          </>}
+        </section>
 
         {selectedAction && <p className="operator-action-guidance">{isFa ? selectedAction.descriptionFa : selectedAction.titleEn}<span>{selectedAction.readOnly ? (isFa ? "فقط خواندن" : "Read only") : (isFa ? "تغییر پیکربندی · نیازمند تأیید" : "Configuration change · confirmation required")}</span></p>}
         {selectedAction && allFields.length > 0 && <section className="operator-parameters">

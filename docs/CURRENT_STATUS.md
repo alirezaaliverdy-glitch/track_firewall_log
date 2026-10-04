@@ -1760,3 +1760,6 @@ The dashboard now shows paged health cards for all registered device vendors. CP
 - From only tracked files, both API and web images built with `pnpm install --frozen-lockfile`, frontend environment validation, TypeScript/Vite build, Prisma client generation and backend TypeScript build.
 - A new isolated Compose project booted with fresh secrets and PostgreSQL volumes. `firewall-api`, `firewall-web`, `firewall-db` and `gateway` all became healthy; ۵۴ migrations applied, bootstrap admin file created, HTTPS UI returned 200, readiness returned 200 and HTTP redirected 308. No existing containers, production data or vendor settings were changed.
 - Root `README.md` now describes the actual clone/build/start/update flow, health checks, first-login secret handling and the production CORS requirement. Test-only temporary directories are untracked and must not be committed.
+# 2026-10-04 — Action Center operation selection
+
+The operation selector is now an inline searchable catalog scoped to the chosen device, with category filters, six initial results and an explicit “show more” control. It no longer opens a viewport-height native dropdown. The reviewed preview/execution path is unchanged. Isolated frontend Docker build passed; no device write or local deployment.
