@@ -351,6 +351,13 @@ export function configureSnmpv3Channel(id: string, input: { credentialId: string
   });
 }
 
+export function configureEsxiSecondaryChannel(id: string, input: { credentialId: string; port: number; fingerprint?: string; caCertificate?: string }) {
+  return requestJson<{ id: string; method: string; port: number; status: string }>(`/devices/${encodeURIComponent(id)}/observability/esxi`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
 export function getDeviceCapabilities(id: string) {
   return requestJson<DeviceCapabilities>(`/devices/${id}/capabilities`);
 }

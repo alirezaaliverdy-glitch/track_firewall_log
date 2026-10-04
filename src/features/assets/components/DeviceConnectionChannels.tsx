@@ -4,6 +4,7 @@ import { testDeviceConnection, type ConnectionTestResult } from "@/lib/devices";
 import type { DeviceWorkspace } from "@/lib/deviceOnboarding";
 import { connectionGuides } from "./connectionGuides";
 import { Snmpv3Setup } from "./Snmpv3Setup";
+import { EsxiSecondarySetup } from "./EsxiSecondarySetup";
 import "./DeviceConnectionChannels.css";
 
 type Channel = DeviceWorkspace["connections"][number];
@@ -144,6 +145,7 @@ export function DeviceConnectionChannels({
                 {!tested?.message && requirements.length && status !== "verified" && status !== "receiving" ? <p className="device-channel__message is-warning">{requirements.join(" · ")}</p> : null}
                 {guide ? <details className="device-channel__guide"><summary>{isFa ? guide.titleFa : guide.titleEn}</summary><ol>{(isFa ? guide.stepsFa : guide.stepsEn).map((step) => <li key={step}>{step}</li>)}</ol>{guide.command ? <pre dir="ltr">{guide.command}</pre> : null}{guide.noteFa ? <p>{isFa ? guide.noteFa : guide.noteEn}</p> : null}</details> : null}
                 {channel.method === "snmpv3" ? <Snmpv3Setup deviceId={deviceId} isFa={isFa} onRefresh={onRefresh} initialPort={channel.port ?? 161} initialCredentialId={channel.credentialId} initialAuthProtocol={channel.settingsJson?.authProtocol} /> : null}
+                {vendor === "esxi" && channel.role === "observability" ? <EsxiSecondarySetup deviceId={deviceId} method={channel.method} initialPort={channel.port ?? (channel.method === "ssh" ? 22 : 443)} initialCredentialId={channel.credentialId} isFa={isFa} onRefresh={onRefresh} /> : null}
                 <footer>
                   <span>{lastSuccess ? (isFa ? `آخرین موفق: ${new Date(lastSuccess).toLocaleString(locale)}` : `Last success: ${new Date(lastSuccess).toLocaleString(locale)}`) : (isFa ? "هنوز اتصال موفق ثبت نشده" : "No successful connection yet")}</span>
                   <span>{channel.host || channel.method === "snmpv3" || channel.method === "ssh" || channel.method === "soap_api" ? <bdi>{channel.host || host}</bdi> : (isFa ? "دریافت ورودی در مرکز لاگ" : "Inbound collector")}</span>

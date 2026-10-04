@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { DeviceProtocol } from "@prisma/client";
 import { selectDeviceConnector } from "../connectors/connector-registry.service.js";
 import { refreshLinuxHealth } from "../monitoring/linux/linux-health.service.js";
 import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
@@ -43,7 +44,7 @@ async function collect(id: string) {
   collectionErrors.delete(id);
   try {
     const device = await prisma.device.findFirst({where:{id,deletedAt:null,company:{deletedAt:null}}});
-    if (!device || device.status === "offline") return;
+    if (!device || (device.status === "offline" && !/esxi/i.test(device.vendor))) return;
     if (/linux/i.test(device.vendor)) { await refreshLinuxHealth(id); return; }
     if (/cisco/i.test(device.vendor)) {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device,["cpu","memory","interfacesDetailed"]);
@@ -57,9 +58,19 @@ async function collect(id: string) {
     const connector = selectDeviceConnector(device);
     if (connector) {
       const result=await connector.testConnection(device);
-      if(!result.connected)collectionErrors.set(id,/AUTH|CREDENTIAL/i.test(result.errorCode??"")?"AUTHENTICATION_FAILED":"COLLECTION_FAILED");
+      let collected = result;
+      if (!result.connected && /esxi/i.test(device.vendor)) {
+        const fallback = await prisma.deviceConnectionChannel.findUnique({ where: { deviceId_role: { deviceId: id, role: "observability" } } });
+        if (fallback?.status === "verified" && fallback.credentialId && ["ssh", "soap_api"].includes(fallback.method)) {
+          const alternative = { ...device, protocol: fallback.method === "ssh" ? DeviceProtocol.ssh : DeviceProtocol.api,
+            managementPort: fallback.port ?? (fallback.method === "ssh" ? 22 : 443), credentialId: fallback.credentialId };
+          const secondaryConnector = selectDeviceConnector(alternative);
+          if (secondaryConnector) collected = await secondaryConnector.testConnection(alternative);
+        }
+      }
+      if (!collected.connected) collectionErrors.set(id,/AUTH|CREDENTIAL/i.test(collected.errorCode??"")?"AUTHENTICATION_FAILED":"COLLECTION_FAILED");
       else await recordVerifiedDeviceConnectivity(id,"AUTHENTICATED_COLLECTION_VERIFIED","Authenticated read-only vendor collection succeeded.");
-      await recordVendorMetricSamples(id,result);
+      await recordVendorMetricSamples(id,collected);
     } else collectionErrors.set(id,"CONNECTOR_UNAVAILABLE");
   } catch {
     collectionErrors.set(id,"COLLECTION_FAILED");

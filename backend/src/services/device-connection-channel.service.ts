@@ -12,6 +12,8 @@ import { getConnectionProfile, type ConnectionMethodKey, type VendorConnectionKe
 import { env } from "../config/env.js";
 import { pollSnmpv3, recordSnmpSamples } from "./snmpv3-collector.service.js";
 import { getCredential } from "./credential.service.js";
+import { esxiSshFingerprint } from "../connectors/esxi-ssh.transport.js";
+import { esxiCertificate } from "../connectors/esxi-soap.transport.js";
 
 type ConnectionChannelResult = {
   id: string;
@@ -167,6 +169,36 @@ export async function configureSnmpv3Channel(device: Device, input: Record<strin
   return { id: channel.id, method: channel.method, port: channel.port, status: channel.status };
 }
 
+export async function configureEsxiSecondaryChannel(device: Device, input: Record<string, unknown>) {
+  if (vendorKey(device) !== "esxi") throw new Error("این تنظیم فقط برای ESXi است.");
+  const method = primaryMethod(device) === "ssh" ? "soap_api" : "ssh";
+  const credentialId = typeof input.credentialId === "string" ? input.credentialId.trim() : "";
+  if (!credentialId || !await getCredential(credentialId)) throw new Error("اعتبارنامه معتبر انتخاب کنید.");
+  const port = Number(input.port ?? (method === "ssh" ? 22 : 443));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("پورت نامعتبر است.");
+  const capabilities = device.capabilities && typeof device.capabilities === "object" && !Array.isArray(device.capabilities)
+    ? device.capabilities as Record<string, unknown> : {};
+  const nextCapabilities = { ...capabilities };
+  if (method === "ssh") {
+    if (typeof input.fingerprint === "string" && input.fingerprint.trim()) nextCapabilities.esxiSshFingerprint = input.fingerprint.trim();
+    esxiSshFingerprint({ id: device.id, capabilities: json(nextCapabilities) });
+  } else if (typeof input.caCertificate === "string" && input.caCertificate.trim()) {
+    nextCapabilities.esxiCaCertificate = input.caCertificate.trim();
+    esxiCertificate({ ...device, capabilities: json(nextCapabilities) });
+  }
+  return prisma.$transaction(async (tx) => {
+    if (JSON.stringify(nextCapabilities) !== JSON.stringify(capabilities)) await tx.device.update({ where: { id: device.id }, data: { capabilities: json(nextCapabilities) } });
+    const channel = await tx.deviceConnectionChannel.upsert({
+      where: { deviceId_role: { deviceId: device.id, role: "observability" } },
+      create: { deviceId: device.id, role: "observability", method, purposes: ["inventory"], host: null, port, credentialId,
+        enabled: false, status: "configured", priority: 2, settingsJson: json({ managedBy: "user" }) },
+      update: { method, purposes: ["inventory"], host: null, port, credentialId, enabled: false, status: "configured",
+        lastSuccessAt: null, lastError: null, settingsJson: json({ managedBy: "user" }) }
+    });
+    return { id: channel.id, method: channel.method, port: channel.port, status: channel.status };
+  });
+}
+
 async function testSecondaryChannel(device: Device, channel: DeviceConnectionChannel): Promise<ConnectionChannelResult> {
   const testedAt = new Date();
   if (channel.method === "agent") {
@@ -230,33 +262,10 @@ async function testSecondaryChannel(device: Device, channel: DeviceConnectionCha
   const result = await connector.testConnection(channelDevice);
   const status = result.connected ? "verified" : "error";
   const message = result.message ?? (result.connected ? `${channel.method} connection succeeded.` : `${channel.method} connection failed.`);
-  const statusKey = connector.name === "mikrotik" ? "mikrotikStatus"
-    : connector.name === "fortigate" ? "fortigateStatus"
-      : connector.name === "sophos" ? "sophosStatus"
-        : connector.name === "esxi" ? "esxiStatus"
-        : connector.name.includes("cisco") ? "ciscoStatus"
-          : "linuxStatus";
-  await prisma.$transaction([
-    prisma.deviceConnectionChannel.update({
-      where: { id: channel.id },
-      data: { enabled: true, status, lastTestAt: testedAt, lastSuccessAt: result.connected ? testedAt : channel.lastSuccessAt, lastError: result.connected ? null : message }
-    }),
-    ...(result.connected ? [prisma.device.update({
-      where: { id: device.id },
-      data: {
-        capabilities: json({
-          ...(device.capabilities && typeof device.capabilities === "object" && !Array.isArray(device.capabilities) ? device.capabilities : {}),
-          [statusKey]: result,
-          connectionRouting: {
-            preferredReadMethod: channel.method,
-            preferredReadRole: channel.role,
-            selectedAt: testedAt.toISOString(),
-            fallbackMethod: primaryMethod(device)
-          }
-        })
-      }
-    })] : [])
-  ]);
+  await prisma.deviceConnectionChannel.update({
+    where: { id: channel.id },
+    data: { enabled: result.connected, status, lastTestAt: testedAt, lastSuccessAt: result.connected ? testedAt : channel.lastSuccessAt, lastError: result.connected ? null : message }
+  });
   return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status, connected: result.connected, tested: true, message, actionRequired: !result.connected, lastTestAt: testedAt.toISOString(), lastSuccessAt: result.connected ? testedAt.toISOString() : channel.lastSuccessAt?.toISOString() ?? null, errorCode: result.errorCode };
 }
 
@@ -282,8 +291,8 @@ export async function recordAndTestDeviceConnectionChannels(device: Device, mana
   const secondary = vendorKey(device) === "linux" ? undefined : channels.find((item) => item.role === "observability");
   const secondaryView = secondary ? await testSecondaryChannel(device, secondary) : null;
   const results = [managementView, secondaryView].filter((item): item is ConnectionChannelResult => Boolean(item));
-  const preferredDataChannel = results.find((item) => item.role === "observability" && item.connected === true && item.purposes.includes("inventory"))
-    ?? results.find((item) => item.role === "management" && item.connected === true)
+  const preferredDataChannel = results.find((item) => item.role === "management" && item.connected === true)
+    ?? results.find((item) => item.role === "observability" && item.connected === true && item.purposes.includes("inventory"))
     ?? null;
   return { channels: results, preferredDataChannel: preferredDataChannel ? { id: preferredDataChannel.id, method: preferredDataChannel.method, role: preferredDataChannel.role } : null };
 }

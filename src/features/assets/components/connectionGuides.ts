@@ -89,5 +89,20 @@ export const connectionGuides: Record<string, Record<string, ConnectionGuide>> =
       noteFa: "دریافت لاگ IPS/وب از این مسیر انجام نمی‌شود؛ فقط متریک پایه SNMP جمع‌آوری می‌شود.",
       noteEn: "IPS and web logs are not collected through this path; only basic SNMP metrics are collected."
     }
+  },
+  esxi: {
+    soap_api: {
+      titleFa: "اتصال API هاست ESXi", titleEn: "ESXi host API connection",
+      stepsFa: ["برای هاست مستقل، HTTPS روی پورت ۴۴۳ و حساب دارای مجوز مشاهده هاست را آماده کنید.", "گواهی TLS باید معتبر باشد؛ در صورت خودامضا بودن، گواهی CA تأییدشده را در تنظیم مسیر وارد کنید.", "بعد از ذخیره، تست اتصال باید موجودی واقعی هاست را بخواند."],
+      stepsEn: ["For a standalone host, prepare HTTPS on port 443 and an account allowed to read host inventory.", "TLS must be trusted; supply a verified CA certificate if the host uses a self-signed certificate.", "After saving, the connection test must read real host inventory."]
+    },
+    ssh: {
+      titleFa: "اتصال SSH هاست ESXi", titleEn: "ESXi host SSH connection",
+      stepsFa: ["در Host Client مسیر Manage → Services → TSM-SSH → Start را باز کنید و دسترسی را به سرور برنامه محدود کنید.", "برای حساب، Shell Access را فعال کنید و اثر انگشت RSA/SHA256 هاست را از کنسول مورداعتماد بگیرید.", "اثر انگشت و اعتبارنامه را در تنظیم مسیر وارد کنید؛ ورود وب به‌تنهایی مجوز SSH نیست."],
+      stepsEn: ["In Host Client, open Manage → Services → TSM-SSH → Start and restrict access to the application server.", "Enable Shell Access for the account and obtain the host's RSA/SHA256 fingerprint from a trusted console.", "Enter the fingerprint and credential in path settings; web login alone does not grant SSH access."],
+      command: "/usr/lib/vmware/openssh/bin/ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub -E sha256",
+      noteFa: "فرمان را فقط داخل خود ESXi اجرا کنید؛ خروجی SHA256 را با منبع مورداعتماد تطبیق دهید.",
+      noteEn: "Run this command on ESXi itself and verify the SHA256 output through a trusted source."
+    }
   }
 };

@@ -6,6 +6,7 @@
 .device-channel__guide p{color:var(--app-muted);line-height:1.7}
 .device-channel__form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
 .device-channel__form label{display:grid;gap:5px;min-width:0;color:var(--app-muted)}
-.device-channel__form input,.device-channel__form select{width:100%;min-width:0;padding:10px;border-radius:9px;border:1px solid var(--app-border);background:rgba(2,10,18,.65);color:var(--app-text)}
+.device-channel__form input,.device-channel__form select,.device-channel__form textarea{width:100%;min-width:0;padding:10px;border-radius:9px;border:1px solid var(--app-border);background:rgba(2,10,18,.65);color:var(--app-text)}
+.device-channel__form-wide{grid-column:1/-1}
 .device-channel__form button{justify-self:start;align-self:end}
 @media(max-width:640px){.device-channel__form{grid-template-columns:1fr}}
