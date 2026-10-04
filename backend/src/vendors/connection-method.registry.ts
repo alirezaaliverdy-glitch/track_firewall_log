@@ -70,7 +70,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   fortigate: {
     vendor: "fortigate",
-    recommendedSecondary: "syslog",
+    recommendedSecondary: "snmpv3",
     strategy: "Use the REST API with a least-privilege token for automation, SSH for compatibility, and Syslog/SNMPv3 for telemetry.",
     strategyFa: "برای اتوماسیون از REST API با توکن حداقل‌دسترسی، برای سازگاری از SSH و برای پایش از Syslog/SNMPv3 استفاده کنید.",
     methods: [
