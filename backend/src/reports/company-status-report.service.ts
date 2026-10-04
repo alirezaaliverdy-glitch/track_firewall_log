@@ -24,6 +24,7 @@ type DeviceData = Device & {
 
 type Live = ReportLiveData;
 const tehran = "Asia/Tehran";
+const maxReportEquipment = 250;
 const obj = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const clean = (value: unknown, fallback = "داده موجود نیست") => typeof value === "string" && value.trim() ? value.trim() : fallback;
 const num = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
@@ -35,7 +36,7 @@ function categoryOf(device: DeviceData): ReportEquipmentCategory { return report
 async function liveStatus(device: DeviceData): Promise<Live> {
   if (!device.credentialId && !device.credentialRef) return null;
   try {
-    if (categoryOf(device) === "server") {
+    if (categoryOf(device) === "server" && !/esxi|vmware/i.test(device.vendor)) {
       const linux = await withTimeout(collectLinuxServerOverview(device.id));
       return { collectedAt: linux.collectedAt, linux };
     }
@@ -61,6 +62,7 @@ function normalizedVendorFields(device: DeviceData, live: Live) {
   if (c?.fortigate) { add("Session", c.fortigate.sessionCount); add("Policy", c.fortigate.policies.length); add("FortiOS", c.fortigate.version); add("License", c.fortigate.licenseStatus); add("Serial", c.fortigate.serial); }
   if (c?.mikrotik) { add("اینترفیس", c.mikrotik.interfaces.length); add("RouterOS", c.mikrotik.routerosVersion); add("Uptime", c.mikrotik.uptime); add("CPU Load", c.mikrotik.cpuLoad); add("Architecture", c.mikrotik.architecture); }
   if (c?.sophos) { add("API Version", c.sophos.apiVersion); add("Interface", c.sophos.interfaces.length); add("Firewall Rule", c.sophos.firewallRules.length); add("VPN", c.sophos.vpnConnections.length); }
+  if (c?.esxi) { add("ESXi", c.esxi.version); add("مدل", c.esxi.model); add("VM", c.esxi.vmCount); add("Datastore", c.esxi.datastoreCount); add("CPU", c.esxi.cpuPercent === null ? null : `${c.esxi.cpuPercent}%`); add("Lockdown", c.esxi.lockdownMode); }
   if (device.vendor === "cisco") { add("سامانه", c?.os ?? device.asset?.platform?.name); }
   // Diagnostic codes and retry flags are not vendor inventory or useful managerial facts.
   return result.slice(0, 6);
@@ -70,6 +72,7 @@ function modelOf(device: DeviceData, live: Live) {
   if (live?.connector?.fortigate?.model) return live.connector.fortigate.model;
   if (live?.connector?.mikrotik?.architecture) return `RouterOS / ${live.connector.mikrotik.architecture}`;
   if (live?.connector?.sophos?.product) return live.connector.sophos.product;
+  if (live?.connector?.esxi?.model) return `${live.connector.esxi.model} / ESXi ${live.connector.esxi.version}`;
   const metadata = obj(device.asset?.metadataJson);
   return clean(metadata.model ?? metadata.product ?? device.asset?.platform?.name ?? live?.connector?.os);
 }
@@ -80,7 +83,7 @@ function normalizeDevice(device: DeviceData, live: Live): CompanyStatusEquipment
   const disk = live?.linux?.disks.map((item) => item.usedPercent).filter((value): value is number => value !== null).sort((a, b) => b - a)[0] ?? null;
   const assessment = assessReportDevice(device, live);
   const fresh = Boolean(live?.linux || live?.connector);
-  const cpu = live?.linux ? live.linux.cpu.usagePercent : live?.connector?.fortigate?.cpuUsage ?? live?.connector?.mikrotik?.cpuLoad;
+  const cpu = live?.linux ? live.linux.cpu.usagePercent : live?.connector?.fortigate?.cpuUsage ?? live?.connector?.mikrotik?.cpuLoad ?? live?.connector?.esxi?.cpuPercent;
   return {
     id: device.id, name: clean(device.asset?.name ?? device.name), host: clean(device.asset?.managementIp ?? device.host), vendor: clean(device.asset?.vendor?.name ?? device.vendor, "Generic"), model: modelOf(device, live),
     category: kind, ...assessment, description: assessment.statusReason, physicalLocation: "", vendorFields: normalizedVendorFields(device, live),
@@ -99,6 +102,7 @@ export async function buildCompanyStatusReport(companyId: string, user: PublicUs
     healthSnapshots: { orderBy: { collectedAt: "desc" }, take: 1, select: { state: true, summary: true, metricsJson: true, collectedAt: true } },
     deviceSnapshots: { orderBy: { collectedAt: "desc" }, take: 1, select: { dataJson: true, collectedAt: true, snapshotType: true } }
   } }) as DeviceData[];
+  if (devices.length > maxReportEquipment) throw new CompanyReportError("REPORT_EQUIPMENT_LIMIT_EXCEEDED", 400);
   const live = refresh ? await Promise.all(devices.map(liveStatus)) : devices.map(() => null);
   const equipment = devices.map((device, index) => normalizeDevice(device, live[index]));
   const count = (state: ReportEquipmentState) => equipment.filter((item) => item.status === state).length;
@@ -113,8 +117,9 @@ export async function buildCompanyStatusReport(companyId: string, user: PublicUs
 
 export function sanitizeCompanyStatusReport(input: CompanyStatusReport, companyId: string): CompanyStatusReport {
   if (!input || input.schemaVersion !== 1 || input.company?.id !== companyId || !Array.isArray(input.equipment)) throw new CompanyReportError("INVALID_REPORT", 400);
+  if (input.equipment.length > maxReportEquipment) throw new CompanyReportError("REPORT_EQUIPMENT_LIMIT_EXCEEDED", 400);
   const status = new Set(["active", "limited", "inactive"]), category = new Set(["server", "firewall", "switch", "router", "other"]);
-  const equipment = input.equipment.slice(0, 250).map((item) => ({ ...item, id: limitText(item.id, 80), name: limitText(item.name, 90), host: limitText(item.host, 120), vendor: limitText(item.vendor, 70), model: limitText(item.model, 100), description: limitText(item.description, 300), physicalLocation: limitText(item.physicalLocation, 120), statusReason: limitText(item.statusReason, 450), recommendation: limitText(item.recommendation, 650), technicalDetails: limitText(item.technicalDetails, 450), connectionState: (["online", "offline", "unknown", "auth_failed"] as const).includes(item.connectionState!) ? item.connectionState : "unknown" as const, category: (category.has(item.category) ? item.category : "other") as ReportEquipmentCategory, status: (status.has(item.status) ? item.status : "limited") as ReportEquipmentState, cpuPercent: item.cpuPercent !== null && num(item.cpuPercent) !== null && item.cpuPercent >= 0 && item.cpuPercent <= 100 ? num(item.cpuPercent) : null, diskPercent: item.diskPercent !== null && num(item.diskPercent) !== null && item.diskPercent >= 0 && item.diskPercent <= 100 ? num(item.diskPercent) : null, collectedAt: item.collectedAt ? limitText(item.collectedAt, 40) : null, source: (["live", "snapshot", "inventory"] as const).includes(item.source) ? item.source : "inventory" as const, vendorFields: (item.vendorFields ?? []).slice(0, 8).map((field) => ({ label: limitText(field.label, 50), value: limitText(field.value, 100) })) }));
+  const equipment = input.equipment.map((item) => ({ ...item, id: limitText(item.id, 80), name: limitText(item.name, 90), host: limitText(item.host, 120), vendor: limitText(item.vendor, 70), model: limitText(item.model, 100), description: limitText(item.description, 300), physicalLocation: limitText(item.physicalLocation, 120), statusReason: limitText(item.statusReason, 450), recommendation: limitText(item.recommendation, 650), technicalDetails: limitText(item.technicalDetails, 450), connectionState: (["online", "offline", "unknown", "auth_failed"] as const).includes(item.connectionState!) ? item.connectionState : "unknown" as const, category: (category.has(item.category) ? item.category : "other") as ReportEquipmentCategory, status: (status.has(item.status) ? item.status : "limited") as ReportEquipmentState, cpuPercent: item.cpuPercent !== null && num(item.cpuPercent) !== null && item.cpuPercent >= 0 && item.cpuPercent <= 100 ? num(item.cpuPercent) : null, diskPercent: item.diskPercent !== null && num(item.diskPercent) !== null && item.diskPercent >= 0 && item.diskPercent <= 100 ? num(item.diskPercent) : null, collectedAt: item.collectedAt ? limitText(item.collectedAt, 40) : null, source: (["live", "snapshot", "inventory"] as const).includes(item.source) ? item.source : "inventory" as const, vendorFields: (item.vendorFields ?? []).slice(0, 8).map((field) => ({ label: limitText(field.label, 50), value: limitText(field.value, 100) })) }));
   const active = equipment.filter((item) => item.status === "active").length, limited = equipment.filter((item) => item.status === "limited").length, inactive = equipment.filter((item) => item.status === "inactive").length;
   return { ...input, generatedAt: limitText(input.generatedAt, 40), reportDateFa: limitText(input.reportDateFa, 30), reportDateGregorian: limitText(input.reportDateGregorian, 30), reportTime: limitText(input.reportTime, 20), timezone: tehran, reportNumber: limitText(input.reportNumber, 60), preparedBy: limitText(input.preparedBy, 80), company: { id: companyId, name: limitText(input.company.name, 100), code: limitText(input.company.code, 50) }, summary: { total: equipment.length, active, limited, inactive, healthScore: equipment.length ? Math.round(active / equipment.length * 100) : 0 }, equipment, completedActions: (input.completedActions ?? []).slice(0, 8).map((item) => limitText(item, 180)), futureActions: (input.futureActions ?? []).slice(0, 8).map((item) => limitText(item, 650)), additionalNotes: limitText(input.additionalNotes, 600), responsibleName: limitText(input.responsibleName, 80) };
 }

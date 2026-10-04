@@ -1866,3 +1866,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a shared device issue guide that translates recent connectivity, collection, security-finding and resource evidence into concise Persian/English diagnosis, cause confidence and next steps.
 - Added compact issue cards to the asset overview. One click performs only a connection retest, opens connection/monitoring guidance, or creates a reviewed Finding ActionPlan; direct device execution remains impossible from the card.
 - Added focused diagnosis tests plus successful isolated backend/frontend production builds and compiled smoke checks. No live device action, migration or deployment.
+
+# 2026-10-04 - ESXi diagnosis and complete company report
+
+- Confirmed the screenshot's `SSH_AUTH_FAILED` narrows ESXi failure to the SSH login being rejected; it does not establish a host outage or the precise account-side cause. Kept the report's specific next-step guidance and avoided claiming a successful live probe.
+- Removed the PDF's effective two-device/eight-vendor omission by adding paginated full-device and overflow-vendor pages while preserving a short executive view. Excel remains full-list. ESXi uses its own connector, is grouped as a server and projects verified model/inventory/CPU data when returned.
+- Replaced silent 250-device truncation with a clear Persian limit error before collection and at export. Backend build, 18 focused tests and real Chromium print pagination with 28 devices/12 vendors passed. No remote configuration change, live credential test, database migration or deployment.

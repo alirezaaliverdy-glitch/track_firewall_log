@@ -5,7 +5,7 @@ import type { CompanyStatusReport } from "../reports/company-status-report.types
 
 function failure(reply: { code: (status: number) => { send: (body: unknown) => unknown } }, error: unknown) {
   const known = error instanceof CompanyReportError ? error : new CompanyReportError(error instanceof Error ? error.message : "REPORT_FAILED", 500);
-  return reply.code(known.statusCode).send({ error: known.code });
+  return reply.code(known.statusCode).send({ error: known.code, ...(known.code === "REPORT_EQUIPMENT_LIMIT_EXCEEDED" ? { messageFa: "گزارش بیش از ۲۵۰ تجهیز دارد؛ برای جلوگیری از خروجی ناقص، فایل ساخته نشد." } : {}) });
 }
 
 export async function reportRoutes(app: FastifyInstance) {

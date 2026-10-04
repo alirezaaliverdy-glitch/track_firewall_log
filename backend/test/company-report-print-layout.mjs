@@ -4,12 +4,12 @@ import test from "node:test";
 import puppeteer from "puppeteer-core";
 import { renderReadableReportHtml } from "../dist/reports/company-status-report.template.js";
 
-test("dense Persian management report fits two A4 pages without overlapping sections", async () => {
+test("dense Persian management report fits all A4 pages without overlapping sections", async () => {
   const font = (await readFile(new URL("../assets/iranyekanwebregularfanum.ttf", import.meta.url))).toString("base64");
   const now = "2026-10-04T10:00:00.000Z";
   const equipment = Array.from({ length: 28 }, (_, index) => ({
     id: `test-${index}`, name: `تجهیز آزمایشی با نام نسبتاً بلند ${index}`, host: `192.0.2.${index + 1}`,
-    vendor: `Vendor ${index % 8}`, model: "مدل آزمایشی", category: "server", status: "limited",
+    vendor: `Vendor ${index % 12}`, model: "مدل آزمایشی", category: "server", status: "limited",
     description: "نیازمند بررسی", statusReason: "جمع‌آوری داده ناقص است و وضعیت احراز هویت یا سنسور باید بررسی شود. ".repeat(3),
     recommendation: "حساب اتصال و مجوز خواندن را بررسی کنید و سپس تست اتصال بگیرید. ".repeat(4),
     technicalDetails: "SSH_AUTH_FAILED", connectionState: "auth_failed", physicalLocation: "",
@@ -39,7 +39,9 @@ test("dense Persian management report fits two A4 pages without overlapping sect
       });
       return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, children };
     }));
-    assert.equal(layout.length, 2);
+    assert.equal(layout.length, 7);
+    assert.equal(await page.$$eval("[data-full-device]", (nodes) => nodes.length), equipment.length);
+    assert.equal(await page.$$eval(".appendix-vendors tbody tr", (nodes) => nodes.length), 4);
     for (const section of layout) {
       for (const child of section.children) {
         assert.ok(child.top >= section.top - 1 && child.bottom <= section.bottom - 20, "report content stays within A4 page padding");
@@ -49,6 +51,6 @@ test("dense Persian management report fits two A4 pages without overlapping sect
         assert.ok(section.children[index].top >= section.children[index - 1].bottom - 1, "report sections do not overlap");
     }
     const pdf = await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true });
-    assert.equal((Buffer.from(pdf).toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length, 2);
+    assert.equal((Buffer.from(pdf).toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length, layout.length);
   } finally { await browser.close(); }
 });

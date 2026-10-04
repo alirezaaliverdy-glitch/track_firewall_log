@@ -6,7 +6,7 @@ export type ReportLiveData = { collectedAt: string; connector?: DeviceConnection
 type Stored = { status: string; vendor: string; type: string; protocol?: string; asset?: { role?: { name: string } | null; platform?: { name: string } | null } | null; statusChecks: Array<{ status: string; message: string | null; checkedAt: Date }>; healthSnapshots: Array<{ state: string; summary: string; collectedAt: Date }> };
 export function reportCategory(device: Pick<Stored, "vendor" | "type" | "asset">): ReportEquipmentCategory {
   const vendor = device.vendor.toLowerCase();
-  if (/linux/.test(vendor)) return "server";
+  if (/linux|esxi|vmware/.test(vendor)) return "server";
   if (/cisco/.test(vendor)) return /router/.test(`${device.asset?.role?.name ?? ""} ${device.asset?.platform?.name ?? ""}`.toLowerCase()) ? "router" : "switch";
   if (/forti|sophos|pfsense/.test(vendor)) return "firewall";
   if (/mikrotik/.test(vendor)) return "router";

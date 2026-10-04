@@ -39,6 +39,7 @@ test("Cisco category is not overridden by the generic firewall transport type",(
   assert.equal(reportCategory({vendor:"cisco",type:"firewall"}),"switch");
   assert.equal(reportCategory({vendor:"fortigate",type:"firewall"}),"firewall");
   assert.equal(reportCategory({vendor:"mikrotik",type:"firewall"}),"router");
+  assert.equal(reportCategory({vendor:"esxi",type:"esxi"}),"server");
 });
 test("ESXi rejected SSH login is distinguished from an unreachable host and has a specific remedy",()=>{
   const esxi={...device,vendor:"esxi",protocol:"ssh"};
@@ -68,11 +69,12 @@ test("report HTML and sanitized drafts preserve a rejected ESXi login label",asy
   assert.match(await renderCompanyReportHtml(safe),/اتصال: <b>ورود رد شد<\/b>/);
 });
 function fixture():CompanyStatusReport{return {schemaVersion:1,generatedAt:new Date(now).toISOString(),reportDateFa:"۱۴۰۵/۰۷/۰۵",reportDateGregorian:"2026-09-27",reportTime:"۱۳:۳۰:۰۰",timezone:"Asia/Tehran",reportNumber:"TEST-REPORT",preparedBy:"مدیر",company:{id:"test-company",name:"شرکت نمونه",code:"TEST"},summary:{total:9,active:0,limited:9,inactive:0,healthScore:90},equipment:Array.from({length:9},(_,i)=>({id:`device-${i}`,name:`تجهیز ${i}`,host:"10.0.0.1",vendor:`Vendor ${i}`,model:"model",category:"server",status:"limited",description:"یادداشت",statusReason:"هشدار واقعی <script>alert(1)</script>",recommendation:"بررسی سنسورها و جمع‌آوری تازه",technicalDetails:"permission denied",connectionState:"online",physicalLocation:"",vendorFields:[],cpuPercent:null,diskPercent:null,collectedAt:new Date(now-3600000).toISOString(),source:"snapshot"})),completedActions:[],futureActions:[],additionalNotes:"",responsibleName:"مدیر"};}
-test("two-page report uses full-width readable cards, explains status and flags omitted assets",async()=>{
+test("report keeps a compact overview and includes every asset in detail pages",async()=>{
   const html=await renderCompanyReportHtml(fixture());
-  assert.equal((html.match(/<section class="page">/g)??[]).length,2);
+  assert.equal((html.match(/<section class="page">/g)??[]).length,5);
   assert.equal((html.match(/data-device=/g)??[]).length,2);
-  assert.match(html,/font:12px/);assert.match(html,/نیازمند بررسی/);assert.match(html,/قدم بعدی/);assert.match(html,/دادهٔ قدیمی/);assert.match(html,/فهرست کامل/);
+  assert.equal((html.match(/data-full-device=/g)??[]).length,9);
+  assert.match(html,/font:12px/);assert.match(html,/نیازمند بررسی/);assert.match(html,/قدم بعدی/);assert.match(html,/دادهٔ قدیمی/);assert.match(html,/جزئیات همهٔ/);
   assert.match(html,/data:font\/ttf;base64,/);assert.doesNotMatch(html,/data:font\/ttf;base64:/);
   assert.match(html,/data-category="server"/);assert.match(html,/خلاصه آماری وندورها/);
   assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>|overflow:hidden|امتیاز سلامت/);
@@ -81,6 +83,11 @@ test("editable assessment is bounded and score is recomputed from actual counts"
   const r=fixture();r.equipment[0].recommendation="x".repeat(1000);r.equipment[0].cpuPercent=200;
   const safe=sanitizeCompanyStatusReport(r,r.company.id);
   assert.equal(safe.equipment[0].recommendation?.length,650);assert.equal(safe.equipment[0].cpuPercent,null);assert.equal(safe.summary.healthScore,0);
+});
+test("export rejects oversized reports instead of silently dropping equipment",()=>{
+  const report=fixture();
+  report.equipment=Array.from({length:251},(_,index)=>({...report.equipment[0],id:`device-${index}`}));
+  assert.throws(()=>sanitizeCompanyStatusReport(report,report.company.id),/REPORT_EQUIPMENT_LIMIT_EXCEEDED/);
 });
 test("Excel includes every asset, cause, next step, data source and technical detail in readable cells",async()=>{
   const book=new ExcelJS.Workbook();await book.xlsx.load(await renderCompanyReportXlsx(fixture()) as never);

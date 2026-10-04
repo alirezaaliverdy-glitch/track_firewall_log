@@ -24,9 +24,9 @@ test("Task 45 report is registered, asset-scoped and protected", () => {
   assert.equal(findMutationPermission("POST", "/api/reports/company-status/export"), "devices.read");
 });
 
-test("Task 45 report uses two pages, dual dates and dynamic vendor sections", async () => {
+test("Task 45 report uses paginated pages, dual dates and dynamic vendor sections", async () => {
   const html = await renderCompanyReportHtml(fixture());
-  assert.equal((html.match(/<section class="page">/g) ?? []).length, 2);
+  assert.equal((html.match(/<section class="page">/g) ?? []).length, 3);
   assert.match(html, /۱۴۰۵\/۰۶\/۳۰/);
   assert.match(html, /2026-09-21/);
   assert.match(html, /FortiGate/);
@@ -34,6 +34,16 @@ test("Task 45 report uses two pages, dual dates and dynamic vendor sections", as
   assert.match(html, /CPU/);
   const workbook = await renderCompanyReportXlsx(fixture());
   assert.ok(workbook.byteLength > 5_000);
+});
+
+test("Task 45 report vendor summary includes every vendor", async () => {
+  const report = fixture();
+  report.equipment.push(...Array.from({ length: 9 }, (_, index) => ({ ...report.equipment[0], id: `vendor-${index}`, name: `تجهیز وندور ${index}`, vendor: `Vendor ${index}`, status: "limited" as const })));
+  const html = await renderCompanyReportHtml(report);
+  assert.match(html, /Vendor 8/);
+  assert.doesNotMatch(html, /وندور دیگر در فایل Excel/);
+  assert.equal((html.match(/data-full-device=/g) ?? []).length, report.equipment.length);
+  assert.match(html, /ادامهٔ جدول وندورها در صفحات بعدی/);
 });
 
 test("Task 45 editable report is bounded and physical location remains user-controlled", () => {
