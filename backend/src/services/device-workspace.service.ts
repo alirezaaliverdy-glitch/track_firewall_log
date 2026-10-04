@@ -651,7 +651,7 @@ export async function getDeviceWorkspace(reference: string) {
       expiresAt: undefined
     } : null,
     collections,
-    connections: connectionChannels,
+    connections: vendorKey === "linux" ? connectionChannels.filter((channel) => channel.role === "management") : connectionChannels,
     sensors: sensorReadings,
     issues,
     charts,

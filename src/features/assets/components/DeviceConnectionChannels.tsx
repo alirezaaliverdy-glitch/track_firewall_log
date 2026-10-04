@@ -112,11 +112,11 @@ export function DeviceConnectionChannels({
       <header>
         <div>
           <span className="operator-eyebrow">{isFa ? "معماری اتصال افزونه‌پذیر" : "Resilient connectivity"}</span>
-          <h2>{isFa ? "دو مسیر مستقل برای هر دستگاه" : "Two independent device channels"}</h2>
-          <p>{isFa ? "فرمان‌ها از مسیر مدیریت و جمع‌آوری داده از بهترین مسیر سالم انجام می‌شود." : "Commands use the management channel; collection selects the best healthy data path."}</p>
+          <h2>{isFa ? "مسیرهای اتصال دستگاه" : "Device connection paths"}</h2>
+          <p>{isFa ? "هر مسیر فقط پس از دریافت پاسخ واقعی تأیید می‌شود؛ روش‌های آماده‌نشده به‌عنوان اتصال موفق نمایش داده نمی‌شوند." : "Each path is verified only after a real response; unconfigured methods are never shown as connected."}</p>
         </div>
         <button className="primary-button" type="button" disabled={testing} onClick={() => void runTest()}>
-          {testing ? (isFa ? "در حال تست هر دو مسیر…" : "Testing both channels…") : (isFa ? "تست هر دو مسیر" : "Test both channels")}
+          {testing ? (isFa ? "در حال تست اتصال…" : "Testing connection…") : (isFa ? "تست اتصال" : "Test connection")}
         </button>
       </header>
 

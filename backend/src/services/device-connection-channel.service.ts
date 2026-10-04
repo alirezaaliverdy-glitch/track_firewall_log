@@ -58,6 +58,7 @@ function protocolForMethod(method: string): DeviceProtocol {
 
 function secondaryDefinition(device: Device) {
   const key = vendorKey(device);
+  if (key === "linux") return null; // SSH already collects Linux health and logs; no standalone agent or Syslog listener is shipped.
   const profile = key ? getConnectionProfile(key) : null;
   if (!profile) return null;
   const primary = primaryMethod(device);
@@ -278,7 +279,7 @@ export async function recordAndTestDeviceConnectionChannels(device: Device, mana
     lastSuccessAt: managementResult.connected ? managementTestAt.toISOString() : management.lastSuccessAt?.toISOString() ?? null,
     errorCode: managementResult.errorCode
   } : null;
-  const secondary = channels.find((item) => item.role === "observability");
+  const secondary = vendorKey(device) === "linux" ? undefined : channels.find((item) => item.role === "observability");
   const secondaryView = secondary ? await testSecondaryChannel(device, secondary) : null;
   const results = [managementView, secondaryView].filter((item): item is ConnectionChannelResult => Boolean(item));
   const preferredDataChannel = results.find((item) => item.role === "observability" && item.connected === true && item.purposes.includes("inventory"))

@@ -9,6 +9,15 @@ export type ConnectionGuide = {
 };
 
 export const connectionGuides: Record<string, Record<string, ConnectionGuide>> = {
+  linux: {
+    ssh: {
+      titleFa: "جمع‌آوری Linux از SSH", titleEn: "Linux collection over SSH",
+      stepsFa: ["سرویس SSH را فعال کنید و دسترسی آن را به IP سرور برنامه محدود کنید.", "یک حساب با دسترسی خواندن وضعیت سیستم و لاگ‌های لازم بسازید؛ برای عملیات مدیریتی sudo را جداگانه و محدود بدهید.", "اعتبارنامه را در تنظیمات تجهیز ثبت و اتصال را تست کنید؛ پایش دوره‌ای با همین مسیر انجام می‌شود."],
+      stepsEn: ["Enable SSH and restrict its access to the application server IP.", "Create an account that can read system status and required logs; grant limited sudo separately for administrative actions.", "Save the credential in device settings and test. Periodic monitoring uses this same path."],
+      noteFa: "Agent مستقل و گیرنده Syslog مستقیم هنوز در برنامه ارائه نشده‌اند؛ این موارد به‌عنوان مسیر متصل نمایش داده نمی‌شوند.",
+      noteEn: "A standalone agent and direct Syslog receiver are not shipped yet and are not presented as connected paths."
+    }
+  },
   cisco: {
     ssh: {
       titleFa: "اتصال مدیریتی Cisco",
