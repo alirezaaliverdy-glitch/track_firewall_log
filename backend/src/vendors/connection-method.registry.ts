@@ -92,7 +92,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   sophos: {
     vendor: "sophos",
-    recommendedSecondary: "syslog",
+    recommendedSecondary: "snmpv3",
     strategy: "Use the supported firewall API for configuration and Syslog/SNMPv3 for operational evidence.",
     strategyFa: "برای تنظیمات از API رسمی فایروال و برای شواهد عملیاتی از Syslog/SNMPv3 استفاده کنید.",
     methods: [

@@ -66,5 +66,19 @@ export const connectionGuides: Record<string, Record<string, ConnectionGuide>> =
       noteFa: "SNMPv3 برای سلامت پایه است؛ جزئیات کامل RouterOS همچنان از REST/SSH خوانده می‌شود.",
       noteEn: "SNMPv3 supplies basic health data; full RouterOS details still come from REST/SSH."
     }
+  },
+  sophos: {
+    xml_api: {
+      titleFa: "اتصال API سوفوس", titleEn: "Sophos Firewall API connection",
+      stepsFa: ["در Administration → API Access دسترسی API را برای IP سرور برنامه فعال کنید.", "حساب با مجوز لازم برای مشاهده بسازید؛ مجوز تغییر را فقط در صورت نیاز به اقدام بدهید."],
+      stepsEn: ["Allow the application server IP under Administration → API Access.", "Create an account with read permission; grant write permission only for reviewed actions."]
+    },
+    snmpv3: {
+      titleFa: "راه‌اندازی SNMPv3 روی Sophos", titleEn: "Set up SNMPv3 on Sophos",
+      stepsFa: ["در Administration → SNMP کاربر SNMPv3 با سطح authPriv، SHA و AES تعریف کنید.", "در قوانین مدیریت، UDP/161 را فقط از IP سرور برنامه مجاز کنید.", "نام کاربر و دو رمز را در فرم زیر ذخیره و تست کنید."],
+      stepsEn: ["Create an SNMPv3 authPriv user with SHA and AES under Administration → SNMP.", "Allow UDP/161 only from the application server in management access rules.", "Save the username and both secrets below, then test."],
+      noteFa: "دریافت لاگ IPS/وب از این مسیر انجام نمی‌شود؛ فقط متریک پایه SNMP جمع‌آوری می‌شود.",
+      noteEn: "IPS and web logs are not collected through this path; only basic SNMP metrics are collected."
+    }
   }
 };
