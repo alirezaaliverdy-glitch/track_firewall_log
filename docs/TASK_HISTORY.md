@@ -1861,3 +1861,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Removed the conflicting large-print overrides and kept the A4 summary within its page bounds with explicit RTL card grid tracks, fixed-width vendor table and controlled selection density.
 - Added a real Chromium print-layout regression covering long Persian content and many devices. It confirms two PDF pages and no overlapping/out-of-page sections. Excel remains the complete record.
+# 2026-10-04 — Evidence-based device issue resolution
+
+- Added a shared device issue guide that translates recent connectivity, collection, security-finding and resource evidence into concise Persian/English diagnosis, cause confidence and next steps.
+- Added compact issue cards to the asset overview. One click performs only a connection retest, opens connection/monitoring guidance, or creates a reviewed Finding ActionPlan; direct device execution remains impossible from the card.
+- Added focused diagnosis tests plus successful isolated backend/frontend production builds and compiled smoke checks. No live device action, migration or deployment.

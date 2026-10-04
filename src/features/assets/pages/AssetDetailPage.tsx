@@ -15,6 +15,8 @@ import { deleteDevice, testDeviceConnection, updateDevice, type DeviceInput } fr
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
 import { refreshDeviceVendorCapabilities } from "@/lib/vendors";
 import { refreshLinuxMonitoringDevice } from "@/lib/linuxMonitoring";
+import { createFindingActionPlan } from "@/lib/platform";
+import { reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { Activity, AlertTriangle, ArrowUpLeft, CheckCircle2, Clock3, Database, Gauge, Network, Server, ShieldCheck } from "lucide-react";
 import "./AssetDetailPage.css";
 import "./AssetDetailOverview.css";
@@ -159,6 +161,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
   const [collecting, setCollecting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteName, setDeleteName] = useState("");
+  const [issueAction, setIssueAction] = useState("");
   const [form, setForm] = useState({ name: "", host: "", managementPort: "22", protocol: "ssh", environment: "lab", tags: "" });
   const load = useCallback(() => getDeviceWorkspace(reference).then((nextWorkspace) => { setWorkspace(nextWorkspace); setError(""); }).catch((failure: Error) => setError(failure.message)), [reference]);
   useEffect(() => {
@@ -306,6 +309,29 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     const needsAttention = !["healthy", "online"].includes(String(overview.healthState).toLowerCase()) || diagnosticReasons.length > 0;
     const openFindings = currentWorkspace.findings.filter((item) => !["resolved", "closed", "false_positive"].includes(String(item.status ?? "open")));
     const dataTime = vendorOverview.collectedAt ?? overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt;
+    const runIssueAction = async (issue: DeviceWorkspace["issues"][number]) => {
+      if (issueAction) return;
+      setIssueAction(issue.id);
+      setError("");
+      try {
+        if (issue.action.kind === "connection_test") {
+          const result = await testDeviceConnection(deviceId);
+          if (result.connected !== true) throw new Error(result.message || (isFa ? "اتصال هنوز برقرار نشده است." : "Connection is still unavailable."));
+          await load();
+        } else if (issue.action.kind === "finding_plan" && issue.action.findingId) {
+          const result = await createFindingActionPlan(issue.action.findingId);
+          reviewInActionCenter(result.actionPlan.id);
+        } else if (issue.action.kind === "setup") {
+          navigate(`/assets/devices/${deviceId}/setup`);
+        } else {
+          navigate(`/assets/devices/${deviceId}/monitoring`);
+        }
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : (isFa ? "اجرای اقدام ممکن نشد." : "The action could not be started."));
+      } finally {
+        setIssueAction("");
+      }
+    };
     return <section className="asset-device-overview">
       {renderOverviewTrends()}
       <section className={`asset-device-overview__hero is-${stateTone(overview.healthState)}`}>
@@ -314,6 +340,17 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
       </section>
 
       {needsAttention ? <section className="asset-diagnostic-callout"><AlertTriangle aria-hidden="true" /><div><strong>{isFa ? "چرا این تجهیز نیازمند توجه است؟" : "Why does this device need attention?"}</strong>{diagnosticReasons.length ? <ul>{diagnosticReasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}</ul> : <p>{value(asRecord(currentWorkspace.health ?? {}).summary, isFa ? "وضعیت سلامت یا تازگی داده نیازمند بررسی است. یک جمع‌آوری جدید اجرا کنید." : "Health state or evidence freshness needs review. Run a new collection.")}</p>}<small>{isFa ? "جمع‌آوری جدید را اجرا کنید؛ اگر خطا باقی ماند، کانال اتصال و زمان آخرین موفقیت را بررسی کنید." : "Run a new collection; if the issue remains, review the channel and its last success time."}</small></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات سلامت" : "Health details"}<ArrowUpLeft /></Link></section> : null}
+
+      {currentWorkspace.issues.length ? <section className="asset-issue-guide" aria-label={isFa ? "راهنمای حل مشکل تجهیز" : "Device issue resolution guide"}>
+        <header><div><small>{isFa ? "تشخیص مبتنی بر دادهٔ واقعی" : "Evidence-based diagnosis"}</small><h2>{isFa ? "مشکل چیست و قدم بعدی چیست؟" : "What is wrong and what is next?"}</h2></div><span>{currentWorkspace.issues.length.toLocaleString(locale)} {isFa ? "مورد" : "issues"}</span></header>
+        <div className="asset-issue-list">{currentWorkspace.issues.map((issue) => <article key={issue.id} className={`asset-issue-card is-${issue.severity}`}>
+          <div className="asset-issue-card__head"><strong>{isFa ? issue.titleFa : issue.titleEn}</strong><StatusBadge value={issue.severity === "critical" ? (isFa ? "بحرانی" : "Critical") : (isFa ? "نیازمند بررسی" : "Needs review")} tone={issue.severity === "critical" ? "danger" : "warning"} /></div>
+          <p><b>{isFa ? "علت فعلی: " : "Current cause: "}</b>{isFa ? issue.causeFa : issue.causeEn}</p>
+          <p><b>{isFa ? "راه‌حل: " : "Next step: "}</b>{isFa ? issue.nextStepFa : issue.nextStepEn}</p>
+          <div className="asset-issue-card__actions"><button type="button" className="primary-link" disabled={issueAction === issue.id} onClick={() => void runIssueAction(issue)}>{issueAction === issue.id ? (isFa ? "در حال آماده‌سازی…" : "Preparing…") : issue.action.kind === "finding_plan" ? (isFa ? "ساخت برنامهٔ رفع" : "Create remediation plan") : issue.action.kind === "setup" ? (isFa ? "اصلاح اتصال" : "Fix connection") : issue.action.kind === "connection_test" ? (isFa ? "آزمایش دوباره" : "Retest") : (isFa ? "مشاهدهٔ پایش" : "View monitoring")}</button>{issue.observedAt ? <time>{isFa ? "مشاهده: " : "Observed: "}{date(issue.observedAt, locale, fallback)}</time> : null}</div>
+        </article>)}</div>
+        <p className="asset-issue-guide__note">{isFa ? "هیچ تغییر مستقیمی از این کارت انجام نمی‌شود؛ اقدام‌های فنی پس از پیش‌نمایش، تأیید شما، PolicyGuard و ثبت نتیجه اجرا می‌شوند." : "These cards never change a device directly; technical actions run only after preview, your confirmation, PolicyGuard and an audited result."}</p>
+      </section> : null}
 
       <section className="asset-overview-kpis" aria-label={isFa ? "خلاصه وضعیت" : "Status summary"}>
         <article><span><ShieldCheck /></span><div><small>{isFa ? "وضعیت اتصال" : "Connection"}</small><strong>{statusLabel(overview.availability, t)}</strong></div></article>

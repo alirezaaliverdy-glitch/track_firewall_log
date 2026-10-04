@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma.js";
 import { buildDeviceTrafficSeries } from "./device-traffic-series.js";
 import { mergeCiscoWorkspaceInterfaces, projectCiscoWorkspaceDetails, safeCiscoDetail } from "./device-workspace-cisco.js";
+import { diagnoseDeviceIssues } from "./device-issue-guide.js";
 
 const PENDING_ACTION_STATES = ["proposed", "validation_failed", "dry_run_ready", "pending_approval", "approved", "executing", "rollback_pending"] as const;
 
@@ -531,6 +532,13 @@ export async function getDeviceWorkspace(reference: string) {
   }
   const newestCollection = collections[0];
   if (newestCollection) addSensor("collection", "جمع‌آوری", "Collection", newestCollection.status, null, newestCollection.completedAt ?? newestCollection.startedAt, newestCollection.provider, successfulCollection(newestCollection.status) ? "ok" : "attention");
+  const issues = diagnoseDeviceIssues({
+    status: latestStatus ? { status: latestStatus.status, checkedAt: latestStatus.checkedAt, message: latestStatus.message } : null,
+    collection: newestCollection ? { status: newestCollection.status, startedAt: newestCollection.startedAt, completedAt: newestCollection.completedAt, errorCode: newestCollection.errorCode } : null,
+    credentialConfigured: Boolean(device?.credentialId || device?.credentialRef),
+    findings: findings.map((item) => ({ id: item.id, title: item.title, severity: item.severity, status: item.status, lastSeen: item.lastSeen })),
+    sensors: sensorReadings.map((item) => ({ key: item.key, value: item.value, measuredAt: item.measuredAt }))
+  });
   const section = (key: string, titleFa: string, titleEn: string, hasData: boolean, requirement: string, nextAction: string) => ({ key, titleFa, titleEn, state: hasData ? "available" : "no_data", reason: hasData ? null : "No verified collection has been stored for this capability.", requirement, nextAction });
   const ciscoSection = (key: string, group: string, titleFa: string, titleEn: string) => {
     const capabilityState = String(ciscoCapabilityGroups[group] ?? "unknown");
@@ -643,6 +651,7 @@ export async function getDeviceWorkspace(reference: string) {
     collections,
     connections: connectionChannels,
     sensors: sensorReadings,
+    issues,
     charts,
     traffic,
     vendor: { key: vendorKey, sections: vendorSections },

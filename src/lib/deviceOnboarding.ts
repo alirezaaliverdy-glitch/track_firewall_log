@@ -133,6 +133,7 @@ export type DeviceWorkspace = {
   collections: Array<Record<string, unknown>>;
   connections: Array<{ id: string; role: string; method: string; purposes: string[]; host: string | null; port: number | null; enabled: boolean; priority: number; status: string; lastTestAt: string | null; lastSuccessAt: string | null; lastError: string | null; settingsJson: Record<string, unknown> }>;
   sensors: Array<{ key: string; titleFa: string; titleEn: string; value: string | number; unit: string | null; measuredAt: string | null; source: string; state: string }>;
+  issues: Array<{ id: string; severity: "warning" | "critical"; titleFa: string; titleEn: string; causeFa: string; causeEn: string; nextStepFa: string; nextStepEn: string; observedAt: string | null; action: { kind: "connection_test" | "setup" | "finding_plan" | "monitoring"; findingId?: string } }>;
   traffic: { interface: string | null; method: "device_5m_average" | "counter_delta"; rx: WorkspaceChartPoint[]; tx: WorkspaceChartPoint[] };
   charts: {
     healthScore: WorkspaceChartPoint[];
