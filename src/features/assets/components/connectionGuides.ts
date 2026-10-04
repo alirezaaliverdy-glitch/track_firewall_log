@@ -47,5 +47,24 @@ export const connectionGuides: Record<string, Record<string, ConnectionGuide>> =
       noteFa: "این مسیر زمان‌کار و تعداد اینترفیس‌ها را می‌خواند؛ لاگ‌های فایروال از SNMP دریافت نمی‌شوند.",
       noteEn: "This path reads uptime and interface count; firewall logs are not collected over SNMP."
     }
+  },
+  mikrotik: {
+    rest_api: {
+      titleFa: "اتصال RouterOS REST", titleEn: "RouterOS REST connection",
+      stepsFa: ["سرویس HTTPS مدیریت RouterOS را با گواهی معتبر فعال کنید.", "یک کاربر فقط‌خواندنی بسازید و دسترسی آن را به IP سرور برنامه محدود کنید."],
+      stepsEn: ["Enable the RouterOS HTTPS management service with a trusted certificate.", "Create a read-only user and restrict its access to the application server IP."]
+    },
+    ssh: {
+      titleFa: "اتصال SSH MikroTik", titleEn: "MikroTik SSH connection",
+      stepsFa: ["SSH را در IP → Services فعال و IP مجاز را محدود کنید.", "حساب دارای حداقل مجوز لازم برای مشاهده اطلاعات بسازید."],
+      stepsEn: ["Enable SSH under IP → Services and restrict allowed addresses.", "Create a least-privilege account for reading device data."]
+    },
+    snmpv3: {
+      titleFa: "راه‌اندازی SNMPv3 روی MikroTik", titleEn: "Set up SNMPv3 on MikroTik",
+      stepsFa: ["SNMP را فعال کنید و یک community/کاربر با security=private، احراز هویت SHA و محرمانگی AES بسازید.", "آدرس مجاز را فقط IP سرور برنامه بگذارید و UDP/161 را در فایروال باز کنید.", "نام و دو رمز همین کاربر را در فرم زیر وارد و تست کنید."],
+      stepsEn: ["Enable SNMP and create a private-security user/community with SHA authentication and AES privacy.", "Restrict the source address to the application server and allow UDP/161.", "Enter the same user and two secrets below, then test."],
+      noteFa: "SNMPv3 برای سلامت پایه است؛ جزئیات کامل RouterOS همچنان از REST/SSH خوانده می‌شود.",
+      noteEn: "SNMPv3 supplies basic health data; full RouterOS details still come from REST/SSH."
+    }
   }
 };

@@ -58,7 +58,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   mikrotik: {
     vendor: "mikrotik",
-    recommendedSecondary: "rest_api",
+    recommendedSecondary: "snmpv3",
     strategy: "Use RouterOS REST over HTTPS for structured read-only inventory on v7; keep SSH for complete controlled changes and legacy RouterOS.",
     strategyFa: "در RouterOS 7 برای موجودی ساخت‌یافته از REST روی HTTPS و برای همه تغییرات کنترل‌شده یا نسخه‌های قدیمی از SSH استفاده کنید.",
     methods: [
