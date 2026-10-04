@@ -46,7 +46,7 @@ import "./DashboardCommandCenter.css";
 
 import { FleetHealthPanel } from "./FleetHealthPanel";
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
-type AttentionItem = { id: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone };
+type AttentionItem = { id: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string };
 
 const EMPTY_EVENT_SUMMARY: EventsSummary = {
   totalEvents: 0,
@@ -103,13 +103,25 @@ function snapshotWarnings(snapshot: LinuxHealthSnapshot | null) {
 function linuxAttentionReason(device: LinuxMonitoringDevice, isFa: boolean) {
   const snapshot = device.latestHealth;
   const warning = snapshotWarnings(snapshot)[0];
-  if (warning) return warning;
+  const warningText = warning?.toLowerCase() ?? "";
+  if (/(security|authentication|failed login|denied|warning|critical|alert)/i.test(warningText)) return copy(isFa, "در لاگ‌های اخیر رویداد امنیتی نیازمند بررسی ثبت شده است؛ جزئیات و منبع آن را در صفحهٔ تجهیز ببینید.", "A recent security signal needs review; inspect its evidence and source on the device page.");
+  if (/(cpu|load)/i.test(warningText)) return copy(isFa, "بار پردازنده بالاست؛ روند CPU و پردازش‌های فعال را بررسی کنید.", "CPU load is elevated; review the trend and active processes.");
+  if (/(memory|ram|swap)/i.test(warningText)) return copy(isFa, "مصرف حافظه بالاست؛ روند حافظه و پردازش‌های پرمصرف را بررسی کنید.", "Memory usage is elevated; review the trend and high-consumption processes.");
+  if (/(disk|storage|full)/i.test(warningText)) return copy(isFa, "فضای دیسک کم است؛ مسیر پرمصرف را در جزئیات تجهیز بررسی کنید.", "Disk space is low; inspect the consuming mount in device details.");
   const state = device.healthState ?? snapshot?.state ?? "unknown";
   if (state === "offline") return copy(isFa, "ارتباط با سرور برقرار نیست؛ ابتدا مسیر شبکه و اعتبارنامه را بررسی کنید.", "The server is unreachable; check its network path and credential first.");
   if (state === "stale") return copy(isFa, "داده سلامت منقضی شده است؛ یک جمع‌آوری جدید اجرا کنید.", "Health data is stale; run a new collection.");
-  if (state === "critical") return snapshot?.summary || copy(isFa, "یکی از شاخص‌های سلامت از محدوده بحرانی عبور کرده است.", "A health metric crossed its critical threshold.");
-  if (state === "warning") return snapshot?.summary || copy(isFa, "یکی از شاخص‌های سلامت نیازمند بازبینی است.", "A health metric needs review.");
+  if (state === "critical") return copy(isFa, "یکی از شاخص‌های سلامت از محدودهٔ بحرانی عبور کرده است؛ جزئیات تجهیز را بررسی کنید.", "A health metric crossed its critical threshold; inspect device details.");
+  if (state === "warning") return copy(isFa, "وضعیت هشدار ثبت شده، اما علت دقیق از دادهٔ فعلی تأیید نشده است؛ جزئیات تشخیص را ببینید.", "A warning state was recorded, but the current evidence does not confirm an exact cause; open the diagnosis.");
   return copy(isFa, "هنوز Snapshot معتبر سلامت برای این سرور ثبت نشده است.", "No valid health snapshot has been recorded for this server yet.");
+}
+
+function collectorAttentionReason(code: string, isFa: boolean) {
+  const normalized = code.toUpperCase();
+  if (/AUTH|CREDENTIAL|LOGIN|PERMISSION/.test(normalized)) return copy(isFa, "جمع‌آوری‌کننده ورود یا سطح دسترسی تجهیز را نپذیرفته است؛ تنظیمات اتصال را بررسی کنید.", "The collector rejected the device login or permissions; review connection settings.");
+  if (/TIMEOUT|UNREACHABLE|NETWORK|REFUSED/.test(normalized)) return copy(isFa, "جمع‌آوری‌کننده در زمان مجاز به تجهیز نرسیده است؛ مسیر شبکه و پورت مدیریت را بررسی کنید.", "The collector could not reach the device in time; inspect the network path and management port.");
+  if (/TLS|CERT|HOST_KEY|FINGERPRINT/.test(normalized)) return copy(isFa, "هویت امن تجهیز تأیید نشده است؛ گواهی یا کلید میزبان را بررسی کنید.", "The device identity could not be verified; inspect its certificate or host key.");
+  return copy(isFa, "آخرین جمع‌آوری ناموفق بوده است؛ جزئیات تشخیص تجهیز علت و قدم بعدی را مشخص می‌کند.", "The latest collection failed; device diagnosis contains the confirmed cause and next step.");
 }
 
 function stateTone(state: string): DashboardTone {
@@ -282,10 +294,12 @@ export default function DashboardPage() {
       items.push({
         id: `linux-${device.id}`,
         title: device.name,
-        reason: linuxAttentionReason(device, isFa),
-        detail: `${stateLabel(state, isFa)} · ${shortDate(device.latestHealth?.collectedAt, language, copy(isFa, "بدون داده سلامت", "No health data"))}`,
-        route: `/monitoring/linux/${device.id}`,
+        reason: device.diagnosis ? `${isFa ? device.diagnosis.titleFa : device.diagnosis.titleEn}: ${isFa ? device.diagnosis.causeFa : device.diagnosis.causeEn}` : linuxAttentionReason(device, isFa),
+        detail: `${stateLabel(state, isFa)} · ${shortDate(device.diagnosis?.observedAt ?? device.latestHealth?.collectedAt, language, copy(isFa, "بدون داده سلامت", "No health data"))}`,
+        route: `/assets/devices/${device.id}`,
         tone: stateTone(state),
+        actionFa: "مشاهدهٔ تشخیص و راهکار",
+        actionEn: "Open diagnosis and fix",
       });
     }
     for (const asset of assets.assets) {
@@ -302,6 +316,8 @@ export default function DashboardPage() {
         detail: `${vendorName(asset)} · ${shortDate(asset.lastSeenAt, language, copy(isFa, "بدون تماس موفق", "No successful contact"))}`,
         route: asset.device?.id ? `/assets/devices/${asset.device.id}` : "/assets",
         tone: stateTone(state),
+        actionFa: "مشاهدهٔ تشخیص و راهکار",
+        actionEn: "Open diagnosis and fix",
       });
     }
     for (const collector of monitoring?.collectors.devices ?? []) {
@@ -309,10 +325,12 @@ export default function DashboardPage() {
       items.push({
         id: `collector-${collector.deviceId}`,
         title: collector.deviceName,
-        reason: copy(isFa, `جمع‌آورنده ${collector.sourceType} با خطای ${collector.lastErrorCode} متوقف شده است.`, `${collector.sourceType} collector failed with ${collector.lastErrorCode}.`),
+        reason: collectorAttentionReason(collector.lastErrorCode, isFa),
         detail: copy(isFa, `${number(collector.consecutiveFailures, language)} خطای متوالی`, `${number(collector.consecutiveFailures, language)} consecutive failures`),
         route: `/assets/devices/${collector.deviceId}`,
         tone: "danger",
+        actionFa: "مشاهدهٔ تشخیص و راهکار",
+        actionEn: "Open diagnosis and fix",
       });
     }
     return items.slice(0, 8);
@@ -369,7 +387,7 @@ export default function DashboardPage() {
         <div className="dashboard-attention-list">{attentionItems.map((item) => <Link key={item.id} to={item.route} className={`dashboard-attention-item is-${item.tone}`}>
           <span className="dashboard-attention-item__state"><CircleAlert /></span>
           <span><strong>{item.title}</strong><small>{item.reason}</small><em>{item.detail}</em></span>
-          <b>{copy(isFa, "بررسی و رفع", "Review and resolve")}<ArrowUpLeft /></b>
+          <b>{copy(isFa, item.actionFa, item.actionEn)}<ArrowUpLeft /></b>
         </Link>)}</div>
       </article> : null}
 

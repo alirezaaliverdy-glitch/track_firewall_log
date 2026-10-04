@@ -18,7 +18,8 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (text ? JSON.parse(text) : {}) as T;
 }
 export type LinuxHealthSnapshot = { id: string; score: number; state: string; summary: string; collectedAt: string; staleAt?: string | null; metricsJson?: unknown; warningsJson?: unknown };
-export type LinuxMonitoringDevice = { id: string; name: string; host: string; status: string; healthState?: string; latestHealth: LinuxHealthSnapshot | null; asset?: { name?: string; site?: { name?: string } } | null };
+export type LinuxHealthDiagnosis = { kind: "connection" | "stale" | "security" | "resource" | "collection" | "unknown"; titleFa: string; titleEn: string; causeFa: string; causeEn: string; nextStepFa: string; nextStepEn: string; observedAt: string | null };
+export type LinuxMonitoringDevice = { id: string; name: string; host: string; status: string; healthState?: string; latestHealth: LinuxHealthSnapshot | null; diagnosis?: LinuxHealthDiagnosis | null; asset?: { name?: string; site?: { name?: string } } | null };
 export type LinuxMonitoringObservability = { state: "available" | "not_configured"; reason?: string; missingTables?: string[]; checkedAt?: string };
 export type LinuxMetricSample = { id: string; metricKey: string; value: number; unit?: string | null; timestamp: string; source: string; labelsJson?: unknown };
 export type LinuxSummary = { total: number; healthy: number; warning: number; critical: number; offline: number; stale: number; unknown: number; devices: LinuxMonitoringDevice[]; observability?: LinuxMonitoringObservability };

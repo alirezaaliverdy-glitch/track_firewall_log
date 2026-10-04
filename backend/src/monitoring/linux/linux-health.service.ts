@@ -4,6 +4,7 @@ import { collectLinuxServerOverview, parseLinuxServerOverview } from "../../tele
 import { parseLinuxHealthOutput } from "./linux-health.parser.js";
 import { scoreLinuxHealth } from "./linux-health-score.js";
 import { recordVerifiedDeviceConnectivity } from "../../services/device-connectivity-sensor.service.js";
+import { diagnoseLinuxHealth } from "./linux-health-diagnosis.js";
 
 function json(value: unknown): Prisma.InputJsonValue { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; }
 function stateFromOverview(status: string) { return status === "healthy" ? "healthy" : status === "critical" ? "critical" : status === "warning" ? "warning" : "unknown"; }
@@ -79,7 +80,7 @@ export function metricsFromOverview(overview: ReturnType<typeof parseLinuxServer
 
 async function listLinuxDevicesWithoutHealth() {
   const devices = await prisma.device.findMany({ where: { OR: [{ vendor: { contains: "linux", mode: "insensitive" } }, { type: "linux_edge" }] }, include: { asset: true }, orderBy: { updatedAt: "desc" } });
-  return devices.map((device) => ({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, healthState: /offline|disconnected|failed/i.test(device.status) ? "offline" : "unknown", latestHealth: null }));
+  return devices.map((device) => withDiagnosis({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, healthState: /offline|disconnected|failed/i.test(device.status) ? "offline" : "unknown", latestHealth: null }));
 }
 
 function effectiveLinuxState(deviceStatus: string, latestHealth: { state: string; staleAt: Date | null } | undefined) {
@@ -89,12 +90,25 @@ function effectiveLinuxState(deviceStatus: string, latestHealth: { state: string
   return latestHealth.state;
 }
 
+function withDiagnosis<T extends { healthState: string; latestHealth: { state: string; summary: string; warningsJson: unknown; score: number; collectedAt: Date } | null }>(device: T) {
+  return {
+    ...device,
+    diagnosis: diagnoseLinuxHealth({
+      state: device.healthState,
+      summary: device.latestHealth?.summary,
+      warnings: device.latestHealth?.warningsJson,
+      score: device.latestHealth?.score,
+      observedAt: device.latestHealth?.collectedAt,
+    }),
+  };
+}
+
 export async function listLinuxMonitoringDevices() {
   const schema = await getObservabilitySchemaState();
   if (!schema.available) return listLinuxDevicesWithoutHealth();
   try {
     const devices = await prisma.device.findMany({ where: { OR: [{ vendor: { contains: "linux", mode: "insensitive" } }, { type: "linux_edge" }] }, include: { asset: true, healthSnapshots: { orderBy: { collectedAt: "desc" }, take: 1 } }, orderBy: { updatedAt: "desc" } });
-    return devices.map((device) => ({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, healthState: effectiveLinuxState(device.status, device.healthSnapshots[0]), latestHealth: device.healthSnapshots[0] ?? null }));
+    return devices.map((device) => withDiagnosis({ id: device.id, name: device.name, host: device.host, asset: device.asset, status: device.status, healthState: effectiveLinuxState(device.status, device.healthSnapshots[0]), latestHealth: device.healthSnapshots[0] ?? null }));
   } catch (error) {
     if (isMigrationPendingError(error)) return listLinuxDevicesWithoutHealth();
     throw error;
@@ -147,11 +161,12 @@ export async function refreshLinuxHealth(deviceId: string) {
   try {
     const overview = await collectLinuxServerOverview(deviceId);
     const metrics = metricsFromOverview(overview);
-    const score = scoreLinuxHealth(metrics, overview.warnings);
+    const diagnosticWarnings = Array.from(new Set([...overview.warnings, ...overview.health.reasons, ...overview.recentProblems]));
+    const score = scoreLinuxHealth(metrics, diagnosticWarnings);
     await prisma.metricSample.createMany({ data: metrics.map((metric) => ({ deviceId, metricKey: metric.metricKey, value: metric.value, unit: metric.unit, source: "linux-ssh", labelsJson: json(metric.labels ?? {}), collectionRunId: run.id })) });
-    const snapshot = await prisma.healthSnapshot.create({ data: { deviceId, score: score.score, state: stateFromOverview(overview.health.status), summary: overview.health.summary, metricsJson: json(metrics), warningsJson: json(overview.warnings), staleAt: new Date(Date.now() + 15 * 60 * 1000), collectionRunId: run.id } });
+    const snapshot = await prisma.healthSnapshot.create({ data: { deviceId, score: score.score, state: stateFromOverview(overview.health.status), summary: overview.health.summary, metricsJson: json(metrics), warningsJson: json(diagnosticWarnings), staleAt: new Date(Date.now() + 15 * 60 * 1000), collectionRunId: run.id } });
     const completedAt = new Date();
-    await prisma.collectionRun.update({ where: { id: run.id }, data: { status: "completed", completedAt, durationMs: Date.now() - started, metricsJson: json(metrics), warningsJson: json(overview.warnings) } });
+    await prisma.collectionRun.update({ where: { id: run.id }, data: { status: "completed", completedAt, durationMs: Date.now() - started, metricsJson: json(metrics), warningsJson: json(diagnosticWarnings) } });
     await recordVerifiedDeviceConnectivity(
       deviceId,
       "LINUX_HEALTH_COLLECTION_VERIFIED",

@@ -1,3 +1,9 @@
+# 2026-10-04 - Persian dashboard warning diagnosis and resolution path
+
+- Replaced raw dashboard warning text with structured Persian-first Linux diagnoses. The classifier uses concrete persisted evidence and separates connection, stale, security, resource, collection and unknown states; a generic online warning is never labeled as an intrusion.
+- Linux health snapshots and collection runs now retain the deduplicated health reasons and recent problem evidence used to produce the warning. Dashboard actions open the affected asset's existing issue-resolution guide, where retest/setup/monitoring or reviewed ActionPlan handoff remains behind the normal preview, confirmation, PolicyGuard and audit boundaries.
+- Collector error codes are translated into actionable Persian guidance. API and web production images were rebuilt and deployed healthy; focused diagnosis assertions passed. No vendor action, schema migration or credential change.
+
 # 2026-10-04 - Security dependency and vendor TLS hardening
 
 - Updated vulnerable production dependencies and pinned tested transitives. Full backend dependency audit reports 0 findings; frontend production audit reports 0. Full frontend audit retains one development-only `braces` advisory without a patched release.

@@ -117,6 +117,11 @@ function statusLabel(status: unknown, t: TFunction) {
 
 function diagnosticLabel(message: string, isFa: boolean, port?: number) {
   if (!isFa) return message;
+  if (/Recent security warnings found/i.test(message)) return "در لاگ‌های اخیر رویداد امنیتی نیازمند بررسی ثبت شده است؛ این مورد به‌تنهایی وقوع نفوذ را ثابت نمی‌کند.";
+  if (/(nginx|apache2|httpd) is inactive/i.test(message)) return "یک سرویس وب غیرفعال گزارش شده است؛ فقط در صورت نیاز سرویس و وابستگی آن را بررسی کنید.";
+  if (/maximum authentication attempts|authentication attempts|failed login|preauth/i.test(message)) return "تلاش‌های ناموفق ورود SSH در لاگ ثبت شده است؛ منبع، زمان و سیاست احراز هویت را بررسی کنید.";
+  if (/connection reset|MaxStartups throttling/i.test(message)) return "سرویس SSH در لاگ، قطع یا محدودشدن تلاش‌های هم‌زمان را گزارش کرده است؛ منبع و ظرفیت احراز هویت را بررسی کنید.";
+  if (/Server is online with warnings/i.test(message)) return "سرور آنلاین است، اما یک یا چند شاخص سلامت نیازمند بررسی است.";
   if (/SSH_(BANNER|HANDSHAKE)_TIMEOUT/.test(message)) return `SSH روی پورت ${port ?? 22} به‌موقع پاسخ نداده؛ محدودیت فایروال یا وضعیت سرویس را بررسی کنید.`;
   if (/SSH_AUTH_FAILED/.test(message)) return "ارتباط شبکه برقرار است اما اعتبارنامه SSH پذیرفته نشده است.";
   if (/SSH_SESSION_CLOSED/.test(message)) return "نشست پایش SSH قطع شده و برنامه در حال اتصال مجدد است.";
@@ -301,8 +306,8 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     const latestCheck = currentWorkspace.statusChecks[0];
     const latestFailedCheck = latestCheck && ["failed", "offline", "error"].includes(String(latestCheck.status).toLowerCase()) ? latestCheck : null;
     const diagnosticReasons = Array.from(new Set([
-      ...asArray(asRecord(currentWorkspace.health ?? {}).warningsJson).map(String),
-      ...asArray(currentWorkspace.capabilities?.warnings).map(String),
+      ...asArray(asRecord(currentWorkspace.health ?? {}).warningsJson).map(String).map((reason) => diagnosticLabel(reason, isFa, currentWorkspace.device?.managementPort)),
+      ...asArray(currentWorkspace.capabilities?.warnings).map(String).map((reason) => diagnosticLabel(reason, isFa, currentWorkspace.device?.managementPort)),
       latestFailedCollection?.errorCode ? `${isFa ? "خطای جمع‌آوری" : "Collection error"}: ${String(latestFailedCollection.errorCode)}` : "",
       latestFailedCheck?.message ? diagnosticLabel(String(latestFailedCheck.message), isFa, currentWorkspace.device?.managementPort) : ""
     ].map((item) => item.trim()).filter(Boolean)));
