@@ -20,7 +20,7 @@ export async function restoreSsh<T>(device: Device, run: (client: Client, rootUs
     password: credential.password, privateKey: credential.privateKey, passphrase: credential.passphrase,
     tryKeyboard: Boolean(credential.password), readyTimeout: env.sshHandshakeTimeoutMs
   };
-  return withSharedSsh(device.id, config, client => run(client, credential.username === "root"));
+  return withSharedSsh(device.id, config, client => run(client, credential.username === "root"), device.type === "linux_edge");
 }
 export function normalizedConfiguration(vendor: RestoreVendor, content: Buffer) {
   let text = content.toString("utf8").replace(/\r/g, "");

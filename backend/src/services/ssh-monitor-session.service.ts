@@ -25,7 +25,8 @@ export async function probeSshMonitorSession(device: Pick<Device, "id" | "creden
     config.algorithms = ciscoConfig.algorithms;
     config.tryKeyboard = ciscoConfig.tryKeyboard;
   }
-  return probeSharedSsh(device.id, config);
+  const vendor = device.vendor.toLowerCase();
+  return probeSharedSsh(device.id, config, vendor.includes("linux") || vendor.includes("ubuntu"));
 }
 
 export function closeSshMonitorSessions() {

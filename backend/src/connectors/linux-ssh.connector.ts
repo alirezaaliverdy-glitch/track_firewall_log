@@ -300,7 +300,7 @@ async function withSsh<T>(device: Device, callback: (client: Client, credential:
 
 async function withSshWithCredential<T>(device: Device, credential: SshCredential, callback: (client: Client) => Promise<T>) {
   try {
-    return await withSharedSsh(device.id, connectConfig(device, credential), callback);
+    return await withSharedSsh(device.id, connectConfig(device, credential), callback, true);
   } catch (error) {
     if (error instanceof SharedSshConnectionError) throw new ConnectorError(error.code, error.message, error.code === "SSH_AUTH_FAILED" ? 401 : 502);
     throw error;

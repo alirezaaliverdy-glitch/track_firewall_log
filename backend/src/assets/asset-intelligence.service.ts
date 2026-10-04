@@ -3,6 +3,8 @@ import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 import { notifySecurityFinding } from "../services/security-alert-email.service.js";
 import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionEvents, eventMatchesVendorRule, groupSubject, normalizeDetectionVendor } from "../security/vendor-detection-rule-library.js";
+import { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
+export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
 const MAX_IMPORT_ASSETS = 100;
 const SECRET_KEY_PATTERN = /(password|passwd|token|api[_-]?key|secret|authorization|privateKey|passphrase)/i;
@@ -545,7 +547,11 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
     const cutoff = Date.now() - Math.max(1, windowMinutes) * 60_000;
     const vendors = Array.isArray(query.vendors) ? query.vendors.map((item) => String(item).toLowerCase()) : [];
     const candidateEvents = definition ? (eventsByVendor.get(definition.vendor) ?? []) : events;
-    const matched = candidateEvents.filter((event) => (event.timestamp ?? event.receivedAt).getTime() >= cutoff && (definition ? eventMatchesVendorRule(ruleKey, event) : normalizedLegacyEventType(event) === wanted && (!vendors.length || vendors.includes(String(event.vendor ?? "").toLowerCase()))));
+    const matched = candidateEvents.filter((event) =>
+      (event.timestamp ?? event.receivedAt).getTime() >= cutoff &&
+      !isCollectorOwnedAuthSuccess(event) &&
+      (definition ? eventMatchesVendorRule(ruleKey, event) : normalizedLegacyEventType(event) === wanted && (!vendors.length || vendors.includes(String(event.vendor ?? "").toLowerCase())))
+    );
     const subjectFor = (event: (typeof events)[number]) => definition ? groupSubject(definition, event) : event.srcIp ?? event.username ?? String(event.dstPort ?? "device");
     const grouped = new Map<string, typeof matched>();
     for (const event of matched) {

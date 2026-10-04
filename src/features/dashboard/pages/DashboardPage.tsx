@@ -2,6 +2,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { useAssets } from "@/features/assets/hooks/useAssets";
 import { useFindings } from "@/features/security/hooks/useFindings";
+import { securityDisplayText } from "@/features/security/securityPresentation";
 import {
   getOperationalDashboardActivity,
   type DashboardActionItem,
@@ -287,54 +288,75 @@ export default function DashboardPage() {
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
     const linuxIds = new Set<string>();
+    const latestFindingForDevice = (deviceId: string | undefined) => deviceId
+      ? [...openFindings]
+        .filter((finding) => finding.device?.id === deviceId)
+        .sort((left, right) => new Date(right.lastSeen).getTime() - new Date(left.lastSeen).getTime())[0]
+      : undefined;
+    const reviewRoute = (deviceId: string | undefined, fallback: string, useFinding = true) => {
+      const finding = useFinding ? latestFindingForDevice(deviceId) : undefined;
+      return finding
+        ? { route: `/security/findings/${finding.id}`, actionFa: "مشاهده یافته و راهکار", actionEn: "Open finding and fix" }
+        : { route: fallback, actionFa: "بررسی مشکل تجهیز", actionEn: "Review device issue" };
+    };
     for (const device of linux?.devices ?? []) {
       const state = device.healthState ?? device.latestHealth?.state ?? "unknown";
       if (stateTone(state) === "good") continue;
       linuxIds.add(device.id);
+      const useFinding = device.diagnosis?.kind === "security" || (!device.diagnosis && stateTone(state) === "warning");
+      const finding = useFinding ? latestFindingForDevice(device.id) : undefined;
+      const review = reviewRoute(device.id, `/assets/devices/${device.id}/monitoring`, useFinding);
       items.push({
         id: `linux-${device.id}`,
         title: device.name,
-        reason: device.diagnosis ? `${isFa ? device.diagnosis.titleFa : device.diagnosis.titleEn}: ${isFa ? device.diagnosis.causeFa : device.diagnosis.causeEn}` : linuxAttentionReason(device, isFa),
+        reason: finding
+          ? `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`
+          : device.diagnosis ? `${isFa ? device.diagnosis.titleFa : device.diagnosis.titleEn}: ${isFa ? device.diagnosis.causeFa : device.diagnosis.causeEn}` : linuxAttentionReason(device, isFa),
         detail: `${stateLabel(state, isFa)} · ${shortDate(device.diagnosis?.observedAt ?? device.latestHealth?.collectedAt, language, copy(isFa, "بدون داده سلامت", "No health data"))}`,
-        route: `/assets/devices/${device.id}`,
+        route: review.route,
         tone: stateTone(state),
-        actionFa: "مشاهدهٔ تشخیص و راهکار",
-        actionEn: "Open diagnosis and fix",
+        actionFa: review.actionFa,
+        actionEn: review.actionEn,
       });
     }
     for (const asset of assets.assets) {
       if (stateTone(asset.healthState) === "good" || (asset.device?.id && linuxIds.has(asset.device.id))) continue;
       const state = asset.healthState || "unknown";
+      const finding = stateTone(state) === "warning" ? latestFindingForDevice(asset.device?.id) : undefined;
+      const review = reviewRoute(asset.device?.id, asset.device?.id ? `/assets/devices/${asset.device.id}/monitoring` : "/assets", Boolean(finding));
       items.push({
         id: `asset-${asset.id}`,
         title: asset.name,
-        reason: state === "offline"
+        reason: finding
+          ? `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`
+          : state === "offline"
           ? copy(isFa, "آخرین بررسی اتصال ناموفق بوده است؛ اتصال مدیریت و اعتبارنامه را آزمایش کنید.", "The latest connection check failed; test the management channel and credential.")
           : state === "error"
             ? copy(isFa, "جمع‌آوری یا اتصال دستگاه با خطا تمام شده است؛ جزئیات آخرین بررسی را باز کنید.", "Device collection or connection failed; open the latest check details.")
             : copy(isFa, "وضعیت معتبر و تازه‌ای از این تجهیز در دسترس نیست؛ جمع‌آوری جدید لازم است.", "No fresh, verified state is available; a new collection is required."),
         detail: `${vendorName(asset)} · ${shortDate(asset.lastSeenAt, language, copy(isFa, "بدون تماس موفق", "No successful contact"))}`,
-        route: asset.device?.id ? `/assets/devices/${asset.device.id}` : "/assets",
+        route: review.route,
         tone: stateTone(state),
-        actionFa: "مشاهدهٔ تشخیص و راهکار",
-        actionEn: "Open diagnosis and fix",
+        actionFa: review.actionFa,
+        actionEn: review.actionEn,
       });
     }
     for (const collector of monitoring?.collectors.devices ?? []) {
       if (!collector.lastErrorCode || collector.consecutiveFailures < 1) continue;
+      const review = reviewRoute(collector.deviceId, `/assets/devices/${collector.deviceId}/monitoring`, false);
       items.push({
         id: `collector-${collector.deviceId}`,
         title: collector.deviceName,
         reason: collectorAttentionReason(collector.lastErrorCode, isFa),
         detail: copy(isFa, `${number(collector.consecutiveFailures, language)} خطای متوالی`, `${number(collector.consecutiveFailures, language)} consecutive failures`),
-        route: `/assets/devices/${collector.deviceId}`,
+        route: review.route,
         tone: "danger",
-        actionFa: "مشاهدهٔ تشخیص و راهکار",
-        actionEn: "Open diagnosis and fix",
+        actionFa: review.actionFa,
+        actionEn: review.actionEn,
       });
     }
     return items.slice(0, 8);
-  }, [assets.assets, isFa, language, linux, monitoring]);
+  }, [assets.assets, isFa, language, linux, monitoring, openFindings]);
 
   const dailyChecks = [
     { label: copy(isFa, "وضعیت تجهیزات", "Device health"), ok: assets.stats.needsReview === 0, value: `${number(assets.stats.online, language)} / ${number(assets.stats.total, language)}` },

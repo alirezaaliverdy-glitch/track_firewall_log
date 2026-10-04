@@ -1883,3 +1883,9 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added a backend Linux health diagnosis classifier that only treats concrete persisted evidence as a security signal and otherwise explains stale, connection, resource and collection states without exposing raw English collector text.
 - Persisted health reasons and recent problems with Linux snapshots/collection runs; dashboard attention cards now show localized cause/time and link to the affected device's evidence-based remediation guide. Collector codes are mapped to Persian network/authentication/certificate guidance.
 - Backend TypeScript production build, frontend production build and deployed-container health checks passed. Compiled diagnosis smoke assertions covered generic warning, security evidence and offline connection cases. No direct vendor mutation or schema migration.
+
+# 2026-10-04 - All devices: SSH provenance, finding navigation, compact overview
+
+- Implemented exact per-device SSH-session provenance for Linux collection, health checks, actions, backups and restores; vendor-incompatible peer probes are disabled. Successful self-logins are excluded from detection only when both source IP and ephemeral port match. Same-IP user and failed-login events remain detectable.
+- Routed security attention to the specific finding, other device issues to monitoring, and action-tab finding rows to finding detail. Applied the compact overview to the shared device page, not one asset ID.
+- Six focused tests and both production container builds passed; local API/web were deployed healthy. No blanket historical finding resolution, vendor mutation, credential change or schema migration.

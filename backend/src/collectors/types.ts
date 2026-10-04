@@ -26,6 +26,10 @@ export type CollectorRunResult = {
   warnings: string[];
   startedAt: Date;
   completedAt: Date;
+  /** Public peer address seen by the target during this authenticated collector session. */
+  collectorSourceIp?: string;
+  collectorSourcePort?: number;
+  applicationSshSessions?: Array<{ ip: string; port: number }>;
 };
 
 export type DeviceCollector = {

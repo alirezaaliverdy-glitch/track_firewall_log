@@ -92,5 +92,5 @@ export async function collectDeviceBackup(device: Device) {
     const version = (await readBackupCommand(client, ":put [/system resource get version]")).toString("utf8").trim();
     if (!/^[67]\./.test(version)) throw new BackupError("BACKUP_ROUTEROS_VERSION_UNSUPPORTED");
     return readBackupCommand(client, version.startsWith("7.") ? "/export terse show-sensitive" : "/export terse hide-sensitive=no");
-  });
+  }, profile.key === "linux");
 }

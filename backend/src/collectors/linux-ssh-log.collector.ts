@@ -4,7 +4,7 @@ import { DeviceProtocol, DeviceType, type Device } from "@prisma/client";
 import { resolveCredentialById, resolveCredentialByName, type ResolvedDeviceCredential } from "../services/credential.service.js";
 import type { CollectedLogLine, CollectorRunResult, CollectorSourceType, DeviceCollector } from "./types.js";
 import { env } from "../config/env.js";
-import { withSharedSsh } from "../services/shared-ssh-session.service.js";
+import { knownSharedSshSessions, withSharedSsh } from "../services/shared-ssh-session.service.js";
 
 const LINUX_SOURCE_TYPES: CollectorSourceType[] = ["linux_ssh", "linux_ufw", "linux_kernel"];
 
@@ -70,7 +70,7 @@ function connectConfig(device: Device, credential: EnvSshCredential): ConnectCon
 
 async function withSsh<T>(device: Device, callback: (client: Client, credential: EnvSshCredential) => Promise<T>) {
   const credential = await resolveCredential(device);
-  return withSharedSsh(device.id, connectConfig(device, credential), (client) => callback(client, credential));
+  return withSharedSsh(device.id, connectConfig(device, credential), (client) => callback(client, credential), true);
 }
 
 function exec(client: Client, command: string, timeoutMs = 15000): Promise<ExecResult> {
@@ -130,6 +130,14 @@ function sinceArg(since: Date) {
   return since.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+function sshPeer(output: string) {
+  const [address, portText] = output.trim().split(/\s+/);
+  const port = Number(portText);
+  return address && /^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]+$/i.test(address) && Number.isInteger(port) && port > 0 && port <= 65535
+    ? { address, port }
+    : undefined;
+}
+
 export const linuxSshLogCollector: DeviceCollector = {
   name: "linux_ssh_log",
   stateSourceType: "linux_ssh",
@@ -150,6 +158,10 @@ export const linuxSshLogCollector: DeviceCollector = {
     return withSsh(device, async (client, credential) => {
       const hostnameResult = await exec(client, "hostname");
       const hostname = hostnameResult.stdout || device.host;
+      // SSH_CONNECTION is supplied by sshd and contains the address actually
+      // observed by the target (including a NAT/public egress address).
+      const connectionResult = await exec(client, "printf '%s' \"$SSH_CONNECTION\"");
+      const collectorPeer = sshPeer(connectionResult.stdout);
       const sudo = sudoPrefix(credential);
       const commands: Array<{ sourceType: CollectorSourceType; command: string }> = [
         { sourceType: "linux_ssh", command: "whoami" },
@@ -181,7 +193,13 @@ export const linuxSshLogCollector: DeviceCollector = {
         lines,
         warnings,
         startedAt,
-        completedAt: new Date()
+        completedAt: new Date(),
+        collectorSourceIp: collectorPeer?.address,
+        collectorSourcePort: collectorPeer?.port,
+        applicationSshSessions: [
+          ...knownSharedSshSessions(device.id),
+          ...(collectorPeer ? [{ ip: collectorPeer.address, port: collectorPeer.port }] : [])
+        ]
       } satisfies CollectorRunResult;
     });
   }

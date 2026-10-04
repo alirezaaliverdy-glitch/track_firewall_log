@@ -21,12 +21,47 @@ type Entry = {
   nextAttemptAt: number;
   lastError: SharedSshResult | null;
   lastUsedAt: number;
+  peerCapturedAt: number;
 };
 
 const entries = new Map<string, Entry>();
 const MAX_SESSIONS = 128;
 const IDLE_MS = 10 * 60_000;
 const MAX_BACKOFF_MS = 2 * 60_000;
+const ownSessions = new Map<string, Map<string, number>>();
+const OWN_SESSION_RETENTION_MS = 60 * 60_000;
+
+function rememberOwnSession(deviceId: string, value: string) {
+  const [ip, sourcePort] = value.trim().split(/\s+/);
+  const port = Number(sourcePort);
+  if (!ip || !Number.isInteger(port) || port < 1 || port > 65535) return;
+  const sessions = ownSessions.get(deviceId) ?? new Map<string, number>();
+  sessions.set(`${ip}|${port}`, Date.now());
+  ownSessions.set(deviceId, sessions);
+}
+
+function captureLinuxPeer(entry: Entry, client: Client, deviceId: string) {
+  if (Date.now() - entry.peerCapturedAt < 15 * 60_000) return;
+  entry.peerCapturedAt = Date.now();
+  // This POSIX command must only run for Linux targets. Other SSH vendors
+  // have different command interpreters and must not receive it.
+  client.exec("printf '%s' \"$SSH_CONNECTION\"", (error, stream) => {
+    if (error) return;
+    let output = "";
+    stream.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
+    stream.on("close", () => rememberOwnSession(deviceId, output));
+  });
+}
+
+export function knownSharedSshSessions(deviceId: string) {
+  const now = Date.now();
+  return [...(ownSessions.get(deviceId) ?? new Map()).entries()]
+    .filter(([, observedAt]) => now - observedAt < OWN_SESSION_RETENTION_MS)
+    .map(([key]) => {
+      const [ip, port] = key.split("|");
+      return { ip, port: Number(port) };
+    });
+}
 
 function identity(config: ConnectConfig) {
   const secret = createHash("sha256")
@@ -95,19 +130,23 @@ async function entryFor(deviceId: string, config: ConnectConfig) {
     entries.delete(idle[0]);
     close(idle[1]);
   }
-  entry = { key, client: null, connected: false, pending: null, queue: Promise.resolve(), busy: 0, failures: 0, nextAttemptAt: 0, lastError: null, lastUsedAt: Date.now() };
+  entry = { key, client: null, connected: false, pending: null, queue: Promise.resolve(), busy: 0, failures: 0, nextAttemptAt: 0, lastError: null, lastUsedAt: Date.now(), peerCapturedAt: 0 };
   entries.set(key, entry);
   return entry;
 }
 
-async function ensure(entry: Entry, config: ConnectConfig): Promise<SharedSshResult> {
+async function ensure(entry: Entry, config: ConnectConfig, deviceId: string, trackLinuxPeer: boolean): Promise<SharedSshResult> {
   entry.lastUsedAt = Date.now();
-  if (entry.connected && entry.client) return { reachable: true, code: "SSH_SESSION_ALIVE", message: "Authenticated SSH session is active.", latencyMs: 0 };
+  if (entry.connected && entry.client) {
+    if (trackLinuxPeer) captureLinuxPeer(entry, entry.client, deviceId);
+    return { reachable: true, code: "SSH_SESSION_ALIVE", message: "Authenticated SSH session is active.", latencyMs: 0 };
+  }
   if (entry.pending) return entry.pending;
   if (Date.now() < entry.nextAttemptAt) return entry.lastError ?? { reachable: false, code: "SSH_RECONNECT_BACKOFF", message: "Waiting before SSH reconnect.", latencyMs: 0 };
   const started = Date.now();
   const client = new Client();
   entry.client = client;
+  entry.peerCapturedAt = 0;
   entry.pending = new Promise<SharedSshResult>((resolve) => {
     let settled = false;
     let deadline: NodeJS.Timeout | null = null;
@@ -124,6 +163,9 @@ async function ensure(entry: Entry, config: ConnectConfig): Promise<SharedSshRes
       entry.failures = 0;
       entry.nextAttemptAt = 0;
       entry.lastError = null;
+      // Match the exact source IP and ephemeral port seen by sshd; never
+      // suppress all logins from an address shared with a real user.
+      if (trackLinuxPeer) captureLinuxPeer(entry, client, deviceId);
       finish({ reachable: true, code: "SSH_SESSION_AUTHENTICATED", message: "Authenticated SSH session established.", latencyMs: Date.now() - started });
     });
     if (config.tryKeyboard && config.password) {
@@ -160,12 +202,14 @@ async function ensure(entry: Entry, config: ConnectConfig): Promise<SharedSshRes
   return entry.pending;
 }
 
-export async function probeSharedSsh(deviceId: string, config: ConnectConfig): Promise<SharedSshResult> {
+export async function probeSharedSsh(deviceId: string, config: ConnectConfig, trackLinuxPeer = false): Promise<SharedSshResult> {
   const entry = await entryFor(deviceId, config);
-  return ensure(entry, config);
+  const result = await ensure(entry, config, deviceId, trackLinuxPeer);
+  if (result.reachable && entry.client && trackLinuxPeer) captureLinuxPeer(entry, entry.client, deviceId);
+  return result;
 }
 
-export async function withSharedSsh<T>(deviceId: string, config: ConnectConfig, callback: (client: Client) => Promise<T>): Promise<T> {
+export async function withSharedSsh<T>(deviceId: string, config: ConnectConfig, callback: (client: Client) => Promise<T>, trackLinuxPeer = false): Promise<T> {
   const entry = await entryFor(deviceId, config);
   const previous = entry.queue;
   let release!: () => void;
@@ -173,8 +217,9 @@ export async function withSharedSsh<T>(deviceId: string, config: ConnectConfig, 
   entry.busy += 1;
   try {
     await previous;
-    const result = await ensure(entry, config);
+    const result = await ensure(entry, config, deviceId, trackLinuxPeer);
     if (!result.reachable || !entry.client) throw new SharedSshConnectionError(result.code, result.message);
+    if (trackLinuxPeer) captureLinuxPeer(entry, entry.client, deviceId);
     return await callback(entry.client);
   } finally {
     entry.busy -= 1;
@@ -186,6 +231,7 @@ export async function withSharedSsh<T>(deviceId: string, config: ConnectConfig, 
 export function closeSharedSshSessions() {
   for (const entry of entries.values()) close(entry);
   entries.clear();
+  ownSessions.clear();
 }
 
 const idleTimer = setInterval(() => {

@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { scheduleSecurityDetection } from "./security-detection-dispatcher.service.js";
 import type { CollectedLogLine, CollectorRunResult } from "../collectors/types.js";
+import { matchesCollectorSession } from "../security/collector-auth-provenance.js";
 
 export type NormalizedCollectedEvent = {
   deviceId: string;
@@ -30,6 +31,16 @@ export type NormalizedCollectedEvent = {
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+}
+
+function collectorTags(result: CollectorRunResult, event: NormalizedCollectedEvent) {
+  return {
+    collector: true,
+    ...(matchesCollectorSession(event, result) ? { collectorOwned: true } : {}),
+    ...(result.collectorSourceIp ? { collectorSourceIp: result.collectorSourceIp } : {}),
+    ...(result.collectorSourcePort ? { collectorSourcePort: result.collectorSourcePort } : {}),
+    warnings: result.warnings.slice(0, 20)
+  };
 }
 
 function snippet(value: string) {
@@ -365,6 +376,15 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
           }
         });
       }
+      // Backfill provenance on previously ingested authentication events. This
+      // lets detection distinguish the application's own SSH session from a
+      // real operator login without suppressing other successful logins.
+      if (matchesCollectorSession(event, result)) {
+        await prisma.securityEvent.update({
+          where: { id: existing.id },
+          data: { tags: toJson(collectorTags(result, event)) }
+        });
+      }
       updated += 1;
     } else {
       await prisma.securityEvent.create({
@@ -396,7 +416,7 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
           firstSeen: event.timestamp,
           lastSeen: event.timestamp,
           count: 1,
-          tags: toJson({ collector: true, warnings: result.warnings.slice(0, 20) })
+          tags: toJson(collectorTags(result, event))
         }
       });
       inserted += 1;
