@@ -2,6 +2,9 @@ import { useState } from "react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { testDeviceConnection, type ConnectionTestResult } from "@/lib/devices";
 import type { DeviceWorkspace } from "@/lib/deviceOnboarding";
+import { connectionGuides } from "./connectionGuides";
+import { Snmpv3Setup } from "./Snmpv3Setup";
+import "./DeviceConnectionChannels.css";
 
 type Channel = DeviceWorkspace["connections"][number];
 
@@ -12,6 +15,8 @@ const methodLabels: Record<string, string> = {
   restconf: "RESTCONF / YANG",
   syslog: "Syslog",
   agent: "Agent"
+  ,snmpv3: "SNMPv3"
+  ,soap_api: "vSphere API"
 };
 
 function statusCopy(status: string, isFa: boolean) {
@@ -55,7 +60,7 @@ function testMessage(
   method: string,
   isFa: boolean
 ) {
-  if (!isFa) return tested.message;
+  if (!isFa || method === "snmpv3") return tested.message;
   const name = methodLabels[method] ?? method;
   if (tested.status === "verified") return `اتصال ${name} با موفقیت تست شد و آماده جمع‌آوری اطلاعات است.`;
   if (tested.status === "receiving") return `داده‌های ورودی ${name} دریافت شده و مسیر پایش فعال است.`;
@@ -66,12 +71,16 @@ function testMessage(
 
 export function DeviceConnectionChannels({
   deviceId,
+  vendor,
+  host,
   channels,
   isFa,
   locale,
   onRefresh
 }: {
   deviceId: string;
+  vendor: string;
+  host: string;
   channels: Channel[];
   isFa: boolean;
   locale: string;
@@ -117,6 +126,7 @@ export function DeviceConnectionChannels({
           const status = tested?.status ?? channel.status;
           const requirements = prerequisites(channel, isFa);
           const lastSuccess = tested?.lastSuccessAt ?? channel.lastSuccessAt;
+          const guide = connectionGuides[vendor]?.[channel.method];
           return (
             <section className={`device-channel is-${tone(status)}`} key={channel.id}>
               <div className="device-channel__number">{index + 1}</div>
@@ -124,7 +134,7 @@ export function DeviceConnectionChannels({
                 <div className="device-channel__title">
                   <div>
                     <small>{channel.role === "management" ? (isFa ? "مدیریت و اجرای فرمان" : "Management & control") : (isFa ? "داده و پایش" : "Data & observability")}</small>
-                    <strong dir="ltr">{methodLabels[channel.method] ?? channel.method}{channel.port ? ` · TCP ${channel.port}` : ""}</strong>
+                    <strong dir="ltr">{methodLabels[channel.method] ?? channel.method}{channel.port ? ` · ${channel.method === "snmpv3" || channel.method === "syslog" ? "UDP" : "TCP"} ${channel.port}` : ""}</strong>
                   </div>
                   <StatusBadge value={statusCopy(status, isFa)} tone={tone(status)} />
                 </div>
@@ -132,9 +142,11 @@ export function DeviceConnectionChannels({
                 {preferred === channel.method ? <span className="device-channel__preferred">{isFa ? "مسیر منتخب جمع‌آوری" : "Selected collection path"}</span> : null}
                 {tested?.message ? <p className={tested.actionRequired ? "device-channel__message is-warning" : "device-channel__message"}>{testMessage(tested, channel.method, isFa)}</p> : null}
                 {!tested?.message && requirements.length && status !== "verified" && status !== "receiving" ? <p className="device-channel__message is-warning">{requirements.join(" · ")}</p> : null}
+                {guide ? <details className="device-channel__guide"><summary>{isFa ? guide.titleFa : guide.titleEn}</summary><ol>{(isFa ? guide.stepsFa : guide.stepsEn).map((step) => <li key={step}>{step}</li>)}</ol>{guide.command ? <pre dir="ltr">{guide.command}</pre> : null}{guide.noteFa ? <p>{isFa ? guide.noteFa : guide.noteEn}</p> : null}</details> : null}
+                {channel.method === "snmpv3" ? <Snmpv3Setup deviceId={deviceId} isFa={isFa} onRefresh={onRefresh} initialPort={channel.port ?? 161} initialCredentialId={channel.credentialId} initialAuthProtocol={channel.settingsJson?.authProtocol} /> : null}
                 <footer>
                   <span>{lastSuccess ? (isFa ? `آخرین موفق: ${new Date(lastSuccess).toLocaleString(locale)}` : `Last success: ${new Date(lastSuccess).toLocaleString(locale)}`) : (isFa ? "هنوز اتصال موفق ثبت نشده" : "No successful connection yet")}</span>
-                  <span>{channel.host ? <bdi>{channel.host}</bdi> : (isFa ? "دریافت ورودی در مرکز لاگ" : "Inbound collector")}</span>
+                  <span>{channel.host || channel.method === "snmpv3" || channel.method === "ssh" || channel.method === "soap_api" ? <bdi>{channel.host || host}</bdi> : (isFa ? "دریافت ورودی در مرکز لاگ" : "Inbound collector")}</span>
                 </footer>
               </div>
             </section>

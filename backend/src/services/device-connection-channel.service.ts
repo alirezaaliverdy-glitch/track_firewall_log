@@ -10,6 +10,8 @@ import type { DeviceConnectionTestResult } from "../connectors/types.js";
 import { prisma } from "../db/prisma.js";
 import { getConnectionProfile, type ConnectionMethodKey, type VendorConnectionKey } from "../vendors/connection-method.registry.js";
 import { env } from "../config/env.js";
+import { pollSnmpv3, recordSnmpSamples } from "./snmpv3-collector.service.js";
+import { getCredential } from "./credential.service.js";
 
 type ConnectionChannelResult = {
   id: string;
@@ -37,11 +39,13 @@ function vendorKey(device: Pick<Device, "vendor" | "type">): VendorConnectionKey
   if (/mikrotik|routeros/.test(value)) return "mikrotik";
   if (/fortigate|fortinet|fortios/.test(value)) return "fortigate";
   if (/sophos|sfos|cyberoam/.test(value)) return "sophos";
+  if (/esxi|vmware/.test(value)) return "esxi";
   return null;
 }
 
 function primaryMethod(device: Pick<Device, "vendor" | "type" | "protocol">): ConnectionMethodKey {
   if (device.protocol !== DeviceProtocol.api) return "ssh";
+  if (vendorKey(device) === "esxi") return "soap_api";
   return vendorKey(device) === "sophos" ? "xml_api" : "rest_api";
 }
 
@@ -57,6 +61,7 @@ function secondaryDefinition(device: Device) {
   const profile = key ? getConnectionProfile(key) : null;
   if (!profile) return null;
   const primary = primaryMethod(device);
+  if (key === "esxi") return profile.methods.find((item) => item.key === (primary === "ssh" ? "soap_api" : "ssh")) ?? null;
   return profile.methods.find((item) => item.key === profile.recommendedSecondary && item.key !== primary)
     ?? profile.methods.find((item) => item.key !== primary && item.readiness === "ready")
     ?? profile.methods.find((item) => item.key !== primary)
@@ -98,31 +103,27 @@ export async function syncDefaultDeviceConnectionChannels(tx: Prisma.Transaction
 
   if (!secondary) return;
   const pullChannel = secondary.key !== "syslog" && secondary.key !== "agent";
+  const existing = await tx.deviceConnectionChannel.findUnique({ where: { deviceId_role: { deviceId: device.id, role: "observability" } } });
+  const existingSettings = existing?.settingsJson && typeof existing.settingsJson === "object" && !Array.isArray(existing.settingsJson)
+    ? existing.settingsJson as Record<string, unknown> : {};
+  const resetDefault = existingSettings.managedBy !== "user" && existing?.method !== secondary.key;
   await tx.deviceConnectionChannel.upsert({
     where: { deviceId_role: { deviceId: device.id, role: "observability" } },
-    update: {
-      method: secondary.key,
-      purposes: secondary.purposes,
-      host: pullChannel ? device.host : null,
-      port: secondary.defaultPort,
-      credentialId: pullChannel ? device.credentialId : null,
-      priority: 2,
-      settingsJson: json({ readiness: secondary.readiness, prerequisites: secondary.prerequisites, prerequisitesFa: secondary.prerequisitesFa, managedBy: "vendor_profile" }),
-      ...(secondary.key === "agent" ? {
-        enabled: false,
-        status: "setup_required",
-        lastSuccessAt: null,
-        lastError: (secondary.prerequisitesFa ?? secondary.prerequisites)?.join("؛ ") ?? "Standalone agent enrollment is not available."
-      } : {})
-    },
+    update: resetDefault ? {
+      method: secondary.key, purposes: secondary.purposes, host: null, port: secondary.defaultPort,
+      credentialId: secondary.key === "snmpv3" ? null : pullChannel ? device.credentialId : null,
+      enabled: false, status: "setup_required", lastSuccessAt: null,
+      settingsJson: json({ readiness: secondary.readiness, prerequisites: secondary.prerequisites,
+        prerequisitesFa: secondary.prerequisitesFa, managedBy: "vendor_profile" })
+    } : {},
     create: {
       deviceId: device.id,
       role: "observability",
       method: secondary.key,
       purposes: secondary.purposes,
-      host: pullChannel ? device.host : null,
+      host: null,
       port: secondary.defaultPort,
-      credentialId: pullChannel ? device.credentialId : null,
+      credentialId: secondary.key === "snmpv3" ? null : pullChannel ? device.credentialId : null,
       enabled: secondary.readiness === "ready",
       priority: 2,
       status: secondary.readiness === "ready" ? "available" : "setup_required",
@@ -140,6 +141,29 @@ async function passiveEvidence(deviceId: string, method: "syslog" | "agent") {
   const evidenceAt = source?.lastSeenAt ?? event?.receivedAt ?? null;
   const freshnessMs = Math.max(60, env.deviceConnectivityIntervalSeconds * 3) * 1000;
   return evidenceAt && Date.now() - evidenceAt.getTime() <= freshnessMs ? evidenceAt : null;
+}
+
+export async function configureSnmpv3Channel(device: Device, input: Record<string, unknown>) {
+  const key = vendorKey(device);
+  if (!key || !getConnectionProfile(key)?.methods.some((item) => item.key === "snmpv3")) {
+    throw new Error("SNMPv3 برای این وندور پشتیبانی نمی‌شود.");
+  }
+  const credentialId = typeof input.credentialId === "string" ? input.credentialId.trim() : "";
+  if (!credentialId || !await getCredential(credentialId)) throw new Error("اعتبارنامه SNMPv3 معتبر انتخاب کنید.");
+  const port = Number(input.port ?? 161);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("پورت SNMP نامعتبر است.");
+  const authProtocol = input.authProtocol === "SHA256" ? "SHA256" : input.authProtocol === "SHA" || input.authProtocol === undefined ? "SHA" : null;
+  if (!authProtocol) throw new Error("فقط SHA یا SHA256 پشتیبانی می‌شود.");
+  const channel = await prisma.deviceConnectionChannel.upsert({
+    where: { deviceId_role: { deviceId: device.id, role: "observability" } },
+    create: { deviceId: device.id, role: "observability", method: "snmpv3", purposes: ["telemetry"],
+      host: null, port, credentialId, enabled: false, status: "configured", priority: 2,
+      settingsJson: json({ managedBy: "user", authProtocol, privProtocol: "AES" }) },
+    update: { method: "snmpv3", purposes: ["telemetry"], host: null, port, credentialId,
+      enabled: false, status: "configured", lastSuccessAt: null, lastError: null,
+      settingsJson: json({ managedBy: "user", authProtocol, privProtocol: "AES" }) }
+  });
+  return { id: channel.id, method: channel.method, port: channel.port, status: channel.status };
 }
 
 async function testSecondaryChannel(device: Device, channel: DeviceConnectionChannel): Promise<ConnectionChannelResult> {
@@ -166,6 +190,28 @@ async function testSecondaryChannel(device: Device, channel: DeviceConnectionCha
     return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status, connected: connected ? true : null, tested: true, message, actionRequired: !connected, lastTestAt: testedAt.toISOString(), lastSuccessAt: evidenceAt?.toISOString() ?? null };
   }
 
+  if (channel.method === "snmpv3") {
+    const result = await pollSnmpv3(device, channel);
+    const status = result.connected ? "verified" : result.errorCode === "SNMP_CREDENTIAL_REQUIRED" ? "setup_required" : "error";
+    await prisma.deviceConnectionChannel.update({ where: { id: channel.id }, data: {
+      enabled: result.connected, status, lastTestAt: testedAt,
+      lastSuccessAt: result.connected ? testedAt : channel.lastSuccessAt,
+      lastError: result.connected ? null : result.message
+    } });
+    if (result.connected) await recordSnmpSamples(device.id, result);
+    return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status,
+      connected: result.connected, tested: true, message: result.message, actionRequired: !result.connected,
+      lastTestAt: testedAt.toISOString(), lastSuccessAt: result.connected ? testedAt.toISOString() : channel.lastSuccessAt?.toISOString() ?? null,
+      errorCode: result.errorCode };
+  }
+
+  if (!["ssh", "soap_api", "rest_api", "xml_api"].includes(channel.method)) {
+    const message = "این روش هنوز کانکتور اجرایی ندارد؛ از مسیر اصلی تأییدشده استفاده کنید.";
+    await prisma.deviceConnectionChannel.update({ where: { id: channel.id }, data: { enabled: false, status: "setup_required", lastTestAt: testedAt, lastError: message } });
+    return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status: "setup_required", connected: null,
+      tested: false, message, actionRequired: true, lastTestAt: testedAt.toISOString(), lastSuccessAt: channel.lastSuccessAt?.toISOString() ?? null };
+  }
+
   const channelDevice: Device = {
     ...device,
     host: channel.host ?? device.host,
@@ -186,6 +232,7 @@ async function testSecondaryChannel(device: Device, channel: DeviceConnectionCha
   const statusKey = connector.name === "mikrotik" ? "mikrotikStatus"
     : connector.name === "fortigate" ? "fortigateStatus"
       : connector.name === "sophos" ? "sophosStatus"
+        : connector.name === "esxi" ? "esxiStatus"
         : connector.name.includes("cisco") ? "ciscoStatus"
           : "linuxStatus";
   await prisma.$transaction([

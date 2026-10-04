@@ -344,6 +344,13 @@ export function testDeviceConnection(id: string) {
   });
 }
 
+export function configureSnmpv3Channel(id: string, input: { credentialId: string; port: number; authProtocol: "SHA" | "SHA256" }) {
+  return requestJson<{ id: string; method: string; port: number; status: string }>(`/devices/${encodeURIComponent(id)}/observability/snmpv3`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
 export function getDeviceCapabilities(id: string) {
   return requestJson<DeviceCapabilities>(`/devices/${id}/capabilities`);
 }

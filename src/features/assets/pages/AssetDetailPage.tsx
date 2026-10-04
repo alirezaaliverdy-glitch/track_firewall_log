@@ -366,7 +366,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
       {currentWorkspace.vendor.key === "esxi" ? <EsxiHostOverview facts={facts} deviceId={deviceId} isFa={isFa} locale={locale} ssh={currentWorkspace.capabilities?.connectorType === "esxi-ssh" || currentWorkspace.device?.protocol === "ssh"} available={overview.availability === "online"} /> : null}
 
-      <details className="asset-overview-technical"><summary>{isFa ? "مسیرهای اتصال دستگاه" : "Device connection channels"}</summary><DeviceConnectionChannels deviceId={deviceId} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} /></details>
+      <details className="asset-overview-technical"><summary>{isFa ? "مسیرهای اتصال دستگاه" : "Device connection channels"}</summary><DeviceConnectionChannels deviceId={deviceId} vendor={currentWorkspace.vendor.key} host={currentWorkspace.device?.host ?? ""} channels={currentWorkspace.connections} isFa={isFa} locale={locale} onRefresh={load} /></details>
 
       <section className="asset-overview-main-grid">
         <article className="asset-identity-card"><header><span><Server /></span><div><small>{isFa ? "هویت و مدیریت" : "Identity and management"}</small><h3>{t("workspace.cards.identity")}</h3></div></header><dl><div><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd></div><div><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd></div><div><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd></div>{optionalIdentity.map(([label, item]) => <div key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>

@@ -413,7 +413,7 @@ export async function getDeviceWorkspace(reference: string) {
     deviceId ? prisma.deviceConnectionChannel.findMany({
       where: { deviceId },
       orderBy: [{ priority: "asc" }, { role: "asc" }],
-      select: { id: true, role: true, method: true, purposes: true, host: true, port: true, enabled: true, priority: true, status: true, lastTestAt: true, lastSuccessAt: true, lastError: true, settingsJson: true }
+      select: { id: true, role: true, method: true, purposes: true, host: true, port: true, credentialId: true, enabled: true, priority: true, status: true, lastTestAt: true, lastSuccessAt: true, lastError: true, settingsJson: true }
     }) : []
   ]);
   const health = healthHistory[0] ?? null;

@@ -57,6 +57,9 @@ importers:
       maxmind:
         specifier: 5.0.7
         version: 5.0.7
+      net-snmp:
+        specifier: ^3.29.1
+        version: 3.29.1
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -76,6 +79,9 @@ importers:
       '@eslint/js':
         specifier: ^9.36.0
         version: 9.39.4
+      '@types/net-snmp':
+        specifier: ^3.23.0
+        version: 3.23.0
       '@types/node':
         specifier: ^24.6.0
         version: 24.13.2
@@ -588,6 +594,9 @@ packages:
   '@types/lodash@4.17.25':
     resolution: {integrity: sha512-+K1NIO8I+F9/wNulfVvu23QYd0Pe9/OCqRrim4NoYIf1VoEDL90Ve4ClzpyqBLc7NpGGWRvYNCKZ1BE/Jpf8dQ==}
 
+  '@types/net-snmp@3.23.0':
+    resolution: {integrity: sha512-54Y5NLlQ8isegHTUZdEaIFhR1iz/qlRkQlpkuXfsWjWDVLNfStLmvraaj9ZS7tmcZEltFkb4ZeDBjnSYeFc3+w==}
+
   '@types/node@14.18.63':
     resolution: {integrity: sha512-fAtCfv4jJg+ExtXhvCkCqUKZ+4ok/JQk01qDKhL5BDDoS3AxKXhV5/MAVUZyQnSEd2GT92fkgZl0pz0Q0AzcIQ==}
 
@@ -753,6 +762,9 @@ packages:
 
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
+
+  asn1-ber@1.2.2:
+    resolution: {integrity: sha512-CbNem/7hxrjSiOAOOTX4iZxu+0m3jiLqlsERQwwPM1IDR/22M8IPpA1VVndCLw5KtjRYyRODbvAEIfuTogNDng==}
 
   asn1@0.2.6:
     resolution: {integrity: sha512-ix/FxPn0MDjeyJ7i/yoHGFt/EX6LyNbxSEhPPXODPL+KB0VPk86UYfL0lMdy+KCnv+fmvIzySwaK5COwqVbWTQ==}
@@ -1446,6 +1458,9 @@ packages:
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
 
+  net-snmp@3.29.1:
+    resolution: {integrity: sha512-wicY3W4DAVC8xvZmVAQ0PIhemao9yPmtmNXqhplzUooQMRI85LOmeJMoZhJsb9+6poK0OzhtBD9J+r61gyaB3Q==}
+
   normalize-path@3.0.0:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
     engines: {node: '>=0.10.0'}
@@ -1734,6 +1749,10 @@ packages:
   signal-exit@4.1.0:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
+
+  smart-buffer@4.2.0:
+    resolution: {integrity: sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==}
+    engines: {node: '>= 6.0.0', npm: '>= 3.0.0'}
 
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
@@ -2379,6 +2398,10 @@ snapshots:
 
   '@types/lodash@4.17.25': {}
 
+  '@types/net-snmp@3.23.0':
+    dependencies:
+      '@types/node': 24.13.2
+
   '@types/node@14.18.63': {}
 
   '@types/node@18.19.130':
@@ -2642,6 +2665,8 @@ snapshots:
       zip-stream: 4.1.1
 
   argparse@2.0.1: {}
+
+  asn1-ber@1.2.2: {}
 
   asn1@0.2.6:
     dependencies:
@@ -3348,6 +3373,11 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
+  net-snmp@3.29.1:
+    dependencies:
+      asn1-ber: 1.2.2
+      smart-buffer: 4.2.0
+
   normalize-path@3.0.0: {}
 
   ohash@2.0.11: {}
@@ -3613,6 +3643,8 @@ snapshots:
   signal-exit@3.0.7: {}
 
   signal-exit@4.1.0: {}
+
+  smart-buffer@4.2.0: {}
 
   sonic-boom@4.2.1:
     dependencies:

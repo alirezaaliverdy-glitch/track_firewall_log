@@ -1,0 +1,11 @@
+.device-channel__guide{border:1px solid rgba(148,163,184,.2);border-radius:12px;padding:10px 12px;color:var(--app-text);font-size:.72rem}
+.device-channel__guide summary{cursor:pointer;font-weight:700;color:#83e6f1;list-style-position:inside}
+.device-channel__guide ol{margin:12px 0;padding-inline-start:22px;line-height:1.8}
+.device-channel__guide li+li{margin-top:5px}
+.device-channel__guide pre{overflow:auto;direction:ltr;text-align:left;background:rgba(2,10,18,.75);border:1px solid rgba(148,163,184,.18);border-radius:10px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.device-channel__guide p{color:var(--app-muted);line-height:1.7}
+.device-channel__form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.device-channel__form label{display:grid;gap:5px;min-width:0;color:var(--app-muted)}
+.device-channel__form input,.device-channel__form select{width:100%;min-width:0;padding:10px;border-radius:9px;border:1px solid var(--app-border);background:rgba(2,10,18,.65);color:var(--app-text)}
+.device-channel__form button{justify-self:start;align-self:end}
+@media(max-width:640px){.device-channel__form{grid-template-columns:1fr}}

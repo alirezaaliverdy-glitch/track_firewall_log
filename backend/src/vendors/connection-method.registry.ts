@@ -44,7 +44,7 @@ const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   },
   cisco: {
     vendor: "cisco",
-    recommendedSecondary: "restconf",
+    recommendedSecondary: "snmpv3",
     strategy: "Use SSH/CLI for broad IOS compatibility; add RESTCONF/NETCONF for structured IOS-XE data and gNMI for streaming telemetry.",
     strategyFa: "برای سازگاری گسترده IOS از SSH/CLI استفاده کنید؛ در IOS-XE برای داده ساخت‌یافته RESTCONF/NETCONF و برای تله‌متری پیوسته gNMI را فعال کنید.",
     methods: [

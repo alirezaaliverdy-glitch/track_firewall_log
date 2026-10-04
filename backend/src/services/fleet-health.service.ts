@@ -7,6 +7,7 @@ import { projectFleetResources } from "./fleet-health-projection.js";
 import { buildDeviceTrafficSeries } from "./device-traffic-series.js";
 import { recordVerifiedDeviceConnectivity } from "./device-connectivity-sensor.service.js";
 import { matchesDeviceMetricSource, metricSourceForVendor } from "./device-metric-source.js";
+import { pollSnmpv3, recordSnmpSamples } from "./snmpv3-collector.service.js";
 
 const PERIOD_MS = 120_000;
 let timer: NodeJS.Timeout | undefined;
@@ -63,7 +64,27 @@ async function collect(id: string) {
   } catch {
     collectionErrors.set(id,"COLLECTION_FAILED");
     // A resource failure is NOT proof that the host is offline. Connectivity has its own sensor.
-  } finally { inFlight.delete(id); }
+  } finally {
+    try {
+      const channel = await prisma.deviceConnectionChannel.findUnique({ where: { deviceId_role: { deviceId: id, role: "observability" } } });
+      if (channel?.method === "snmpv3" && channel.credentialId) {
+        const device = await prisma.device.findFirst({ where: { id, deletedAt: null, company: { deletedAt: null } } });
+        if (device && device.status !== "offline") {
+          const result = await pollSnmpv3(device, channel);
+          const now = new Date();
+          await prisma.deviceConnectionChannel.update({ where: { id: channel.id }, data: {
+            enabled: result.connected, status: result.connected ? "verified" : "error", lastTestAt: now,
+            lastSuccessAt: result.connected ? now : channel.lastSuccessAt,
+            lastError: result.connected ? null : result.message
+          } });
+          if (result.connected) await recordSnmpSamples(id, result);
+        }
+      }
+    } catch {
+      // A secondary telemetry failure must not mark the management connection offline.
+    }
+    inFlight.delete(id);
+  }
 }
 
 async function tick() {
