@@ -6,6 +6,7 @@ import { recordCiscoMetricSamples, recordVendorMetricSamples } from "./vendor-me
 import { projectFleetResources } from "./fleet-health-projection.js";
 import { buildDeviceTrafficSeries } from "./device-traffic-series.js";
 import { recordVerifiedDeviceConnectivity } from "./device-connectivity-sensor.service.js";
+import { matchesDeviceMetricSource, metricSourceForVendor } from "./device-metric-source.js";
 
 const PERIOD_MS = 120_000;
 let timer: NodeJS.Timeout | undefined;
@@ -22,16 +23,17 @@ export async function listFleetHealth(ownerId: string, page = 0) {
     prisma.device.findMany({ where, orderBy: { id: "asc" }, skip: page * 12, take: 12,
       select: { id:true,name:true,vendor:true,host:true,status:true,
         statusChecks:{orderBy:{checkedAt:"desc"},take:120,select:{status:true,checkedAt:true}},
-        metricSamples:{where:{metricKey:{in:["cpu.usage_percent","memory.usage_percent","disk.usage_percent","datastore.usage_percent","interfaces.down_count","vpn.active_count","sessions.count"]},timestamp:{gte:new Date(Date.now()-24*3600_000)}},orderBy:{timestamp:"desc"},take:128,select:{metricKey:true,value:true,unit:true,timestamp:true}}
+        metricSamples:{where:{metricKey:{in:["cpu.usage_percent","memory.usage_percent","disk.usage_percent","datastore.usage_percent","interfaces.down_count","vpn.active_count","sessions.count"]},timestamp:{gte:new Date(Date.now()-24*3600_000)}},orderBy:{timestamp:"desc"},take:128,select:{metricKey:true,value:true,unit:true,timestamp:true,source:true}}
       } })
   ]);
   const charts = await Promise.all(devices.map(async device => {
-    const samples = await prisma.metricSample.findMany({where:{deviceId:device.id,metricKey:{in:["cpu.usage_percent","memory.usage_percent","network.rx_bytes","network.tx_bytes","network.rx_mbps","network.tx_mbps"]},timestamp:{gte:new Date(Date.now()-2*3600_000)}},orderBy:{timestamp:"desc"},take:2048,select:{metricKey:true,value:true,unit:true,timestamp:true,labelsJson:true}});
+    const source = metricSourceForVendor(device.vendor);
+    const samples = await prisma.metricSample.findMany({where:{deviceId:device.id,...(source ? {source} : {}),metricKey:{in:["cpu.usage_percent","memory.usage_percent","network.rx_bytes","network.tx_bytes","network.rx_mbps","network.tx_mbps"]},timestamp:{gte:new Date(Date.now()-2*3600_000)}},orderBy:{timestamp:"desc"},take:2048,select:{metricKey:true,value:true,unit:true,timestamp:true,labelsJson:true}});
     const resource = (key:string) => samples.filter(s=>s.metricKey===key&&Number.isFinite(s.value)&&s.value>=0&&s.value<=100).reverse().map(s=>({timestamp:s.timestamp,value:s.value,unit:"percent"}));
     const traffic=buildDeviceTrafficSeries(samples);
     return {cpu:resource("cpu.usage_percent"),memory:resource("memory.usage_percent"),traffic,availability:device.statusChecks.slice().reverse().map(s=>({timestamp:s.checkedAt,value:s.status==="online"?1:s.status==="offline"?0:.5,unit:"state"}))};
   }));
-  return { total, page, pageSize:12, collectionIntervalSeconds:PERIOD_MS/1000, generatedAt:new Date().toISOString(), devices: devices.map(({metricSamples,statusChecks,...device},index) => ({...device,...projectFleetResources(metricSamples),charts:charts[index],collectionError:collectionErrors.get(device.id)??null, connection:statusChecks[0]?.status ?? device.status, checkedAt:statusChecks[0]?.checkedAt ?? null, collecting:inFlight.has(device.id)})) };
+  return { total, page, pageSize:12, collectionIntervalSeconds:PERIOD_MS/1000, generatedAt:new Date().toISOString(), devices: devices.map(({metricSamples,statusChecks,...device},index) => ({...device,...projectFleetResources(metricSamples.filter((sample) => matchesDeviceMetricSource(device.vendor, sample.source))),charts:charts[index],collectionError:collectionErrors.get(device.id)??null, connection:statusChecks[0]?.status ?? device.status, checkedAt:statusChecks[0]?.checkedAt ?? null, collecting:inFlight.has(device.id)})) };
 }
 
 async function collect(id: string) {

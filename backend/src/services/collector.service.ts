@@ -1,5 +1,5 @@
 import { prisma } from "../db/prisma.js";
-import { selectCollector } from "../collectors/collector-registry.service.js";
+import { isCurrentCollectorState, selectCollector } from "../collectors/collector-registry.service.js";
 import { ingestCollectorRun } from "./event-ingestion.service.js";
 import { buildIncidentsFromRecentEvents } from "./incident-builder.service.js";
 import { env } from "../config/env.js";
@@ -26,17 +26,30 @@ export async function listCollectors() {
   await reconcileCollectorStates();
   const states = await prisma.eventCollectorState.findMany({
     orderBy: { updatedAt: "desc" },
-    include: { device: { select: { id: true, name: true, type: true, host: true, protocol: true } } }
+    include: { device: true }
   });
-  return { collectors: states };
+  return { collectors: states
+    .filter((state) => !state.device.deletedAt && isCurrentCollectorState(state.device, state.sourceType))
+    .map(({ device, ...state }) => ({ ...state, device: {
+      id: device.id, name: device.name, type: device.type, host: device.host, protocol: device.protocol
+    } })) };
 }
 
 export async function reconcileCollectorStates() {
-  const devices = await prisma.device.findMany();
+  const devices = await prisma.device.findMany({ where: { deletedAt: null } });
   let supportedDevices = 0;
   let createdStates = 0;
   for (const device of devices) {
     const collector = selectCollector(device);
+    const obsolete = await prisma.eventCollectorState.findMany({
+      where: { deviceId: device.id, enabled: true },
+      select: { id: true, sourceType: true }
+    });
+    const obsoleteIds = obsolete.filter((state) => !isCurrentCollectorState(device, state.sourceType)).map((state) => state.id);
+    if (obsoleteIds.length) await prisma.eventCollectorState.updateMany({
+      where: { id: { in: obsoleteIds } },
+      data: { enabled: false, lastError: null, consecutiveFailures: 0 }
+    });
     if (!collector) continue;
     supportedDevices += 1;
     const existing = await prisma.eventCollectorState.findUnique({

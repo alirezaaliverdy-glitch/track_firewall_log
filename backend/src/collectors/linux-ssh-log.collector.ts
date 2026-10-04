@@ -135,7 +135,7 @@ export const linuxSshLogCollector: DeviceCollector = {
   stateSourceType: "linux_ssh",
   sourceTypes: LINUX_SOURCE_TYPES,
   supports(device) {
-    return Boolean(device && device.protocol === DeviceProtocol.ssh && (
+    return Boolean(device && device.type !== DeviceType.esxi && !/^(?:esxi|vmware)(?:$|[-_\s])/i.test(device.vendor) && device.protocol === DeviceProtocol.ssh && (
       device.type === DeviceType.linux_edge ||
       String(device.vendor ?? "").toLowerCase().includes("ubuntu") ||
       String(device.vendor ?? "").toLowerCase().includes("linux")

@@ -9,6 +9,11 @@ import { ESXI_SSH_READ_COMMANDS, esxiCsv, parseEsxiSshInventory } from "../src/c
 import { esxiSshConnector, collectEsxiSshHost } from "../src/connectors/esxi-ssh.connector.js";
 import { vendorMeasurements } from "../src/services/vendor-metric-samples.service.js";
 import { selectDeviceConnector } from "../src/connectors/connector-registry.service.js";
+import { isLinuxSshCapable } from "../src/connectors/linux-ssh.connector.js";
+import { linuxSshLogCollector } from "../src/collectors/linux-ssh-log.collector.js";
+import { isCurrentCollectorState, selectCollector } from "../src/collectors/collector-registry.service.js";
+import { matchesDeviceMetricSource } from "../src/services/device-metric-source.js";
+import { mergeReactivatedCapabilities } from "../src/services/device-onboarding.service.js";
 import { getConnectionProfile } from "../src/vendors/connection-method.registry.js";
 import { liveVendorProjection } from "../src/services/device-workspace.service.js";
 import { withSharedSsh, closeSharedSshSessions } from "../src/services/shared-ssh-session.service.js";
@@ -17,6 +22,24 @@ const fingerprint = "SHA256:" + Buffer.alloc(32, 1).toString("base64").replace(/
 const {Server, utils} = ssh2;
 const device = {id: "esxi-test", host: "esxi.example.test", managementPort: 22, vendor: "esxi", protocol: "ssh",
   capabilities: {esxiSshFingerprint: fingerprint}} as unknown as Device;
+test("re-registered ESXi ignores inherited Linux capabilities, collector state and sensor history", () => {
+  const reactivated = {...device, type: "esxi", capabilities: {
+    esxiSshFingerprint: fingerprint, linuxStatus: {connected: true}, onboarding: {previousVendor: "linux"}
+  }} as unknown as Device;
+  assert.equal(isLinuxSshCapable(reactivated), false);
+  assert.equal(selectDeviceConnector(reactivated), esxiSshConnector);
+  assert.equal(linuxSshLogCollector.supports(reactivated), false);
+  assert.equal(selectCollector(reactivated), null);
+  assert.equal(isCurrentCollectorState(reactivated, "linux_ssh"), false);
+  assert.equal(matchesDeviceMetricSource("esxi", "linux-ssh"), false);
+  assert.equal(matchesDeviceMetricSource("esxi", "esxi"), true);
+  assert.equal(matchesDeviceMetricSource("linux", "linux-ssh"), true);
+  const merged = mergeReactivatedCapabilities({linuxStatus: {connected:true}, inventoryStatus:"archived"},
+    {esxiSshFingerprint:fingerprint}, "linux", "esxi");
+  assert.equal("linuxStatus" in merged, false);
+  assert.equal(merged.esxiSshFingerprint, fingerprint);
+  assert.equal(mergeReactivatedCapabilities({esxiStatus:{connected:true}}, {}, "esxi", "esxi").esxiStatus !== undefined, true);
+});
 test("SSH registration selects an independent read-only connector and profile", async () => {
   assert.equal(esxiSshConnector.supports(device), true);
   assert.equal(esxiSshConnector.supports({...device, protocol: "api"}), false);

@@ -691,8 +691,12 @@ function sameVendor(a: string | null | undefined, b: string) {
   return String(a ?? "").trim().toLowerCase() === b.trim().toLowerCase();
 }
 
-function mergeReactivatedCapabilities(existing: unknown, next: Record<string, unknown>) {
-  const merged = { ...((existing && typeof existing === "object" && !Array.isArray(existing)) ? existing as Record<string, unknown> : {}), ...next };
+export function mergeReactivatedCapabilities(existing: unknown, next: Record<string, unknown>, previousVendor?: string, nextVendor?: string) {
+  // Reuse the device/asset identity and audit history, never the former vendor's
+  // live status or connection hints. They can select the wrong connector.
+  const retain = previousVendor && nextVendor && sameVendor(previousVendor, nextVendor)
+    && existing && typeof existing === "object" && !Array.isArray(existing) ? existing as Record<string, unknown> : {};
+  const merged = { ...retain, ...next };
   delete merged.inventoryStatus;
   const inventory = merged.inventory && typeof merged.inventory === "object" && !Array.isArray(merged.inventory) ? { ...merged.inventory as Record<string, unknown> } : null;
   if (inventory) {
@@ -811,7 +815,7 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
         environment: draft.environment as DeviceEnvironment,
         tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
         status: DeviceStatus.unknown,
-        capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, nextCapabilities)),
+        capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, nextCapabilities, existingDevice?.vendor, draft.vendor)),
         credentialId: draft.credentialId || null
       };
       const device = target.deviceId
@@ -917,7 +921,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
         managementPort: draft.managementPort, protocol: draft.connectionMethod === "api" ? DeviceProtocol.api : DeviceProtocol.ssh, credentialId: draft.credentialId,
         environment: draft.environment as DeviceEnvironment,
         tags: [draft.site ? `site:${draft.site}` : "", draft.location ? `location:${draft.location}` : ""].filter(Boolean),
-        status: DeviceStatus.online, capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, capabilities))
+        status: DeviceStatus.online, capabilities: json(mergeReactivatedCapabilities(existingDevice?.capabilities, capabilities, existingDevice?.vendor, draft.vendor))
       };
       const device = target.deviceId
         ? await tx.device.update({ where: { id: target.deviceId }, data })

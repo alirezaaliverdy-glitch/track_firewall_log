@@ -18,3 +18,7 @@ export function getCollectors() {
 export function selectCollector(device: Device | null) {
   return collectors.find((collector) => collector.supports(device)) ?? null;
 }
+
+export function isCurrentCollectorState(device: Device | null, sourceType: string) {
+  return selectCollector(device)?.stateSourceType === sourceType;
+}

@@ -1,6 +1,6 @@
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
-import { selectCollector } from "../collectors/collector-registry.service.js";
+import { isCurrentCollectorState, selectCollector } from "../collectors/collector-registry.service.js";
 import { reconcileCollectorStates, runCollectorOnce } from "./collector.service.js";
 import { retryFailedSecurityAlertDeliveries } from "./security-alert-email.service.js";
 import { effectiveCollectorIntervalSeconds, isCollectorDue } from "./security-monitor-schedule.js";
@@ -140,13 +140,14 @@ export async function getSecurityMonitorStatus() {
   const [states, supportedDevices, enabledRules, alertChannels, pendingRetries] = await Promise.all([
     prisma.eventCollectorState.findMany({
       orderBy: [{ enabled: "desc" }, { updatedAt: "desc" }],
-      include: { device: { select: { id: true, name: true, vendor: true, type: true, host: true, protocol: true } } }
+      include: { device: true }
     }),
     prisma.device.findMany().then((devices) => devices.filter((device) => Boolean(selectCollector(device))).length),
     prisma.detectionRule.count({ where: { enabled: true } }),
     prisma.securityAlertChannel.count({ where: { enabled: true, recipientEmail: { not: null } } }),
     prisma.securityAlertDelivery.count({ where: { status: { in: ["pending", "failed"] } } })
   ]);
+  const currentStates = states.filter((state) => !state.device.deletedAt && isCurrentCollectorState(state.device, state.sourceType));
   return {
     enabled: env.securityMonitoringEnabled,
     running: runtime.running,
@@ -159,12 +160,12 @@ export async function getSecurityMonitorStatus() {
     lastErrorCode: runtime.lastErrorCode,
     collectors: {
       supportedDevices,
-      configured: states.length,
-      enabled: states.filter((state) => state.enabled).length,
+      configured: currentStates.length,
+      enabled: currentStates.filter((state) => state.enabled).length,
       attempted: runtime.collectorsAttempted,
       succeeded: runtime.collectorsSucceeded,
       failed: runtime.collectorsFailed,
-      devices: states.map((state) => ({
+      devices: currentStates.map((state) => ({
         deviceId: state.deviceId,
         deviceName: state.device.name,
         vendor: state.device.vendor,

@@ -234,6 +234,9 @@ export function isLinuxSshCapable(device: Pick<Device, "type" | "vendor" | "prot
   if (!device) return false;
   const vendor = String(device.vendor ?? "").trim().toLowerCase();
   const type = String(device.type ?? "").trim().toLowerCase();
+  // An archived Linux identity may be re-registered as ESXi while legacy
+  // capability metadata is retained. The current vendor/type wins.
+  if (type === "esxi" || /^(?:esxi|vmware)(?:$|[-_\s])/.test(vendor)) return false;
   const capabilities = device.capabilities && typeof device.capabilities === "object" ? JSON.stringify(device.capabilities).toLowerCase() : "";
   const linux = type === "linux_edge" || type === "linux" || vendor === "linux" || vendor.includes("ubuntu") || vendor.includes("linux") || capabilities.includes("linux");
   const ssh = String(device.protocol ?? "").toLowerCase() === "ssh" || capabilities.includes("ssh");
