@@ -1,5 +1,9 @@
 # Current handoff
 
+2026-10-04 local packaging safeguard: the user's untracked `ssl_managerial_report.html` is excluded from the frontend Docker build context. The original file is untouched and remains untracked.
+
+2026-10-04 management PDF layout follow-up: compacted the fixed two-page A4 summary, removed conflicting oversized CSS overrides, constrained table and card columns, assigned the vendor stripe an explicit grid span, and reduced the PDF overview to two priority devices while the full equipment list remains in Excel. A new headless Chromium test with 28 devices, eight vendors and long Persian cause/remedy text asserts two physical PDF pages and no section overflow/overlap. Isolated backend runtime built and the print-layout test passed; no production deployment or device action.
+
 2026-10-04 ESXi report diagnosis: the saved/live connector's SSH_AUTH_FAILED code means the SSH login was rejected, not that the host is proven offline. The report now distinguishes rejected login from offline/unknown, explains the SSH-versus-API remedy, and keeps host-key/TLS guidance fail-closed. The ESXi SSH read-only capability notice is informational and no longer creates a false health warning. Isolated backend build and focused report tests passed; no fresh host authentication or configuration change was attempted. PDF layout remains a separate follow-up.
 
 2026-10-04 Action Center operation-picker update: replaced the browser's oversized native operation dropdown with an inline, searchable, category-filtered and progressively revealed list. Device/credential choice and the preview → explicit confirmation → connector execution boundary are unchanged. An isolated frontend Docker build passed; no device operation or deployment was run. Two separate requested follow-ups remain: ESXi report diagnosis and PDF report layout.

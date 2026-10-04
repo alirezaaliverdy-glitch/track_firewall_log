@@ -1766,3 +1766,6 @@ The operation selector is now an inline searchable catalog scoped to the chosen 
 # 2026-10-04 — ESXi report diagnosis
 
 Report assessment now maps ESXi SSH/API authentication failure to an explicit rejected-login state with channel-specific next steps, rather than implying offline or showing an unexplained unknown connection. Host-key and TLS/network errors retain safe, distinct guidance. The SSH read-only capability notice is not treated as a health failure. Backend build and focused report tests passed in isolated containers; the real host was not retested.
+# 2026-10-04 — Management PDF layout
+
+The two-page A4 summary now has bounded density, consistent RTL grid placement, smaller typography and predictable page content. The PDF intentionally shows two highest-priority devices and two follow-ups; the Excel file retains every device and full details. A network-disabled Chromium regression with 28 devices/eight vendors/long Persian text verified two PDF pages and no section overflow or overlap. Isolated backend runtime built; no production deployment.

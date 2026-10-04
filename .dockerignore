@@ -10,3 +10,4 @@ backend
 .env
 *.log
 *.zip
+ssl_managerial_report.html

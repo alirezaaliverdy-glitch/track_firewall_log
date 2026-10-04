@@ -72,7 +72,7 @@ test("two-page report uses full-width readable cards, explains status and flags 
   const html=await renderCompanyReportHtml(fixture());
   assert.equal((html.match(/<section class="page">/g)??[]).length,2);
   assert.equal((html.match(/data-device=/g)??[]).length,2);
-  assert.match(html,/font:14px/);assert.match(html,/نیازمند بررسی/);assert.match(html,/قدم بعدی/);assert.match(html,/دادهٔ قدیمی/);assert.match(html,/فهرست کامل/);
+  assert.match(html,/font:12px/);assert.match(html,/نیازمند بررسی/);assert.match(html,/قدم بعدی/);assert.match(html,/دادهٔ قدیمی/);assert.match(html,/فهرست کامل/);
   assert.match(html,/data:font\/ttf;base64,/);assert.doesNotMatch(html,/data:font\/ttf;base64:/);
   assert.match(html,/data-category="server"/);assert.match(html,/خلاصه آماری وندورها/);
   assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>|overflow:hidden|امتیاز سلامت/);

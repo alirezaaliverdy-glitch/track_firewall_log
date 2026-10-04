@@ -1851,3 +1851,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Distinguished rejected ESXi SSH/API login from offline/unknown status; added actionable Persian guidance for credentials, Shell Access, Lockdown Mode, trusted host key and TLS/network checks.
 - Kept the ESXi SSH read-only capability notice informational. Added assessment and report-output regressions; no vendor writes or fresh live login.
+# 2026-10-04 — Management PDF layout
+
+- Removed the conflicting large-print overrides and kept the A4 summary within its page bounds with explicit RTL card grid tracks, fixed-width vendor table and controlled selection density.
+- Added a real Chromium print-layout regression covering long Persian content and many devices. It confirms two PDF pages and no overlapping/out-of-page sections. Excel remains the complete record.
