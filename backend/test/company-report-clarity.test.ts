@@ -40,6 +40,33 @@ test("Cisco category is not overridden by the generic firewall transport type",(
   assert.equal(reportCategory({vendor:"fortigate",type:"firewall"}),"firewall");
   assert.equal(reportCategory({vendor:"mikrotik",type:"firewall"}),"router");
 });
+test("ESXi rejected SSH login is distinguished from an unreachable host and has a specific remedy",()=>{
+  const esxi={...device,vendor:"esxi",protocol:"ssh"};
+  const connector={connected:false,errorCode:"SSH_AUTH_FAILED",message:"SSH authentication was rejected.",warnings:[]} as unknown as NonNullable<NonNullable<Parameters<typeof assessReportDevice>[1]>["connector"]>;
+  const result=assessReportDevice(esxi,{collectedAt:new Date(now).toISOString(),connector},now);
+  assert.equal(result.status,"limited");assert.equal(result.connectionState,"auth_failed");
+  assert.match(result.statusReason,/SSH.*ورود/);assert.match(result.recommendation,/Shell Access/);
+  assert.doesNotMatch(result.statusReason,/قطع|خاموش/);
+});
+test("ESXi SSH read-only capability notice alone is not a health failure",()=>{
+  const esxi={...device,vendor:"esxi",protocol:"ssh"};
+  const connector={connected:true,warnings:[{code:"ESXI_SSH_READONLY",message:"Read-only host monitoring"}]} as unknown as NonNullable<NonNullable<Parameters<typeof assessReportDevice>[1]>["connector"]>;
+  const result=assessReportDevice(esxi,{collectedAt:new Date(now).toISOString(),connector},now);
+  assert.equal(result.status,"active");assert.equal(result.connectionState,"online");
+});
+test("ESXi host-key mismatch advises identity verification instead of disabling checks",()=>{
+  const esxi={...device,vendor:"esxi",protocol:"ssh"};
+  const connector={connected:false,errorCode:"SSH_HOST_KEY_REJECTED",warnings:[]} as unknown as NonNullable<NonNullable<Parameters<typeof assessReportDevice>[1]>["connector"]>;
+  const result=assessReportDevice(esxi,{collectedAt:new Date(now).toISOString(),connector},now);
+  assert.match(result.statusReason,/اثر انگشت/);assert.match(result.recommendation,/مستقل/);
+  assert.equal(result.connectionState,"unknown");
+});
+test("report HTML and sanitized drafts preserve a rejected ESXi login label",async()=>{
+  const report=fixture();report.equipment[0].vendor="esxi";report.equipment[0].connectionState="auth_failed";
+  const safe=sanitizeCompanyStatusReport(report,report.company.id);
+  assert.equal(safe.equipment[0].connectionState,"auth_failed");
+  assert.match(await renderCompanyReportHtml(safe),/اتصال: <b>ورود رد شد<\/b>/);
+});
 function fixture():CompanyStatusReport{return {schemaVersion:1,generatedAt:new Date(now).toISOString(),reportDateFa:"۱۴۰۵/۰۷/۰۵",reportDateGregorian:"2026-09-27",reportTime:"۱۳:۳۰:۰۰",timezone:"Asia/Tehran",reportNumber:"TEST-REPORT",preparedBy:"مدیر",company:{id:"test-company",name:"شرکت نمونه",code:"TEST"},summary:{total:9,active:0,limited:9,inactive:0,healthScore:90},equipment:Array.from({length:9},(_,i)=>({id:`device-${i}`,name:`تجهیز ${i}`,host:"10.0.0.1",vendor:`Vendor ${i}`,model:"model",category:"server",status:"limited",description:"یادداشت",statusReason:"هشدار واقعی <script>alert(1)</script>",recommendation:"بررسی سنسورها و جمع‌آوری تازه",technicalDetails:"permission denied",connectionState:"online",physicalLocation:"",vendorFields:[],cpuPercent:null,diskPercent:null,collectedAt:new Date(now-3600000).toISOString(),source:"snapshot"})),completedActions:[],futureActions:[],additionalNotes:"",responsibleName:"مدیر"};}
 test("two-page report uses full-width readable cards, explains status and flags omitted assets",async()=>{
   const html=await renderCompanyReportHtml(fixture());

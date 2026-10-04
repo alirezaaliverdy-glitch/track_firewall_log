@@ -9,7 +9,7 @@ export type CompanyStatusEquipment = {
   cpuPercent: number | null; diskPercent: number | null;
   collectedAt: string | null; source: "live" | "snapshot" | "inventory";
   statusReason?: string; recommendation?: string; technicalDetails?: string;
-  connectionState?: "online" | "offline" | "unknown";
+  connectionState?: "online" | "offline" | "unknown" | "auth_failed";
 };
 
 export type CompanyStatusReport = {

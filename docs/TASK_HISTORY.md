@@ -1847,3 +1847,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Replaced the full catalog native select with searchable, category-filtered, progressively revealed inline action cards, preserving keyboard-focus styling and selected-action state.
 - Isolated frontend Docker build passed. No vendor actions were executed.
+# 2026-10-04 — ESXi report diagnosis
+
+- Distinguished rejected ESXi SSH/API login from offline/unknown status; added actionable Persian guidance for credentials, Shell Access, Lockdown Mode, trusted host key and TLS/network checks.
+- Kept the ESXi SSH read-only capability notice informational. Added assessment and report-output regressions; no vendor writes or fresh live login.

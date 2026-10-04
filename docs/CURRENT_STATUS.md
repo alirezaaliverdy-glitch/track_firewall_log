@@ -1763,3 +1763,6 @@ The dashboard now shows paged health cards for all registered device vendors. CP
 # 2026-10-04 — Action Center operation selection
 
 The operation selector is now an inline searchable catalog scoped to the chosen device, with category filters, six initial results and an explicit “show more” control. It no longer opens a viewport-height native dropdown. The reviewed preview/execution path is unchanged. Isolated frontend Docker build passed; no device write or local deployment.
+# 2026-10-04 — ESXi report diagnosis
+
+Report assessment now maps ESXi SSH/API authentication failure to an explicit rejected-login state with channel-specific next steps, rather than implying offline or showing an unexplained unknown connection. Host-key and TLS/network errors retain safe, distinct guidance. The SSH read-only capability notice is not treated as a health failure. Backend build and focused report tests passed in isolated containers; the real host was not retested.

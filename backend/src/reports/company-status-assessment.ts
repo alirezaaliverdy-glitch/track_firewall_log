@@ -3,7 +3,7 @@ import type { LinuxServerOverview } from "../telemetry/linux/linux-telemetry.typ
 import type { ReportEquipmentCategory, ReportEquipmentState } from "./company-status-report.types.js";
 
 export type ReportLiveData = { collectedAt: string; connector?: DeviceConnectionTestResult; linux?: LinuxServerOverview; collectionError?: string } | null;
-type Stored = { status: string; vendor: string; type: string; asset?: { role?: { name: string } | null; platform?: { name: string } | null } | null; statusChecks: Array<{ status: string; message: string | null; checkedAt: Date }>; healthSnapshots: Array<{ state: string; summary: string; collectedAt: Date }> };
+type Stored = { status: string; vendor: string; type: string; protocol?: string; asset?: { role?: { name: string } | null; platform?: { name: string } | null } | null; statusChecks: Array<{ status: string; message: string | null; checkedAt: Date }>; healthSnapshots: Array<{ state: string; summary: string; collectedAt: Date }> };
 export function reportCategory(device: Pick<Stored, "vendor" | "type" | "asset">): ReportEquipmentCategory {
   const vendor = device.vendor.toLowerCase();
   if (/linux/.test(vendor)) return "server";
@@ -46,8 +46,8 @@ export function reportActionTitle(raw: string) {
   return /[\u0600-\u06ff]/.test(raw) ? raw : "عملیات اجراشده و تأییدشده";
 }
 
-export function assessReportDevice(device: Stored, live: ReportLiveData, now = Date.now()): { status: ReportEquipmentState; statusReason: string; recommendation: string; technicalDetails: string; connectionState: "online" | "offline" | "unknown" } {
-  const result = (status: ReportEquipmentState, statusReason: string, recommendation: string, technicalDetails = "", connectionState: "online" | "offline" | "unknown" = "unknown") => ({ status, statusReason, recommendation, technicalDetails, connectionState });
+export function assessReportDevice(device: Stored, live: ReportLiveData, now = Date.now()): { status: ReportEquipmentState; statusReason: string; recommendation: string; technicalDetails: string; connectionState: "online" | "offline" | "unknown" | "auth_failed" } {
+  const result = (status: ReportEquipmentState, statusReason: string, recommendation: string, technicalDetails = "", connectionState: "online" | "offline" | "unknown" | "auth_failed" = "unknown") => ({ status, statusReason, recommendation, technicalDetails, connectionState });
   if (live?.linux) {
     const o = live.linux;
     const reasons = [...o.health.reasons, ...o.warnings];
@@ -61,8 +61,17 @@ export function assessReportDevice(device: Stored, live: ReportLiveData, now = D
   }
   if (live?.connector) {
     const c=live.connector;
-    if (c.connected && !c.warnings.length) return result("active", "اتصال و خواندن اطلاعات دستگاه با موفقیت تأیید شد", "پایش دوره‌ای و بک‌آپ منظم را ادامه دهید.", "", "online");
-    const raw = c.warnings.map(w=>`${w.code}: ${w.message}`).join("; ") || c.errorCode || c.message || "partial";
+    const warnings=c.warnings.filter(w=>w.code!=="ESXI_SSH_READONLY");
+    if (c.connected && !warnings.length) return result("active", "اتصال و خواندن اطلاعات دستگاه با موفقیت تأیید شد", "پایش دوره‌ای را ادامه دهید؛ پوشش سنسورها را جداگانه بررسی کنید.", "", "online");
+    const raw = warnings.map(w=>`${w.code}: ${w.message}`).join("; ") || c.errorCode || c.message || "partial";
+    if (device.vendor.toLowerCase()==="esxi" && /^(SSH_AUTH_FAILED|ESXI_AUTH_FAILED)$/.test(c.errorCode ?? "")) {
+      const ssh=device.protocol==="ssh";
+      return result("limited", ssh ? "ارتباط SSH با هاست برقرار شد، اما ESXi ورود حساب ثبت‌شده را رد کرد" : "ESXi ورود حساب API ثبت‌شده را رد کرد؛ دسترسی مدیریتی هنوز تأیید نشده است",
+        ssh ? "در تنظیم اتصال ESXi، اعتبارنامهٔ SSH و نام کاربری را بررسی کنید. در Host Client وضعیت حساب، Shell Access و محدودیت ورود SSH را بررسی کنید؛ سپس تست اتصال بگیرید. ورود موفق به وب به معنی مجوز SSH نیست." : "در تنظیم اتصال ESXi، نام کاربری و رمز API را بررسی کنید؛ وضعیت حساب، مجوز خواندن و محدودیت Lockdown Mode را در Host Client بررسی کنید و سپس تست اتصال بگیرید.",
+        c.errorCode ?? "", "auth_failed");
+    }
+    if (device.vendor.toLowerCase()==="esxi" && c.errorCode==="SSH_HOST_KEY_REJECTED") return result("limited", "هویت SSH هاست با اثر انگشت ثبت‌شده تطبیق ندارد", "اثر انگشت RSA هاست را از مسیر مستقل و مورد اعتماد با مدیر ESXi تطبیق دهید؛ فقط پس از تأیید هویت، مقدار ثبت‌شده را اصلاح و تست کنید. بررسی هویت را دور نزنید.", c.errorCode, "unknown");
+    if (device.vendor.toLowerCase()==="esxi" && c.errorCode==="ESXI_TLS_OR_NETWORK") return result("limited", "اتصال امن API به ESXi برقرار نشد؛ خطای TLS یا مسیر شبکه باید جدا بررسی شود", "از سرور برنامه دسترسی به پورت HTTPS و نام DNS را بررسی کنید؛ سپس گواهی مورد اعتماد و تطبیق SAN با نام/IP را در تنظیم اتصال بررسی و تست کنید.", c.errorCode, "unknown");
     const e=explainReportSignal(raw);
     const offline=!c.connected && /TCP|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH/.test(c.errorCode ?? "");
     return result(offline ? "inactive" : "limited", e.reason, e.action, raw, c.connected ? "online" : offline ? "offline" : "unknown");
