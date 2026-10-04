@@ -28,14 +28,19 @@ export type VendorConnectionProfile = {
   methods: VendorConnectionMethod[];
 };
 
-const method = (value: VendorConnectionMethod) => value;
+const unshippedMethods = new Set<ConnectionMethodKey>(["agent", "syslog", "restconf", "netconf", "gnmi"]);
+const method = (value: VendorConnectionMethod): VendorConnectionMethod => unshippedMethods.has(value.key)
+  ? { ...value, readiness: "planned", recommended: false,
+      prerequisites: ["This collector is not shipped yet; vendor-side configuration alone cannot connect it."],
+      prerequisitesFa: ["گیرنده/کانکتور این روش هنوز در برنامه ارائه نشده است؛ تنظیم وندور به‌تنهایی اتصال را فعال نمی‌کند."] }
+  : value;
 
 const PROFILES: Record<VendorConnectionKey, VendorConnectionProfile> = {
   linux: {
     vendor: "linux",
     recommendedSecondary: "syslog",
-    strategy: "Use SSH keys for control, active health collection, and bootstrap; use Syslog over TLS for continuous events.",
-    strategyFa: "برای کنترل، جمع‌آوری فعال سلامت و راه‌اندازی از کلید SSH و برای رخدادهای پیوسته از Syslog امن استفاده کنید.",
+    strategy: "SSH is the available path for Linux inventory, health, and log collection. A standalone agent and direct Syslog receiver are not shipped yet.",
+    strategyFa: "در حال حاضر موجودی، سلامت و لاگ Linux از SSH جمع‌آوری می‌شود. عامل مستقل و گیرنده مستقیم Syslog هنوز ارائه نشده‌اند.",
     methods: [
       method({ key: "ssh", title: "SSH", titleFa: "SSH امن", summary: "Full administrative control and read-only discovery.", summaryFa: "کنترل مدیریتی و کشف خواندنی با پشتیبانی کلید خصوصی.", purposes: ["control", "inventory"], readiness: "ready", recommended: true, selectable: true, secure: true, defaultPort: 22, credential: "private_key", prerequisites: ["Reachable SSH service", "Least-privilege sudo account"], prerequisitesFa: ["دسترسی شبکه به سرویس SSH", "حساب sudo با حداقل سطح دسترسی"] }),
       method({ key: "agent", title: "Agent", titleFa: "عامل پایش", summary: "Continuous metrics and security telemetry.", summaryFa: "ارسال پیوسته متریک‌ها و داده‌های امنیتی.", purposes: ["telemetry", "events"], readiness: "setup_required", recommended: true, selectable: false, secure: true, defaultPort: null, credential: "api_token", prerequisites: ["The standalone agent package is not shipped yet; use the verified SSH collector for active monitoring"], prerequisitesFa: ["بسته مستقل Agent هنوز ارائه نشده است؛ پایش فعال فعلاً از مسیر SSH تأییدشده انجام می‌شود"] }),

@@ -16,6 +16,24 @@ test("connection catalog exposes an honest profile for every onboarded vendor", 
   }
 });
 
+test("unshipped receivers are not advertised as usable, while SNMPv3 requires device setup", () => {
+  for (const profile of listConnectionProfiles()) {
+    for (const method of profile.methods) {
+      if (["syslog", "agent", "restconf", "netconf", "gnmi"].includes(method.key)) {
+        assert.equal(method.readiness, "planned", `${profile.vendor}/${method.key} has no executable collector`);
+        assert.equal(method.selectable, false);
+      }
+      if (method.key === "snmpv3") {
+        assert.equal(method.readiness, "setup_required");
+        assert.equal(method.selectable, false, "SNMPv3 is configured after onboarding, not a management replacement");
+      }
+    }
+  }
+  for (const vendor of ["cisco", "fortigate", "mikrotik", "sophos"]) {
+    assert.equal(getConnectionProfile(vendor)?.recommendedSecondary, "snmpv3");
+  }
+});
+
 test("MikroTik exposes SSH control and RouterOS REST read-only onboarding", () => {
   const profile = getConnectionProfile("mikrotik");
   assert.ok(profile);

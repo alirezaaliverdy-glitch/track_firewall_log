@@ -1,3 +1,9 @@
+# 2026-10-05 - Guided vendor connection channels
+
+- Six independent commits cover Cisco, FortiGate, MikroTik, Sophos, Linux and ESXi connection choices and short setup guidance. Cisco/FortiGate/MikroTik/Sophos expose a real SNMPv3 polling path; Linux uses SSH; ESXi presents SOAP and SSH as distinct methods.
+- Final integration correction requires usable SNMPv3 auth/privacy credentials, records actual uptime and interface-count samples, allows SNMP health checks when the primary channel is offline, and shows verified channel telemetry. Unimplemented Agent, Syslog receiver, RESTCONF, NETCONF and gNMI paths are clearly marked planned and are not presented as active onboarding options. Syslog evidence no longer passes a channel test without a receiver.
+- Production API and web Docker image builds and compiled registry/SNMPv3-session smoke checks passed. Live vendor connectivity and on-device configuration were not tested; there was no deployment or device mutation. The user's untracked `ssl_managerial_report.html` was left untouched.
+
 # 2026-10-04 - Persian dashboard warning diagnosis and resolution path
 
 - Replaced raw dashboard warning text with structured Persian-first Linux diagnoses. The classifier uses concrete persisted evidence and separates connection, stale, security, resource, collection and unknown states; a generic online warning is never labeled as an intrusion.

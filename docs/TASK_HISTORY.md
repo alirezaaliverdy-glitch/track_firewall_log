@@ -1,3 +1,8 @@
+# 2026-10-05 - Vendor connection protocol follow-up
+
+- Added six vendor-specific, user-guided connection paths in independent commits, then corrected shared SNMPv3 collection and channel readiness. Tested both production Docker image builds and compiled registry/session smoke assertions; no live vendor acceptance or deployment was claimed.
+- Kept unsupported protocol families visibly planned instead of reporting them as working. Preserved explicit credential and response checks, and did not execute any device command.
+
 # 2026-10-04 - Security audit remediation
 
 - Reproduced dependency advisories with pnpm audit, upgraded Fastify and vulnerable transitive packages in both lockfiles, and verified frozen Docker builds. Backend full audit: 0; frontend production audit: 0. One frontend dev-only `braces` advisory remains because no patched release exists.

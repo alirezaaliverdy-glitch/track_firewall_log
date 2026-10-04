@@ -31,17 +31,23 @@ export async function pollSnmpv3(device: Device, channel: DeviceConnectionChanne
     ? channel.settingsJson as Record<string, unknown> : {};
   const authProtocol = settings.authProtocol === "SHA256" ? snmp.AuthProtocols.sha256 : snmp.AuthProtocols.sha;
   const privProtocol = snmp.PrivProtocols.aes;
-  const session = snmp.createV3Session(channel.host || device.host, {
-    name: credential.username,
-    level: snmp.SecurityLevel.authPriv,
-    authProtocol,
-    authKey: credential.password,
-    privProtocol,
-    privKey: credential.passphrase
-  }, { port: channel.port ?? 161, retries: 1, timeout: 3500, transport: "udp4" });
+  let session: snmp.Session | undefined;
   try {
+    session = snmp.createV3Session(device.host, {
+      name: credential.username,
+      level: snmp.SecurityLevel.authPriv,
+      authProtocol,
+      authKey: credential.password,
+      privProtocol,
+      privKey: credential.passphrase
+    }, { port: channel.port ?? 161, retries: 1, timeout: 3500, transport: "udp4" });
+    const activeSession = session;
     const values = await new Promise<snmp.Varbind[]>((resolve, reject) => {
-      session.get(OIDS, (error, varbinds) => error ? reject(error) : resolve(varbinds));
+      activeSession.get(OIDS, (error, varbinds) => {
+        if (error) reject(error);
+        else if (varbinds && varbinds.length >= 2) resolve(varbinds);
+        else reject(new Error("empty SNMP response"));
+      });
     });
     if (snmp.isVarbindError(values[0]) || snmp.isVarbindError(values[1])) {
       return { connected: false, errorCode: "SNMP_OID_UNAVAILABLE", message: "پاسخ SNMP رسید، ولی شناسه یا زمان‌کار دستگاه در دسترس نیست؛ سطح دسترسی کاربر را بررسی کنید." };
@@ -56,11 +62,13 @@ export async function pollSnmpv3(device: Device, channel: DeviceConnectionChanne
       interfaceCount: interfaceCount !== undefined && Number.isFinite(interfaceCount) ? interfaceCount : undefined
     };
   } catch (error) {
-    return { connected: false, errorCode: snmpErrorCode(error), message: snmpErrorCode(error) === "SNMP_TIMEOUT"
-      ? "پاسخی از UDP/161 دریافت نشد؛ آدرس، فایروال و دسترسی جمع‌آورنده را بررسی کنید."
-      : "درخواست SNMPv3 رد شد؛ نام کاربری، روش SHA/AES و رمزها را بررسی کنید." };
+    const errorCode = snmpErrorCode(error);
+    return { connected: false, errorCode, message: errorCode === "SNMP_TIMEOUT"
+      ? "پاسخی از SNMP دریافت نشد؛ آدرس، پورت UDP و فایروال را بررسی کنید."
+      : errorCode === "SNMP_AUTH_FAILED" ? "درخواست SNMPv3 رد شد؛ نام کاربری، روش SHA/AES و رمزها را بررسی کنید."
+        : "پاسخ SNMPv3 قابل‌خواندن نبود؛ مجوز OIDهای پایه و نسخه SNMP دستگاه را بررسی کنید." };
   } finally {
-    session.close();
+    session?.close();
   }
 }
 
@@ -70,5 +78,8 @@ export async function recordSnmpSamples(deviceId: string, result: SnmpPollResult
     result.uptimeSeconds !== undefined ? { deviceId, metricKey: "system.uptime_seconds", value: result.uptimeSeconds, unit: "seconds", source: "snmpv3" } : null,
     result.interfaceCount !== undefined ? { deviceId, metricKey: "interfaces.count", value: result.interfaceCount, unit: "count", source: "snmpv3" } : null
   ].filter((item): item is NonNullable<typeof item> => item !== null);
-  if (data.length) await prisma.metricSample.createMany({ data });
+  if (data.length) {
+    try { await prisma.metricSample.createMany({ data }); }
+    catch { /* Optional metric storage must not invalidate a verified protocol response. */ }
+  }
 }

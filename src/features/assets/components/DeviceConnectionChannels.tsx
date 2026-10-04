@@ -140,6 +140,10 @@ export function DeviceConnectionChannels({
                   <StatusBadge value={statusCopy(status, isFa)} tone={tone(status)} />
                 </div>
                 <p>{purposeCopy(channel.purposes, isFa)}</p>
+                {channel.method === "snmpv3" && status === "verified" && channel.telemetry && (channel.telemetry.uptimeSeconds !== null || channel.telemetry.interfaceCount !== null) ? <div className="device-channel__telemetry">
+                  {channel.telemetry.uptimeSeconds !== null ? <span>{isFa ? "زمان‌کار" : "Uptime"}: {Math.floor(channel.telemetry.uptimeSeconds / 3600).toLocaleString(locale)} {isFa ? "ساعت" : "hours"}</span> : null}
+                  {channel.telemetry.interfaceCount !== null ? <span>{isFa ? "اینترفیس‌ها" : "Interfaces"}: {channel.telemetry.interfaceCount.toLocaleString(locale)}</span> : null}
+                </div> : null}
                 {preferred === channel.method ? <span className="device-channel__preferred">{isFa ? "مسیر منتخب جمع‌آوری" : "Selected collection path"}</span> : null}
                 {tested?.message ? <p className={tested.actionRequired ? "device-channel__message is-warning" : "device-channel__message"}>{testMessage(tested, channel.method, isFa)}</p> : null}
                 {!tested?.message && requirements.length && status !== "verified" && status !== "receiving" ? <p className="device-channel__message is-warning">{requirements.join(" · ")}</p> : null}

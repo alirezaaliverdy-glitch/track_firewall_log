@@ -80,7 +80,7 @@ async function collect(id: string) {
       const channel = await prisma.deviceConnectionChannel.findUnique({ where: { deviceId_role: { deviceId: id, role: "observability" } } });
       if (channel?.method === "snmpv3" && channel.credentialId) {
         const device = await prisma.device.findFirst({ where: { id, deletedAt: null, company: { deletedAt: null } } });
-        if (device && device.status !== "offline") {
+        if (device) {
           const result = await pollSnmpv3(device, channel);
           const now = new Date();
           await prisma.deviceConnectionChannel.update({ where: { id: channel.id }, data: {

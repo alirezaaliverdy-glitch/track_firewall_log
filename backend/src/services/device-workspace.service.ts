@@ -381,7 +381,7 @@ async function loadWorkspaceMetrics(deviceId: string, vendor: string) {
   const source = metricSourceForVendor(vendor);
   const select = { metricKey: true, value: true, unit: true, timestamp: true, source: true, labelsJson: true } as const;
   // Interface counters must not evict CPU/memory/disk readings from one global limit.
-  const keys = ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent", "swap.usage_percent", "cpu.load_1m", "sessions.count", "interfaces.up_count", "interfaces.down_count", "vpn.active_count", "services.failed_count", "ports.listening_count", "firewall.enabled"];
+  const keys = ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent", "swap.usage_percent", "cpu.load_1m", "sessions.count", "interfaces.up_count", "interfaces.down_count", "vpn.active_count", "services.failed_count", "ports.listening_count", "firewall.enabled", "system.uptime_seconds", "interfaces.count"];
   const groups = await Promise.all([
     ...keys.map((metricKey) => prisma.metricSample.findMany({ where: { deviceId, metricKey, timestamp, ...(source ? { source } : {}) }, orderBy: { timestamp: "desc" }, take: 240, select })),
     prisma.metricSample.findMany({ where: { deviceId, metricKey: { in: ["network.rx_bytes", "network.tx_bytes", "network.rx_mbps", "network.tx_mbps"] }, timestamp, ...(source ? { source } : {}) }, orderBy: { timestamp: "desc" }, take: 8192, select })
@@ -651,7 +651,13 @@ export async function getDeviceWorkspace(reference: string) {
       expiresAt: undefined
     } : null,
     collections,
-    connections: vendorKey === "linux" ? connectionChannels.filter((channel) => channel.role === "management") : connectionChannels,
+    connections: (vendorKey === "linux" ? connectionChannels.filter((channel) => channel.role === "management") : connectionChannels).map((channel) => ({
+      ...channel,
+      telemetry: channel.method === "snmpv3" ? {
+        uptimeSeconds: metricSamples.find((sample) => sample.source === "snmpv3" && sample.metricKey === "system.uptime_seconds" && channel.lastSuccessAt && sample.timestamp >= channel.lastSuccessAt)?.value ?? null,
+        interfaceCount: metricSamples.find((sample) => sample.source === "snmpv3" && sample.metricKey === "interfaces.count" && channel.lastSuccessAt && sample.timestamp >= channel.lastSuccessAt)?.value ?? null
+      } : null
+    })),
     sensors: sensorReadings,
     issues,
     charts,

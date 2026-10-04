@@ -1,6 +1,5 @@
 import {
   DeviceProtocol,
-  EventSourceType,
   type Device,
   type DeviceConnectionChannel,
   type Prisma
@@ -9,9 +8,8 @@ import { selectDeviceConnector } from "../connectors/connector-registry.service.
 import type { DeviceConnectionTestResult } from "../connectors/types.js";
 import { prisma } from "../db/prisma.js";
 import { getConnectionProfile, type ConnectionMethodKey, type VendorConnectionKey } from "../vendors/connection-method.registry.js";
-import { env } from "../config/env.js";
 import { pollSnmpv3, recordSnmpSamples } from "./snmpv3-collector.service.js";
-import { getCredential } from "./credential.service.js";
+import { getCredential, resolveCredentialById } from "./credential.service.js";
 import { esxiSshFingerprint } from "../connectors/esxi-ssh.transport.js";
 import { esxiCertificate } from "../connectors/esxi-soap.transport.js";
 
@@ -135,24 +133,16 @@ export async function syncDefaultDeviceConnectionChannels(tx: Prisma.Transaction
   });
 }
 
-async function passiveEvidence(deviceId: string, method: "syslog" | "agent") {
-  const sourceType = method === "agent" ? EventSourceType.agent : EventSourceType.syslog;
-  const [source, event] = await Promise.all([
-    prisma.eventSource.findFirst({ where: { deviceId, type: sourceType }, orderBy: { lastSeenAt: "desc" }, select: { lastSeenAt: true } }),
-    prisma.securityEvent.findFirst({ where: { deviceId, sourceType: { contains: method, mode: "insensitive" } }, orderBy: { receivedAt: "desc" }, select: { receivedAt: true } })
-  ]);
-  const evidenceAt = source?.lastSeenAt ?? event?.receivedAt ?? null;
-  const freshnessMs = Math.max(60, env.deviceConnectivityIntervalSeconds * 3) * 1000;
-  return evidenceAt && Date.now() - evidenceAt.getTime() <= freshnessMs ? evidenceAt : null;
-}
-
 export async function configureSnmpv3Channel(device: Device, input: Record<string, unknown>) {
   const key = vendorKey(device);
   if (!key || !getConnectionProfile(key)?.methods.some((item) => item.key === "snmpv3")) {
     throw new Error("SNMPv3 برای این وندور پشتیبانی نمی‌شود.");
   }
   const credentialId = typeof input.credentialId === "string" ? input.credentialId.trim() : "";
-  if (!credentialId || !await getCredential(credentialId)) throw new Error("اعتبارنامه SNMPv3 معتبر انتخاب کنید.");
+  const credential = credentialId ? await resolveCredentialById(credentialId) : null;
+  if (!credential?.username || !credential.password || !credential.passphrase) {
+    throw new Error("اعتبارنامه SNMPv3 باید نام کاربری، رمز احراز هویت و رمز AES داشته باشد.");
+  }
   const port = Number(input.port ?? 161);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("پورت SNMP نامعتبر است.");
   const authProtocol = input.authProtocol === "SHA256" ? "SHA256" : input.authProtocol === "SHA" || input.authProtocol === undefined ? "SHA" : null;
@@ -181,10 +171,10 @@ export async function configureEsxiSecondaryChannel(device: Device, input: Recor
   const nextCapabilities = { ...capabilities };
   if (method === "ssh") {
     if (typeof input.fingerprint === "string" && input.fingerprint.trim()) nextCapabilities.esxiSshFingerprint = input.fingerprint.trim();
-    esxiSshFingerprint({ id: device.id, capabilities: json(nextCapabilities) });
+    esxiSshFingerprint({ id: device.id, capabilities: JSON.parse(JSON.stringify(nextCapabilities)) as Device["capabilities"] });
   } else if (typeof input.caCertificate === "string" && input.caCertificate.trim()) {
     nextCapabilities.esxiCaCertificate = input.caCertificate.trim();
-    esxiCertificate({ ...device, capabilities: json(nextCapabilities) });
+    esxiCertificate({ ...device, capabilities: JSON.parse(JSON.stringify(nextCapabilities)) as Device["capabilities"] });
   }
   return prisma.$transaction(async (tx) => {
     if (JSON.stringify(nextCapabilities) !== JSON.stringify(capabilities)) await tx.device.update({ where: { id: device.id }, data: { capabilities: json(nextCapabilities) } });
@@ -210,17 +200,12 @@ async function testSecondaryChannel(device: Device, channel: DeviceConnectionCha
     return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status: "setup_required", connected: null, tested: false, message, actionRequired: true, lastTestAt: testedAt.toISOString(), lastSuccessAt: null };
   }
   if (channel.method === "syslog") {
-    const evidenceAt = await passiveEvidence(device.id, channel.method);
-    const connected = Boolean(evidenceAt);
-    const status = connected ? "receiving" : "waiting_data";
-    const message = connected
-      ? `Inbound ${channel.method} data was received successfully.`
-      : "Remote Syslog forwarding must be completed on the device; this push channel cannot be tested like SSH.";
+    const message = "گیرنده مستقیم Syslog هنوز در برنامه راه‌اندازی نشده است؛ رخدادهای واردشده قبلی اثبات اتصال زنده نیستند.";
     await prisma.deviceConnectionChannel.update({
       where: { id: channel.id },
-      data: { enabled: connected, status, lastTestAt: testedAt, lastSuccessAt: evidenceAt, lastError: connected ? null : message }
+      data: { enabled: false, status: "setup_required", lastTestAt: testedAt, lastSuccessAt: null, lastError: message }
     });
-    return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status, connected: connected ? true : null, tested: true, message, actionRequired: !connected, lastTestAt: testedAt.toISOString(), lastSuccessAt: evidenceAt?.toISOString() ?? null };
+    return { id: channel.id, role: channel.role, method: channel.method, purposes: channel.purposes, status: "setup_required", connected: null, tested: false, message, actionRequired: true, lastTestAt: testedAt.toISOString(), lastSuccessAt: null };
   }
 
   if (channel.method === "snmpv3") {
