@@ -144,3 +144,59 @@ jobs:
           docker compose -f docker-compose.staging.yml config
           docker compose -f docker-compose.production.yml config
           docker compose -f docker-compose.firewall.yml config
+
+  deploy-production:
+    name: Deploy latest main to production server
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [frontend, backend, compose]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    concurrency:
+      group: production-server-deploy
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@v4
+
+      - name: Configure pinned SSH access
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+          SSH_PORT: ${{ vars.PRODUCTION_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Set PRODUCTION_SSH_HOST in the production environment}"
+          : "${SSH_USER:?Set PRODUCTION_SSH_USER in the production environment}"
+          : "${SSH_KEY:?Set PRODUCTION_SSH_KEY in the production environment}"
+          : "${SSH_KNOWN_HOSTS:?Set PRODUCTION_SSH_KNOWN_HOSTS to the verified server host key}"
+          SSH_PORT="${SSH_PORT:-22}"
+          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] && (( SSH_PORT > 0 && SSH_PORT < 65536 ))
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts >/dev/null
+          printf 'SSH_PORT=%s\n' "$SSH_PORT" >> "$GITHUB_ENV"
+
+      - name: Deploy only the commit that passed CI
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_PATH:?Set PRODUCTION_DEPLOY_PATH in the production environment}"
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          ssh -p "$SSH_PORT" \
+            -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            "$SSH_USER@$SSH_HOST" \
+            "sh -s -- '$DEPLOY_PATH' '$DEPLOY_SHA'" < scripts/deploy/update-main-server.sh

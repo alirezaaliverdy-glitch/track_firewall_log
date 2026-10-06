@@ -1894,3 +1894,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Implemented exact per-device SSH-session provenance for Linux collection, health checks, actions, backups and restores; vendor-incompatible peer probes are disabled. Successful self-logins are excluded from detection only when both source IP and ephemeral port match. Same-IP user and failed-login events remain detectable.
 - Routed security attention to the specific finding, other device issues to monitoring, and action-tab finding rows to finding detail. Applied the compact overview to the shared device page, not one asset ID.
 - Six focused tests and both production container builds passed; local API/web were deployed healthy. No blanket historical finding resolution, vendor mutation, credential change or schema migration.
+# 2026-10-06 - Push-to-main production deployment
+
+- Extended the gated CI workflow so successful pushes to `main` automatically deploy over pinned SSH to the existing firewall Compose project. Added a host script for exact-commit fast-forward, deployment serialization, build, health checks, and volume preservation.
+- Documented the required GitHub production environment settings. No SSH secrets were added to the repository and no remote host was changed; server access and GitHub secret provisioning remain required to activate deployment.

@@ -58,6 +58,18 @@ The config/env examples are placeholders for advanced deployments. Real secrets 
 
 Back up the named database, bootstrap, uploads, telemetry, Caddy, and runtime-secret volumes before host migration. Never use docker compose down -v on a production host unless permanent data deletion is intentional.
 
+## Automatic deployment from `main`
+
+The `CI` workflow deploys pushes to `main` after the frontend, backend, and Compose checks all pass. It updates the existing `track_firewall_log` checkout using a fast-forward only, builds `firewall-web` and `firewall-api`, runs the existing `docker-compose.firewall.yml` stack with its existing named volumes, waits for container health, and checks the dashboard and API readiness endpoints. It never removes volumes. A deployment is skipped if a newer `main` commit has already replaced the commit that passed CI.
+
+Configure these values in the repository's GitHub `production` environment before expecting automatic deployment:
+
+- Secrets `PRODUCTION_SSH_HOST`, `PRODUCTION_SSH_USER`, `PRODUCTION_SSH_KEY`, and `PRODUCTION_DEPLOY_PATH`.
+- Secret `PRODUCTION_SSH_KNOWN_HOSTS` containing the verified SSH host key line for the host and port.
+- Optional variable `PRODUCTION_SSH_PORT` (defaults to `22`).
+
+The SSH user must be able to fetch the public repository, run Docker Compose, and access the existing deployment directory. Keep SSH reachable from GitHub Actions runners or provide an approved runner/network path. The current IP deployment's HTTPS endpoint must also be routed to this application for secure browser login; automatic image deployment alone does not correct the host's HTTPS routing.
+
 ## Advanced CI deployment
 
 GitHub workflows keep immutable-image staging, production release, and rollback flows. Their SSH, registry, database, authentication, and encryption values must be supplied through GitHub Environments or the target host secret manager. These external-secret requirements do not apply to the primary root compose.
