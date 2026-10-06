@@ -20,7 +20,7 @@ jobs:
   frontend:
     name: Frontend typecheck, test, build
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       VITE_APP_ENV: production
       VITE_BASE_PATH: /firewall/
@@ -200,5 +200,7 @@ jobs:
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
             "$SSH_USER@$SSH_HOST" \
             "sh -s -- '$DEPLOY_PATH' '$DEPLOY_SHA'" < scripts/deploy/update-main-server.sh

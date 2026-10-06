@@ -2,7 +2,7 @@
 
 - Confirmed that the local Codex terminal failed before any SSH attempt due to Windows `CryptUnprotectData` and a stale workspace directory. Using the real project path and approved terminal context allowed pinned-key SSH to the server on port 9008 without a password.
 - Inspected the active production stack and found that the prior CI script would deploy another Compose project. Separated server-only Caddy/TLS changes into an ignored local file and preserved untracked Compose override/certificates; restored the tracked Caddyfile after verifying the gateway mounted the local file. Live containers, HTTPS dashboard and API readiness stayed healthy.
-- Changed CI script/workflow and deployment documentation to deploy the live `firewall-soar` stack with explicit volume/config guards and HTTPS health checks. Local shell syntax and remote mount checks passed; end-to-end GitHub Actions run remains pending.
+- Changed CI script/workflow and deployment documentation to deploy the live `firewall-soar` stack with explicit volume/config guards and HTTPS health checks. The first Actions run passed all three CI checks and fast-forwarded the server to `2250d6d`, but Docker canceled the backend image build after about ten minutes in Chromium's Alpine installation. No deployment marker was written, and existing containers stayed healthy. Added a follow-up for SSH keepalive and periodic build progress; a complete subsequent run must verify it.
 
 # 2026-10-05 - Vendor connection protocol follow-up
 

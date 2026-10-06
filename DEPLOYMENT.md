@@ -72,6 +72,8 @@ Configure these values in the repository's GitHub `production` environment befor
 
 The SSH user must own or be authorized to update the checkout, fetch the public repository, and run Docker Compose. The existing host also needs `jq` so the script can verify that the effective Compose configuration mounts its local Caddyfile. Keep SSH reachable from GitHub Actions runners or provide an approved runner/network path. On the existing host, HTTPS is served by the same `firewall-soar` gateway that the deployment updates; verify its certificate and dashboard route after each release.
 
+The initial backend image build can take more than ten minutes while Alpine installs Chromium. CI keeps the SSH connection alive and emits a periodic progress line during the build; the production job permits up to 45 minutes. Do not interpret a fast-forwarded checkout alone as a successful release: the deploy marker and health checks are written only after the containers are healthy.
+
 ## Advanced CI deployment
 
 GitHub workflows keep immutable-image staging, production release, and rollback flows. Their SSH, registry, database, authentication, and encryption values must be supplied through GitHub Environments or the target host secret manager. These external-secret requirements do not apply to the primary root compose.

@@ -76,6 +76,16 @@ compose config --format json | jq -e --arg source "$(pwd -P)/Caddyfile.productio
   exit 2
 }
 compose run --rm --no-deps gateway caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+# Keep the runner's SSH channel active during a slow first-time Chromium build.
+(
+  while sleep 30; do
+    echo "Production image build is still running..."
+  done
+) &
+heartbeat_pid=$!
+trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
+
 compose build firewall-web firewall-api
 compose up -d --remove-orphans --wait --wait-timeout 300
 
