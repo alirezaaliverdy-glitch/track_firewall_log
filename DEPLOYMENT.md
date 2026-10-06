@@ -74,6 +74,8 @@ The SSH user must own or be authorized to update the checkout, fetch the public 
 
 The initial backend image build can take more than ten minutes while Alpine installs Chromium. CI keeps the SSH connection alive and emits a periodic progress line during the build; the production job permits up to 45 minutes. Do not interpret a fast-forwarded checkout alone as a successful release: the deploy marker and health checks are written only after the containers are healthy.
 
+The server must have at least 2 GiB free before a release begins; the deploy script refuses to start below that floor to protect the live database and gateway from a full root filesystem. A first build can temporarily need more than 3 GiB because the old and new Chromium-enabled API images coexist. Increase the server filesystem if this headroom cannot be maintained. Only disposable build/package caches were cleared during the 2026-10-06 recovery; runtime volumes and certificate files were preserved.
+
 ## Advanced CI deployment
 
 GitHub workflows keep immutable-image staging, production release, and rollback flows. Their SSH, registry, database, authentication, and encryption values must be supplied through GitHub Environments or the target host secret manager. These external-secret requirements do not apply to the primary root compose.

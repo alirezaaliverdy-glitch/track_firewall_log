@@ -59,6 +59,14 @@ command -v jq >/dev/null 2>&1 || {
   echo "jq is required to verify the production Caddy mount" >&2
   exit 2
 }
+available_kb=$(df -Pk . | awk 'NR == 2 { print $4 }')
+case "$available_kb" in
+  ''|*[!0-9]*) echo "Cannot determine free space for production build" >&2; exit 2 ;;
+esac
+[ "$available_kb" -ge 2097152 ] || {
+  echo "Production build needs at least 2 GiB free; expand disk or clear unused caches" >&2
+  exit 2
+}
 
 git merge --ff-only "$target_sha"
 
