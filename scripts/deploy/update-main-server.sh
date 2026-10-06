@@ -87,7 +87,7 @@ heartbeat_pid=$!
 trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 
 compose build firewall-web firewall-api
-compose up -d --remove-orphans --wait --wait-timeout 300
+compose up -d --no-build --remove-orphans --wait --wait-timeout 300
 
 if ! compose exec -T gateway wget --no-check-certificate -qO- https://127.0.0.1/firewall-api/health/ready | grep -q '"ready":true'; then
   echo "Deployment health check failed: API/database readiness is not healthy" >&2
