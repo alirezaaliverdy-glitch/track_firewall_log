@@ -1,6 +1,7 @@
 # 2026-10-05 - Vendor connection protocol follow-up
 
 - Follow-up from the first CI run: removed duplicate pnpm setup pins because each package declares its exact package manager, and create an empty ignored backend `.env` inside the ephemeral Compose validation job. A fresh run is still needed to validate these fixes and reach the deployment gate.
+- Follow-up from the second run: supplied a harmless unreachable DSN for Prisma 7 client generation and updated production frontend smoke routes to use the `/firewall/` base path. Waiting on a clean rerun to verify deployment eligibility.
 
 - Added six vendor-specific, user-guided connection paths in independent commits, then corrected shared SNMPv3 collection and channel readiness. Tested both production Docker image builds and compiled registry/session smoke assertions; no live vendor acceptance or deployment was claimed.
 - Kept unsupported protocol families visibly planned instead of reporting them as working. Preserved explicit credential and response checks, and did not execute any device command.

@@ -67,6 +67,8 @@ jobs:
     name: Backend typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://127.0.0.1:1/ci_prisma_generate
 
     steps:
       - name: Check out repository

@@ -83,7 +83,7 @@ async function main() {
     if (!indexHtml.includes('id="root"')) fail("application root element is missing");
     await verifyAssetReferences(indexHtml);
 
-    const routes = ["/login", "/dashboard", "/actions", "/assets/devices", "/assistant"];
+    const routes = ["/firewall/login", "/firewall/dashboard", "/firewall/actions", "/firewall/assets/devices", "/firewall/assistant"];
     for (const route of routes) {
       const html = await fetchText(route);
       if (!html.includes('id="root"')) fail(`${route} did not return the app shell`);
