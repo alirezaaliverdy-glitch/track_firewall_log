@@ -32,8 +32,6 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -76,8 +74,6 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -139,6 +135,9 @@ jobs:
           AUTH_SESSION_SECRET: ci-placeholder-secret-with-at-least-32-chars
           POSTGRES_PASSWORD: ci-placeholder-db-password
         run: |
+          # This ignored file is required by the server-oriented Compose manifest;
+          # CI supplies no production .env values and validates only the manifest.
+          touch backend/.env
           docker compose -f docker-compose.yml config
           docker compose -f docker-compose.development.yml config
           docker compose -f docker-compose.staging.yml config
