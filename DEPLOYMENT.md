@@ -60,15 +60,17 @@ Back up the named database, bootstrap, uploads, telemetry, Caddy, and runtime-se
 
 ## Automatic deployment from `main`
 
-The `CI` workflow deploys pushes to `main` after the frontend, backend, and Compose checks all pass. It updates the existing `track_firewall_log` checkout using a fast-forward only, builds `firewall-web` and `firewall-api`, runs the existing `docker-compose.firewall.yml` stack with its existing named volumes, waits for container health, and checks the dashboard and API readiness endpoints. It never removes volumes. A deployment is skipped if a newer `main` commit has already replaced the commit that passed CI.
+The `CI` workflow deploys pushes to `main` after the frontend, backend, and Compose checks all pass. On the existing production host it fast-forwards the checkout and rebuilds `firewall-web` and `firewall-api` in the running `firewall-soar` project, using `docker-compose.yml` together with the host's `docker-compose.override.yml`. It checks that the existing database volume and server-local Caddy configuration are present before changing containers, validates the effective Compose and Caddy configuration, waits for health, then probes API/database readiness and the HTTPS dashboard through `gateway`. It never removes volumes. A deployment is skipped if a newer `main` commit has superseded the commit that passed CI.
+
+This host's override supplies the API egress network, ACME challenge and Let's Encrypt certificate mounts, and `./Caddyfile.production.local:/etc/caddy/Caddyfile:ro` for the gateway. Keep the override, `Caddyfile.production.local`, and certificate directories on the host; do not commit certificates or private keys. The `.local` file carries this host's trusted public TLS configuration while the tracked `Caddyfile.production` remains the portable internal-CA default for a fresh clone. The deploy script refuses tracked server-side edits, so make server-specific Caddy changes in the local file.
 
 Configure these values in the repository's GitHub `production` environment before expecting automatic deployment:
 
 - Secrets `PRODUCTION_SSH_HOST`, `PRODUCTION_SSH_USER`, `PRODUCTION_SSH_KEY`, and `PRODUCTION_DEPLOY_PATH`.
 - Secret `PRODUCTION_SSH_KNOWN_HOSTS` containing the verified SSH host key line for the host and port.
-- Optional variable `PRODUCTION_SSH_PORT` (defaults to `22`).
+- Optional variable `PRODUCTION_SSH_PORT` (defaults to `22`; this host uses `9008`). For a nonstandard port, the known-hosts entry must use `[host]:port`.
 
-The SSH user must be able to fetch the public repository, run Docker Compose, and access the existing deployment directory. Keep SSH reachable from GitHub Actions runners or provide an approved runner/network path. The current IP deployment's HTTPS endpoint must also be routed to this application for secure browser login; automatic image deployment alone does not correct the host's HTTPS routing.
+The SSH user must own or be authorized to update the checkout, fetch the public repository, and run Docker Compose. The existing host also needs `jq` so the script can verify that the effective Compose configuration mounts its local Caddyfile. Keep SSH reachable from GitHub Actions runners or provide an approved runner/network path. On the existing host, HTTPS is served by the same `firewall-soar` gateway that the deployment updates; verify its certificate and dashboard route after each release.
 
 ## Advanced CI deployment
 

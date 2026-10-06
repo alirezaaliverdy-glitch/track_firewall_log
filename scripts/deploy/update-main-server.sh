@@ -42,21 +42,49 @@ git diff --quiet && git diff --cached --quiet || {
   echo "Tracked server-side edits exist; refusing to overwrite them" >&2
   exit 2
 }
+
+[ -f docker-compose.override.yml ] || {
+  echo "Production Compose override is missing" >&2
+  exit 2
+}
+[ -s Caddyfile.production.local ] || {
+  echo "Server-local Caddyfile is missing" >&2
+  exit 2
+}
+docker volume inspect firewall-soar_firewall_db_data >/dev/null 2>&1 || {
+  echo "Existing production database volume was not found" >&2
+  exit 2
+}
+command -v jq >/dev/null 2>&1 || {
+  echo "jq is required to verify the production Caddy mount" >&2
+  exit 2
+}
+
 git merge --ff-only "$target_sha"
 
 compose() {
-  docker compose --project-name track_firewall_log -f docker-compose.firewall.yml "$@"
+  docker compose --project-name firewall-soar -f docker-compose.yml -f docker-compose.override.yml "$@"
 }
 
+compose config --quiet
+compose config --format json | jq -e --arg source "$(pwd -P)/Caddyfile.production.local" '
+  .services.gateway.volumes
+  | map(select(.target == "/etc/caddy/Caddyfile" and .source == $source))
+  | length == 1
+' >/dev/null || {
+  echo "Gateway is not using the server-local Caddyfile" >&2
+  exit 2
+}
+compose run --rm --no-deps gateway caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 compose build firewall-web firewall-api
 compose up -d --remove-orphans --wait --wait-timeout 300
 
-if ! compose exec -T main-nginx wget -qO- http://127.0.0.1/firewall-api/health/ready | grep -q '"ready":true'; then
+if ! compose exec -T gateway wget --no-check-certificate -qO- https://127.0.0.1/firewall-api/health/ready | grep -q '"ready":true'; then
   echo "Deployment health check failed: API/database readiness is not healthy" >&2
   compose ps
   exit 1
 fi
-if ! compose exec -T main-nginx wget -q --spider http://127.0.0.1/firewall/dashboard; then
+if ! compose exec -T gateway wget --no-check-certificate -q --spider https://127.0.0.1/firewall/dashboard; then
   echo "Deployment health check failed: dashboard did not return successfully" >&2
   compose ps
   exit 1

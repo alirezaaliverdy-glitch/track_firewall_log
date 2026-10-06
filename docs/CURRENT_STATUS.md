@@ -1,3 +1,9 @@
+## 2026-10-06 - Production deploy connection and live-stack correction
+
+- SSH to `78.38.152.54:9008` works with the pinned deployment key. The earlier assistant-side failure came from local Windows command startup and an incorrect workspace path, not the server. The server checkout is now writable by `alireza` and has no tracked edits.
+- The real production project is `firewall-soar` with root Compose plus a host-only override; the previous automation targeted an unrelated `docker-compose.firewall.yml` stack. A byte-identical server-local Caddyfile and an override mount preserve the public TLS configuration while allowing the tracked file to be clean. Existing database/certificate/runtime volumes were not removed.
+- Updated deploy script checks the existing DB volume, local override/Caddy mount, Compose/Caddy validity and actual HTTPS gateway readiness. Syntax, effective mount and currently running HTTPS/API health passed. GitHub Actions deployment of this repair is still to be verified. Preserve unrelated `ssl_managerial_report.html`.
+
 # 2026-10-05 - Guided vendor connection channels
 
 - Six independent commits cover Cisco, FortiGate, MikroTik, Sophos, Linux and ESXi connection choices and short setup guidance. Cisco/FortiGate/MikroTik/Sophos expose a real SNMPv3 polling path; Linux uses SSH; ESXi presents SOAP and SSH as distinct methods.

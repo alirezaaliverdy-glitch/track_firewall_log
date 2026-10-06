@@ -145,6 +145,7 @@ jobs:
           docker compose -f docker-compose.staging.yml config
           docker compose -f docker-compose.production.yml config
           docker compose -f docker-compose.firewall.yml config
+          sh -n scripts/deploy/update-main-server.sh
 
   deploy-production:
     name: Deploy latest main to production server

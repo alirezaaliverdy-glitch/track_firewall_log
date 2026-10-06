@@ -1,3 +1,9 @@
+## 2026-10-06 - Diagnose Codex SSH failure and correct production deploy target
+
+- Confirmed that the local Codex terminal failed before any SSH attempt due to Windows `CryptUnprotectData` and a stale workspace directory. Using the real project path and approved terminal context allowed pinned-key SSH to the server on port 9008 without a password.
+- Inspected the active production stack and found that the prior CI script would deploy another Compose project. Separated server-only Caddy/TLS changes into an ignored local file and preserved untracked Compose override/certificates; restored the tracked Caddyfile after verifying the gateway mounted the local file. Live containers, HTTPS dashboard and API readiness stayed healthy.
+- Changed CI script/workflow and deployment documentation to deploy the live `firewall-soar` stack with explicit volume/config guards and HTTPS health checks. Local shell syntax and remote mount checks passed; end-to-end GitHub Actions run remains pending.
+
 # 2026-10-05 - Vendor connection protocol follow-up
 
 - Follow-up from the first CI run: removed duplicate pnpm setup pins because each package declares its exact package manager, and create an empty ignored backend `.env` inside the ephemeral Compose validation job. A fresh run is still needed to validate these fixes and reach the deployment gate.
