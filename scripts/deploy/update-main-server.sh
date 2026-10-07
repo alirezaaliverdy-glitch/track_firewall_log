@@ -63,11 +63,18 @@ available_kb=$(df -Pk . | awk 'NR == 2 { print $4 }')
 case "$available_kb" in
   ''|*[!0-9]*) echo "Cannot determine free space for production build" >&2; exit 2 ;;
 esac
-[ "$available_kb" -ge 2097152 ] || {
-  echo "Production build needs at least 2 GiB free; expand disk or clear unused caches" >&2
+if [ "$available_kb" -lt 6291456 ]; then
+  echo "Less than 6 GiB free; trimming only reclaimable BuildKit cache before deployment"
+  docker buildx prune --force --max-used-space 2gb
+  available_kb=$(df -Pk . | awk 'NR == 2 { print $4 }')
+fi
+case "$available_kb" in
+  ''|*[!0-9]*) echo "Cannot determine free space after cache cleanup" >&2; exit 2 ;;
+esac
+[ "$available_kb" -ge 6291456 ] || {
+  echo "Production build needs at least 6 GiB free after cache cleanup; expand disk before deploying" >&2
   exit 2
 }
-
 git merge --ff-only "$target_sha"
 
 compose() {
@@ -84,6 +91,20 @@ compose config --format json | jq -e --arg source "$(pwd -P)/Caddyfile.productio
   exit 2
 }
 compose run --rm --no-deps gateway caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+image_for_service() {
+  container_id=$(compose ps -q "$1")
+  [ -n "$container_id" ] || {
+    echo "Production $1 container is missing; refusing to deploy" >&2
+    return 1
+  }
+  docker inspect --format '{{.Image}}' "$container_id"
+}
+
+# Record only this project's current application images. Never prune unrelated
+# images, running containers, or the database/certificate volumes.
+old_web_image=$(image_for_service firewall-web)
+old_api_image=$(image_for_service firewall-api)
 
 # Keep the runner's SSH channel active during a slow first-time Chromium build.
 (
@@ -109,4 +130,9 @@ if ! compose exec -T gateway wget --no-check-certificate -q --spider https://127
 fi
 
 printf '%s\n' "$target_sha" > .deploy/current-main-sha
-echo "Production is healthy at main commit $target_sha"
+echo "Production is healthy at main commit $target_sha; cleaning up previous application images"
+new_web_image=$(image_for_service firewall-web)
+new_api_image=$(image_for_service firewall-api)
+sh scripts/deploy/prune-production-images.sh \
+  "$old_web_image" "$old_api_image" "$new_web_image" "$new_api_image"
+echo "Production cleanup complete; $(df -hP . | awk 'NR == 2 { print $4 }') free"

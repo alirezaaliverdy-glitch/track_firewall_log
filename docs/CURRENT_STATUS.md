@@ -1,3 +1,9 @@
+## 2026-10-07 - Production image cleanup on deployment
+
+- Production deploy now checks for at least 6 GiB free before moving `main`, pruning only reclaimable BuildKit cache first when necessary.
+- Once the API and dashboard health checks pass, the script removes superseded API/web image IDs without force, prunes only unused application images bearing the new project label, and limits BuildKit cache to 2 GB. Running containers, unrelated images, certificates and named volumes remain outside the cleanup scope.
+- Shell regression tests and Compose validation passed locally. End-to-end GitHub Actions deployment and post-deploy disk verification are pending.
+
 ## 2026-10-06 - Production deploy connection and live-stack correction
 
 - SSH to `78.38.152.54:9008` works with the pinned deployment key. The earlier assistant-side failure came from local Windows command startup and an incorrect workspace path, not the server. The server checkout is now writable by `alireza` and has no tracked edits.

@@ -52,6 +52,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      labels:
+        io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope: production-app
     depends_on:
       secrets-init:
         condition: service_completed_successfully
@@ -120,6 +122,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      labels:
+        io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope: production-app
       args:
         VITE_BASE_PATH: /firewall/
         VITE_API_BASE_URL: /firewall-api

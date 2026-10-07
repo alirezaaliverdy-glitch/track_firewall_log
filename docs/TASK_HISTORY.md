@@ -1,3 +1,9 @@
+## 2026-10-07 - Bound production Docker disk use after push
+
+- Added an application-scoped post-health image cleanup, a 2 GB BuildKit cache target, and a 6 GiB pre-build free-space guard to the existing main-branch deployment.
+- Labelled only the API/web build images so an interrupted build's unused images can be cleaned on a later successful deployment. No global prune, container removal, volume removal, or certificate deletion.
+- Added a mocked cleanup regression test to CI; local test and Compose syntax validation passed. Production push verification is pending.
+
 ## 2026-10-06 - Diagnose Codex SSH failure and correct production deploy target
 
 - Confirmed that the local Codex terminal failed before any SSH attempt due to Windows `CryptUnprotectData` and a stale workspace directory. Using the real project path and approved terminal context allowed pinned-key SSH to the server on port 9008 without a password.

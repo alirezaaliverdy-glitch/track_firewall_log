@@ -146,6 +146,8 @@ jobs:
           docker compose -f docker-compose.production.yml config
           docker compose -f docker-compose.firewall.yml config
           sh -n scripts/deploy/update-main-server.sh
+          sh -n scripts/deploy/prune-production-images.sh
+          sh scripts/deploy/test-prune-production-images.sh
 
   deploy-production:
     name: Deploy latest main to production server
