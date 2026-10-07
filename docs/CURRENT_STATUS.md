@@ -1,8 +1,8 @@
 ## 2026-10-07 - Production image cleanup on deployment
 
 - Production deploy now checks for at least 6 GiB free before moving `main`, pruning only reclaimable BuildKit cache first when necessary.
-- Once the API and dashboard health checks pass, the script removes superseded API/web image IDs without force, prunes only unused application images bearing the new project label, and limits BuildKit cache to 2 GB. Running containers, unrelated images, certificates and named volumes remain outside the cleanup scope.
-- Shell regression tests and Compose validation passed locally. End-to-end GitHub Actions deployment and post-deploy disk verification are pending.
+- Once the API and dashboard health checks pass, the script removes superseded API/web image IDs without force, prunes only unused application images bearing the new project label, and targets 2 GB of BuildKit cache; shared/in-use layers can leave Docker's total cache figure higher. Running containers, unrelated images, certificates and named volumes remain outside the cleanup scope.
+- Commit `33fa566` passed all CI jobs and deployed successfully. Server HEAD/deploy marker matched, all four services were healthy, no dangling labeled app images remained, and about 20 GB remained free.
 
 ## 2026-10-06 - Production deploy connection and live-stack correction
 

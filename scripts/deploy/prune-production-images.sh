@@ -38,6 +38,6 @@ done
 docker image prune --all --force \
   --filter label=io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope=production-app
 
-# Keep useful recent layers, but bound the reclaimable build cache. This does
-# not remove running containers, named volumes, or unrelated Docker images.
+# Target 2 GB of BuildKit cache; shared/in-use layers may keep Docker's total
+# cache accounting above that target. Containers and volumes are untouched.
 docker buildx prune --force --max-used-space 2gb

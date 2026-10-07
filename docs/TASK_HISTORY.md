@@ -1,8 +1,8 @@
 ## 2026-10-07 - Bound production Docker disk use after push
 
-- Added an application-scoped post-health image cleanup, a 2 GB BuildKit cache target, and a 6 GiB pre-build free-space guard to the existing main-branch deployment.
+- Added an application-scoped post-health image cleanup, a 2 GB BuildKit cache target (subject to shared/in-use layers), and a 6 GiB pre-build free-space guard to the existing main-branch deployment.
 - Labelled only the API/web build images so an interrupted build's unused images can be cleaned on a later successful deployment. No global prune, container removal, volume removal, or certificate deletion.
-- Added a mocked cleanup regression test to CI; local test and Compose syntax validation passed. Production push verification is pending.
+- Added a mocked cleanup regression test to CI; local test and Compose syntax validation passed. Commit `33fa566` passed all CI jobs and deployed: SHA/marker matched, all services healthy, no dangling labeled app images, and about 20 GB free. Shared layers kept Docker's total cache accounting above the 2 GB pruning target.
 
 ## 2026-10-06 - Diagnose Codex SSH failure and correct production deploy target
 
