@@ -18,14 +18,14 @@ import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityE
 import { getSecurityMonitorStatus } from "../services/security-monitor.service.js";
 import { createTrustedSourceIp, deleteTrustedSourceIp, listTrustedSourceIps, TRUSTED_SOURCE_VENDORS } from "../services/trusted-source-ip.service.js";
 import { scheduleSecurityDetection } from "../services/security-detection-dispatcher.service.js";
-import { listVendorUserActivity } from "../services/vendor-user-activity.service.js";
+import { invalidateVendorUserActivityCache, listCachedVendorUserActivity } from "../services/vendor-user-activity.service.js";
 
 export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { vendor?: string; deviceId?: string; days?: string; username?: string } }>("/api/security/vendor-users", async (request, reply) => {
     const { vendor, deviceId, days, username } = request.query ?? {};
     if (username && username.length > 80) return reply.code(400).send({ error: "INVALID_USERNAME" });
     try {
-      return await listVendorUserActivity({ vendor, deviceId, days: Number(days), username, ownerId: request.authUser?.id });
+      return await listCachedVendorUserActivity({ vendor, deviceId, days: Number(days), username, ownerId: request.authUser?.id });
     } catch (error) {
       if (error instanceof Error && ["INVALID_VENDOR", "INVALID_DEVICE"].includes(error.message)) return reply.code(400).send({ error: error.message });
       throw error;
@@ -37,6 +37,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: Record<string, unknown> }>("/api/security/events", async (request, reply) => {
     const event = await createSecurityEvent(request.body ?? {});
     const detection = await scheduleSecurityDetection({ deviceId: event.deviceId ?? undefined, assetId: event.assetId ?? undefined });
+    if (event.vendor) invalidateVendorUserActivityCache(event.vendor);
     return reply.code(201).send({ event, detection });
   });
 

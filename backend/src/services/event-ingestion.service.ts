@@ -3,6 +3,7 @@ import { EventBatchStatus, EventSourceStatus, EventSourceType, type Prisma } fro
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { scheduleSecurityDetection } from "./security-detection-dispatcher.service.js";
+import { invalidateVendorUserActivityCache } from "./vendor-user-activity.service.js";
 import type { CollectedLogLine, CollectorRunResult } from "../collectors/types.js";
 import { matchesCollectorSession } from "../security/collector-auth-provenance.js";
 
@@ -434,6 +435,7 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
   });
 
   const detection = await scheduleSecurityDetection({ deviceId: result.deviceId });
+  if (inserted > 0) invalidateVendorUserActivityCache(result.vendor);
   return { batchId: batch.id, inserted, updated, warnings: result.warnings, detection };
 }
 

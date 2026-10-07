@@ -20,6 +20,8 @@ test("identity and configuration rules require an attributable actor, not merely
   assert.equal(eventMatchesAccountRule("account.identity-change", identity), true);
   assert.equal(eventMatchesAccountRule("account.configuration-change", identity), false);
   assert.equal(eventMatchesAccountRule("account.identity-change", event("user admin added", null, "configuration_change")), false);
+  assert.equal(eventMatchesAccountRule("account.identity-change", event("user admin added", "admin", "configuration_change")), false,
+    "a structured username may name the changed account rather than the operator");
   const configuration = event("%SYS-5-CONFIG_I: Configured from console by alice", null, "configuration_change");
   assert.equal(accountRuleActor(configuration), "alice");
   assert.equal(eventMatchesAccountRule("account.configuration-change", configuration), true);

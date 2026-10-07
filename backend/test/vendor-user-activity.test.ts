@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { accountNameFromEvent, classifyAccountEvent } from "../src/services/vendor-user-activity.service.js";
+import { accountNameFromEvent, attributedAccountName, classifyAccountEvent } from "../src/services/vendor-user-activity.service.js";
 
 function event(rawSnippet: string, action = "unknown", username: string | null = null, tags: unknown = {}) {
   return { rawSnippet, rawMessage: null, action, eventType: "vendor_log", username, tags };
@@ -48,6 +48,12 @@ test("Privileged command is flagged for review, not labeled as proven misuse", (
   assert.equal(accountNameFromEvent(ordinary), "alice");
   assert.deepEqual(classifyAccountEvent(ordinary), { kind: "privileged", risk: "review" });
   assert.deepEqual(classifyAccountEvent(high), { kind: "privileged", risk: "high" });
+});
+
+test("a risky change is attributed to its operator, never just the target username", () => {
+  assert.equal(attributedAccountName(event("user admin added", "configuration_change", "admin")), null);
+  assert.equal(attributedAccountName(event("user admin added by alice", "configuration_change", "admin")), "alice");
+  assert.equal(attributedAccountName(event("sudo: alice : TTY=pts/0 ; USER=root ; COMMAND=/usr/bin/ufw disable", "unknown", "root")), "alice");
 });
 
 test("Traffic event and invalid actor do not create a fabricated successful login", () => {

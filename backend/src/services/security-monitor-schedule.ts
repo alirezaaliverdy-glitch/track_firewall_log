@@ -22,6 +22,15 @@ export function effectiveCollectorIntervalSeconds(state: CollectorScheduleState)
   return Math.round(Math.min(900, base * failureMultiplier * idleMultiplier) * stableJitter(state.deviceId));
 }
 
+const ACCOUNT_LOG_SOURCES = new Set(["linux_ssh", "mikrotik_log", "fortigate_log", "cisco_syslog", "pfsense_log"]);
+
+export function accountMonitoringSchedule(state: CollectorScheduleState, sourceType: string) {
+  if (!ACCOUNT_LOG_SOURCES.has(sourceType)) return state;
+  // Account changes remain security-relevant even after quiet collection runs.
+  // Preserve failure backoff so unreachable devices are not hammered.
+  return { ...state, intervalSeconds: Math.min(state.intervalSeconds, 20), consecutiveIdleRuns: 0 };
+}
+
 export function isCollectorDue(state: CollectorScheduleState, now = new Date()) {
   const lastAttempt = [state.lastCollectedAt, state.lastErrorAt]
     .filter((value): value is Date => value instanceof Date)

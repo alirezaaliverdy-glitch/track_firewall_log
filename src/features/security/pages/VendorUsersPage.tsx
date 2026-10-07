@@ -1,8 +1,10 @@
 import { Activity, AlertTriangle, ChevronLeft, Clock3, FileSearch2, Info, KeyRound, LogIn, Search, Server, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listVendorUserActivity, type VendorUserActivity } from "@/lib/platform";
+import { createCatalogAction } from "@/lib/commandCatalog";
+import { publishActionPlanCreated } from "@/lib/actionPlanHandoff";
 import "@/features/attackers/pages/AttackersPage.css";
 import "./VendorUsersPage.css";
 
@@ -29,36 +31,44 @@ function formatTime(value: string, locale: string) {
 }
 
 export default function VendorUsersPage() {
+  const navigate = useNavigate();
   const { i18n } = useTranslation();
   const isFa = i18n.language?.startsWith("fa");
   const locale = isFa ? "fa-IR" : "en-US";
   const [vendor, setVendor] = useState("");
   const [deviceId, setDeviceId] = useState("");
-  const [days, setDays] = useState(30);
+  const [days, setDays] = useState(7);
   const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
   const [data, setData] = useState<VendorUserActivity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionDeviceId, setActionDeviceId] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
     const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const result = await listVendorUserActivity({ vendor, deviceId, days, username: selected });
         if (cancelled) return;
         setData(result);
         setError("");
-        if (!vendor && result.vendors.length) setVendor(result.vendors[0]);
+        if (!vendor && result.recommendedVendor) setVendor(result.recommendedVendor);
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : isFa ? "دریافت داده‌های کاربران ناموفق بود." : "Could not load vendor accounts.");
       } finally {
+        inFlight = false;
         if (!cancelled) setLoading(false);
       }
     };
     setLoading(true);
     void load();
-    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 30_000);
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 10_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [vendor, deviceId, days, selected, isFa]);
 
@@ -72,6 +82,24 @@ export default function VendorUsersPage() {
   const findings = selectedData?.findings.filter((finding) => finding.username.toLowerCase() === selected.toLowerCase()) ?? [];
   const totalLogins = current?.accounts.reduce((sum, account) => sum + account.loginCount, 0) ?? 0;
   const reviewAccounts = current?.accounts.filter((account) => account.reviewCount || account.findingCount).length ?? 0;
+  const reviewDevices = active?.devices.filter((device) => active.reviewDeviceIds.includes(device.id)) ?? [];
+  const targetDeviceId = reviewDevices.some((device) => device.id === actionDeviceId) ? actionDeviceId : reviewDevices[0]?.id ?? "";
+  const lockSupported = vendor === "linux" && /^[a-z_][a-z0-9_.-]{0,31}$/i.test(active?.username ?? "") && active?.username.toLowerCase() !== "root";
+
+  async function prepareAccountLock() {
+    if (!active || !targetDeviceId || !lockSupported || actionBusy) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      const plan = await createCatalogAction("linux.lock-user", targetDeviceId, { username: active.username });
+      publishActionPlanCreated(plan.id);
+      navigate(`/actions/${encodeURIComponent(plan.id)}`);
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : isFa ? "ساخت برنامهٔ اقدام ناموفق بود." : "Could not create the action plan.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   return <section className="page-stack attackers-page vendor-users-page">
     <header className="attacker-hero">
@@ -98,6 +126,7 @@ export default function VendorUsersPage() {
     </section>
 
     {error ? <div className="vendor-users-notice is-error" role="alert"><AlertTriangle />{isFa ? "دریافت تازه ناموفق بود؛ دادهٔ قبلی ممکن است قدیمی باشد." : "Refresh failed; previously shown data may be stale."} <span>{error}</span></div> : null}
+    {current ? <div className={`vendor-users-notice ${current.monitoring?.enabledCollectors && current.monitoring.latestErrorAt && (!current.monitoring.latestCollectionAt || current.monitoring.latestErrorAt > current.monitoring.latestCollectionAt) ? "is-warning" : ""}`} role="status"><Activity /><span>{current.monitoring?.enabledCollectors ? (isFa ? "پایش خودکار فعال است؛ نیازی به اجرای دستی نیست." : "Automatic monitoring is active; no manual scan is needed.") : (isFa ? "برای این انتخاب گردآورندهٔ فعالی ثبت نشده است؛ فقط لاگ‌های واردشده نمایش داده می‌شوند." : "No active collector for this selection; only imported logs appear.")}{current.monitoring?.latestCollectionAt ? ` ${isFa ? "آخرین جمع‌آوری موفق:" : "Last successful collection:"} ${formatTime(current.monitoring.latestCollectionAt, locale)}` : ""} · {isFa ? "آخرین به‌روزرسانی صفحه:" : "View updated:"} {formatTime(current.refreshedAt, locale)}</span></div> : null}
     <div className="vendor-users-notice"><Info /><span>{isFa ? "این نما ورودها و تغییرهای منتسب به حساب را نشان می‌دهد، نه کاربران آنلاین. حسابِ دارای تغییر ممکن است لاگ ورود نداشته باشد. رویدادهای یک نام حساب الزاماً به یک شخص یا نشست تعلق ندارند." : "This view shows observed logins and attributed changes, not online users. A changed account may have no login log. Events sharing an account name may not belong to one person or session."}</span></div>
     {current?.coverage === "import_only" ? <div className="vendor-users-notice is-warning"><Info /><span>{isFa ? "برای این وندور collector لاگ حساب وجود ندارد؛ فقط رویدادهای واردشده نمایش داده می‌شوند. برای پوشش بیشتر، لاگ audit آن را وارد برنامه کنید." : "No account-log collector is available for this vendor. Only imported events can appear; import its audit logs for better coverage."}</span></div> : null}
     {current?.sampled ? <div className="vendor-users-notice is-warning"><Info /><span>{isFa ? "حجم رویدادها از سقف بررسی این نما بیشتر است؛ نتایج نمونه‌ای‌اند و نبود یک حساب به معنی نبود فعالیت نیست." : "The event volume exceeds this view's scan limit. Results are sampled; an absent account does not prove no activity."}</span></div> : null}
@@ -109,6 +138,7 @@ export default function VendorUsersPage() {
 
       {active ? <aside className="attacker-detail vendor-user-detail"><div className={`attacker-detail__hero ${active.reviewCount || active.findingCount ? "attacker-detail__hero--high" : ""}`}><span><KeyRound /></span><div><small>{isFa ? "نام حساب در وندور انتخابی" : "Account name in selected vendor"}</small><h2 dir="ltr">{active.username}</h2><p>{vendor} · {active.devices.length.toLocaleString(locale)} {isFa ? "تجهیز" : "devices"}</p></div><strong>{active.loginCount.toLocaleString(locale)}<small> {isFa ? "ورود" : "logins"}</small></strong></div>
         <div className="attacker-detail__metrics"><article><LogIn /><span>{isFa ? "ورود" : "Logins"}</span><strong>{active.loginCount.toLocaleString(locale)}</strong></article><article><Activity /><span>{isFa ? "فعالیت دیگر" : "Other activity"}</span><strong>{active.activityCount.toLocaleString(locale)}</strong></article><article><AlertTriangle /><span>{isFa ? "نیازمند بررسی" : "Review signals"}</span><strong>{active.reviewCount.toLocaleString(locale)}</strong></article><article><FileSearch2 /><span>{isFa ? "یافتهٔ مرتبط" : "Linked findings"}</span><strong>{active.findingCount.toLocaleString(locale)}</strong></article></div>
+        {reviewDevices.length ? <section className="vendor-user-containment"><h3><ShieldCheck />{isFa ? "بررسی و مهار حساب" : "Review and contain account"}</h3><p>{isFa ? "رویداد حساس منتسب به این حساب ثبت شده است؛ این به‌تنهایی سوءاستفاده را ثابت نمی‌کند. قبل از هر اقدامی شاهد، مجوز تغییر و نقش حساب را بررسی کنید." : "A sensitive action was attributed to this account; this alone does not prove misuse. Review evidence, authorization and the account's role first."}</p><label>{isFa ? "تجهیز دارای شاهد" : "Device with evidence"}<select value={targetDeviceId} onChange={(event) => setActionDeviceId(event.target.value)}>{reviewDevices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}</select></label>{lockSupported ? <><p>{isFa ? "قفل لینوکس فقط ورود با گذرواژه را محدود می‌کند؛ کلید SSH و نشست‌های باز ممکن است فعال بمانند. برنامه ساخته می‌شود، سپس فرمان و اثر آن را در مرکز عملیات می‌بینید و اجرای آن فقط با تأیید صریح شماست." : "Linux account locking restricts password sign-in only; SSH keys and active sessions may remain. Review the plan in Action Center before explicitly confirming execution."}</p><button type="button" className="secondary-button" disabled={actionBusy} onClick={() => void prepareAccountLock()}>{actionBusy ? (isFa ? "در حال ساخت برنامه..." : "Preparing plan...") : (isFa ? "آماده‌سازی قفل گذرواژهٔ حساب" : "Prepare password lock plan")}</button></> : <p>{isFa ? "برای این وندور یا حساب، غیرفعال‌سازی مستقیمِ تأییدشده وجود ندارد. پس از بررسی یافته، حساب را از کنسول مدیریتی همان تجهیز محدود کنید؛ این برنامه تغییری را خودکار اعمال نمی‌کند." : "No verified direct disable operation is available for this vendor or account. Review the finding, then restrict the account in that device's management console; no change is applied automatically."}</p>}{actionError ? <p role="alert" className="vendor-user-action-error">{actionError}</p> : null}</section> : null}
         <section className="attacker-detail__section"><header><Clock3 /><div><h3>{isFa ? "خط زمانی فعالیت" : "Activity timeline"}</h3><p>{isFa ? "از جدید به قدیم، با شاهد و تجهیز" : "Newest first, with evidence and device"}</p></div></header>{selectedData?.timeline.length ? <div className="vendor-user-timeline">{selectedData.timeline.map((event) => <article key={event.id} className={`vendor-user-event is-${event.risk}`}><div><span className={`vendor-user-kind is-${event.kind}`}>{isFa ? kindFa[event.kind] : kindEn[event.kind]}</span><time>{formatTime(event.observedAt, locale)}</time></div><p>{event.deviceName ?? (isFa ? "تجهیز نامشخص" : "Unknown device")}{event.sourceIp ? <> · <code dir="ltr">{event.sourceIp}</code></> : null}</p>{event.evidence ? <code className="vendor-user-evidence" dir="auto">{event.evidence}</code> : null}{event.risk !== "normal" ? <small>{isFa ? "برای قضاوت دربارهٔ خطر، شاهد و یافتهٔ مرتبط را بررسی کنید؛ این برچسب اثبات سوءاستفاده نیست." : "Review evidence and linked findings before judging risk; this label does not prove misuse."}</small> : null}</article>)}</div> : <p className="attacker-empty-inline">{loading || !selectedData ? (isFa ? "در حال دریافت خط زمانی..." : "Loading timeline...") : (isFa ? "برای این حساب رویدادی در نمونهٔ فعلی در دسترس نیست." : "No account events in the current sample.")}</p>}{(selectedData?.timelineTotal ?? 0) > 250 ? <p className="attacker-empty-inline">{isFa ? "فقط ۲۵۰ رویداد تازه‌تر این حساب نمایش داده شده است." : "Only the 250 newest account events are shown."}</p> : null}</section>
         {findings.length ? <section className="attacker-detail__section"><header><FileSearch2 /><div><h3>{isFa ? "یافته‌های مرتبط" : "Related findings"}</h3><p>{isFa ? "یافته‌هایی که همین نام حساب را به‌عنوان عامل ثبت کرده‌اند" : "Findings recording this account name as actor"}</p></div></header><div className="attacker-finding-list">{findings.slice(0, 12).map((finding) => <Link key={finding.id} to={`/security/findings/${finding.id}`}><span className={`is-${finding.severity}`}>{finding.severity}</span><div><strong>{finding.title}</strong><small>{formatTime(finding.lastSeen, locale)}</small></div><ChevronLeft /></Link>)}</div></section> : null}
         <div className="vendor-users-detail-note"><Info /><span>{isFa ? "بدون شناسهٔ نشست و لاگ audit کامل، همهٔ رویدادها را نمی‌توان به یک نشست یا شخص نسبت داد." : "Without session IDs and full audit logs, events cannot all be tied to one session or person."}</span></div>

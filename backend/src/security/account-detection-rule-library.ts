@@ -1,5 +1,5 @@
 import type { SecurityEvent } from "@prisma/client";
-import { accountNameFromEvent, classifyAccountEvent } from "../services/vendor-user-activity.service.js";
+import { attributedAccountName, classifyAccountEvent } from "../services/vendor-user-activity.service.js";
 
 export type AccountDetectionRuleDefinition = {
   key: string;
@@ -39,7 +39,7 @@ export const ACCOUNT_DETECTION_RULES: AccountDetectionRuleDefinition[] = [
 export function accountRuleActor(event: Pick<SecurityEvent, "username" | "rawSnippet" | "rawMessage" | "action" | "eventType" | "tags">) {
   const classification = classifyAccountEvent(event);
   if (!classification || classification.kind === "login" || classification.kind === "failed_login" || classification.kind === "logout") return null;
-  return accountNameFromEvent(event);
+  return attributedAccountName(event);
 }
 
 export function eventMatchesAccountRule(key: string, event: SecurityEvent) {

@@ -5,6 +5,7 @@ import { notifySecurityFinding } from "../services/security-alert-email.service.
 import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionEvents, eventMatchesVendorRule, groupSubject, normalizeDetectionVendor } from "../security/vendor-detection-rule-library.js";
 import { ACCOUNT_DETECTION_RULES, accountRuleActor, eventMatchesAccountRule } from "../security/account-detection-rule-library.js";
 import { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
+import { invalidateVendorUserActivityCache } from "../services/vendor-user-activity.service.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
 const MAX_IMPORT_ASSETS = 100;
@@ -622,6 +623,7 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
         saved = await prisma.finding.create({ data });
         created += 1;
       }
+      invalidateVendorUserActivityCache(first.vendor ?? "generic");
       await notifySecurityFinding({ finding: saved, rule, eventIds: existing ? newEvents.map((event) => event.id) : group.map((event) => event.id) });
     }
   }

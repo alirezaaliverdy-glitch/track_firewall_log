@@ -3,7 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { isCurrentCollectorState, selectCollector } from "../collectors/collector-registry.service.js";
 import { reconcileCollectorStates, runCollectorOnce } from "./collector.service.js";
 import { retryFailedSecurityAlertDeliveries } from "./security-alert-email.service.js";
-import { effectiveCollectorIntervalSeconds, isCollectorDue } from "./security-monitor-schedule.js";
+import { accountMonitoringSchedule, effectiveCollectorIntervalSeconds, isCollectorDue } from "./security-monitor-schedule.js";
 import { getDetectionDispatcherStatus, scheduleSecurityDetection, wasDetectionRecentlyCompleted } from "./security-detection-dispatcher.service.js";
 import { getDeviceConnectivitySensorStatus } from "./device-connectivity-sensor.service.js";
 
@@ -51,7 +51,7 @@ async function runDueCollectors(logger?: MonitorLogger) {
   const states = await prisma.eventCollectorState.findMany({ where: { enabled: true }, include: { device: true } });
   const due = states.filter((state) => {
     const collector = selectCollector(state.device);
-    return state.device.status !== "offline" && collector?.stateSourceType === state.sourceType && isCollectorDue(state);
+    return state.device.status !== "offline" && collector?.stateSourceType === state.sourceType && isCollectorDue(accountMonitoringSchedule(state, state.sourceType));
   });
   for (let offset = 0; offset < due.length; offset += 3) {
     const batch = due.slice(offset, offset + 3);
@@ -172,7 +172,7 @@ export async function getSecurityMonitorStatus() {
         sourceType: state.sourceType,
         enabled: state.enabled,
         intervalSeconds: state.intervalSeconds,
-        effectiveIntervalSeconds: effectiveCollectorIntervalSeconds(state),
+        effectiveIntervalSeconds: effectiveCollectorIntervalSeconds(accountMonitoringSchedule(state, state.sourceType)),
         consecutiveIdleRuns: state.consecutiveIdleRuns,
         consecutiveFailures: state.consecutiveFailures,
         lastSuccessAt: state.lastSuccessAt,

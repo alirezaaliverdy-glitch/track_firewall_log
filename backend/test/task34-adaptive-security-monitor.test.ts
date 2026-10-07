@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { effectiveCollectorIntervalSeconds, isCollectorDue } from "../src/services/security-monitor-schedule.js";
+import { accountMonitoringSchedule, effectiveCollectorIntervalSeconds, isCollectorDue } from "../src/services/security-monitor-schedule.js";
 
 test("Task 34 adaptive collector scheduling backs off idle and failing devices with a cap", () => {
   const base = { deviceId: "linux-1", intervalSeconds: 60, lastCollectedAt: new Date(0), lastSuccessAt: new Date(0), lastErrorAt: null };
@@ -14,6 +14,16 @@ test("Task 34 adaptive collector scheduling backs off idle and failing devices w
   assert.ok(failing <= 990);
   assert.equal(isCollectorDue({ ...base, consecutiveIdleRuns: 0 }, new Date(active * 1000 - 1)), false);
   assert.equal(isCollectorDue({ ...base, consecutiveIdleRuns: 0 }, new Date(active * 1000)), true);
+});
+
+test("account-log collection stays near real time after idle runs but still backs off on failure", () => {
+  const state = { deviceId: "linux-1", intervalSeconds: 60, lastCollectedAt: new Date(0), lastSuccessAt: new Date(0), lastErrorAt: null, consecutiveIdleRuns: 8, consecutiveFailures: 0 };
+  const account = accountMonitoringSchedule(state, "linux_ssh");
+  assert.ok(effectiveCollectorIntervalSeconds(account) <= 22);
+  assert.ok(effectiveCollectorIntervalSeconds(account) >= 18);
+  assert.equal(accountMonitoringSchedule(state, "unrelated"), state);
+  const failed = accountMonitoringSchedule({ ...state, lastErrorAt: new Date(1), consecutiveFailures: 2 }, "linux_ssh");
+  assert.ok(effectiveCollectorIntervalSeconds(failed) > effectiveCollectorIntervalSeconds(account));
 });
 
 test("Task 34 detection is event-scoped, debounced, bounded, and never triggered by read pages", () => {

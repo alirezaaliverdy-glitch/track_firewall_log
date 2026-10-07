@@ -296,6 +296,8 @@ export type AttackerListResponse = {
 
 export type VendorUserActivity = {
   vendors: string[];
+  recommendedVendor: string | null;
+  refreshedAt: string;
   vendor: string | null;
   deviceId: string | null;
   selectedUsername: string | null;
@@ -303,8 +305,9 @@ export type VendorUserActivity = {
   days: number;
   since: string;
   sampled: boolean;
+  monitoring?: { enabledCollectors: number; latestCollectionAt: string | null; latestErrorAt: string | null };
   coverage: "select_vendor" | "collector_or_import" | "import_only";
-  accounts: Array<{ username: string; loginCount: number; activityCount: number; reviewCount: number; findingCount: number; devices: Array<{ id: string; name: string }>; sourceIps: string[]; lastSeen: string }>;
+  accounts: Array<{ username: string; loginCount: number; activityCount: number; reviewCount: number; findingCount: number; devices: Array<{ id: string; name: string }>; reviewDeviceIds: string[]; sourceIps: string[]; lastSeen: string }>;
   timeline: Array<{ id: string; username: string; kind: "login" | "failed_login" | "logout" | "privileged" | "change" | "activity"; risk: "normal" | "review" | "high"; deviceId: string | null; deviceName: string | null; sourceIp: string | null; observedAt: string; sourceType: string | null; evidence: string }>;
   timelineTotal: number;
   findings: Array<{ id: string; username: string; deviceId: string | null; title: string; severity: string; status: string; lastSeen: string }>;
