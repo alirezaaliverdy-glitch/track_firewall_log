@@ -1922,3 +1922,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added Security > Vendor users & activity with vendor/device/window filters and an evidence timeline styled after Attackers. Shows only observed data and explicit coverage limits; app-owned SSH logins are not counted.
 - Added three account-aware rules to the existing seeded detection engine, a Users rule tab, and per-actor/device Finding links. Changes and sensitive commands are review signals rather than proof of abuse; account findings do not recommend an IP block. Activity without a login log can still be reviewed.
 - Added classifier and isolated-DB/API regressions covering actor attribution, collector exclusion, finding dedupe, tenant scoping, cross-device separation, and action-only accounts. Ten focused tests and final API/web production builds passed. No push or deployment.
+## 2026-10-08 - Make the new Security view visible on localhost
+
+- Confirmed the local browser was served by the `track_firewall_log` Compose stack with old `firewall-log-analyzer` images, not by the separate images previously built from root Compose.
+- Built its API/web images and recreated only those two containers. Reloaded nginx after a validated configuration check to clear cached upstream IPs; this resolved transient 502 responses. Verified all four services healthy, API readiness true and both Security routes HTTP 200. PostgreSQL, volumes and the unrelated HTML report were untouched; no push or production deployment.
