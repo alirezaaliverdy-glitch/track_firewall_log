@@ -1819,3 +1819,7 @@ The two-page A4 summary now has bounded density, consistent RTL grid placement, 
 - GitHub production environment SSH secrets, host-key pin, and a reachable SSH route are required to activate remote deployment; these depend on server/account settings and were not provisioned from this workspace. Existing server HTTPS routing also remains a separate login prerequisite.
 - The first Actions run revealed pre-existing CI setup failures (duplicate pnpm version pins and missing ignored `backend/.env` during Compose validation). Removed the duplicate pins and create a blank ignored file only in the ephemeral CI job before validating Compose; the next run must confirm the fix.
 - The next Actions run reached compilation and Compose validation, then exposed a missing dummy `DATABASE_URL` for Prisma generation and an outdated frontend smoke path (`/login` instead of `/firewall/login`). Added a CI-only unreachable placeholder DSN and corrected smoke probes to the production mount path. A fresh run still needs to pass before remote deployment can be confirmed.
+
+## 2026-10-07 - Restore SSH access for shams
+
+- Added `shams` to the server SSH `AllowUsers` allowlist, validated the full `sshd` configuration, and reloaded the SSH service without interrupting the active session. The account itself was already present and active; no application code, deployment, or vendor configuration changed.

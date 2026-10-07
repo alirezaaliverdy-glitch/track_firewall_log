@@ -1907,3 +1907,7 @@ Entries are chronological and compact. Validation reflects what was known at the
 
 - Extended the gated CI workflow so successful pushes to `main` automatically deploy over pinned SSH to the existing firewall Compose project. Added a host script for exact-commit fast-forward, deployment serialization, build, health checks, and volume preservation.
 - Documented the required GitHub production environment settings. No SSH secrets were added to the repository and no remote host was changed; server access and GitHub secret provisioning remain required to activate deployment.
+
+## 2026-10-07 - Add shams to SSH allowlist
+
+- Diagnosed the login failure as the server hardening drop-in allowing only `alireza`. Added `shams`, kept a server-side backup of the prior drop-in, passed `sshd -t`, and reloaded SSH. No secrets or raw authentication logs were recorded.
