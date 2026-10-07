@@ -294,6 +294,22 @@ export type AttackerListResponse = {
   attackers: AttackerSummary[];
 };
 
+export type VendorUserActivity = {
+  vendors: string[];
+  vendor: string | null;
+  deviceId: string | null;
+  selectedUsername: string | null;
+  devices: Array<{ id: string; name: string; vendor: string }>;
+  days: number;
+  since: string;
+  sampled: boolean;
+  coverage: "select_vendor" | "collector_or_import" | "import_only";
+  accounts: Array<{ username: string; loginCount: number; activityCount: number; reviewCount: number; findingCount: number; devices: Array<{ id: string; name: string }>; sourceIps: string[]; lastSeen: string }>;
+  timeline: Array<{ id: string; username: string; kind: "login" | "failed_login" | "logout" | "privileged" | "change" | "activity"; risk: "normal" | "review" | "high"; deviceId: string | null; deviceName: string | null; sourceIp: string | null; observedAt: string; sourceType: string | null; evidence: string }>;
+  timelineTotal: number;
+  findings: Array<{ id: string; username: string; deviceId: string | null; title: string; severity: string; status: string; lastSeen: string }>;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: "include",
@@ -345,3 +361,8 @@ export const listAttackers = (filters: { query?: string; vendor?: string; device
   return request<AttackerListResponse>(`/security/attackers${query.size ? `?${query}` : ""}`);
 };
 export const getAttackerDetails = (ip: string, includeResolved = false) => request<{ generatedAt: string; qualification: string; attacker: AttackerDetails }>(`/security/attackers/${encodeURIComponent(ip)}${includeResolved ? "?includeResolved=true" : ""}`);
+export const listVendorUserActivity = (filters: { vendor?: string; deviceId?: string; days?: number; username?: string } = {}) => {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== "") query.set(key, String(value)); });
+  return request<VendorUserActivity>(`/security/vendor-users${query.size ? `?${query}` : ""}`);
+};

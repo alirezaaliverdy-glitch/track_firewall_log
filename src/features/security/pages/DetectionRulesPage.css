@@ -92,3 +92,8 @@
   .gmail-connection__form > button { grid-column: 1; }
   .security-email-deliveries > div { grid-template-columns: 1fr; }
 }
+.security-rule-vendors { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.security-account-rule-note { display: flex; flex-wrap: wrap; gap: 5px 12px; margin: 0; padding: 12px 17px; border-bottom: 1px solid var(--app-border); color: var(--app-muted); font-size: .73rem; line-height: 1.8; }
+.security-account-rule-note a { color: #67e8f9; text-decoration: none; font-weight: 750; }
+.security-account-rule-note a:hover { text-decoration: underline; }
+@media (max-width: 950px) { .security-rule-vendors { grid-template-columns: repeat(7, minmax(125px, 1fr)); } }

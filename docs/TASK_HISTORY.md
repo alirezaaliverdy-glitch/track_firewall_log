@@ -1917,3 +1917,8 @@ Entries are chronological and compact. Validation reflects what was known at the
 ## 2026-10-07 - Add shams to SSH allowlist
 
 - Diagnosed the login failure as the server hardening drop-in allowing only `alireza`. Added `shams`, kept a server-side backup of the prior drop-in, passed `sshd -t`, and reloaded SSH. No secrets or raw authentication logs were recorded.
+## 2026-10-08 - Add vendor-user monitoring and account detection
+
+- Added Security > Vendor users & activity with vendor/device/window filters and an evidence timeline styled after Attackers. Shows only observed data and explicit coverage limits; app-owned SSH logins are not counted.
+- Added three account-aware rules to the existing seeded detection engine, a Users rule tab, and per-actor/device Finding links. Changes and sensitive commands are review signals rather than proof of abuse; account findings do not recommend an IP block. Activity without a login log can still be reviewed.
+- Added classifier and isolated-DB/API regressions covering actor attribution, collector exclusion, finding dedupe, tenant scoping, cross-device separation, and action-only accounts. Ten focused tests and final API/web production builds passed. No push or deployment.

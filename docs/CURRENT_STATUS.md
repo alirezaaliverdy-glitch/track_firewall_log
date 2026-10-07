@@ -1829,3 +1829,8 @@ The two-page A4 summary now has bounded density, consistent RTL grid placement, 
 ## 2026-10-07 - Restore SSH access for shams
 
 - Added `shams` to the server SSH `AllowUsers` allowlist, validated the full `sshd` configuration, and reloaded the SSH service without interrupting the active session. The account itself was already present and active; no application code, deployment, or vendor configuration changed.
+## 2026-10-08 - Vendor user activity and account-aware detection
+
+- New Security subsection shows observed account logins and attributable activity by vendor, device and time window, with a per-account timeline, evidence, review signals and linked findings. The UI reuses the Attackers visual language and distinguishes historical logs from live sessions and incomplete audit coverage.
+- Existing vendor detection stays intact. Three enabled-by-default account rules in the same detection engine flag a named actor's sensitive privileged command, identity change or configuration change for review. They produce per-device/per-account findings without automatic IP-block recommendations. The rules appear in a dedicated Users tab and can be disabled through the existing controls.
+- Collector-owned SSH success is excluded, target-account-only messages cannot establish an actor, findings from another device do not cross-link, and an attributable sensitive action remains visible even when no login log exists. Focused tests with isolated PostgreSQL passed (10); final production API/web builds passed. No production deployment, vendor-side action, migration or push. Preserve `ssl_managerial_report.html`.

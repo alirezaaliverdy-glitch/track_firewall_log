@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { proposeActionPlan } from "../services/action-plan.service.js";
 import { notifySecurityFinding } from "../services/security-alert-email.service.js";
 import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionEvents, eventMatchesVendorRule, groupSubject, normalizeDetectionVendor } from "../security/vendor-detection-rule-library.js";
+import { ACCOUNT_DETECTION_RULES, accountRuleActor, eventMatchesAccountRule } from "../security/account-detection-rule-library.js";
 import { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
@@ -458,6 +459,14 @@ export async function ensureSeededSecurityRules() {
       create: { name: definition.name, description: definition.description, ruleType: definition.ruleType as DetectionRuleType, severity: definition.severity as IncidentSeverity, enabled: true, queryJson: toJson(query), thresholdJson: toJson({ count: definition.threshold, windowMinutes: definition.windowMinutes }) }
     });
   }
+  for (const definition of ACCOUNT_DETECTION_RULES) {
+    const query = { ruleKey: definition.key, scope: "account", category: definition.category, mitreTags: definition.mitreTags, implementation: "event_backed", priorityEmail: false };
+    await prisma.detectionRule.upsert({
+      where: { ruleType_name: { ruleType: DetectionRuleType.suspicious_outbound, name: definition.name } },
+      update: { description: definition.description, severity: definition.severity as IncidentSeverity, queryJson: toJson(query), thresholdJson: toJson({ count: definition.threshold, windowMinutes: definition.windowMinutes }) },
+      create: { name: definition.name, description: definition.description, ruleType: DetectionRuleType.suspicious_outbound, severity: definition.severity as IncidentSeverity, enabled: true, queryJson: toJson(query), thresholdJson: toJson({ count: definition.threshold, windowMinutes: definition.windowMinutes }) }
+    });
+  }
 }
 
 function normalizedLegacyEventType(event: { eventType: string; rawMessage: string | null; action: string | null }) {
@@ -519,6 +528,7 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
     take: 5000
   });
   const definitionsByKey = new Map(VENDOR_DETECTION_RULES.map((definition) => [definition.key, definition]));
+  const accountDefinitionsByKey = new Map(ACCOUNT_DETECTION_RULES.map((definition) => [definition.key, definition]));
   const eventsByVendor = new Map<string, typeof events>();
   for (const event of events) {
     const vendor = normalizeDetectionVendor(event.vendor);
@@ -539,20 +549,21 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
     const query = rule.queryJson && typeof rule.queryJson === "object" ? rule.queryJson as Record<string, unknown> : {};
     const ruleKey = String(query.ruleKey ?? "");
     const definition = definitionsByKey.get(ruleKey);
+    const accountDefinition = accountDefinitionsByKey.get(ruleKey);
     const wanted = String(query.eventType ?? "");
-    if (!definition && !wanted) continue;
+    if (!definition && !accountDefinition && !wanted) continue;
     const thresholdConfig = rule.thresholdJson as Record<string, unknown> | null;
-    const threshold = Number(thresholdConfig?.count ?? definition?.threshold ?? query.threshold ?? 1);
-    const windowMinutes = Number(thresholdConfig?.windowMinutes ?? definition?.windowMinutes ?? 15);
+    const threshold = Number(thresholdConfig?.count ?? definition?.threshold ?? accountDefinition?.threshold ?? query.threshold ?? 1);
+    const windowMinutes = Number(thresholdConfig?.windowMinutes ?? definition?.windowMinutes ?? accountDefinition?.windowMinutes ?? 15);
     const cutoff = Date.now() - Math.max(1, windowMinutes) * 60_000;
     const vendors = Array.isArray(query.vendors) ? query.vendors.map((item) => String(item).toLowerCase()) : [];
     const candidateEvents = definition ? (eventsByVendor.get(definition.vendor) ?? []) : events;
     const matched = candidateEvents.filter((event) =>
       (event.timestamp ?? event.receivedAt).getTime() >= cutoff &&
       !isCollectorOwnedAuthSuccess(event) &&
-      (definition ? eventMatchesVendorRule(ruleKey, event) : normalizedLegacyEventType(event) === wanted && (!vendors.length || vendors.includes(String(event.vendor ?? "").toLowerCase())))
+      (accountDefinition ? eventMatchesAccountRule(ruleKey, event) : definition ? eventMatchesVendorRule(ruleKey, event) : normalizedLegacyEventType(event) === wanted && (!vendors.length || vendors.includes(String(event.vendor ?? "").toLowerCase())))
     );
-    const subjectFor = (event: (typeof events)[number]) => definition ? groupSubject(definition, event) : event.srcIp ?? event.username ?? String(event.dstPort ?? "device");
+    const subjectFor = (event: (typeof events)[number]) => accountDefinition ? accountRuleActor(event)?.toLowerCase() ?? "unknown-account" : definition ? groupSubject(definition, event) : event.srcIp ?? event.username ?? String(event.dstPort ?? "device");
     const grouped = new Map<string, typeof matched>();
     for (const event of matched) {
       const key = [event.deviceId ?? "none", event.assetId ?? "none", subjectFor(event)].join("|");
@@ -582,9 +593,9 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
         vendor: first.vendor ?? "generic",
         title: rule.name,
         severity: normalizeSeverity(rule.severity),
-        category: definition?.category ?? "general-detection",
+        category: accountDefinition?.category ?? definition?.category ?? "general-detection",
         status: "active",
-        confidence: definition?.key === "fortigate.security-threat" ? 0.98 : definition?.logicalEventFamily === "authentication_failure" ? 0.9 : definition?.ruleType === "deny_drop_spike" ? 0.84 : 0.82,
+        confidence: accountDefinition ? 0.82 : definition?.key === "fortigate.security-threat" ? 0.98 : definition?.logicalEventFamily === "authentication_failure" ? 0.9 : definition?.ruleType === "deny_drop_spike" ? 0.84 : 0.82,
         summary: `${rule.description} (${group.length} matching events in ${windowMinutes} minutes)`,
         evidenceJson: toJson(group.slice(0, 10).map((event) => ({ id: event.id, message: event.rawMessage, srcIp: event.srcIp, dstPort: event.dstPort }))),
         source: "seeded_detection_rule",
@@ -592,12 +603,12 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
         firstSeen: group.reduce((min, event) => (event.timestamp ?? event.receivedAt) < min ? (event.timestamp ?? event.receivedAt) : min, group[0].timestamp ?? group[0].receivedAt),
         lastSeen: group.reduce((max, event) => (event.timestamp ?? event.receivedAt) > max ? (event.timestamp ?? event.receivedAt) : max, group[0].timestamp ?? group[0].receivedAt),
         count: existing ? existing.count + newEvents.length : group.length,
-        mitreTags: definition?.mitreTags ?? [],
-        srcIp: first.srcIp,
+        mitreTags: accountDefinition?.mitreTags ?? definition?.mitreTags ?? [],
+        srcIp: accountDefinition ? null : first.srcIp,
         dstIp: first.dstIp,
         dstPort: first.dstPort,
-        actor: first.username,
-        recommendedActions: toJson([{
+        actor: accountDefinition ? accountRuleActor(first) : first.username,
+        recommendedActions: toJson(accountDefinition ? [{ intent: "review_account_activity", label: "Review account evidence and authorized change record", manualOnly: true }] : [{
           intent: definition?.vendor === "fortigate" && first.srcIp ? "fortigate_create_deny_policy" : definition?.vendor === "mikrotik" && first.srcIp ? "mikrotik_block_ip" : definition?.vendor === "linux" && first.srcIp ? "linux_block_ip" : "generic_security_action",
           label: definition?.vendor === "fortigate" ? "Create reviewed FortiGate deny policy" : "Create reviewed ActionPlan"
         }]),

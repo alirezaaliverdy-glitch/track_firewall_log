@@ -20,6 +20,7 @@ const AssetSyncPage = lazy(() => import("@/features/assets/pages/AssetSyncPage")
 const PortTopologyPage = lazy(() => import("@/features/assets/pages/PortTopologyPage"));
 const SecurityOverviewPage = lazy(() => import("@/features/security/pages/SecurityOverviewPage"));
 const FindingsPage = lazy(() => import("@/features/security/pages/FindingsPage"));
+const VendorUsersPage = lazy(() => import("@/features/security/pages/VendorUsersPage"));
 const FindingDetailPage = lazy(() => import("@/features/security/pages/FindingDetailPage"));
 const DetectionRulesPage = lazy(() => import("@/features/security/pages/DetectionRulesPage"));
 const EmailAlertsPage = lazy(() => import("@/features/security/pages/EmailAlertsPage"));
@@ -63,6 +64,7 @@ export const appRoutes: AppRoute[] = [
   { path: "/security", featureKey: "security.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "security", component: SecurityOverviewPage },
   { path: "/security/findings", featureKey: "security.findings", labelFa: "یافته‌ها", labelEn: "Findings", group: "security", component: FindingsPage },
   { path: "/security/findings/:findingId", featureKey: "security.finding_detail", labelFa: "جزئیات یافته", labelEn: "Finding detail", group: "security", component: FindingDetailPage },
+  { path: "/security/vendor-users", featureKey: "security.vendor_users", labelFa: "کاربران و فعالیت‌ها", labelEn: "Vendor users", group: "security", component: VendorUsersPage },
   { path: "/security/events", featureKey: "security.events", labelFa: "رویدادها", labelEn: "Events", group: "security", component: planned("رویدادها", "رویدادها در یافته‌ها و پایش مصرف می‌شوند؛ صفحه مستقل هنوز آماده نیست.") },
   { path: "/security/rules", featureKey: "security.rules", labelFa: "قوانین تشخیص", labelEn: "Rules", group: "security", component: DetectionRulesPage },
   { path: "/security/email-alerts", featureKey: "security.email_alerts", labelFa: "اعلان‌های ایمیلی", labelEn: "Email alerts", group: "security", component: EmailAlertsPage },
