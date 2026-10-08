@@ -1,3 +1,9 @@
+## 2026-10-08 - Fix mobile navigation, account editor and user activity detail
+
+- Repositioned the RTL/LTR drawer, made the account editor a visible mobile dialog, reduced mobile account-summary height, and protected its deletion confirmation from stacking/focus regressions.
+- Replaced long always-open account logs with a small, filterable timeline that reveals evidence on request and displays six events at a time. Preserved device attribution and the warning that a signal alone does not establish misuse.
+- Built and deployed the local web container healthy; bilingual mobile Chromium test, translation-key parity, Persian copy and UTF-8 checks passed. Browser account creation uses a mocked API and does not create real users. Production CI and live smoke checks remain to be verified after push.
+
 ## 2026-10-07 - Bound production Docker disk use after push
 
 - Added an application-scoped post-health image cleanup, a 2 GB BuildKit cache target (subject to shared/in-use layers), and a 6 GiB pre-build free-space guard to the existing main-branch deployment.

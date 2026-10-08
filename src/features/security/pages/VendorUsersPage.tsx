@@ -1,29 +1,13 @@
-import { Activity, AlertTriangle, ChevronLeft, Clock3, FileSearch2, Info, KeyRound, LogIn, Search, Server, ShieldCheck, UsersRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, ChevronLeft, Clock3, FileSearch2, Info, KeyRound, LogIn, Search, Server, ShieldCheck, UsersRound, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { listVendorUserActivity, type VendorUserActivity } from "@/lib/platform";
 import { createCatalogAction } from "@/lib/commandCatalog";
 import { publishActionPlanCreated } from "@/lib/actionPlanHandoff";
+import VendorUserTimeline from "./VendorUserTimeline";
 import "@/features/attackers/pages/AttackersPage.css";
 import "./VendorUsersPage.css";
-
-const kindFa: Record<VendorUserActivity["timeline"][number]["kind"], string> = {
-  login: "ورود موفق",
-  failed_login: "تلاش ورود ناموفق برای حساب",
-  logout: "خروج ثبت‌شده",
-  privileged: "دستور با دسترسی ویژه",
-  change: "تغییر پیکربندی",
-  activity: "رویداد منتسب به حساب"
-};
-const kindEn: Record<VendorUserActivity["timeline"][number]["kind"], string> = {
-  login: "Successful login",
-  failed_login: "Failed attempt against account",
-  logout: "Recorded logout",
-  privileged: "Privileged command",
-  change: "Configuration change",
-  activity: "Account-attributed event"
-};
 
 function formatTime(value: string, locale: string) {
   const date = new Date(value);
@@ -46,6 +30,7 @@ export default function VendorUsersPage() {
   const [actionDeviceId, setActionDeviceId] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  const detailRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +64,15 @@ export default function VendorUsersPage() {
     return !needle || [account.username, ...account.devices.map((device) => device.name), ...account.sourceIps].join(" ").toLowerCase().includes(needle);
   }), [current, search]);
   const active = current?.accounts.find((account) => account.username.toLowerCase() === selected.toLowerCase());
+  const detailOpen = Boolean(active);
+  useEffect(() => {
+    if (!detailOpen) return;
+    document.body.classList.add("vendor-user-detail-open");
+    if (window.matchMedia("(max-width: 1100px)").matches) detailRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setSelected(""); };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.classList.remove("vendor-user-detail-open"); document.removeEventListener("keydown", closeOnEscape); };
+  }, [detailOpen]);
   const findings = selectedData?.findings.filter((finding) => finding.username.toLowerCase() === selected.toLowerCase()) ?? [];
   const totalLogins = current?.accounts.reduce((sum, account) => sum + account.loginCount, 0) ?? 0;
   const reviewAccounts = current?.accounts.filter((account) => account.reviewCount || account.findingCount).length ?? 0;
@@ -136,10 +130,10 @@ export default function VendorUsersPage() {
         {loading && !current ? <div className="attacker-empty"><Clock3 /><h3>{isFa ? "در حال دریافت شواهد..." : "Loading evidence..."}</h3></div> : accounts.length ? <div className="attacker-list">{accounts.map((account) => <button key={account.username.toLowerCase()} type="button" className={`attacker-card vendor-user-card ${selected.toLowerCase() === account.username.toLowerCase() ? "is-selected" : ""} ${account.reviewCount || account.findingCount ? "attacker-card--high" : ""}`} onClick={() => setSelected(account.username)}><span className="attacker-card__score"><strong>{account.loginCount.toLocaleString(locale)}</strong><small>{isFa ? "ورود" : "logins"}</small></span><span className="attacker-card__body"><span className="attacker-card__identity"><code dir="ltr">{account.username}</code>{account.reviewCount || account.findingCount ? <i>{isFa ? "بررسی" : "Review"}</i> : null}</span><span className="attacker-card__facts"><span><Server />{account.devices.map((item) => item.name).join("، ") || (isFa ? "تجهیز نامشخص" : "Unknown device")}</span><span><Activity />{account.activityCount.toLocaleString(locale)} {isFa ? "رویداد دیگر" : "other events"}</span><span><Clock3 />{formatTime(account.lastSeen, locale)}</span></span></span><ChevronLeft className="attacker-card__open" /></button>)}</div> : <div className="attacker-empty"><KeyRound /><h3>{isFa ? "ورود قابل‌انتساب ثبت نشده" : "No attributable login recorded"}</h3><p>{isFa ? "این نتیجه به معنی نبود کاربر نیست؛ لاگ ورود این وندور/تجهیز یا بازهٔ انتخابی ممکن است پوشش نداشته باشد." : "This does not mean no users exist. Login logs may be missing for this vendor, device, or time window."}</p><Link to={deviceId ? `/assets/devices/${encodeURIComponent(deviceId)}/monitoring` : "/assets/devices"}>{isFa ? "بررسی پایش تجهیزات" : "Check device monitoring"}</Link></div>}
       </section>
 
-      {active ? <aside className="attacker-detail vendor-user-detail"><div className={`attacker-detail__hero ${active.reviewCount || active.findingCount ? "attacker-detail__hero--high" : ""}`}><span><KeyRound /></span><div><small>{isFa ? "نام حساب در وندور انتخابی" : "Account name in selected vendor"}</small><h2 dir="ltr">{active.username}</h2><p>{vendor} · {active.devices.length.toLocaleString(locale)} {isFa ? "تجهیز" : "devices"}</p></div><strong>{active.loginCount.toLocaleString(locale)}<small> {isFa ? "ورود" : "logins"}</small></strong></div>
+      {active ? <aside ref={detailRef} className="attacker-detail vendor-user-detail" role="dialog" aria-modal="true" aria-label={isFa ? "جزئیات حساب" : "Account details"} tabIndex={-1}><button type="button" className="vendor-user-detail-close" onClick={() => setSelected("")} aria-label={isFa ? "بازگشت به فهرست حساب‌ها" : "Back to accounts"}><X />{isFa ? "بازگشت به حساب‌ها" : "Back to accounts"}</button><div className={`attacker-detail__hero ${active.reviewCount || active.findingCount ? "attacker-detail__hero--high" : ""}`}><span><KeyRound /></span><div><small>{isFa ? "نام حساب در وندور انتخابی" : "Account name in selected vendor"}</small><h2 dir="ltr">{active.username}</h2><p>{vendor} · {active.devices.length.toLocaleString(locale)} {isFa ? "تجهیز" : "devices"}</p></div><strong>{active.loginCount.toLocaleString(locale)}<small> {isFa ? "ورود" : "logins"}</small></strong></div>
         <div className="attacker-detail__metrics"><article><LogIn /><span>{isFa ? "ورود" : "Logins"}</span><strong>{active.loginCount.toLocaleString(locale)}</strong></article><article><Activity /><span>{isFa ? "فعالیت دیگر" : "Other activity"}</span><strong>{active.activityCount.toLocaleString(locale)}</strong></article><article><AlertTriangle /><span>{isFa ? "نیازمند بررسی" : "Review signals"}</span><strong>{active.reviewCount.toLocaleString(locale)}</strong></article><article><FileSearch2 /><span>{isFa ? "یافتهٔ مرتبط" : "Linked findings"}</span><strong>{active.findingCount.toLocaleString(locale)}</strong></article></div>
         {reviewDevices.length ? <section className="vendor-user-containment"><h3><ShieldCheck />{isFa ? "بررسی و مهار حساب" : "Review and contain account"}</h3><p>{isFa ? "رویداد حساس منتسب به این حساب ثبت شده است؛ این به‌تنهایی سوءاستفاده را ثابت نمی‌کند. قبل از هر اقدامی شاهد، مجوز تغییر و نقش حساب را بررسی کنید." : "A sensitive action was attributed to this account; this alone does not prove misuse. Review evidence, authorization and the account's role first."}</p><label>{isFa ? "تجهیز دارای شاهد" : "Device with evidence"}<select value={targetDeviceId} onChange={(event) => setActionDeviceId(event.target.value)}>{reviewDevices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}</select></label>{lockSupported ? <><p>{isFa ? "قفل لینوکس فقط ورود با گذرواژه را محدود می‌کند؛ کلید SSH و نشست‌های باز ممکن است فعال بمانند. برنامه ساخته می‌شود، سپس فرمان و اثر آن را در مرکز عملیات می‌بینید و اجرای آن فقط با تأیید صریح شماست." : "Linux account locking restricts password sign-in only; SSH keys and active sessions may remain. Review the plan in Action Center before explicitly confirming execution."}</p><button type="button" className="secondary-button" disabled={actionBusy} onClick={() => void prepareAccountLock()}>{actionBusy ? (isFa ? "در حال ساخت برنامه..." : "Preparing plan...") : (isFa ? "آماده‌سازی قفل گذرواژهٔ حساب" : "Prepare password lock plan")}</button></> : <p>{isFa ? "برای این وندور یا حساب، غیرفعال‌سازی مستقیمِ تأییدشده وجود ندارد. پس از بررسی یافته، حساب را از کنسول مدیریتی همان تجهیز محدود کنید؛ این برنامه تغییری را خودکار اعمال نمی‌کند." : "No verified direct disable operation is available for this vendor or account. Review the finding, then restrict the account in that device's management console; no change is applied automatically."}</p>}{actionError ? <p role="alert" className="vendor-user-action-error">{actionError}</p> : null}</section> : null}
-        <section className="attacker-detail__section"><header><Clock3 /><div><h3>{isFa ? "خط زمانی فعالیت" : "Activity timeline"}</h3><p>{isFa ? "از جدید به قدیم، با شاهد و تجهیز" : "Newest first, with evidence and device"}</p></div></header>{selectedData?.timeline.length ? <div className="vendor-user-timeline">{selectedData.timeline.map((event) => <article key={event.id} className={`vendor-user-event is-${event.risk}`}><div><span className={`vendor-user-kind is-${event.kind}`}>{isFa ? kindFa[event.kind] : kindEn[event.kind]}</span><time>{formatTime(event.observedAt, locale)}</time></div><p>{event.deviceName ?? (isFa ? "تجهیز نامشخص" : "Unknown device")}{event.sourceIp ? <> · <code dir="ltr">{event.sourceIp}</code></> : null}</p>{event.evidence ? <code className="vendor-user-evidence" dir="auto">{event.evidence}</code> : null}{event.risk !== "normal" ? <small>{isFa ? "برای قضاوت دربارهٔ خطر، شاهد و یافتهٔ مرتبط را بررسی کنید؛ این برچسب اثبات سوءاستفاده نیست." : "Review evidence and linked findings before judging risk; this label does not prove misuse."}</small> : null}</article>)}</div> : <p className="attacker-empty-inline">{loading || !selectedData ? (isFa ? "در حال دریافت خط زمانی..." : "Loading timeline...") : (isFa ? "برای این حساب رویدادی در نمونهٔ فعلی در دسترس نیست." : "No account events in the current sample.")}</p>}{(selectedData?.timelineTotal ?? 0) > 250 ? <p className="attacker-empty-inline">{isFa ? "فقط ۲۵۰ رویداد تازه‌تر این حساب نمایش داده شده است." : "Only the 250 newest account events are shown."}</p> : null}</section>
+        <VendorUserTimeline key={active.username.toLowerCase()} events={selectedData?.timeline ?? []} total={selectedData?.timelineTotal ?? 0} loading={loading || !selectedData} isFa={Boolean(isFa)} locale={locale} />
         {findings.length ? <section className="attacker-detail__section"><header><FileSearch2 /><div><h3>{isFa ? "یافته‌های مرتبط" : "Related findings"}</h3><p>{isFa ? "یافته‌هایی که همین نام حساب را به‌عنوان عامل ثبت کرده‌اند" : "Findings recording this account name as actor"}</p></div></header><div className="attacker-finding-list">{findings.slice(0, 12).map((finding) => <Link key={finding.id} to={`/security/findings/${finding.id}`}><span className={`is-${finding.severity}`}>{finding.severity}</span><div><strong>{finding.title}</strong><small>{formatTime(finding.lastSeen, locale)}</small></div><ChevronLeft /></Link>)}</div></section> : null}
         <div className="vendor-users-detail-note"><Info /><span>{isFa ? "بدون شناسهٔ نشست و لاگ audit کامل، همهٔ رویدادها را نمی‌توان به یک نشست یا شخص نسبت داد." : "Without session IDs and full audit logs, events cannot all be tied to one session or person."}</span></div>
       </aside> : null}

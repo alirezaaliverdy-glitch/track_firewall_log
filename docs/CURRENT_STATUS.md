@@ -1,3 +1,10 @@
+## 2026-10-08 - Mobile settings and vendor-user detail
+
+- Persian mobile navigation opens from the right; English opens from the left. Mobile account summaries are compact so the Add account control remains usable above the bottom navigation.
+- Account create/edit now appears in an accessible full-screen mobile dialog. The delete confirmation remains above it, and Escape returns to the editor. No account-management API or authorization behavior changed.
+- Vendor-user detail now has a mobile back control, compact metrics, filtered activity, six-at-a-time pagination and evidence collapsed by default. It still shows the existing sampled/coverage caveats and does not automatically disable accounts.
+- Local web build and container health passed. Chromium touch regression passed in Persian and English with a mocked create-account POST and mocked activity responses; locale parity (883 keys), Persian primary-copy and UTF-8 checks passed. Real authenticated production account creation and production rollout still require verification after push.
+
 ## 2026-10-07 - Production image cleanup on deployment
 
 - Production deploy now checks for at least 6 GiB free before moving `main`, pruning only reclaimable BuildKit cache first when necessary.

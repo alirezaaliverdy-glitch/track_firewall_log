@@ -347,8 +347,8 @@
   .platform-sidebar.is-collapsed {
     position: fixed;
     inset-block: 0;
-    inset-inline-start: auto;
-    inset-inline-end: 0;
+    inset-inline-start: 0;
+    inset-inline-end: auto;
     z-index: 70;
     display: flex;
     width: min(86vw, 336px);
@@ -365,7 +365,18 @@
     pointer-events: none;
   }
 
+  .platform-shell[dir="rtl"] .platform-sidebar.platform-sidebar {
+    inset-inline-start: 0;
+    inset-inline-end: auto;
+  }
+
+  .platform-shell[dir="ltr"] .platform-sidebar,
+  .platform-shell[dir="ltr"] .platform-sidebar.is-collapsed {
+    transform: translateX(-110%);
+  }
+
   .platform-sidebar.is-mobile-open,
+  .platform-shell[dir="rtl"] .platform-sidebar.is-mobile-open,
   .platform-shell[dir="ltr"] .platform-sidebar.is-mobile-open {
     transform: translateX(0);
     visibility: visible;
