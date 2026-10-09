@@ -142,6 +142,7 @@ services:
 
   gateway:
     image: caddy:2.10-alpine
+    init: true
     depends_on:
       firewall-api:
         condition: service_healthy

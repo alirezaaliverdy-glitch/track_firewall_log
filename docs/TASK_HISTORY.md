@@ -1,3 +1,8 @@
+## 2026-10-09 - Production access migration preflight and gateway PID repair
+
+- Connected through the pinned SSH key and verified the production database table owner equals the API role (`firewall_app`); the pending workspace migration is not yet applied, and its preflight evaluates to `ready`.
+- Fixed the production preflight's database target to use the Compose service, not a nonexistent local-style container name. Diagnosed a gateway health failure despite dashboard HTTP 200: Caddy has thousands of reparented `ssl_client` zombies and is at its PID limit. Set `init: true` for gateway to reap these after its next recreation. Validated Compose config and deploy shell syntax. No push or server mutation at this stage.
+
 ## 2026-10-09 - Make managed viewers read-only and operators section-scoped
 
 - Viewer UI exposes all sections with a read-only notice, and the backend blocks mutations independent of browser controls. Operator section checks and existing action permissions remain server-enforced; SNMPv3/ESXi configuration routes now have declared policies.

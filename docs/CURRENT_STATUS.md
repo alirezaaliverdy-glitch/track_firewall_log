@@ -1,3 +1,8 @@
+## 2026-10-09 - Verify production migration and repair gateway health on next deploy
+
+- Read-only pinned SSH check: production `AppUser` owner and migration role are both `firewall_app`, so the pending additive migration can run there. Corrected the fail-closed preflight to target the actual Compose `firewall-db` service; the exact SQL returned `ready` on production. No server data was changed.
+- Public HTTPS dashboard is 200, but gateway health is failing because Caddy has accumulated about 9,355 `ssl_client` zombies from its TLS healthcheck and reached its PID cgroup limit. Added Docker `init: true` for gateway so a future recreation reaps children. Compose configuration and deploy shell syntax validate locally; live recreation/health remains pending deployment.
+
 ## 2026-10-09 - Viewer and operator workspace access
 
 - Viewers now see all seven product sections, but the API rejects their data-changing requests. Operators see only granted sections and retain their existing non-admin operations there; destructive/admin-only actions remain restricted.
