@@ -39,7 +39,6 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   viewer: new Set<Permission>([
-    "assistant.chat",
     "devices.read",
     "actions.read",
     "audit.read",

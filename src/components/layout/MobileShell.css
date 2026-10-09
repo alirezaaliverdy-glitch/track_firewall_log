@@ -1,4 +1,6 @@
 .platform-mobile-brand { display: none; }
+.platform-readonly-notice { display:flex;align-items:center;gap:8px;margin:0 0 14px;padding:11px 13px;border:1px solid rgba(103,232,249,.25);border-radius:12px;background:rgba(8,47,73,.24);color:#b5dce8;font-size:.82rem;line-height:1.6; }
+.platform-readonly-notice svg { width:18px;height:18px;flex:0 0 18px;color:#67e8f9; }
 
 @media (max-width: 900px) {
   html {

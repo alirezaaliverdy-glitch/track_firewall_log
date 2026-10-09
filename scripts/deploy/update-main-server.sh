@@ -75,6 +75,20 @@ esac
   echo "Production build needs at least 6 GiB free after cache cleanup; expand disk before deploying" >&2
   exit 2
 }
+
+# A legacy database can have AppUser owned by postgres while the API migrates
+# as firewall_app. Check before replacing a healthy API container: Prisma cannot
+# ALTER a table owned by another role, and a failed startup would cause outage.
+if git cat-file -e "$target_sha:backend/prisma/migrations/20261009090000_managed_user_workspace_scope/migration.sql" 2>/dev/null; then
+  migration_access=$(docker exec firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261009090000_managed_user_workspace_scope' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR EXISTS (SELECT 1 FROM pg_tables t JOIN pg_roles r ON r.rolname = current_user WHERE t.schemaname = 'public' AND t.tablename = 'AppUser' AND (t.tableowner = current_user OR r.rolsuper)) THEN 'ready' ELSE 'owner_mismatch' END\"") || {
+    echo "Cannot verify AppUser migration ownership; leaving the running deployment unchanged" >&2
+    exit 2
+  }
+  [ "$migration_access" = ready ] || {
+    echo "AppUser migration requires its table owner or a DB superuser; leaving the running deployment unchanged" >&2
+    exit 2
+  }
+fi
 git merge --ff-only "$target_sha"
 
 compose() {

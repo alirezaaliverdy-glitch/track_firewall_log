@@ -28,35 +28,35 @@ function verificationError(reply: FastifyReply, error: unknown) {
 
 export const deviceWorkspaceRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { reference: string } }>("/api/device-workspaces/:reference", async (request, reply) => {
-    const visible = await getDeviceById(request.params.reference, request.authUser?.id) ?? await getAsset(request.params.reference, request.authUser?.id);
+    const visible = await getDeviceById(request.params.reference, request.authUser?.scopeOwnerId) ?? await getAsset(request.params.reference, request.authUser?.scopeOwnerId);
     if (!visible) return reply.code(404).send({ error: { code: "DEVICE_WORKSPACE_NOT_FOUND", message: "Device or asset not found." } });
     const workspace = await getDeviceWorkspace(request.params.reference);
     return workspace ?? reply.code(404).send({ error: { code: "DEVICE_WORKSPACE_NOT_FOUND", message: "Device or asset not found." } });
   });
   app.get<{ Params: { deviceId: string } }>("/api/devices/:deviceId/verification", async (request, reply) => {
     try {
-      if (!await getDeviceById(request.params.deviceId, request.authUser?.id)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
+      if (!await getDeviceById(request.params.deviceId, request.authUser?.scopeOwnerId)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
       return await getDeviceVerification(request.params.deviceId);
     }
     catch (error) { return verificationError(reply, error); }
   });
   app.post<{ Params: { deviceId: string }; Body: Record<string, unknown> }>("/api/devices/:deviceId/connection-test", async (request, reply) => {
     try {
-      if (!await getDeviceById(request.params.deviceId, request.authUser?.id)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
+      if (!await getDeviceById(request.params.deviceId, request.authUser?.scopeOwnerId)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
       return await testDeviceVerification(request.params.deviceId, request.body ?? {});
     }
     catch (error) { return verificationError(reply, error); }
   });
   app.post<{ Params: { deviceId: string }; Body: Record<string, unknown> }>("/api/devices/:deviceId/verification/retry", async (request, reply) => {
     try {
-      if (!await getDeviceById(request.params.deviceId, request.authUser?.id)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
+      if (!await getDeviceById(request.params.deviceId, request.authUser?.scopeOwnerId)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
       return await retryDeviceVerification(request.params.deviceId, request.body ?? {});
     }
     catch (error) { return verificationError(reply, error); }
   });
   app.post<{ Params: { deviceId: string }; Body: Record<string, unknown> }>("/api/devices/:deviceId/verification/commit", async (request, reply) => {
     try {
-      if (!await getDeviceById(request.params.deviceId, request.authUser?.id)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
+      if (!await getDeviceById(request.params.deviceId, request.authUser?.scopeOwnerId)) return reply.code(404).send({ error: { code: "DEVICE_NOT_FOUND", message: "Device not found." } });
       return await commitDeviceVerification(request.params.deviceId, request.body ?? {});
     }
     catch (error) { return verificationError(reply, error); }

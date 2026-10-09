@@ -8,7 +8,7 @@ import { backupHistoryWhere, clearBackupHistory, type BackupHistoryFilter } from
 export async function backupRoutes(app: FastifyInstance) {
   const guard = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.authUser) return reply.code(401).send({ error: "AUTH_REQUIRED" });
-    if (!hasPermission(request.authUser.role, "devices.manage")) return reply.code(403).send({ error: "BACKUP_ACCESS_DENIED" });
+    if (!hasPermission(request.authUser.role, request.method === "GET" && !request.url.includes("/download") ? "devices.read" : "devices.manage")) return reply.code(403).send({ error: "BACKUP_ACCESS_DENIED" });
     reply.header("Cache-Control", "no-store");
   };
   const adminGuard = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -17,7 +17,7 @@ export async function backupRoutes(app: FastifyInstance) {
     return guard(request, reply);
   };
   app.get("/api/backups", { preHandler: guard }, async (request) => {
-    const ownerId = request.authUser!.id;
+    const ownerId = request.authUser!.scopeOwnerId ?? request.authUser!.id;
     const devices = await listDevices(ownerId);
     const records = await prisma.deviceSnapshot.findMany({
       where: { snapshotType: BACKUP_SNAPSHOT_TYPE, device: { deletedAt: null, company: { ownerId, deletedAt: null } } },
@@ -36,7 +36,7 @@ export async function backupRoutes(app: FastifyInstance) {
     } } }
   }, async (request) => {
     const { page = 1, action, search, companyId } = request.query;
-    const where = backupHistoryWhere(request.authUser!.id, { action, search, companyId });
+    const where = backupHistoryWhere(request.authUser!.scopeOwnerId ?? request.authUser!.id, { action, search, companyId });
     const [total, records] = await prisma.$transaction([
       prisma.auditLog.count({ where }),
       prisma.auditLog.findMany({ where, skip: (page - 1) * 20, take: 20,
@@ -45,7 +45,7 @@ export async function backupRoutes(app: FastifyInstance) {
     ]);
     const available = await prisma.deviceSnapshot.findMany({
       where: { id: { in: records.filter(record => record.action === "device.backup.create" && record.targetId).map(record => record.targetId!) },
-        snapshotType: BACKUP_SNAPSHOT_TYPE, device: { company: { ownerId: request.authUser!.id, deletedAt: null }, deletedAt: null } },
+        snapshotType: BACKUP_SNAPSHOT_TYPE, device: { company: { ownerId: request.authUser!.scopeOwnerId ?? request.authUser!.id, deletedAt: null }, deletedAt: null } },
       select: { id: true }
     });
     const availableIds = new Set(available.map(record => record.id));

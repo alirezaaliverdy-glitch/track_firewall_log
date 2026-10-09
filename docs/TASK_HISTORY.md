@@ -1,3 +1,9 @@
+## 2026-10-09 - Make managed viewers read-only and operators section-scoped
+
+- Viewer UI exposes all sections with a read-only notice, and the backend blocks mutations independent of browser controls. Operator section checks and existing action permissions remain server-enforced; SNMPv3/ESXi configuration routes now have declared policies.
+- Persisted a workspace owner for managed users and shared admin-owned reads/allowed updates across core device, company, asset, security, monitoring, backup, and report paths. Added migration with single-admin legacy backfill. Destructive and admin-only paths were not broadly delegated.
+- Tested focused permissions (15 passing), existing auth/CSRF flow (passing), and isolated HTTP integration (passing). Built backend/frontend images and deployed both locally healthy; API readiness/dashboard HTTP 200. Disposed of only the task's isolated test database. Added fail-closed deployment ownership preflight before replacing the production API. No push or server change; a production owner mismatch still needs one-time DBA action.
+
 ## 2026-10-08 - Fix mobile navigation, account editor and user activity detail
 
 - Repositioned the RTL/LTR drawer, made the account editor a visible mobile dialog, reduced mobile account-summary height, and protected its deletion confirmation from stacking/focus regressions.

@@ -14,6 +14,7 @@ model AppUser {
   role         AppUserRole   @default(viewer)
   isActive     Boolean       @default(true)
   allowedSections String[]   @default([])
+  workspaceOwnerId String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sessions     AuthSession[]
@@ -21,6 +22,8 @@ model AppUser {
   scheduledTasks ScheduledTask[]
   companies     Company[]
   onboardingSessions DeviceOnboardingSession[]
+
+  @@index([workspaceOwnerId])
 }
 
 model Company {

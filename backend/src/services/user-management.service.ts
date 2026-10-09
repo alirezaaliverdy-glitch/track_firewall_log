@@ -53,7 +53,7 @@ function publicManagedUser(user: {
     displayName: user.displayName,
     role: user.role,
     isActive: user.isActive,
-    allowedSections: user.role === "admin" ? [...APPLICATION_SECTIONS] : user.allowedSections,
+    allowedSections: user.role === "admin" || user.role === "viewer" ? [...APPLICATION_SECTIONS] : user.allowedSections,
     effectivePermissions: permissionsForRole(user.role),
     activeSessionCount: user._count.sessions,
     lastSeenAt: user.sessions[0]?.lastSeenAt ?? null,
@@ -78,18 +78,18 @@ function managedUserSelect() {
   } as const;
 }
 
-export async function listManagedUsers() {
-  const users = await prisma.appUser.findMany({ orderBy: [{ isActive: "desc" }, { role: "asc" }, { displayName: "asc" }], select: managedUserSelect() });
+export async function listManagedUsers(actorId: string) {
+  const users = await prisma.appUser.findMany({ where: { OR: [{ id: actorId }, { workspaceOwnerId: actorId }] }, orderBy: [{ isActive: "desc" }, { role: "asc" }, { displayName: "asc" }], select: managedUserSelect() });
   return users.map(publicManagedUser);
 }
 
-export async function createManagedUser(input: { username?: unknown; displayName?: unknown; password?: unknown; role?: unknown; allowedSections?: unknown }) {
+export async function createManagedUser(actorId: string, input: { username?: unknown; displayName?: unknown; password?: unknown; role?: unknown; allowedSections?: unknown }) {
   const identity = normalizeIdentity(input);
   const role = normalizeRole(input.role);
   const password = validateManagedPassword(input.password);
-  const allowedSections = role === "admin" ? [...APPLICATION_SECTIONS] : normalizeApplicationSections(input.allowedSections);
+  const allowedSections = role === "admin" || role === "viewer" ? [...APPLICATION_SECTIONS] : normalizeApplicationSections(input.allowedSections);
   const user = await prisma.appUser.create({
-    data: { ...identity, passwordHash: await bcrypt.hash(password, 12), role, allowedSections, isActive: true },
+    data: { ...identity, passwordHash: await bcrypt.hash(password, 12), role, allowedSections, isActive: true, workspaceOwnerId: role === "admin" ? null : actorId },
     select: managedUserSelect()
   });
   return publicManagedUser(user);
@@ -98,6 +98,7 @@ export async function createManagedUser(input: { username?: unknown; displayName
 export async function updateManagedUser(actorId: string, userId: string, input: { displayName?: unknown; role?: unknown; isActive?: unknown; allowedSections?: unknown }) {
   const current = await prisma.appUser.findUnique({ where: { id: userId } });
   if (!current) throw new Error("USER_NOT_FOUND");
+  if (current.id !== actorId && current.workspaceOwnerId !== actorId) throw new Error("USER_NOT_FOUND");
   const role = input.role === undefined ? current.role : normalizeRole(input.role);
   const isActive = input.isActive === undefined ? current.isActive : input.isActive === true;
   const displayName = input.displayName === undefined ? current.displayName : String(input.displayName).trim();
@@ -108,14 +109,14 @@ export async function updateManagedUser(actorId: string, userId: string, input: 
     const otherActiveAdmins = await prisma.appUser.count({ where: { id: { not: userId }, role: "admin", isActive: true } });
     if (!otherActiveAdmins) throw new Error("LAST_ACTIVE_ADMIN_REQUIRED");
   }
-  const allowedSections = role === "admin"
+  const allowedSections = role === "admin" || role === "viewer"
     ? [...APPLICATION_SECTIONS]
     : input.allowedSections === undefined
       ? normalizeApplicationSections(current.allowedSections)
       : normalizeApplicationSections(input.allowedSections);
   const accessChanged = role !== current.role || isActive !== current.isActive || allowedSections.join("|") !== current.allowedSections.join("|");
   const user = await prisma.$transaction(async (transaction) => {
-    const updated = await transaction.appUser.update({ where: { id: userId }, data: { displayName, role, isActive, allowedSections }, select: managedUserSelect() });
+    const updated = await transaction.appUser.update({ where: { id: userId }, data: { displayName, role, isActive, allowedSections, workspaceOwnerId: role === "admin" ? null : current.workspaceOwnerId ?? actorId }, select: managedUserSelect() });
     if (accessChanged) await transaction.authSession.deleteMany({ where: { userId } });
     return updated;
   });
@@ -124,7 +125,7 @@ export async function updateManagedUser(actorId: string, userId: string, input: 
 
 export async function resetManagedUserPassword(actorId: string, userId: string, passwordInput: unknown) {
   if (actorId === userId) throw new Error("USE_CHANGE_PASSWORD_FOR_SELF");
-  const user = await prisma.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true } });
+  const user = await prisma.appUser.findFirst({ where: { id: userId, workspaceOwnerId: actorId }, select: { id: true, username: true } });
   if (!user) throw new Error("USER_NOT_FOUND");
   const password = validateManagedPassword(passwordInput);
   await prisma.$transaction([
@@ -136,7 +137,7 @@ export async function resetManagedUserPassword(actorId: string, userId: string, 
 
 export async function deleteManagedUser(actorId: string, userId: string, confirmation: unknown) {
   if (actorId === userId) throw new Error("CANNOT_DELETE_SELF");
-  const user = await prisma.appUser.findUnique({ where: { id: userId }, select: { id: true, username: true, role: true, isActive: true } });
+  const user = await prisma.appUser.findFirst({ where: { id: userId, workspaceOwnerId: actorId }, select: { id: true, username: true, role: true, isActive: true } });
   if (!user) throw new Error("USER_NOT_FOUND");
   if (String(confirmation ?? "").trim().toLowerCase() !== `delete ${user.username}`) throw new Error("USER_DELETE_CONFIRMATION_MISMATCH");
   if (user.role === "admin" && user.isActive) {

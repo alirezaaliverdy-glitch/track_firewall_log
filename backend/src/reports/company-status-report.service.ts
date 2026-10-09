@@ -94,7 +94,7 @@ function normalizeDevice(device: DeviceData, live: Live): CompanyStatusEquipment
 }
 
 export async function buildCompanyStatusReport(companyId: string, user: PublicUser, refresh = true): Promise<CompanyStatusReport> {
-  const company = await prisma.company.findFirst({ where: { id: companyId, ownerId: user.id, deletedAt: null } });
+  const company = await prisma.company.findFirst({ where: { id: companyId, ownerId: user.scopeOwnerId ?? user.id, deletedAt: null } });
   if (!company) throw new CompanyReportError("COMPANY_NOT_FOUND", 404);
   const devices = await prisma.device.findMany({ where: { companyId, deletedAt: null }, orderBy: { name: "asc" }, include: {
     asset: { select: { name: true, managementIp: true, healthState: true, metadataJson: true, vendor: { select: { name: true } }, platform: { select: { name: true } }, role: { select: { name: true } } } },

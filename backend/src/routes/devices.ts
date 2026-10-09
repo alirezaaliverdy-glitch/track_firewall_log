@@ -15,7 +15,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { companyId?: string } }>("/api/devices", async (request, reply) => {
     try {
       return {
-        devices: await listDevices(request.authUser?.id, request.query.companyId)
+        devices: await listDevices(request.authUser?.scopeOwnerId, request.query.companyId)
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to list devices";
@@ -28,7 +28,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Body: Record<string, unknown> }>("/api/devices", async (request, reply) => {
     try {
-      const device = await createDevice(request.body ?? {}, request.authUser?.id);
+      const device = await createDevice(request.body ?? {}, request.authUser?.scopeOwnerId);
       return reply.code(201).send(device);
     } catch (error) {
       if (error instanceof DuplicateDeviceError) {
@@ -42,7 +42,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
   app.get<{ Params: { id: string } }>("/api/devices/:id", async (request, reply) => {
-    const device = await getDeviceById(request.params.id, request.authUser?.id);
+    const device = await getDeviceById(request.params.id, request.authUser?.scopeOwnerId);
 
     if (!device) {
       return reply.code(404).send({ error: "Device not found" });
@@ -53,7 +53,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/devices/:id", async (request, reply) => {
     try {
-      return await updateDevice(request.params.id, request.body ?? {}, request.authUser?.id);
+      return await updateDevice(request.params.id, request.body ?? {}, request.authUser?.scopeOwnerId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid device input";
       const statusCode = message.includes("Record to update not found") ? 404 : 400;
@@ -72,7 +72,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
   });
   app.post<{ Params: { id: string } }>("/api/devices/:id/test-connection", async (request, reply) => {
     try {
-      const result = await testDeviceConnection(request.params.id, request.authUser?.id);
+      const result = await testDeviceConnection(request.params.id, request.authUser?.scopeOwnerId);
 
       if (!result) {
         return reply.code(404).send({ error: "Device not found", code: "DEVICE_NOT_FOUND" });
@@ -86,7 +86,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.put<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/devices/:id/observability/snmpv3", async (request, reply) => {
-    const device = await getDeviceById(request.params.id, request.authUser?.id);
+    const device = await getDeviceById(request.params.id, request.authUser?.scopeOwnerId);
     if (!device) return reply.code(404).send({ error: "Device not found" });
     try {
       return await configureSnmpv3Channel(device, request.body ?? {});
@@ -95,14 +95,14 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
     }
   });
   app.put<{ Params: { id: string }; Body: Record<string, unknown> }>("/api/devices/:id/observability/esxi", async (request, reply) => {
-    const device = await getDeviceById(request.params.id, request.authUser?.id);
+    const device = await getDeviceById(request.params.id, request.authUser?.scopeOwnerId);
     if (!device) return reply.code(404).send({ error: "Device not found" });
     try { return await configureEsxiSecondaryChannel(device, request.body ?? {}); }
     catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Invalid ESXi settings" }); }
   });
 
   app.get<{ Params: { id: string } }>("/api/devices/:id/capabilities", async (request, reply) => {
-    if (!await getDeviceById(request.params.id, request.authUser?.id)) {
+    if (!await getDeviceById(request.params.id, request.authUser?.scopeOwnerId)) {
       return reply.code(404).send({ error: "Device not found", code: "DEVICE_NOT_FOUND" });
     }
     const capabilities = await getDeviceVendorCapabilities(request.params.id);

@@ -81,6 +81,9 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
     if (CSRF_EXEMPT_PATHS.has(pathname)) return;
 
     if (request.authTransport === "bearer") {
+      if (request.authUser?.role === "viewer" && !["/api/auth/logout", "/api/auth/change-password"].includes(pathname)) {
+        return reply.code(403).send(forbidden("VIEWER_READ_ONLY", "حساب مشاهده‌گر اجازهٔ تغییر داده یا اجرای عملیات را ندارد."));
+      }
       const permission = findMutationPermission(request.method, pathname);
       if (!permission) {
         return reply.code(403).send(forbidden(
@@ -111,6 +114,10 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
         "CSRF_VALIDATION_FAILED",
         "اعتبارسنجی امنیتی درخواست ناموفق بود."
       ));
+    }
+
+    if (request.authUser?.role === "viewer" && !["/api/auth/logout", "/api/auth/change-password"].includes(pathname)) {
+      return reply.code(403).send(forbidden("VIEWER_READ_ONLY", "حساب مشاهده‌گر اجازهٔ تغییر داده یا اجرای عملیات را ندارد."));
     }
 
     const permission = findMutationPermission(request.method, pathname);

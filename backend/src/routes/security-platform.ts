@@ -25,7 +25,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
     const { vendor, deviceId, days, username } = request.query ?? {};
     if (username && username.length > 80) return reply.code(400).send({ error: "INVALID_USERNAME" });
     try {
-      return await listCachedVendorUserActivity({ vendor, deviceId, days: Number(days), username, ownerId: request.authUser?.id });
+      return await listCachedVendorUserActivity({ vendor, deviceId, days: Number(days), username, ownerId: request.authUser?.scopeOwnerId });
     } catch (error) {
       if (error instanceof Error && ["INVALID_VENDOR", "INVALID_DEVICE"].includes(error.message)) return reply.code(400).send({ error: error.message });
       throw error;
@@ -48,7 +48,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { query?: string; vendor?: string; deviceId?: string; severity?: string; scope?: string; includeResolved?: string } }>("/api/security/attackers", async (request) => {
     return listAttackers({
       ...request.query,
-      ownerId: request.authUser?.id,
+      ownerId: request.authUser?.scopeOwnerId,
       includeResolved: request.query?.includeResolved === "true"
     });
   });
@@ -56,7 +56,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { ip: string }; Querystring: { vendor?: string; deviceId?: string; includeResolved?: string } }>("/api/security/attackers/:ip", async (request, reply) => {
     const result = await getAttackerDetails(request.params.ip, {
       ...request.query,
-      ownerId: request.authUser?.id,
+      ownerId: request.authUser?.scopeOwnerId,
       includeResolved: request.query?.includeResolved === "true"
     });
     return result ?? reply.code(404).send({ error: "Qualified attacker IP not found" });

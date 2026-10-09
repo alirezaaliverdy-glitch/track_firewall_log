@@ -1,4 +1,4 @@
-import { Bot, Boxes, ChevronDown, Crosshair, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, ShieldCheck, WifiOff, Wrench, X } from "lucide-react";
+import { Bot, Boxes, ChevronDown, Crosshair, Eye, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, ShieldCheck, WifiOff, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -244,7 +244,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
             <Link to={selectedDevice ? `/assets/devices/${selectedDevice.id}` : "/assets/devices"} className="topbar-device">
               <Server aria-hidden="true" /><span><small>{t("shell.selectedDevice")}</small><strong dir={selectedDevice ? "ltr" : direction}>{selectedDevice ? `${selectedDevice.name} · ${selectedDevice.vendor}` : t("shell.noDeviceSelected")}</strong></span>
             </Link>
-            <Link to="/actions" className="topbar-create"><Plus aria-hidden="true" /><span>{isFa ? "اقدام جدید" : "New action"}</span></Link>
+            {user?.role !== "viewer" ? <Link to="/actions" className="topbar-create"><Plus aria-hidden="true" /><span>{isFa ? "اقدام جدید" : "New action"}</span></Link> : null}
             <details ref={accountMenuRef} className="topbar-account">
               <summary aria-label={isFa ? "منوی حساب" : "Account menu"}><span>{(user?.displayName || user?.username || "U").slice(0, 1).toLocaleUpperCase()}</span><strong>{user?.displayName || user?.username}</strong><ChevronDown aria-hidden="true" /></summary>
               <div className="topbar-account__menu">
@@ -264,6 +264,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
           </div>
         ) : null}
         <main className="platform-content">
+          {user?.role === "viewer" ? <p className="platform-readonly-notice" role="status"><Eye aria-hidden="true" />{isFa ? "حالت فقط‌مشاهده: همهٔ بخش‌ها قابل دیدن‌اند؛ تغییر داده و اجرای عملیات مجاز نیست." : "Read-only mode: you can view every section, but cannot change data or run operations."}</p> : null}
           {children}
         </main>
       </div>

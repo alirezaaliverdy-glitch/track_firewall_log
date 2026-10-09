@@ -20,12 +20,12 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     return company.id;
   }
 
-  app.get<{ Querystring: { deviceId?: string } }>("/api/assets/port-topology", async (request) => listPortTopology(request.query.deviceId, request.authUser?.id));
+  app.get<{ Querystring: { deviceId?: string } }>("/api/assets/port-topology", async (request) => listPortTopology(request.query.deviceId, request.authUser?.scopeOwnerId));
 
   app.post<{ Body: { deviceId?: unknown } }>("/api/assets/port-topology/discover", async (request, reply) => {
     const deviceId = typeof request.body?.deviceId === "string" ? request.body.deviceId : "";
     if (!deviceId) return reply.code(400).send({ error: "DEVICE_ID_REQUIRED" });
-    const result = await discoverDevicePorts(deviceId, request.authUser?.id);
+    const result = await discoverDevicePorts(deviceId, request.authUser?.scopeOwnerId);
     return result ?? reply.code(404).send({ error: "DEVICE_NOT_FOUND" });
   });
 
@@ -33,7 +33,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const deviceId = typeof request.body?.deviceId === "string" ? request.body.deviceId : "";
     if (!deviceId) return reply.code(400).send({ error: "DEVICE_ID_REQUIRED" });
     try {
-      const result = await refreshLinuxServicePorts(deviceId, request.authUser?.id);
+      const result = await refreshLinuxServicePorts(deviceId, request.authUser?.scopeOwnerId);
       return result ?? reply.code(404).send({ error: "DEVICE_NOT_FOUND" });
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "LISTENER_REFRESH_FAILED" });
@@ -42,7 +42,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch<{ Params: { deviceId: string; portName: string }; Body: Record<string, unknown> }>("/api/assets/port-topology/:deviceId/ports/:portName", async (request, reply) => {
     try {
-      const result = await savePortOverride(request.params.deviceId, request.params.portName, request.body ?? {}, request.authUser?.id);
+      const result = await savePortOverride(request.params.deviceId, request.params.portName, request.body ?? {}, request.authUser?.scopeOwnerId);
       return result ?? reply.code(404).send({ error: "DEVICE_NOT_FOUND" });
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "INVALID_PORT_OVERRIDE" });
@@ -60,7 +60,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.patch<{ Params: { deviceId: string; endpointKey: string }; Body: Record<string, unknown> }>("/api/assets/port-topology/:deviceId/services/:endpointKey", async (request, reply) => {
     try {
-      const result = await saveServiceEndpointOverride(request.params.deviceId, request.params.endpointKey, request.body ?? {}, request.authUser?.id);
+      const result = await saveServiceEndpointOverride(request.params.deviceId, request.params.endpointKey, request.body ?? {}, request.authUser?.scopeOwnerId);
       return result ?? reply.code(404).send({ error: "DEVICE_NOT_FOUND" });
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : "INVALID_SERVICE_ENDPOINT" });
@@ -77,11 +77,11 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
   });
   app.get<{ Querystring: { view?: string; companyId?: string } }>("/api/assets", async (request) => {
     const view = request.query.view === "archived" || request.query.view === "all" ? request.query.view : "active";
-    return listAssets(view, request.authUser?.id, request.query.companyId);
+    return listAssets(view, request.authUser?.scopeOwnerId, request.query.companyId);
   });
 
   app.get<{ Params: { id: string } }>("/api/assets/:id", async (request, reply) => {
-    const asset = await getAsset(request.params.id, request.authUser?.id);
+    const asset = await getAsset(request.params.id, request.authUser?.scopeOwnerId);
     return asset ? asset : reply.code(404).send({ error: "Asset not found" });
   });
 
@@ -96,32 +96,32 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get<{ Params: { id: string } }>("/api/assets/:id/topology", async (request, reply) => {
-    const topology = await getAssetTopology(request.params.id, request.authUser?.id);
+    const topology = await getAssetTopology(request.params.id, request.authUser?.scopeOwnerId);
     return topology ? topology : reply.code(404).send({ error: "Asset not found" });
   });
 
   app.get<{ Params: { id: string } }>("/api/assets/:id/findings", async (request, reply) => {
-    if (!await getAsset(request.params.id, request.authUser?.id)) return reply.code(404).send({ error: "Asset not found" });
+    if (!await getAsset(request.params.id, request.authUser?.scopeOwnerId)) return reply.code(404).send({ error: "Asset not found" });
     return { findings: await prisma.finding.findMany({ where: { assetId: request.params.id }, orderBy: { lastSeen: "desc" }, take: 100 }) };
   });
 
   app.post<{ Body: Record<string, unknown> }>("/api/assets/import/preview", async (request, reply) => {
-    try { return await previewAssetImport({ ...(request.body ?? {}), companyId: await activeCompanyId(request.authUser?.id, request.body?.companyId) }); }
+    try { return await previewAssetImport({ ...(request.body ?? {}), companyId: await activeCompanyId(request.authUser?.scopeOwnerId, request.body?.companyId) }); }
     catch (error) { return reply.code(400).send({ error: "Invalid asset import", detail: error instanceof Error ? error.message : "Invalid payload" }); }
   });
 
   app.post<{ Body: Record<string, unknown> }>("/api/assets/import/apply", async (request, reply) => {
-    try { return await applyAssetImport({ ...(request.body ?? {}), companyId: await activeCompanyId(request.authUser?.id, request.body?.companyId) }); }
+    try { return await applyAssetImport({ ...(request.body ?? {}), companyId: await activeCompanyId(request.authUser?.scopeOwnerId, request.body?.companyId) }); }
     catch (error) { return reply.code(400).send({ error: "Asset import failed", detail: error instanceof Error ? error.message : "Invalid payload" }); }
   });
 
-  app.post("/api/assets/sync/devices", async (request) => syncExistingDevicesToAssets(request.authUser?.id));
+  app.post("/api/assets/sync/devices", async (request) => syncExistingDevicesToAssets(request.authUser?.scopeOwnerId));
 
   app.get("/api/sites", async () => ({ sites: await prisma.assetSite.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { assets: true } } } }) }));
   app.get("/api/vlans", async () => ({ vlans: await prisma.assetVlan.findMany({ orderBy: [{ siteId: "asc" }, { vlanId: "asc" }] }) }));
   app.get("/api/prefixes", async () => ({ prefixes: await prisma.assetPrefix.findMany({ orderBy: { cidr: "asc" }, include: { site: true, vlan: true } }) }));
 
   app.get("/api/integrations/netbox/health", async () => mockNetBoxHealth());
-  app.get("/api/integrations/netbox/sync-preview", async (request) => previewAssetImport({ companyId: await activeCompanyId(request.authUser?.id), sourceType: "netbox", assets: mockNetBoxAssets() }));
-  app.post<{ Body: { idempotencyKey?: string; companyId?: string } }>("/api/integrations/netbox/sync", async (request) => applyAssetImport({ companyId: await activeCompanyId(request.authUser?.id, request.body?.companyId), sourceType: "netbox", idempotencyKey: request.body?.idempotencyKey ?? "mock-netbox-default", assets: mockNetBoxAssets() }));
+  app.get("/api/integrations/netbox/sync-preview", async (request) => previewAssetImport({ companyId: await activeCompanyId(request.authUser?.scopeOwnerId), sourceType: "netbox", assets: mockNetBoxAssets() }));
+  app.post<{ Body: { idempotencyKey?: string; companyId?: string } }>("/api/integrations/netbox/sync", async (request) => applyAssetImport({ companyId: await activeCompanyId(request.authUser?.scopeOwnerId, request.body?.companyId), sourceType: "netbox", idempotencyKey: request.body?.idempotencyKey ?? "mock-netbox-default", assets: mockNetBoxAssets() }));
 };

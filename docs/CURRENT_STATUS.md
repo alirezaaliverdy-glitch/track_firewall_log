@@ -1,3 +1,9 @@
+## 2026-10-09 - Viewer and operator workspace access
+
+- Viewers now see all seven product sections, but the API rejects their data-changing requests. Operators see only granted sections and retain their existing non-admin operations there; destructive/admin-only actions remain restricted.
+- Added a managed-account workspace owner and shared admin-owned reads across core asset/security/monitoring/report screens. A focused isolated-DB HTTP test covered real account creation, viewer reads and write denial, operator edit and ungranted-section denial. RBAC/CSRF tests and backend/frontend builds passed. Local API/web and gateway health checks passed (HTTP 200).
+- Production is not pushed or verified. The additive Prisma migration auto-runs at API startup only if the production DB role can alter `AppUser`. The local legacy table was owned by postgres, so it needed a one-time owner-run migration and Prisma resolution. Production deployment now checks ownership before moving Git or replacing the healthy API; a mismatch fails safely and requires DBA action. Unrelated `ssl_managerial_report.html` was not changed.
+
 ## 2026-10-08 - Mobile settings and vendor-user detail
 
 - Persian mobile navigation opens from the right; English opens from the left. Mobile account summaries are compact so the Add account control remains usable above the bottom navigation.

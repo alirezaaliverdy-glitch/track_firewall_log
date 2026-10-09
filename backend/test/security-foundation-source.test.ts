@@ -53,7 +53,7 @@ function mutationRoutesFromSource() {
 }
 
 test("Phase A role matrix keeps viewer read-only, operator scoped, and admin complete", () => {
-  assert.equal(hasPermission("viewer", "assistant.chat"), true);
+  assert.equal(hasPermission("viewer", "assistant.chat"), false);
   assert.equal(hasPermission("viewer", "devices.manage"), false);
   assert.equal(hasPermission("viewer", "actions.execute.write"), false);
   assert.equal(hasPermission("operator", "actions.execute.write"), true);

@@ -38,8 +38,8 @@ function managementError(error: unknown) {
 export async function adminUserRoutes(app: FastifyInstance) {
   app.get("/api/admin/users", async (request, reply) => {
     try {
-      requireAdmin(request);
-      return { users: await listManagedUsers(), catalog: userAccessCatalog() };
+      const actor = requireAdmin(request);
+      return { users: await listManagedUsers(actor.id), catalog: userAccessCatalog() };
     } catch (error) {
       const result = managementError(error);
       return reply.code(responseCode(result.code)).send({ error: result.code, violations: result.violations });
@@ -48,8 +48,8 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   app.post<{ Body: { username?: unknown; displayName?: unknown; password?: unknown; role?: unknown; allowedSections?: unknown } }>("/api/admin/users", async (request, reply) => {
     try {
-      requireAdmin(request);
-      const user = await createManagedUser(request.body ?? {});
+      const actor = requireAdmin(request);
+      const user = await createManagedUser(actor.id, request.body ?? {});
       auditUserManagement(request, "admin.user.create", user.id, { role: user.role, allowedSections: user.allowedSections });
       return reply.code(201).send({ user });
     } catch (error) {

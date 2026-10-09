@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { passwordPolicyViolations } from "../security/password-policy.js";
+import { APPLICATION_SECTIONS } from "../security/section-access.js";
 
 export const AUTH_COOKIE_NAME = "firewall_session";
 export const AUTH_COOKIE_PATH = "/";
@@ -14,6 +15,8 @@ export type PublicUser = {
   displayName: string;
   role: "admin" | "operator" | "viewer";
   allowedSections: string[];
+  workspaceOwnerId?: string | null;
+  scopeOwnerId?: string;
 };
 
 export type PublicAuthSession = {
@@ -31,7 +34,11 @@ export function hashSessionToken(token: string) {
 }
 
 export function publicUser(user: PublicUser): PublicUser {
-  return { id: user.id, username: user.username, displayName: user.displayName, role: user.role, allowedSections: user.allowedSections };
+  return {
+    id: user.id, username: user.username, displayName: user.displayName, role: user.role,
+    allowedSections: user.role === "viewer" || user.role === "admin" ? [...APPLICATION_SECTIONS] : user.allowedSections,
+    scopeOwnerId: user.role === "admin" ? user.id : user.workspaceOwnerId ?? user.id
+  };
 }
 
 export async function authenticate(username: string, password: string) {

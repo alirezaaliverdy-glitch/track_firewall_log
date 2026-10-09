@@ -20,6 +20,7 @@ test("Task 30 maps sensitive API paths to their product section", () => {
   assert.equal(sectionForApiPath("/api/devices/device-1/telemetry/linux/overview"), "monitoring");
   assert.equal(sectionForApiPath("/api/devices/device-1/findings"), "security");
   assert.equal(sectionForApiPath("/api/devices"), "assets");
+  assert.equal(sectionForApiPath("/api/companies"), "assets");
   assert.equal(sectionForApiPath("/api/actions/plan-1/execute"), "actions");
   assert.equal(sectionForApiPath("/api/ai/chat"), "assistant");
   assert.equal(sectionForApiPath("/api/auth/sessions"), null);
@@ -27,9 +28,14 @@ test("Task 30 maps sensitive API paths to their product section", () => {
 
 test("Task 30 applies least privilege and reserves user administration for admins", () => {
   assert.equal(hasSectionAccess({ role: "viewer", allowedSections: ["dashboard"] }, "dashboard"), true);
-  assert.equal(hasSectionAccess({ role: "viewer", allowedSections: ["dashboard"] }, "security"), false);
+  assert.equal(hasSectionAccess({ role: "viewer", allowedSections: ["dashboard"] }, "security"), true);
+  assert.equal(hasSectionAccess({ role: "operator", allowedSections: ["dashboard"] }, "security"), false);
+  assert.equal(hasSectionAccess({ role: "operator", allowedSections: ["dashboard", "assets"] }, "assets"), true);
   assert.equal(hasSectionAccess({ role: "admin", allowedSections: [] }, "security"), true);
   assert.equal(hasPermission("viewer", "users.manage"), false);
+  assert.equal(hasPermission("viewer", "devices.manage"), false);
+  assert.equal(hasPermission("viewer", "assistant.chat"), false);
+  assert.equal(hasPermission("operator", "devices.manage"), true);
   assert.equal(hasPermission("operator", "users.manage"), false);
   assert.equal(hasPermission("admin", "users.manage"), true);
   assert.equal(findMutationPermission("POST", "/api/admin/users"), "users.manage");

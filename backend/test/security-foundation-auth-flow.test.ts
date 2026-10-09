@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import bcrypt from "bcryptjs";
 import { AiRiskLevel, ActionPlanSource, ActionPlanStatus, ActionType } from "@prisma/client";
+import { APPLICATION_SECTIONS } from "../src/security/section-access.js";
 
 process.env.ADMIN_USERNAME = "phase-a-admin-bootstrap";
 process.env.ADMIN_PASSWORD = "phase-a-admin-password";
@@ -19,6 +20,7 @@ async function createUser(username: string, role: "admin" | "operator" | "viewer
       username,
       displayName: username,
       role,
+      allowedSections: [...APPLICATION_SECTIONS],
       passwordHash: await bcrypt.hash("phase-a-password", 10)
     }
   });
@@ -96,7 +98,7 @@ test("Phase A RBAC, CSRF, rate-limit, high-risk, logout, and expired-session acc
     payload: proposalPayload
   });
   assert.equal(viewerDenied.statusCode, 403);
-  assert.equal(viewerDenied.json().reasonCode, "PERMISSION_DENIED");
+  assert.equal(viewerDenied.json().reasonCode, "VIEWER_READ_ONLY");
 
   const operatorCookie = await login(app, operator.username);
   const operatorCsrf = await csrf(app, operatorCookie);

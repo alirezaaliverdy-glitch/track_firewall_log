@@ -7,7 +7,7 @@ export class CompanyServiceError extends Error {
   }
 }
 
-type Actor = { id: string; role: AppUserRole; username?: string };
+type Actor = { id: string; role: AppUserRole; username?: string; scopeOwnerId?: string };
 
 function text(value: unknown, max = 160) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -41,7 +41,7 @@ export async function listCompanies(actor: Actor, view: "active" | "deleted" | "
   const deletedAt = view === "active" ? null : view === "deleted" ? { not: null } : undefined;
   return prisma.company.findMany({
     where: {
-      ...(support ? {} : { ownerId: actor.id }),
+      ...(support ? {} : { ownerId: actor.scopeOwnerId ?? actor.id }),
       ...(deletedAt === undefined ? {} : { deletedAt })
     },
     include: {
@@ -65,7 +65,7 @@ export async function createCompany(actor: Actor, input: { name?: unknown; code?
   const { name, code } = assertCompanyInput(input);
   try {
     return await prisma.company.create({
-      data: { ownerId: actor.id, name, code, description: text(input.description, 500) || null },
+      data: { ownerId: actor.scopeOwnerId ?? actor.id, name, code, description: text(input.description, 500) || null },
       include: companyInclude
     });
   } catch (error) {
@@ -75,7 +75,7 @@ export async function createCompany(actor: Actor, input: { name?: unknown; code?
 }
 
 export async function updateCompany(actor: Actor, companyId: string, input: { name?: unknown; code?: unknown; description?: unknown }) {
-  const current = await getCompanyForActor(companyId, actor.id);
+  const current = await getCompanyForActor(companyId, actor.scopeOwnerId ?? actor.id);
   const { name, code } = assertCompanyInput({
     name: input.name === undefined ? current.name : input.name,
     code: input.code === undefined ? current.code : input.code

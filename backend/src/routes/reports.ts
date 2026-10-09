@@ -15,7 +15,7 @@ export async function reportRoutes(app: FastifyInstance) {
       const companyId = String(request.query.companyId ?? "").trim();
       if (!companyId) throw new CompanyReportError("COMPANY_ID_REQUIRED", 400);
       const company = await prisma.company.findFirst({
-        where: { id: companyId, ownerId: request.authUser.id, deletedAt: null },
+        where: { id: companyId, ownerId: request.authUser.scopeOwnerId ?? request.authUser.id, deletedAt: null },
         select: { id: true, name: true, code: true }
       });
       if (!company) throw new CompanyReportError("COMPANY_NOT_FOUND", 404);
@@ -101,7 +101,7 @@ export async function reportRoutes(app: FastifyInstance) {
     try {
       if (!request.authUser) throw new CompanyReportError("AUTH_REQUIRED", 401);
       const companyId = String(request.body?.companyId ?? "");
-      const owned = await prisma.company.findFirst({ where: { id: companyId, ownerId: request.authUser.id, deletedAt: null }, select: { id: true } });
+      const owned = await prisma.company.findFirst({ where: { id: companyId, ownerId: request.authUser.scopeOwnerId ?? request.authUser.id, deletedAt: null }, select: { id: true } });
       if (!owned) throw new CompanyReportError("COMPANY_NOT_FOUND", 404);
       const report = sanitizeCompanyStatusReport(request.body?.report as CompanyStatusReport, companyId);
       const format = request.body?.format ?? "pdf", filename = `company-status-${report.company.code}-${new Date().toISOString().slice(0, 10)}`;
