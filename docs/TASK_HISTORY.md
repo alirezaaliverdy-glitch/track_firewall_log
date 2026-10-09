@@ -1,3 +1,7 @@
+## 2026-10-09 - Verify live viewer/operator rollout
+
+- GitHub Actions run `37921389342` succeeded after pushing code through `b9797eb`. Server HEAD/deploy marker matched, Prisma recorded the workspace migration, all four services were healthy, gateway PIDs returned to 10, and public dashboard/API readiness were 200. Preserved server-only configuration and user untracked files; no live account or vendor command was used for validation.
+
 ## 2026-10-09 - Production access migration preflight and gateway PID repair
 
 - Connected through the pinned SSH key and verified the production database table owner equals the API role (`firewall_app`); the pending workspace migration is not yet applied, and its preflight evaluates to `ready`.

@@ -1,3 +1,8 @@
+## 2026-10-09 - Production access rollout verified
+
+- Pushed through `b9797eb`; GitHub Actions run `37921389342` passed all four jobs including production deployment. Server HEAD and deploy marker matched the pushed SHA; tracked checkout was clean and the managed-account workspace migration was applied.
+- API, web, PostgreSQL and gateway were all healthy after deployment. Gateway PID count was 10 with init enabled; readiness, local dashboard and externally requested public HTTPS dashboard all returned HTTP 200. No live test user or vendor mutation was performed.
+
 ## 2026-10-09 - Verify production migration and repair gateway health on next deploy
 
 - Read-only pinned SSH check: production `AppUser` owner and migration role are both `firewall_app`, so the pending additive migration can run there. Corrected the fail-closed preflight to target the actual Compose `firewall-db` service; the exact SQL returned `ready` on production. No server data was changed.
