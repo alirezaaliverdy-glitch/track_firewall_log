@@ -17,7 +17,7 @@ RUN pnpm install --frozen-lockfile
 # Copy source
 COPY . .
 
-ARG VITE_BASE_PATH=/firewall/
+ARG VITE_BASE_PATH=/
 ARG VITE_API_BASE_URL=/firewall-api
 ARG VITE_APP_ENV=production
 ARG VITE_BUILD_VERSION=local

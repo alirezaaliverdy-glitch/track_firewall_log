@@ -32,10 +32,11 @@ export function useAssets(companyId?: string) {
   const stats = useMemo(() => {
     const total = assets.length;
     const managed = assets.filter((asset) => asset.managedState === "managed").length;
-    const online = assets.filter((asset) => ["online", "healthy"].includes(asset.healthState)).length;
+    const availability = (asset: PlatformAsset) => asset.availability ?? (asset.healthState === "healthy" ? "online" : asset.healthState);
+    const online = assets.filter((asset) => availability(asset) === "online").length;
     const unmanaged = assets.filter((asset) => asset.managedState !== "managed").length;
-    const unreachable = assets.filter((asset) => ["offline", "error", "unknown"].includes(asset.healthState)).length;
-    const needsReview = assets.filter((asset) => !["online", "healthy"].includes(asset.healthState)).length;
+    const unreachable = assets.filter((asset) => ["offline", "error", "unknown"].includes(availability(asset))).length;
+    const needsReview = assets.filter((asset) => ["warning", "critical", "unknown"].includes(asset.healthState)).length;
     const withoutSite = assets.filter((asset) => !asset.site?.name).length;
     return { total, managed, online, unmanaged, unreachable, needsReview, withoutSite };
   }, [assets]);

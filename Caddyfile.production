@@ -2,14 +2,7 @@
 	admin off
 }
 
-http:// {
-	redir https://{host}:{$FIREWALL_HTTPS_PORT}{uri} 308
-}
-
-https:// {
-	tls internal {
-		on_demand
-	}
+{$PUBLIC_HOST:eosnet.ir} {
 	encode zstd gzip
 
 	header {
@@ -28,11 +21,7 @@ https:// {
 		}
 	}
 
-	handle /firewall/* {
-		reverse_proxy firewall-web:50
-	}
-
 	handle {
-		redir /firewall/ 302
+		reverse_proxy firewall-web:50
 	}
 }

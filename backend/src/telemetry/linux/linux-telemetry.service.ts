@@ -226,21 +226,18 @@ export function parseLinuxServerOverview(input: { deviceId: string; host: string
   const diskIoDevices = lines(parsed.io, 30).filter((line) => line.trim() && !/^Linux|Device/i.test(line)).slice(0, 12);
   const recentProblems = [
     ...disks.filter((disk) => disk.status === "warning" || disk.status === "critical").map((disk) => `Disk ${disk.mount} is ${disk.usedPercent}% full`),
-    ...services.filter((service) => service.state === "failed" || ["ssh", "sshd", "nginx", "apache2", "httpd"].includes(service.name) && service.state === "inactive").map((service) => `${service.name} is ${service.state}`),
-    ...securitySignals.recentWarnings.slice(0, 3)
+    ...services.filter((service) => service.state === "failed" || ["ssh", "sshd", "nginx", "apache2", "httpd"].includes(service.name) && service.state === "inactive").map((service) => `${service.name} is ${service.state}`)
   ].slice(0, 8);
   const reasons = [
     cpu.status === "critical" ? "CPU is overloaded" : null,
     memory.status === "critical" ? "Memory is under heavy pressure" : null,
     disks.some((disk) => disk.status === "critical") ? "Disk is almost full" : null,
-    securitySignals.status === "critical" ? "Critical security signals found" : null,
     services.some((service) => service.state === "failed") ? "A service is failed" : null
   ].filter(Boolean) as string[];
   const warningReasons = [
     cpu.status === "warning" ? "CPU load is elevated" : null,
     memory.status === "warning" ? "Memory usage is high" : null,
     disks.some((disk) => disk.status === "warning") ? "Disk usage is high" : null,
-    securitySignals.status === "warning" ? "Recent security warnings found" : null,
     ...parserWarnings
   ].filter(Boolean) as string[];
   const status = reasons.length ? "critical" : warningReasons.length ? "warning" : "healthy";

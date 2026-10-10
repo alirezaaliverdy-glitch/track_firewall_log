@@ -1995,3 +1995,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Added visible-page Finding polling, severity/time ordering and per-device deduplication so new issues appear quickly and resolved/closed ones disappear without reloading the dashboard.
 - Added immediate read-only health recollection after a connector-backed action passes verification. Linux refreshes deterministic security posture too; verified IP-block/deny-policy remediation resolves only its linked Finding and records audit provenance, while new evidence can reopen it.
 - Production API/web builds, 26 focused regressions and the 227-item command-catalog validation passed. Rebuilt the local API/web through scoped scripts; both are healthy and HTTP checks return 200. No schema migration, test vendor write, push or production deployment occurred.
+
+## 2026-10-10 - Fix false fleet warnings and domain routing
+
+- Read-only production checks confirmed devices 114, 116 and 117 were online with successful collections and normal resource use; security Findings, not equipment failure, caused all three warning badges and the `0 / 3` daily-check value.
+- Removed security Findings and Linux auth-log warnings from operational health computation, exposed current connectivity as a separate asset field, and changed dashboard online counting to that field. Security alerts remain visible and actionable without locking or degrading equipment.
+- Grouped repeated same-title Findings into one issue card and replaced the long generic Persian guidance with a direct review/fix explanation. Existing preview, confirmation, PolicyGuard, connector and audit controls remain unchanged.
+- Changed the production frontend base to `/`, made only `/` public, added a landing login link, extended Nginx root SPA handling, and changed Caddy production routing to domain TLS plus API-first/root-web proxying. Production CI/release builds now use the root base path.
+- No migration or vendor-side mutation. Validation and direct server deployment are performed before handoff; no GitHub push is part of this task.

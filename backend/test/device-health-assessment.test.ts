@@ -13,11 +13,11 @@ test("healthy requires fresh reachability and measured health", () => {
   assert.equal(assessDeviceHealth({ ...base, status: null, collection: null }).state, "unknown");
 });
 
-test("a resolved finding disappears, but cannot fabricate healthy telemetry", () => {
+test("security findings never redefine operational device health", () => {
   const findings = [{ severity: "critical", status: "resolved" }];
   assert.equal(assessDeviceHealth({ ...base, findings }).state, "healthy");
   assert.equal(assessDeviceHealth({ ...base, snapshot: null, findings }).state, "unknown");
-  assert.equal(assessDeviceHealth({ ...base, findings: [{ severity: "critical", status: "active" }] }).state, "critical");
+  assert.equal(assessDeviceHealth({ ...base, findings: [{ severity: "critical", status: "active" }] }).state, "healthy");
 });
 
 test("current outage or failed collection cannot be hidden by a healthy snapshot", () => {

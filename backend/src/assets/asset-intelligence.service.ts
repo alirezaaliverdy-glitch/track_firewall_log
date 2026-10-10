@@ -425,6 +425,7 @@ export async function listAssets(view: "active" | "archived" | "all" = "active",
             name: true,
             type: true,
             host: true,
+            status: true,
             statusChecks: { orderBy: { checkedAt: "desc" }, take: 1, select: { status: true, checkedAt: true } },
             collectionRuns: { orderBy: { startedAt: "desc" }, take: 1, select: { status: true, startedAt: true, completedAt: true } },
             healthSnapshots: { orderBy: { collectedAt: "desc" }, take: 1, select: { state: true, score: true, collectedAt: true } },
@@ -458,7 +459,12 @@ export async function listAssets(view: "active" | "archived" | "all" = "active",
   const assets = assetRows.map((row) => {
     const { collectionRuns, healthSnapshots, metricSamples, findings, device, ...asset } = row;
     if (!device || asset.managedState === "archived") {
-      return { ...asset, device: device ? { id: device.id, name: device.name, type: device.type, host: device.host } : null };
+      return {
+        ...asset,
+        availability: device?.statusChecks[0]?.status ?? device?.status ?? "unknown",
+        availabilityObservedAt: device?.statusChecks[0]?.checkedAt ?? null,
+        device: device ? { id: device.id, name: device.name, type: device.type, host: device.host } : null
+      };
     }
     const newest = <T,>(values: T[], date: (value: T) => Date | null | undefined) => values
       .filter((value) => Boolean(date(value)))
@@ -483,6 +489,8 @@ export async function listAssets(view: "active" | "archived" | "all" = "active",
     return {
       ...asset,
       device: { id: device.id, name: device.name, type: device.type, host: device.host },
+      availability: device.statusChecks[0]?.status ?? device.status ?? "unknown",
+      availabilityObservedAt: device.statusChecks[0]?.checkedAt ?? null,
       healthState: assessment.state,
       healthScore: assessment.score,
       healthCoverage: assessment.coverage,

@@ -40,10 +40,6 @@ function firstAllowedRoute(allowedSections: string[] = []) {
   return section ? sectionLanding[section] : "/settings";
 }
 
-function HomeRedirect() {
-  return <Navigate to="/landing" replace />;
-}
-
 function SectionGate({ section, children }: { section: string; children: ReactNode }) {
   const { user } = useAuth();
   if (user?.role !== "admin" && !(user?.allowedSections ?? []).includes(section)) {
@@ -145,8 +141,8 @@ function App() {
       <LogProvider>
         <RouterNavigationBridge />
         <Routes>
-          <Route path="/" element={<HomeRedirect />} />
-          <Route path="/landing" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/landing" element={<Navigate to="/" replace />} />
           <Route path="/action-library" element={<SectionGate section="actions"><ActionLibraryRoute /></SectionGate>} />
           <Route path="/guided-actions/:sessionId" element={<SectionGate section="actions"><GuidedActionRoute /></SectionGate>} />
           <Route path="/actions/:actionId/result" element={<SectionGate section="actions"><ActionResultRoute /></SectionGate>} />

@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 35
     env:
       VITE_APP_ENV: production
-      VITE_BASE_PATH: /firewall/
+      VITE_BASE_PATH: /
       VITE_API_BASE_URL: /firewall-api
     outputs:
       version: ${{ steps.images.outputs.version }}
@@ -126,7 +126,7 @@ jobs:
           push: true
           build-args: |
             VITE_APP_ENV=production
-            VITE_BASE_PATH=/firewall/
+            VITE_BASE_PATH=/
             VITE_API_BASE_URL=/firewall-api
           tags: |
             ${{ steps.images.outputs.frontend_image }}

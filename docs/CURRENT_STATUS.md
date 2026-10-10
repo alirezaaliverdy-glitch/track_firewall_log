@@ -1911,3 +1911,11 @@ The two-page A4 summary now has bounded density, consistent RTL grid placement, 
 - Security findings poll every five seconds while visible. Dashboard attention includes actionable high/critical findings even when an older asset state was green, deduplicates devices, sorts critical/new evidence first and removes resolved/closed findings without a manual reload.
 - Every successfully verified controlled action triggers an immediate read-only vendor health collection. Linux also refreshes its deterministic security snapshot. A linked Finding is automatically resolved only for connector-verified Linux/MikroTik IP blocking or FortiGate deny-policy remediation, with audit provenance; repeated fresh evidence can reopen it.
 - Production API/web builds, 26 focused tests and command-catalog validation (227 items) passed. The local API/web images were rebuilt and both are healthy; `/firewall-api/health` and `/firewall/` return 200. No migration, vendor mutation performed by validation, push or production deployment.
+
+## 2026-10-10 - Operational health is independent from security alerts
+
+- Production diagnosis showed all three affected devices had fresh successful connectivity and collection, while open authentication Findings were forcing every asset to `warning` and the daily-check counter to `0 / 3`.
+- Availability is now projected separately from operational health. Findings remain in Security and remediation flows, but only connection, collection, resource, service and fresh health evidence can change device health.
+- Linux security-log warnings no longer reduce the resource-health score. Same-title Findings produce one issue card and the Persian path is reduced to one clear review/fix action.
+- The production frontend is configured for `https://eosnet.ir/`: root is the public landing page and every non-root application URL is protected by login. The old `/firewall/` web path remains accepted by Nginx for compatibility, while the API stays under `/firewall-api`.
+- No database migration and no change to ActionPlan, PolicyGuard, connector invocation, audit, or the protected lab approval behavior.

@@ -127,7 +127,7 @@ export default function LandingPage() {
         <nav aria-label="ناوبری لندینگ">
           <a href="#product">محصول</a><a href="#capabilities">قابلیت‌ها</a><a href="#workflow">چرخه اقدام</a><a href="#team">تیم</a>
         </nav>
-        <a className="landing-header__anchor" href="#product">مشاهده محصول <ArrowDownLeft /></a>
+        <a className="landing-header__anchor" href={`${import.meta.env.BASE_URL}dashboard`}>ورود به سامانه <ArrowDownLeft /></a>
       </header>
 
       <main>

@@ -8,7 +8,6 @@ type Finding = { severity: string; status: string };
 const CONNECTION_MAX_AGE_MS = 5 * 60_000;
 const TELEMETRY_MAX_AGE_MS = 15 * 60_000;
 const RESOURCE_KEYS = new Set(["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent", "datastore.usage_percent"]);
-const CLOSED = new Set(["resolved", "closed", "false_positive", "suppressed", "accepted_risk"]);
 
 function isFresh(value: Date | string | null | undefined, now: Date, maxAge: number) {
   if (!value) return false;
@@ -59,11 +58,9 @@ export function assessDeviceHealth(input: {
     if (metric.value >= 95) raise("critical", `resource_critical:${key}`);
     else if (metric.value >= 85) raise("warning", `resource_high:${key}`);
   }
-  for (const finding of input.findings) {
-    if (CLOSED.has(finding.status.toLowerCase())) continue;
-    if (finding.severity === "critical") raise("critical", "critical_finding");
-    else if (finding.severity === "high") raise("warning", "high_finding");
-  }
+  // Security findings are intentionally not part of operational device health.
+  // They remain visible in Security and remediation views, but an alert must not
+  // turn a reachable device with healthy resources into a failed device.
 
   const verifiedReachability = status === "online" || ["succeeded", "completed"].includes(collection);
   const measured = Boolean(snapshotFresh) || metrics.size > 0;

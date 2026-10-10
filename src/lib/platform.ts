@@ -8,6 +8,8 @@ export type PlatformAsset = {
   hostname: string | null;
   managementIp: string | null;
   managedState: string;
+  availability?: string;
+  availabilityObservedAt?: string | null;
   healthState: string;
   healthScore?: number | null;
   healthCoverage?: "measured" | "partial" | "none";

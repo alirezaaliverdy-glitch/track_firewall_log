@@ -59,6 +59,20 @@ test("uses the same five-minute freshness window as the health assessment", () =
   assert.equal(stale.some((item) => item.id === "connection"), false);
 });
 
+test("groups repeated findings into one actionable issue", () => {
+  const issues = diagnoseDeviceIssues({
+    now,
+    credentialConfigured: true,
+    findings: [
+      { id: "finding-new", title: "Repeated authentication failures", severity: "high", status: "active", lastSeen: new Date("2026-10-04T09:59:00.000Z") },
+      { id: "finding-old", title: " repeated authentication failures ", severity: "high", status: "active", lastSeen: new Date("2026-10-04T09:58:00.000Z") }
+    ],
+    sensors: []
+  });
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0]?.action.findingId, "finding-new");
+});
+
 test("surfaces fresh datastore pressure and a snapshot-only warning without inventing detail", () => {
   const pressure = diagnoseDeviceIssues({
     now,

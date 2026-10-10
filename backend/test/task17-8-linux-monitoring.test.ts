@@ -264,6 +264,8 @@ test("Linux server overview parser handles Ubuntu and Debian style command outpu
   assert.equal(overview.services.find((service) => service.name === "nginx")?.state, "active");
   assert.equal(overview.listeningPorts[0].process, "sshd");
   assert.equal(overview.securitySignals.status, "warning");
+  assert.equal(overview.health.status, "healthy");
+  assert.deepEqual(overview.recentProblems, []);
 });
 
 test("Linux server overview parser handles RHEL-like output and partial command failure", () => {
