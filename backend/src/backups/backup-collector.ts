@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { withSharedSsh } from "../services/shared-ssh-session.service.js";
+import { trackCurrentApplicationSshCommand, withApplicationSshContext } from "../security/application-command-provenance.js";
 import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 import { backupProfile } from "./backup-profiles.js";
 import { readFortigateConfig } from "./fortigate-scp.js";
@@ -12,7 +13,7 @@ export class BackupError extends Error {
 }
 // Commands and paths are fixed by the server, never supplied by an HTTP client.
 export function readBackupCommand(client: Client, command: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
+  return trackCurrentApplicationSshCommand(command, () => new Promise((resolve, reject) => {
     let settled = false, size = 0;
     let channel: ClientChannel | undefined;
     const chunks: Buffer[] = [];
@@ -47,7 +48,7 @@ export function readBackupCommand(client: Client, command: string): Promise<Buff
         finish(new BackupError(reason, 502));
       });
     });
-  });
+  }));
 }
 export function backupSshTarget(device: Device, channels: DeviceConnectionChannel[]) {
   const ssh = channels.filter(channel => channel.enabled && channel.method === "ssh")
@@ -84,7 +85,7 @@ export async function collectDeviceBackup(device: Device) {
     host: sshDevice.host, port: sshDevice.managementPort, username: credential.username,
     password: credential.password, privateKey: credential.privateKey, passphrase: credential.passphrase,
     tryKeyboard: Boolean(credential.password), readyTimeout: env.sshHandshakeTimeoutMs
-  }, async (client) => {
+  }, async (client) => withApplicationSshContext({ deviceId: device.id, username: credential.username }, async () => {
     if (profile.key === "linux") return collectLinuxBackup(client, credential.sudo);
     if (profile.key === "pfsense") return readBackupCommand(client, "cat /conf/config.xml");
     if (profile.key === "fortigate") return readFortigateConfig(client);
@@ -92,5 +93,5 @@ export async function collectDeviceBackup(device: Device) {
     const version = (await readBackupCommand(client, ":put [/system resource get version]")).toString("utf8").trim();
     if (!/^[67]\./.test(version)) throw new BackupError("BACKUP_ROUTEROS_VERSION_UNSUPPORTED");
     return readBackupCommand(client, version.startsWith("7.") ? "/export terse show-sensitive" : "/export terse hide-sensitive=no");
-  }, profile.key === "linux");
+  }), profile.key === "linux");
 }

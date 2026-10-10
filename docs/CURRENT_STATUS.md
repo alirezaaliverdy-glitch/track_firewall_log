@@ -1,3 +1,12 @@
+## 2026-10-10 - Exclude proven application activity and repair fleet-health display
+
+- Linux SSH work performed by collectors, telemetry, controlled actions, backups, restores and live streams is tracked by device, configured integration account, exact command fingerprint and execution window. Only proven application-owned events are excluded; another command or session by the same `alireza` account remains eligible for detection.
+- Historical repair is deliberately narrower: only fixed read-only collector commands executed by the configured integration account are backfilled. An account finding closes automatically only when all of its referenced events are proven application-owned, and the closure is audited. Sanitized local verification found both active `alireza` findings contained collector evidence; after deployment and a successful collection, both became resolved and zero matching findings remain active.
+- Rolling-window counts now equal the real current matched set rather than repeatedly adding old events, and newest evidence references are retained. The previously inflated six-digit counts fell to bounded real window counts before the false findings closed.
+- Cisco cards no longer show an English, empty `Datastore` placeholder. Unsupported storage is omitted with a Persian explanation; real ESXi datastore data is localized, and sensor coverage uses the number of rows actually displayed.
+- The finding page now presents the practical resolution path before raw evidence. Account guidance explains evidence comparison, alternate-access precheck, reviewed lock/remove-sudo planning, credential rotation and fresh-log verification; creating a plan still does not execute anything.
+- Backend and frontend production builds passed. Focused provenance, account-rule, count, remediation and fleet-health tests passed. Local API/web were rebuilt through the scoped deploy scripts; both containers are healthy and dashboard/readiness routes return HTTP 200. No migration, device mutation, push or production deployment occurred; `quick_controlled` protected behavior is unchanged.
+
 ## 2026-10-10 - Treat main pushes as immediate production releases
 
 - The operator confirmed that a push to `main` deploys directly to the server. Project workflow now requires production-ready changes: no local-only assumptions, affected production Compose/deploy validation, and additive migrations compatible with the production role and table/type ownership.

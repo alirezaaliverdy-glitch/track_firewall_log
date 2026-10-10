@@ -21,14 +21,14 @@ const guidance: Record<string, Copy> = {
   },
   account: {
     fa: {
-      problem: "فعالیت حساس به یک حساب نسبت داده شده، اما مجاز بودن آن هنوز مشخص نیست.",
-      steps: ["نام حساب، زمان، دستور یا تغییر و مجوز ثبت‌شده را با شواهد تطبیق دهید.", "اگر غیرمجاز بود، نشست و دسترسی حساب را طبق فرایند تأییدشده محدود کنید و تغییر را پس از بررسی اثر آن برگردانید."],
-      verification: "وضعیت فعلی حساب و مجوزها را دوباره از تجهیز بخوانید و فعالیت تازهٔ همان حساب را بررسی کنید."
+      problem: "یک فرمان حساس خارج از منشأ تأییدشدهٔ برنامه به این حساب نسبت داده شده است؛ فعالیتی که فرمان، حساب و زمان اجرای آن با خود برنامه تطبیق داشته باشد خودکار از حادثه کنار گذاشته می‌شود.",
+      steps: ["در «لاگ‌های واقعی»، نام حساب، زمان و خودِ فرمان را با اقدام تأییدشدهٔ همان زمان تطبیق دهید.", "اگر فرمان غیرمجاز است، اول دسترسی مدیریتی جایگزین را آزمایش کنید؛ سپس از مرکز اقدام، برنامهٔ قفل حساب یا حذف دسترسی sudo را بسازید و اعتبارنامهٔ اتصال برنامه را تعویض کنید."],
+      verification: "وضعیت حساب و عضویت‌های مدیریتی را دوباره از تجهیز بخوانید و یک جمع‌آوری تازه انجام دهید؛ رفع واقعی یعنی فرمان غیرمجاز تکرار نشود و اتصال مجاز برنامه همچنان سالم بماند."
     },
     en: {
-      problem: "Sensitive activity is attributed to an account, but authorization is not established.",
-      steps: ["Match the account, time, command or change against the approved change record and evidence.", "If unauthorized, restrict the account through the reviewed process and revert the change only after impact review."],
-      verification: "Read back the current account and permissions, then check for new activity by the same account."
+      problem: "A sensitive command outside verified application provenance is attributed to this account. Activity whose command, account and execution time match the application is excluded automatically.",
+      steps: ["In Real logs, compare the account, time and exact command with the approved action at that time.", "If unauthorized, first test alternate management access; then create a reviewed lock-account or remove-sudo plan and rotate the application's connection credential."],
+      verification: "Read back the account and administrative memberships and collect fresh logs; the command must not recur while authorized application access remains healthy."
     }
   },
   configuration: {

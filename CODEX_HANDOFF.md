@@ -1,4 +1,8 @@
-# Current handoff
+# CODEX_HANDOFF.md
+
+## هدف فعلی
+
+2026-10-10 application-owned Linux activity and fleet-health correction: Linux SSH commands issued by collection, telemetry, controlled actions, backups, restores and live streams now receive bounded application provenance using device, integration account, exact command fingerprint and execution time. Historical backfill is limited to the fixed read-only collector commands plus the device's configured integration account; there is no username-wide allowlist. Detection and vendor-user activity exclude only proven `applicationOwned` events. Account rolling-window finding counts no longer grow when the same events are evaluated again, newest evidence references are retained, and an account finding auto-resolves only when every referenced event is proven application-owned; an audit entry records that closure. Both local `alireza` false findings were verified from sanitized aggregate evidence and auto-resolved after a successful collector run (active count zero). Fleet health no longer invents a blank Cisco `Datastore` row: unsupported storage is omitted with a Persian explanation, real ESXi datastore labels are bilingual, and the coverage denominator reflects sensors actually shown. Finding remediation is now above raw evidence and the account path gives a concrete review/containment/verification sequence. Final API/web production builds and focused provenance/detection/UI tests passed; local API and web were rebuilt with the scoped scripts, both containers are healthy, and routed readiness/dashboard return HTTP 200. No schema migration, remote device mutation, push or production deployment occurred; protected quick-controlled execution behavior is unchanged.
 
 2026-10-10 production-readiness requirement: every commit that may be pushed to `main` must be treated as an immediate server release because the push pipeline deploys directly to production. Recorded in `AGENTS.md`: avoid local-only assumptions, validate the production Compose/deploy path for affected components, keep migrations additive and compatible with the production role/ownership model, never push without explicit user authorization, and after an authorized push verify CI/deploy completion, server SHA/marker, migrations, all service health, API readiness and the public dashboard before claiming success.
 
@@ -85,13 +89,13 @@ Standalone VMware ESXi now has selectable SSH and SOAP API registration. The int
 Backend/frontend builds, 17 original focused/regression tests and validation of 225 catalog items passed. A real loopback SSH server verified host-key rejection and session reuse; mocked-API Chromium tests verified SSH/API selection and separate fields at 1440/390px. The local API/web are deployed and healthy; no new migration was needed for SSH. Live Host Client login/inspection has now succeeded, but no live-host action or successful SSH collection has been tested. Before production deployment, ensure the earlier ESXi enum migration is applied with an enum-owning role, and validate the pinned RSA host key, least-privilege ESXCLI inventory, TLS and one approved non-disruptive API action on the actual ESXi version. SSH CPU/RAM utilization is now collected when typed quickstats and capacity are available; hardware health and VM count still require API. API traffic counters are not yet collected. Alternate ESXi channels are disabled until separately configured. Never claim all ESXi features or live compatibility as complete without that acceptance.
 
 Project rules are in AGENTS.md; current work status is in docs/CURRENT_STATUS.md and docs/TASK_HISTORY.md.
-## 2026-09-28 - ESXi archived-address registration and save recovery
+**2026-09-28 - ESXi archived-address registration and save recovery**
 
 - Fixed archived record matching to use company/address identity even after port/vendor changes; considers deleted/archived state and preserves active conflicts and linked-asset safety. Existing device/asset and history are reused through the ordinary audited transaction, with no schema migration or manual production-data repair.
 - Commit retry requires a successful connector test, supported platform, invoked discovery and preview; input edits still clear evidence. UI uses the same complete readiness contract, refreshes failed-save state and does not mislabel database save failures as offline or silently register unverified on retry.
 - Verified backend/frontend builds, focused ESXi SSH/SOAP and isolated PostgreSQL recovery tests, plus mocked-API browser flows at 1440/390/320px. No real vendor writes or push. The user's stored successful test was inspected without printing credentials/inventory; final live registration remains the user's next confirmation.
 
-## 2026-09-28 - Clear ESXi SSH fingerprint guidance
+**2026-09-28 - Clear ESXi SSH fingerprint guidance**
 
 - Corrected the setup command to `/usr/lib/vmware/openssh/bin/ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub -E sha256`, avoiding ESXi's missing-PATH issue. Explained running it inside the trusted host console/session, copying only SHA256 and distinguishing SSH keys from HTTPS certificates. Sample does not embed the user's host key.
 - Added accessible collapsible help, restrained styling, a copy button and honest manual fallback next to the SSH-only field. Existing required fingerprint validation and host-key verification remain unchanged; no arbitrary command execution added.
@@ -101,3 +105,43 @@ Second follow-up: the account actor for sensitive changes must appear explicitly
 Read scalability: vendor-user API requests are coalesced and cached for at most 15 seconds per owner/filter with a 100-entry bound; new events/findings invalidate that vendor. Browser refresh remains every 10 seconds but unchanged requests do not rerun the heavy history scan. Cache reuse/invalidation have an isolated-DB API regression.
 Final local check: successful logins, sensitive changes, failures and context have separate caps; 115k account-labelled Linux events no longer crowd out all logins. Initial/vendor queries measured about 2s/7s, seven observed accounts remained visible, two Linux collectors showed fresh collection and 19/20s effective intervals, and API/web/DB/gateway were healthy. Isolated-DB high-volume regression passed. No production push.
 Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-only Linux containment and cache invalidation. Recreated only the local API and verified API/web/DB/gateway healthy; readiness and vendor-user page returned HTTP 200. First cold seven-day read was 10.9s; warm uncached reads 1.8s/0.5s and cached repeat 1ms. Evidence gaps and sampling prevent a guarantee of complete or error-free user attribution. No account was disabled and no production push occurred.
+
+## تغییرات انجام‌شده
+
+- آخرین تغییر runtime، منشأ دقیق فرمان‌های Linux برنامه را برای collector، telemetry، action، backup، restore و stream ثبت می‌کند. نام حساب یا IP به‌تنهایی allowlist نیست.
+- backfill تاریخی فقط فرمان‌های ثابت read-only جمع‌آورنده و حساب اتصال همان تجهیز را می‌پذیرد. دو Finding اشتباه `alireza` پس از collection موفق به‌صورت ممیزی‌شده resolved شدند و یافتهٔ متناظر فعال صفر است.
+- count پنجرهٔ تشخیص دیگر با ارزیابی تکراری رشد نمی‌کند؛ جدیدترین evidence referenceها نگه‌داری می‌شوند.
+- Fleet Health ردیف خالی Cisco Datastore را حذف می‌کند، نبود سنسور را توضیح می‌دهد و Datastore واقعی ESXi را دو‌زبانه نشان می‌دهد. مسیر رسیدگی Finding پیش از raw evidence نمایش داده می‌شود.
+- build تولیدی API/web و تست‌های متمرکز پاس شدند. API و web لوکال با اسکریپت‌های scoped rebuild شدند؛ هر دو healthy و dashboard/readiness برابر HTTP 200 هستند.
+
+## فایل‌های مهم
+
+- `AGENTS.md`: قواعد ثابت پروژه و رفتار محافظت‌شده.
+- `backend/src/security/application-command-provenance.ts`: fingerprint و بازهٔ فعالیت SSH خود برنامه.
+- `backend/src/services/event-ingestion.service.ts`: برچسب‌گذاری، backfill و auto-resolve ممیزی‌شده.
+- `backend/src/assets/asset-intelligence.service.ts`: count و evidence referenceهای تشخیص.
+- `src/features/dashboard/pages/FleetHealthPanel.tsx`: نمایش سنسورهای واقعی.
+- `src/features/security/findingRemediation.ts` و `src/features/security/pages/FindingDetailPage.tsx`: راهکار عملی یافته.
+- `docs/CURRENT_STATUS.md` و `docs/TASK_HISTORY.md`: وضعیت و تاریخچهٔ تفصیلی.
+
+## کارهای باقی‌مانده
+
+- commit همین task پس از کنترل نهایی Git؛ هیچ `.env` یا secret نباید stage شود.
+- push و production rollout انجام نشده‌اند. push فقط با اجازهٔ صریح کاربر و سپس بررسی CI/deploy، SHA/marker، migration، service health، readiness و dashboard عمومی انجام شود.
+- full backend suite در runner موقت این turn معتبر نبود چون source mount و isolated DB کامل نداشت؛ build نهایی و تست‌های مستقیم مرتبط پاس شده‌اند.
+
+## دستوراتی که اجرا شده
+
+- build تولیدی backend و frontend در Docker.
+- تست‌های `task60-collector-auth-provenance`، `account-detection-rules` و `task61-application-owned-health-remediation`.
+- rebuild محلی با `scripts/deploy/rebuild-firewall-api.ps1` و `scripts/deploy/rebuild-firewall-web.ps1` و health check.
+- بررسی تجمیعی و بدون raw log برای Findingها، collector state و نتیجهٔ auto-resolve.
+- بررسی نهایی HTTP 200 برای `/firewall-api/health/ready` و `/firewall/`.
+
+## نکته‌های مهم
+
+- `ACTION_EXECUTION_MODE=quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` محافظت‌شده‌اند؛ برای template پشتیبانی‌شده در lab یک تأیید کاربر کافی است.
+- `applicationOwned` فقط از provenance دقیق می‌آید. کل حساب اتصال، IP یا vendor را مستثنا نکنید.
+- preview اجرا نیست؛ موفقیت فقط بعد از connector واقعی و `connectorInvoked=true` ثبت شود. PolicyGuard و Audit حذف نشوند.
+- هیچ migration، فرمان تغییردهندهٔ تجهیز، push یا production deployment در این task انجام نشد.
+- secret، credential، raw log، database، upload، dependency folder و build output نباید چاپ، مستند یا commit شوند.

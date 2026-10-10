@@ -30,5 +30,7 @@ test("identity and configuration rules require an attributable actor, not merely
 test("collector-owned events and ordinary traffic never trigger account rules", () => {
   const owned = event("sudo: collector : COMMAND=/usr/bin/systemctl stop auditd", "collector", "unknown", { collectorOwned: true });
   assert.equal(eventMatchesAccountRule("account.risky-privileged-command", owned), false);
+  const applicationOwned = event("sudo: collector : COMMAND=/usr/bin/systemctl stop auditd", "collector", "unknown", { applicationOwned: true });
+  assert.equal(eventMatchesAccountRule("account.risky-privileged-command", applicationOwned), false);
   assert.equal(eventMatchesAccountRule("account.configuration-change", event("allow src=192.0.2.1", "alice", "allow")), false);
 });

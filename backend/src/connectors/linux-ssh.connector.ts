@@ -2,6 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import { Client, type ConnectConfig } from "ssh2";
 import { SharedSshConnectionError, withSharedSsh } from "../services/shared-ssh-session.service.js";
+import { trackApplicationSshCommand, trackCurrentApplicationSshCommand, withApplicationSshContext } from "../security/application-command-provenance.js";
 import { ActionType, type ActionPlan, type Device } from "@prisma/client";
 import { env } from "../config/env.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
@@ -300,7 +301,12 @@ async function withSsh<T>(device: Device, callback: (client: Client, credential:
 
 async function withSshWithCredential<T>(device: Device, credential: SshCredential, callback: (client: Client) => Promise<T>) {
   try {
-    return await withSharedSsh(device.id, connectConfig(device, credential), callback, true);
+    return await withSharedSsh(
+      device.id,
+      connectConfig(device, credential),
+      (client) => withApplicationSshContext({ deviceId: device.id, username: credential.username }, () => callback(client)),
+      true
+    );
   } catch (error) {
     if (error instanceof SharedSshConnectionError) throw new ConnectorError(error.code, error.message, error.code === "SSH_AUTH_FAILED" ? 401 : 502);
     throw error;
@@ -308,7 +314,7 @@ async function withSshWithCredential<T>(device: Device, credential: SshCredentia
 }
 
 function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeoutMs): Promise<ExecResult> {
-  return new Promise((resolve, reject) => {
+  return trackCurrentApplicationSshCommand(command, () => new Promise((resolve, reject) => {
     client.exec(command, (error, stream) => {
       if (error) {
         reject(error);
@@ -335,11 +341,11 @@ function exec(client: Client, command: string, timeoutMs = env.sshCommandTimeout
         stderr += chunk.toString("utf8");
       });
     });
-  });
+  }));
 }
 
 function execWithStdin(client: Client, command: string, stdin: string, timeoutMs = env.sshCommandTimeoutMs): Promise<ExecResult> {
-  return new Promise((resolve, reject) => {
+  return trackCurrentApplicationSshCommand(command, () => new Promise((resolve, reject) => {
     client.exec(command, (error, stream) => {
       if (error) {
         reject(error);
@@ -361,7 +367,7 @@ function execWithStdin(client: Client, command: string, stdin: string, timeoutMs
       stream.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8"); });
       stream.end(stdin);
     });
-  });
+  }));
 }
 
 function sudoPrefix(credential: SshCredential) {
@@ -422,28 +428,35 @@ export async function openLinuxTelemetryStream(
   const ready = new Promise<void>((resolve, reject) => {
     client.once("ready", async () => {
       try {
-        const uid = await exec(client, "id -u");
+        const run = (command: string) => trackApplicationSshCommand(
+          { deviceId: device.id, username: credential.username, command },
+          () => exec(client, command)
+        );
+        const uid = await run("id -u");
         const root = uid.stdout.trim() === "0" || credential.username === "root";
-        const sudoCheck = root ? null : await exec(client, "sudo -n true");
+        const sudoCheck = root ? null : await run("sudo -n true");
         const privileged = root || sudoCheck?.exitCode === 0;
         const command = privileged && !root
           ? `sudo -n sh -c ${JSON.stringify(LINUX_STREAM_COMMANDS[source])}`
           : LINUX_STREAM_COMMANDS[source];
-        client.exec(command, (error, stream) => {
-          if (error) return reject(error);
-          channel = stream;
-          let buffer = "";
-          const consume = (chunk: Buffer) => {
-            buffer += chunk.toString("utf8");
-            const lines = buffer.split(/\r?\n/);
-            buffer = lines.pop() ?? "";
-            lines.filter(Boolean).forEach(onLine);
-          };
-          stream.on("data", consume);
-          stream.stderr.on("data", (chunk: Buffer) => onWarning(chunk.toString("utf8").trim()));
-          stream.on("close", () => { if (!closed) onWarning(`${source} stream closed.`); });
-          resolve();
-        });
+        void trackApplicationSshCommand(
+          { deviceId: device.id, username: credential.username, command },
+          () => new Promise<void>((complete, fail) => client.exec(command, (error, stream) => {
+            if (error) { fail(error); reject(error); return; }
+            channel = stream;
+            let buffer = "";
+            const consume = (chunk: Buffer) => {
+              buffer += chunk.toString("utf8");
+              const lines = buffer.split(/\r?\n/);
+              buffer = lines.pop() ?? "";
+              lines.filter(Boolean).forEach(onLine);
+            };
+            stream.on("data", consume);
+            stream.stderr.on("data", (chunk: Buffer) => onWarning(chunk.toString("utf8").trim()));
+            stream.on("close", () => { if (!closed) onWarning(`${source} stream closed.`); complete(); });
+            resolve();
+          }))
+        ).catch((error: unknown) => { if (!closed) onWarning(error instanceof Error ? error.message : "Stream command failed."); });
       } catch (error) {
         reject(error);
       }

@@ -35,11 +35,12 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       const connected=state==="online"&&!device.collectionError;
       const resource=(key:string)=>device.rows.find(row=>row.metricKey===key);
       const current=(row?:Row)=>connected&&!!row?.fresh&&recent(row.measuredAt)&&row.value!==null;
-      const disk=resource("disk.usage_percent"),storage=disk?.value!=null?disk:resource("datastore.usage_percent");
+      const disk=resource("disk.usage_percent"),datastore=resource("datastore.usage_percent");
+      const storage=[disk,datastore].find(row=>row?.value!==null&&row?.value!==undefined)||[disk,datastore].find(row=>!!row?.measuredAt);
       const rows=[
         {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#22d3ee"},
         {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#a78bfa"},
-        {label:storage?.metricKey==="datastore.usage_percent"?"Datastore":t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#f59e0b"}
+        ...(storage?[{label:storage.metricKey==="datastore.usage_percent"?t("فضای داده","Datastore"):t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#f59e0b"}]:[])
       ];
       const coverage=rows.filter(item=>current(item.row)).length;
       const score=coverage&&connected&&Number.isFinite(device.score)?device.score:null;
@@ -47,12 +48,13 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       return <article className="fleet-device fleet-summary" key={device.id}>
         <header><div><h3>{device.name}</h3><span dir="ltr">{device.vendor} · {device.host}</span></div><span className={`fleet-status is-${state}`}><i/>{state==="online"?t("آنلاین","Online"):state==="offline"?t("آفلاین","Offline"):t("نامشخص","Unknown")}</span></header>
         <div className="fleet-summary-visual">
-          <div className="fleet-summary-dial" style={{"--fleet-health-angle":`${(score??0)*3.6}deg`,"--health-color":color} as CSSProperties} aria-label={t("امتیاز سلامت منابع","Resource health score")}><div><span>{t("سلامت منابع","Resource health")}</span><strong>{score===null?"—":score.toLocaleString(locale)}<small>/ {Number(100).toLocaleString(locale)}</small></strong><em>{score===null?t("منتظر دادهٔ معتبر","Awaiting fresh data"):t(`${coverage.toLocaleString(locale)} از ۳ سنسور به‌روز`,`${coverage} of 3 sensors current`)}</em></div></div>
+          <div className="fleet-summary-dial" style={{"--fleet-health-angle":`${(score??0)*3.6}deg`,"--health-color":color} as CSSProperties} aria-label={t("امتیاز سلامت منابع","Resource health score")}><div><span>{t("سلامت منابع","Resource health")}</span><strong>{score===null?"—":score.toLocaleString(locale)}<small>/ {Number(100).toLocaleString(locale)}</small></strong><em>{score===null?t("منتظر دادهٔ معتبر","Awaiting fresh data"):t(`${coverage.toLocaleString(locale)} از ${rows.length.toLocaleString(locale)} سنسور به‌روز`,`${coverage} of ${rows.length} sensors current`)}</em></div></div>
           <dl className="fleet-summary-resources">{rows.map(({label,row,icon:Icon,color:metricColor})=>{
             const valid=current(row),measured=row?.value!=null;
             return <div key={label} style={{"--metric-color":metricColor} as CSSProperties}><dt><span><Icon size={15}/>{label}</span><strong>{measured?`${row.value!.toLocaleString(locale,{maximumFractionDigits:1})}%`:"—"}</strong></dt><dd><i style={{width:valid?`${Math.max(0,Math.min(100,row!.value!))}%`:"0%"}}/></dd><small>{!measured?t("سنسور در دسترس نیست","Sensor unavailable"):valid?t("به‌روز","Current"):t("آخرین مقدار؛ قدیمی / تأییدنشده","Last value; stale / unverified")}</small></div>;
           })}</dl>
         </div>
+        {!storage&&connected?<p className="fleet-sensor-note">{t("این تجهیز سنسور ذخیره‌سازی گزارش نمی‌کند؛ فقط داده‌های واقعی نمایش داده شده‌اند.","This device does not report a storage sensor; only measured data is shown.")}</p>:null}
         {device.collectionError&&<p className="fleet-collection-error">{device.collectionError==="AUTHENTICATION_FAILED"?t("ورود برای خواندن سنسورها رد شد؛ اعتبارنامه را بررسی کنید.","Sensor login rejected; check credentials."):t("جمع‌آوری سنسورها ناموفق بود؛ اتصال را بررسی کنید.","Sensor collection failed; check connection.")}</p>}
         <footer><span>{device.collecting?t("در حال جمع‌آوری…","Collecting…"):date(device.checkedAt)}</span><Link to={`/assets/devices/${device.id}/overview`}>{t("جزئیات و نمودارها","Details & charts")}</Link></footer>
       </article>;

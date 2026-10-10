@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { redactText } from "../security/redaction.js";
+import { isApplicationOwnedSecurityEvent } from "../security/collector-auth-provenance.js";
 
 type AccountEvent = {
   id: string;
@@ -66,8 +67,7 @@ export type AccountActivityKind = "login" | "failed_login" | "logout" | "privile
 export type AccountActivityRisk = "normal" | "review" | "high";
 
 export function classifyAccountEvent(event: Pick<AccountEvent, "action" | "eventType" | "rawSnippet" | "rawMessage" | "tags">): { kind: AccountActivityKind; risk: AccountActivityRisk } | null {
-  const tags = event.tags && typeof event.tags === "object" && !Array.isArray(event.tags) ? event.tags as Record<string, unknown> : {};
-  if (tags.collectorOwned === true) return null;
+  if (isApplicationOwnedSecurityEvent(event)) return null;
   const raw = rawText(event);
   const action = (event.action ?? "").toLowerCase();
   const eventType = event.eventType.toLowerCase();

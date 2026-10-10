@@ -29,6 +29,8 @@ export type CollectorRunResult = {
   /** Public peer address seen by the target during this authenticated collector session. */
   collectorSourceIp?: string;
   collectorSourcePort?: number;
+  /** Integration account used by this collector run. Never contains a secret. */
+  applicationUsername?: string;
   applicationSshSessions?: Array<{ ip: string; port: number }>;
 };
 

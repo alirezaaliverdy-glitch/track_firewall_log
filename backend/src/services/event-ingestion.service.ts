@@ -5,7 +5,8 @@ import { prisma } from "../db/prisma.js";
 import { scheduleSecurityDetection } from "./security-detection-dispatcher.service.js";
 import { invalidateVendorUserActivityCache } from "./vendor-user-activity.service.js";
 import type { CollectedLogLine, CollectorRunResult } from "../collectors/types.js";
-import { matchesCollectorSession } from "../security/collector-auth-provenance.js";
+import { isApplicationOwnedSecurityEvent, matchesCollectorSession } from "../security/collector-auth-provenance.js";
+import { knownApplicationCommands, matchesApplicationCommand, matchesFixedCollectorRead } from "../security/application-command-provenance.js";
 
 export type NormalizedCollectedEvent = {
   deviceId: string;
@@ -34,10 +35,17 @@ function toJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
 }
 
+function jsonObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function collectorTags(result: CollectorRunResult, event: NormalizedCollectedEvent) {
+  const applicationOwned = matchesCollectorSession(event, result) ||
+    matchesApplicationCommand(event, knownApplicationCommands(result.deviceId)) ||
+    matchesFixedCollectorRead(event, result.applicationUsername);
   return {
     collector: true,
-    ...(matchesCollectorSession(event, result) ? { collectorOwned: true } : {}),
+    ...(applicationOwned ? { collectorOwned: true, applicationOwned: true } : {}),
     ...(result.collectorSourceIp ? { collectorSourceIp: result.collectorSourceIp } : {}),
     ...(result.collectorSourcePort ? { collectorSourcePort: result.collectorSourcePort } : {}),
     warnings: result.warnings.slice(0, 20)
@@ -380,7 +388,9 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
       // Backfill provenance on previously ingested authentication events. This
       // lets detection distinguish the application's own SSH session from a
       // real operator login without suppressing other successful logins.
-      if (matchesCollectorSession(event, result)) {
+      if (matchesCollectorSession(event, result) ||
+        matchesApplicationCommand(event, knownApplicationCommands(result.deviceId)) ||
+        matchesFixedCollectorRead(event, result.applicationUsername)) {
         await prisma.securityEvent.update({
           where: { id: existing.id },
           data: { tags: toJson(collectorTags(result, event)) }
@@ -433,6 +443,51 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
       completedAt: new Date()
     }
   });
+
+  // A finding is automatically closed only when every referenced event is
+  // explicitly proven to be application-owned. Mixed or unresolved evidence
+  // remains open for human review.
+  const accountFindings = await prisma.finding.findMany({
+    where: { deviceId: result.deviceId, status: { not: "resolved" }, category: { startsWith: "account-" } },
+    select: { id: true, rawRefsJson: true }
+  });
+  for (const finding of accountFindings) {
+    const refs = Array.isArray(finding.rawRefsJson) ? finding.rawRefsJson.map(String) : [];
+    if (!refs.length) continue;
+    const referencedEvents = await prisma.securityEvent.findMany({
+      where: { id: { in: refs } },
+      select: { id: true, tags: true, rawSnippet: true, rawMessage: true }
+    });
+    if (referencedEvents.length !== refs.length) continue;
+    const ownership = referencedEvents.map((event) => ({
+      event,
+      owned: isApplicationOwnedSecurityEvent(event) || matchesFixedCollectorRead(
+        { rawSnippet: event.rawSnippet ?? undefined, message: event.rawMessage ?? undefined },
+        result.applicationUsername
+      )
+    }));
+    if (!ownership.every((item) => item.owned)) continue;
+    const provenanceBackfills = ownership
+      .filter(({ event }) => !isApplicationOwnedSecurityEvent(event))
+      .map(({ event }) => prisma.securityEvent.update({
+        where: { id: event.id },
+        data: { tags: toJson({ ...jsonObject(event.tags), collector: true, collectorOwned: true, applicationOwned: true, applicationOrigin: "fixed_collector_read_backfill" }) }
+      }));
+    await prisma.$transaction([
+      ...provenanceBackfills,
+      prisma.finding.update({ where: { id: finding.id }, data: { status: "resolved" } }),
+      prisma.auditLog.create({ data: {
+        deviceId: result.deviceId,
+        actor: "system",
+        action: "security.finding.auto_resolved",
+        targetType: "finding",
+        targetId: finding.id,
+        dryRun: false,
+        approvalStatus: "not_required",
+        metadata: toJson({ reason: "application_owned_evidence", referenceCount: refs.length })
+      } })
+    ]);
+  }
 
   const detection = await scheduleSecurityDetection({ deviceId: result.deviceId });
   if (inserted > 0) invalidateVendorUserActivityCache(result.vendor);

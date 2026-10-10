@@ -5,6 +5,7 @@ import { resolveCredentialById, resolveCredentialByName, type ResolvedDeviceCred
 import type { CollectedLogLine, CollectorRunResult, CollectorSourceType, DeviceCollector } from "./types.js";
 import { env } from "../config/env.js";
 import { knownSharedSshSessions, withSharedSsh } from "../services/shared-ssh-session.service.js";
+import { trackApplicationSshCommand } from "../security/application-command-provenance.js";
 
 const LINUX_SOURCE_TYPES: CollectorSourceType[] = ["linux_ssh", "linux_ufw", "linux_kernel"];
 
@@ -106,8 +107,12 @@ function sudoPrefix(credential: EnvSshCredential) {
 
 function parseTimestamp(line: string) {
   const match = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:?\d{2}|Z)?)/);
-  if (!match) return undefined;
-  const date = new Date(match[1]);
+  const syslog = line.match(/^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\b/);
+  if (!match && !syslog) return undefined;
+  let date = match ? new Date(match[1]) : new Date(`${syslog![1]} ${new Date().getFullYear()}`);
+  if (!match && date.getTime() > Date.now() + 36 * 60 * 60 * 1000) {
+    date = new Date(`${syslog![1]} ${new Date().getFullYear() - 1}`);
+  }
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
@@ -156,11 +161,15 @@ export const linuxSshLogCollector: DeviceCollector = {
     const sinceValue = sinceArg(since);
 
     return withSsh(device, async (client, credential) => {
-      const hostnameResult = await exec(client, "hostname");
+      const run = (command: string, timeoutMs?: number) => trackApplicationSshCommand(
+        { deviceId: device.id, username: credential.username, command },
+        () => exec(client, command, timeoutMs)
+      );
+      const hostnameResult = await run("hostname");
       const hostname = hostnameResult.stdout || device.host;
       // SSH_CONNECTION is supplied by sshd and contains the address actually
       // observed by the target (including a NAT/public egress address).
-      const connectionResult = await exec(client, "printf '%s' \"$SSH_CONNECTION\"");
+      const connectionResult = await run("printf '%s' \"$SSH_CONNECTION\"");
       const collectorPeer = sshPeer(connectionResult.stdout);
       const sudo = sudoPrefix(credential);
       const commands: Array<{ sourceType: CollectorSourceType; command: string }> = [
@@ -177,7 +186,7 @@ export const linuxSshLogCollector: DeviceCollector = {
       ];
 
       for (const item of commands) {
-        const result = await exec(client, item.command);
+        const result = await run(item.command);
         if (result.exitCode !== 0) {
           warnings.push(`${item.command}: ${result.stderr || `exit ${result.exitCode}`}`);
           continue;
@@ -196,6 +205,7 @@ export const linuxSshLogCollector: DeviceCollector = {
         completedAt: new Date(),
         collectorSourceIp: collectorPeer?.address,
         collectorSourcePort: collectorPeer?.port,
+        applicationUsername: credential.username,
         applicationSshSessions: [
           ...knownSharedSshSessions(device.id),
           ...(collectorPeer ? [{ ip: collectorPeer.address, port: collectorPeer.port }] : [])

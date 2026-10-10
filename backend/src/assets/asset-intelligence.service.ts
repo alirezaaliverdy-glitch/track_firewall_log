@@ -4,7 +4,7 @@ import { proposeActionPlan } from "../services/action-plan.service.js";
 import { notifySecurityFinding } from "../services/security-alert-email.service.js";
 import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionEvents, eventMatchesVendorRule, groupSubject, normalizeDetectionVendor } from "../security/vendor-detection-rule-library.js";
 import { ACCOUNT_DETECTION_RULES, accountRuleActor, eventMatchesAccountRule } from "../security/account-detection-rule-library.js";
-import { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
+import { isApplicationOwnedSecurityEvent, isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 import { invalidateVendorUserActivityCache } from "../services/vendor-user-activity.service.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
@@ -561,7 +561,7 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
     const candidateEvents = definition ? (eventsByVendor.get(definition.vendor) ?? []) : events;
     const matched = candidateEvents.filter((event) =>
       (event.timestamp ?? event.receivedAt).getTime() >= cutoff &&
-      !isCollectorOwnedAuthSuccess(event) &&
+      !isApplicationOwnedSecurityEvent(event) &&
       (accountDefinition ? eventMatchesAccountRule(ruleKey, event) : definition ? eventMatchesVendorRule(ruleKey, event) : normalizedLegacyEventType(event) === wanted && (!vendors.length || vendors.includes(String(event.vendor ?? "").toLowerCase())))
     );
     const subjectFor = (event: (typeof events)[number]) => accountDefinition ? accountRuleActor(event)?.toLowerCase() ?? "unknown-account" : definition ? groupSubject(definition, event) : event.srcIp ?? event.username ?? String(event.dstPort ?? "device");
@@ -585,9 +585,13 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
       const fingerprint = `detection:${rule.id}:${deviceId}:${assetId ?? "none"}:${ruleKey || wanted}:${subject}`;
       const existing = await prisma.finding.findUnique({ where: { deviceId_fingerprint: { deviceId, fingerprint } } });
       const existingRefs = new Set(Array.isArray(existing?.rawRefsJson) ? existing.rawRefsJson.map(String) : []);
-      const newEvents = group.filter((event) => !existingRefs.has(event.id));
-      if (existing && newEvents.length === 0) continue;
-      const mergedRefs = Array.from(new Set([...existingRefs, ...group.map((event) => event.id)])).slice(-100);
+      const newEvents = group.filter((event) => {
+        if (!existing) return true;
+        const observedAt = event.timestamp ?? event.receivedAt;
+        return observedAt > existing.lastSeen || (observedAt.getTime() === existing.lastSeen.getTime() && !existingRefs.has(event.id));
+      });
+      if (existing && newEvents.length === 0 && existing.count === group.length) continue;
+      const mergedRefs = Array.from(new Set([...group.map((event) => event.id), ...existingRefs])).slice(0, 100);
       const data = {
         deviceId,
         assetId,
@@ -595,7 +599,7 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
         title: rule.name,
         severity: normalizeSeverity(rule.severity),
         category: accountDefinition?.category ?? definition?.category ?? "general-detection",
-        status: "active",
+        status: existing && newEvents.length === 0 ? existing.status : "active",
         confidence: accountDefinition ? 0.82 : definition?.key === "fortigate.security-threat" ? 0.98 : definition?.logicalEventFamily === "authentication_failure" ? 0.9 : definition?.ruleType === "deny_drop_spike" ? 0.84 : 0.82,
         summary: `${rule.description} (${group.length} matching events in ${windowMinutes} minutes)`,
         evidenceJson: toJson(group.slice(0, 10).map((event) => ({ id: event.id, message: event.rawMessage, srcIp: event.srcIp, dstPort: event.dstPort }))),
@@ -603,7 +607,10 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
         rawRefsJson: toJson(mergedRefs),
         firstSeen: group.reduce((min, event) => (event.timestamp ?? event.receivedAt) < min ? (event.timestamp ?? event.receivedAt) : min, group[0].timestamp ?? group[0].receivedAt),
         lastSeen: group.reduce((max, event) => (event.timestamp ?? event.receivedAt) > max ? (event.timestamp ?? event.receivedAt) : max, group[0].timestamp ?? group[0].receivedAt),
-        count: existing ? existing.count + newEvents.length : group.length,
+        // This is a rolling-window rule. Persist the real number of matching
+        // events in the current window; repeatedly evaluating the same rows
+        // must never inflate the finding count.
+        count: group.length,
         mitreTags: accountDefinition?.mitreTags ?? definition?.mitreTags ?? [],
         srcIp: accountDefinition ? null : first.srcIp,
         dstIp: first.dstIp,
@@ -624,7 +631,9 @@ async function executeSecurityDetection(input: { deviceId?: string; assetId?: st
         created += 1;
       }
       invalidateVendorUserActivityCache(first.vendor ?? "generic");
-      await notifySecurityFinding({ finding: saved, rule, eventIds: existing ? newEvents.map((event) => event.id) : group.map((event) => event.id) });
+      if (!existing || newEvents.length) {
+        await notifySecurityFinding({ finding: saved, rule, eventIds: existing ? newEvents.map((event) => event.id) : group.map((event) => event.id) });
+      }
     }
   }
   return { rulesEvaluated: rules.length, eventsEvaluated: events.length, findingsCreated: created, findingsUpdated: updated };
