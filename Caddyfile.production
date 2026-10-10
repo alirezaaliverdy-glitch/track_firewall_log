@@ -2,6 +2,10 @@
 	admin off
 }
 
+http://127.0.0.1 {
+	respond /healthz 200
+}
+
 {$PUBLIC_HOST:eosnet.ir} {
 	encode zstd gzip
 
