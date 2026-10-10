@@ -1,3 +1,8 @@
+## 2026-10-10 - Keep the local runtime current after every code task
+
+- Project workflow now requires rebuilding and deploying each affected local API/web service after every meaningful runtime change, followed by container-health and routed dashboard/API checks. Documentation-only edits are exempt.
+- Deployed equipment-health commit `5f6ef38` with the scoped project scripts. API, web, PostgreSQL and main Nginx are healthy; the local dashboard and API readiness routes both return HTTP 200. No database migration, device action, push or production deployment occurred.
+
 ## 2026-10-10 - Evidence-based equipment health and verified remediation
 
 - Device workspaces derive health from fresh, bounded evidence: connection checks, collection results, stored health snapshots, CPU/RAM/disk/datastore measurements and open high/critical findings. Stale or missing measurements produce `unknown`, not a false healthy state; measured/partial/none coverage is now visible in the equipment card.

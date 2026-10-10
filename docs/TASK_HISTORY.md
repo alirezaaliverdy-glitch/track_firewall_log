@@ -1,3 +1,8 @@
+## 2026-10-10 - Deploy equipment health locally and make local refresh mandatory
+
+- Rebuilt and recreated only the local API and web services using the project-scoped deployment scripts. Both became healthy; database and gateway remained healthy, and dashboard/API readiness returned HTTP 200.
+- Added the operator's standing requirement to `AGENTS.md`: after every meaningful runtime change, deploy the affected local service(s) and verify the visible routes before handoff. No global prune, device mutation, migration, push or production rollout.
+
 ## 2026-10-10 - Complete evidence-based equipment health
 
 - Replaced inherited/stale health presentation in the device workspace with a fresh-evidence assessment that cannot call a device healthy without both verified reachability and measured health data. Added explicit evidence coverage and ESXi datastore pressure handling.

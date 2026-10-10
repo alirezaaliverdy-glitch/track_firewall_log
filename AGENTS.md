@@ -48,7 +48,7 @@ Never expose, print, document, or commit `.env` contents, API keys, tokens, pass
 1. Read `AGENTS.md`, `CODEX_HANDOFF.md`, `docs/CURRENT_STATUS.md`, and `docs/TASK_HISTORY.md`.
 2. Implement only the requested scope and preserve protected behavior.
 3. Run backend build/tests when backend or package code changes; run frontend build when frontend or root package code changes. Validate catalog changes with `npm run validate:command-catalog` in `backend`.
-   For local frontend Docker deployment, use `scripts/deploy/rebuild-firewall-web.ps1`; it verifies container health before removing only the superseded `firewall-web` image. Never use a global Docker prune as part of routine deployment.
+   After every meaningful runtime change, rebuild and deploy the affected local API and/or web service before handoff so the operator always sees the newest version. Use `scripts/deploy/rebuild-firewall-api.ps1` for the API and `scripts/deploy/rebuild-firewall-web.ps1` for the frontend; verify container health and the local dashboard/API routes. Documentation-only changes do not require a runtime rebuild. Never use a global Docker prune as part of routine deployment.
    Before validating the real OpenRouter provider on Windows Docker Desktop, run `scripts/start-openrouter-host-proxy.ps1`; use only sanitized probes and never print provider credentials or response content.
 4. After every meaningful task, update `CODEX_HANDOFF.md`, `docs/CURRENT_STATUS.md`, and `docs/TASK_HISTORY.md` when relevant.
 5. Before commit, run `git status --short`, confirm no `.env` file is staged, run relevant validation, then commit with a clear message. The user expects a commit after each completed task.
