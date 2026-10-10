@@ -138,6 +138,7 @@ export type MikroTikDiscovery = {
   architecture?: string;
   uptime?: string;
   cpuLoad?: string;
+  cpuCount?: string;
   memoryFree?: string;
   memoryTotal?: string;
   storageFree?: string;

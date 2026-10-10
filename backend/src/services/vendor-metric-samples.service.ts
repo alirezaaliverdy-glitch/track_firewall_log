@@ -23,13 +23,23 @@ function add(measurements: Measurement[], metricKey: string, value: unknown, uni
   const number = numeric(value);
   if (number !== null) measurements.push({ metricKey, value: number, unit, labels });
 }
+function addCapacityPair(measurements: Measurement[], prefix: "memory" | "disk", freeValue: unknown, totalValue: unknown) {
+  const free = routerOsBytes(freeValue), total = routerOsBytes(totalValue);
+  if (free === null || total === null || total <= 0 || free > total) return;
+  add(measurements, `${prefix}.total_bytes`, total, "bytes");
+  add(measurements, `${prefix}.used_bytes`, total - free, "bytes");
+}
 
 export function vendorMeasurements(result: DeviceConnectionTestResult): Measurement[] {
   if (!result.connected) return [];
   const measurements: Measurement[] = [];
   if (result.esxi) {
     add(measurements, "cpu.usage_percent", result.esxi.cpuPercent, "percent");
+    add(measurements, "cpu.total_cores", result.esxi.cpuCores, "count");
     add(measurements, "memory.usage_percent", result.esxi.memoryPercent, "percent");
+    add(measurements, "memory.total_bytes", result.esxi.memoryBytes, "bytes");
+    if (result.esxi.memoryBytes !== null && result.esxi.memoryPercent !== null)
+      add(measurements, "memory.used_bytes", result.esxi.memoryBytes * result.esxi.memoryPercent / 100, "bytes");
     add(measurements, "vm.count", result.esxi.vmCount, "count");
     add(measurements, "datastore.count", result.esxi.datastoreCount, "count");
     for(const item of result.esxi.interfaceCounters?.slice(0,16) ?? []) {
@@ -37,14 +47,21 @@ export function vendorMeasurements(result: DeviceConnectionTestResult): Measurem
       add(measurements,"network.tx_bytes",item.txBytes,"bytes",{interface:item.name});
     }
     for (const datastore of result.esxi.datastores) {
-      if (datastore.capacityBytes && datastore.freeBytes !== null)
+      if (datastore.capacityBytes && datastore.freeBytes !== null) {
+        const labels = { datastore: datastore.name };
         add(measurements, "datastore.usage_percent", (1 - datastore.freeBytes / datastore.capacityBytes) * 100, "percent", { datastore: datastore.name });
+        add(measurements, "datastore.total_bytes", datastore.capacityBytes, "bytes", labels);
+        add(measurements, "datastore.used_bytes", datastore.capacityBytes - datastore.freeBytes, "bytes", labels);
+      }
     }
   }
   if (result.mikrotik) {
     add(measurements, "cpu.usage_percent", result.mikrotik.cpuLoad, "percent");
+    add(measurements, "cpu.total_cores", result.mikrotik.cpuCount, "count");
     add(measurements, "memory.usage_percent", usedPercent(result.mikrotik.memoryFree,result.mikrotik.memoryTotal), "percent");
     add(measurements, "disk.usage_percent", usedPercent(result.mikrotik.storageFree,result.mikrotik.storageTotal), "percent");
+    addCapacityPair(measurements, "memory", result.mikrotik.memoryFree, result.mikrotik.memoryTotal);
+    addCapacityPair(measurements, "disk", result.mikrotik.storageFree, result.mikrotik.storageTotal);
     for (const item of result.mikrotik.interfaceCounters?.slice(0, 32) ?? []) {
       add(measurements, "network.rx_bytes", item.rxBytes, "bytes", { interface: item.name });
       add(measurements, "network.tx_bytes", item.txBytes, "bytes", { interface: item.name });
@@ -96,8 +113,11 @@ export function ciscoMeasurements(outputs: Record<string, string>): Measurement[
   const cpu = outputs.cpu?.match(/five seconds:\s*(\d+)%/i)?.[1];
   add(measurements, "cpu.usage_percent", cpu, "percent");
   const memory = outputs.memory?.match(/Processor\s+Pool\s+Total:\s*(\d+)\s+Used:\s*(\d+)\s+Free:\s*(\d+)/i);
-  if (memory && Number(memory[1]) > 0 && Number(memory[2]) <= Number(memory[1]))
+  if (memory && Number(memory[1]) > 0 && Number(memory[2]) <= Number(memory[1])) {
     add(measurements, "memory.usage_percent", Number(memory[2])/Number(memory[1])*100, "percent", {pool:"processor"});
+    add(measurements, "memory.total_bytes", memory[1], "bytes", {pool:"processor"});
+    add(measurements, "memory.used_bytes", memory[2], "bytes", {pool:"processor"});
+  }
   const sections = (outputs.interfacesDetailed ?? "").split(/(?=^\S+\s+is\s+(?:up|down|administratively down)\b)/gim);
   for (const section of sections.slice(0, 32)) {
     const name = section.match(/^(\S+)\s+is\s+(?:up|down|administratively down)/im)?.[1];

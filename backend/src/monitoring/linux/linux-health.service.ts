@@ -8,6 +8,13 @@ import { diagnoseLinuxHealth } from "./linux-health-diagnosis.js";
 
 function json(value: unknown): Prisma.InputJsonValue { return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue; }
 function stateFromOverview(status: string) { return status === "healthy" ? "healthy" : status === "critical" ? "critical" : status === "warning" ? "warning" : "unknown"; }
+export function linuxCapacityBytes(value: string | null | undefined) {
+  const match = String(value ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*([kmgtpe])?(?:i?b)?$/i);
+  if (!match) return null;
+  const powers: Record<string, number> = { "": 0, k: 1, m: 2, g: 3, t: 4, p: 5, e: 6 };
+  const bytes = Number(match[1]) * 1024 ** powers[(match[2] ?? "").toLowerCase()];
+  return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
+}
 type ObservabilitySchemaState = { available: boolean; missing: string[]; checkedAt: string; reason?: string };
 let observabilitySchemaState: ObservabilitySchemaState | null = null;
 let warnedMissingObservability = false;
@@ -54,14 +61,24 @@ async function getObservabilitySchemaState(): Promise<ObservabilitySchemaState> 
 export function metricsFromOverview(overview: ReturnType<typeof parseLinuxServerOverview>) {
   const metrics = [] as Array<{ metricKey: string; value: number; unit?: string; labels?: Record<string, unknown> }>;
   if (overview.cpu.usagePercent !== null) metrics.push({ metricKey: "cpu.usage_percent", value: overview.cpu.usagePercent, unit: "percent" });
+  if (overview.cpu.coreCount !== null) metrics.push({ metricKey: "cpu.total_cores", value: overview.cpu.coreCount, unit: "count" });
   const [l1, l5, l15] = overview.cpu.loadAverage;
   if (l1 !== undefined) metrics.push({ metricKey: "cpu.load_1m", value: l1, unit: "load" });
   if (l5 !== undefined) metrics.push({ metricKey: "cpu.load_5m", value: l5, unit: "load" });
   if (l15 !== undefined) metrics.push({ metricKey: "cpu.load_15m", value: l15, unit: "load" });
   if (overview.memory.usedPercent !== null) metrics.push({ metricKey: "memory.usage_percent", value: overview.memory.usedPercent, unit: "percent" });
+  if (overview.memory.totalMb !== null) metrics.push({ metricKey: "memory.total_bytes", value: overview.memory.totalMb * 1024 ** 2, unit: "bytes" });
+  if (overview.memory.usedMb !== null) metrics.push({ metricKey: "memory.used_bytes", value: overview.memory.usedMb * 1024 ** 2, unit: "bytes" });
   if (overview.memory.swapUsedPercent !== null) metrics.push({ metricKey: "swap.usage_percent", value: overview.memory.swapUsedPercent, unit: "percent" });
   const rootDisk = overview.disks[0];
-  if (rootDisk?.usedPercent !== null && rootDisk?.usedPercent !== undefined) metrics.push({ metricKey: "disk.usage_percent", value: rootDisk.usedPercent, unit: "percent", labels: { mount: rootDisk.mount } });
+  if (rootDisk?.usedPercent !== null && rootDisk?.usedPercent !== undefined) {
+    const labels = { mount: rootDisk.mount };
+    metrics.push({ metricKey: "disk.usage_percent", value: rootDisk.usedPercent, unit: "percent", labels });
+    const totalBytes = linuxCapacityBytes(rootDisk.size);
+    const usedBytes = linuxCapacityBytes(rootDisk.used);
+    if (totalBytes !== null) metrics.push({ metricKey: "disk.total_bytes", value: totalBytes, unit: "bytes", labels });
+    if (usedBytes !== null) metrics.push({ metricKey: "disk.used_bytes", value: usedBytes, unit: "bytes", labels });
+  }
   metrics.push({ metricKey: "services.failed_count", value: overview.services.filter((service) => service.state === "failed").length, unit: "count" });
   metrics.push({ metricKey: "ports.listening_count", value: overview.listeningPorts.length, unit: "count" });
   metrics.push({ metricKey: "firewall.enabled", value: overview.services.some((service) => ["ufw", "firewalld"].includes(service.name) && service.state === "active") ? 1 : 0, unit: "boolean" });

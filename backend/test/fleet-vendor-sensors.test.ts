@@ -13,14 +13,23 @@ test("RouterOS resource units normalize without guessing malformed values",()=>{
   assert.equal(routerOsBytes("unknown"),null);
 });
 test("MikroTik memory and storage use measured total/free, never zero for missing values",()=>{
-  const result={connected:true,mikrotik:{cpuLoad:"12",memoryFree:"64MiB",memoryTotal:"128MiB",storageFree:"8MiB",storageTotal:"16MiB",interfaces:[]}} as unknown as DeviceConnectionTestResult;
+  const result={connected:true,mikrotik:{cpuLoad:"12",cpuCount:"4",memoryFree:"64MiB",memoryTotal:"128MiB",storageFree:"8MiB",storageTotal:"16MiB",interfaces:[]}} as unknown as DeviceConnectionTestResult;
   const values=vendorMeasurements(result);
+  assert.equal(values.find(v=>v.metricKey==="cpu.total_cores")?.value,4);
   assert.equal(values.find(v=>v.metricKey==="memory.usage_percent")?.value,50);
+  assert.equal(values.find(v=>v.metricKey==="memory.used_bytes")?.value,64*1024**2);
+  assert.equal(values.find(v=>v.metricKey==="memory.total_bytes")?.value,128*1024**2);
   assert.equal(values.find(v=>v.metricKey==="disk.usage_percent")?.value,50);
+  assert.equal(values.find(v=>v.metricKey==="disk.used_bytes")?.value,8*1024**2);
+  assert.equal(values.find(v=>v.metricKey==="disk.total_bytes")?.value,16*1024**2);
   delete result.mikrotik!.memoryTotal;
   assert.equal(vendorMeasurements(result).some(v=>v.metricKey==="memory.usage_percent"),false);
+  assert.equal(vendorMeasurements(result).some(v=>v.metricKey==="memory.total_bytes"),false);
 });
 test("Cisco processor pool uses valid measured utilization",()=>{
-  assert.equal(ciscoMeasurements({memory:"Processor Pool Total: 1000 Used: 250 Free: 750"}).find(v=>v.metricKey==="memory.usage_percent")?.value,25);
+  const values=ciscoMeasurements({memory:"Processor Pool Total: 1000 Used: 250 Free: 750"});
+  assert.equal(values.find(v=>v.metricKey==="memory.usage_percent")?.value,25);
+  assert.equal(values.find(v=>v.metricKey==="memory.total_bytes")?.value,1000);
+  assert.equal(values.find(v=>v.metricKey==="memory.used_bytes")?.value,250);
   assert.equal(ciscoMeasurements({memory:"% Invalid input"}).length,0);
 });

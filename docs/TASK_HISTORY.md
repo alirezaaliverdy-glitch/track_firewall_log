@@ -1981,3 +1981,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Excluded proven application-owned events from account/vendor detection and account activity, made rolling counts idempotent, retained newest evidence IDs, and added audited auto-resolution only when every referenced event is application-owned. After local deployment and a fresh collection, both false findings resolved and no matching active finding remained.
 - Removed the fabricated empty Cisco `Datastore` row, localized real ESXi datastore labels, made the sensor denominator dynamic, and added a Persian explanation when storage telemetry is unsupported. Moved concrete finding remediation before raw logs and strengthened account-specific containment and verification guidance.
 - Production API/web builds and focused tests passed. Rebuilt local API and web with the scoped scripts; both are healthy and routed readiness/dashboard checks return 200. No migration, vendor write, push or production rollout was performed.
+
+## 2026-10-10 - Add real resource capacities to fleet-health cards
+
+- Added persisted companion metrics for CPU core count and RAM/disk/datastore used/total capacity across Linux, MikroTik, ESXi and the Cisco processor-memory pool. Capacity is paired with the exact percent collection and matching storage label; missing vendor evidence remains unavailable.
+- Updated Persian/English cards to show current CPU load with reported core capacity and `used of total` memory/storage in readable units. Rolling API/web compatibility is guarded and unsupported storage remains omitted rather than shown as an empty English Datastore row.
+- Production API/web builds, 12 focused tests, the isolated dashboard-contract subtest, UTF-8 and locale checks passed. A pre-existing unrelated Asset Detail placement assertion in the broader chart test remains stale.
+- Rebuilt local API then web with the project scripts. Both containers are healthy, routed readiness/dashboard return HTTP 200, and sanitized live checks confirmed the supported capacity fields reach fleet projection. No migration, device write, push or production deployment occurred.

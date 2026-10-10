@@ -4,7 +4,7 @@ import { Cpu, HardDrive, MemoryStick } from "lucide-react";
 import { API_BASE_URL } from "@/config/frontendEnv";
 import "./FleetHealthPanel.css";
 
-type Row = { metricKey:string; value:number|null; unit:string; measuredAt:string|null; fresh:boolean };
+type Row = { metricKey:string; value:number|null; unit:string; measuredAt:string|null; fresh:boolean; usedValue?:number|null; totalValue?:number|null; quantityUnit?:"bytes"|"cores"|null; seriesLabel?:string|null };
 type Device = { id:string; name:string; vendor:string; host:string; connection:string; checkedAt:string|null; collecting:boolean; collectionError?:string|null; score:number|null; rows:Row[] };
 type Fleet = { devices:Device[]; total:number; pageSize:number };
 const recent = (at:string|null) => !!at && Date.now()-Date.parse(at)<=300_000 && Date.parse(at)<=Date.now()+30_000;
@@ -25,6 +25,20 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
     return()=>{disposed=true;controller.abort();window.clearInterval(interval);document.removeEventListener("visibilitychange",visible);};
   },[page]);
   const date=(at:string|null)=>at?new Date(at).toLocaleString(locale,{dateStyle:"short",timeStyle:"short"}):t("ثبت نشده","Not recorded");
+  const bytes=(value:number)=>{
+    const units=isFa?["بایت","کیلوبایت","مگابایت","گیگابایت","ترابایت"]:["B","KiB","MiB","GiB","TiB"];
+    const power=Math.min(units.length-1,Math.max(0,Math.floor(Math.log(Math.max(value,1))/Math.log(1024))));
+    return `${(value/1024**power).toLocaleString(locale,{maximumFractionDigits:1})} ${units[power]}`;
+  };
+  const capacity=(row:Row|undefined)=>{
+    if (!row || row.value===null) return null;
+    if (row.metricKey==="cpu.usage_percent") return row.totalValue==null
+      ? t("تعداد هسته توسط تجهیز گزارش نشده","Core count is not reported by this device")
+      : t(`ظرفیت: ${row.totalValue.toLocaleString(locale)} هسته · بار فعلی: ${row.value.toLocaleString(locale,{maximumFractionDigits:1})}٪`,`Capacity: ${row.totalValue.toLocaleString(locale)} cores · current load: ${row.value.toLocaleString(locale,{maximumFractionDigits:1})}%`);
+    if (row.quantityUnit==="bytes" && row.usedValue!=null && row.totalValue!=null)
+      return t(`مصرف: ${bytes(row.usedValue)} از ${bytes(row.totalValue)}`,`Used: ${bytes(row.usedValue)} of ${bytes(row.totalValue)}`);
+    return t("حجم کل و مصرف‌شده توسط تجهیز گزارش نشده","Total and used capacity are not reported by this device");
+  };
   return <section className="command-linux-section fleet-health" aria-busy={busy}>
     <header className="fleet-heading"><div><span className="fleet-live-indicator"><i/>{t("وضعیت تجهیزات","Device status")}</span><h2>{t("سلامت دارایی‌ها","Asset health")}</h2><p>{t("CPU، حافظه و فضای ذخیره‌سازیِ اندازه‌گیری‌شده","Measured CPU, memory and storage")}</p></div></header>
     {error&&<p role="alert">{t("تازه‌سازی ناموفق؛ اطلاعات ممکن است قدیمی باشد.","Refresh failed; data may be outdated.")}</p>}
@@ -51,7 +65,8 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
           <div className="fleet-summary-dial" style={{"--fleet-health-angle":`${(score??0)*3.6}deg`,"--health-color":color} as CSSProperties} aria-label={t("امتیاز سلامت منابع","Resource health score")}><div><span>{t("سلامت منابع","Resource health")}</span><strong>{score===null?"—":score.toLocaleString(locale)}<small>/ {Number(100).toLocaleString(locale)}</small></strong><em>{score===null?t("منتظر دادهٔ معتبر","Awaiting fresh data"):t(`${coverage.toLocaleString(locale)} از ${rows.length.toLocaleString(locale)} سنسور به‌روز`,`${coverage} of ${rows.length} sensors current`)}</em></div></div>
           <dl className="fleet-summary-resources">{rows.map(({label,row,icon:Icon,color:metricColor})=>{
             const valid=current(row),measured=row?.value!=null;
-            return <div key={label} style={{"--metric-color":metricColor} as CSSProperties}><dt><span><Icon size={15}/>{label}</span><strong>{measured?`${row.value!.toLocaleString(locale,{maximumFractionDigits:1})}%`:"—"}</strong></dt><dd><i style={{width:valid?`${Math.max(0,Math.min(100,row!.value!))}%`:"0%"}}/></dd><small>{!measured?t("سنسور در دسترس نیست","Sensor unavailable"):valid?t("به‌روز","Current"):t("آخرین مقدار؛ قدیمی / تأییدنشده","Last value; stale / unverified")}</small></div>;
+            const detail=capacity(row);
+            return <div key={label} style={{"--metric-color":metricColor} as CSSProperties}><dt><span><Icon size={15}/>{label}</span><strong>{measured?`${row.value!.toLocaleString(locale,{maximumFractionDigits:1})}%`:"—"}</strong></dt><dd><i style={{width:valid?`${Math.max(0,Math.min(100,row!.value!))}%`:"0%"}}/></dd>{detail&&<small className="fleet-resource-capacity">{detail}</small>}<small className="fleet-resource-state">{!measured?t("سنسور در دسترس نیست","Sensor unavailable"):valid?t("به‌روز","Current"):t("آخرین مقدار؛ قدیمی / تأییدنشده","Last value; stale / unverified")}</small></div>;
           })}</dl>
         </div>
         {!storage&&connected?<p className="fleet-sensor-note">{t("این تجهیز سنسور ذخیره‌سازی گزارش نمی‌کند؛ فقط داده‌های واقعی نمایش داده شده‌اند.","This device does not report a storage sensor; only measured data is shown.")}</p>:null}

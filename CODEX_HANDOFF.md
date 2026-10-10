@@ -2,6 +2,8 @@
 
 ## هدف فعلی
 
+2026-10-10 fleet resource-capacity completion: Asset Health no longer stops at CPU/RAM/storage percentages. The backend persists and projects only connector-measured capacity evidence from the same collection and series: CPU logical/core count, RAM used/total bytes, disk used/total bytes and ESXi datastore used/total bytes. Linux, MikroTik and ESXi currently expose all supported capacity pairs; Cisco exposes its real processor-memory pool used/total but honestly reports that CPU core count and storage capacity are unavailable. The Persian-first cards show `مصرف ... از ...` for RAM/storage and `ظرفیت ... هسته · بار فعلی ...` for CPU; missing capacity is explicitly reported rather than derived or fabricated. Datastore capacity follows the busiest datastore selected for the percent row. Production backend/frontend builds, 12 focused resource tests, UTF-8 and locale guards passed; the dashboard-contract subtest passed independently. One unrelated pre-existing assertion in the shared asset-chart file still expects charts in the old first-viewport location. Local API/web were rebuilt with the scoped scripts and are healthy; readiness/dashboard are HTTP 200. Sanitized live projection confirmed the new capacity fields for Linux/MikroTik/ESXi and Cisco RAM. No schema migration, vendor mutation, push or production deployment occurred; protected quick-controlled behavior is unchanged.
+
 2026-10-10 application-owned Linux activity and fleet-health correction: Linux SSH commands issued by collection, telemetry, controlled actions, backups, restores and live streams now receive bounded application provenance using device, integration account, exact command fingerprint and execution time. Historical backfill is limited to the fixed read-only collector commands plus the device's configured integration account; there is no username-wide allowlist. Detection and vendor-user activity exclude only proven `applicationOwned` events. Account rolling-window finding counts no longer grow when the same events are evaluated again, newest evidence references are retained, and an account finding auto-resolves only when every referenced event is proven application-owned; an audit entry records that closure. Both local `alireza` false findings were verified from sanitized aggregate evidence and auto-resolved after a successful collector run (active count zero). Fleet health no longer invents a blank Cisco `Datastore` row: unsupported storage is omitted with a Persian explanation, real ESXi datastore labels are bilingual, and the coverage denominator reflects sensors actually shown. Finding remediation is now above raw evidence and the account path gives a concrete review/containment/verification sequence. Final API/web production builds and focused provenance/detection/UI tests passed; local API and web were rebuilt with the scoped scripts, both containers are healthy, and routed readiness/dashboard return HTTP 200. No schema migration, remote device mutation, push or production deployment occurred; protected quick-controlled execution behavior is unchanged.
 
 2026-10-10 production-readiness requirement: every commit that may be pushed to `main` must be treated as an immediate server release because the push pipeline deploys directly to production. Recorded in `AGENTS.md`: avoid local-only assumptions, validate the production Compose/deploy path for affected components, keep migrations additive and compatible with the production role/ownership model, never push without explicit user authorization, and after an authorized push verify CI/deploy completion, server SHA/marker, migrations, all service health, API readiness and the public dashboard before claiming success.
@@ -108,6 +110,9 @@ Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-onl
 
 ## تغییرات انجام‌شده
 
+- Fleet resource samples now retain measured capacity companions: `cpu.total_cores`, `memory.used_bytes`, `memory.total_bytes`, `disk.used_bytes`, `disk.total_bytes`, `datastore.used_bytes` and `datastore.total_bytes`.
+- Projection pairs capacity only with the same collection and disk/datastore series. The dashboard formats bytes in Persian/English readable units and states unsupported capacity explicitly; it does not estimate used CPU cores.
+- Linux, MikroTik, ESXi and Cisco memory collectors were covered with focused regressions. Live sanitized checks confirmed capacity companions are reaching the deployed local projection.
 - آخرین تغییر runtime، منشأ دقیق فرمان‌های Linux برنامه را برای collector، telemetry، action، backup، restore و stream ثبت می‌کند. نام حساب یا IP به‌تنهایی allowlist نیست.
 - backfill تاریخی فقط فرمان‌های ثابت read-only جمع‌آورنده و حساب اتصال همان تجهیز را می‌پذیرد. دو Finding اشتباه `alireza` پس از collection موفق به‌صورت ممیزی‌شده resolved شدند و یافتهٔ متناظر فعال صفر است.
 - count پنجرهٔ تشخیص دیگر با ارزیابی تکراری رشد نمی‌کند؛ جدیدترین evidence referenceها نگه‌داری می‌شوند.
@@ -116,6 +121,8 @@ Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-onl
 
 ## فایل‌های مهم
 
+- `backend/src/monitoring/linux/linux-health.service.ts` و `backend/src/services/vendor-metric-samples.service.ts`: ثبت ظرفیت واقعی منابع.
+- `backend/src/services/fleet-health-projection.ts` و `backend/src/services/fleet-health.service.ts`: pairing امن و قرارداد API کارت‌ها.
 - `AGENTS.md`: قواعد ثابت پروژه و رفتار محافظت‌شده.
 - `backend/src/security/application-command-provenance.ts`: fingerprint و بازهٔ فعالیت SSH خود برنامه.
 - `backend/src/services/event-ingestion.service.ts`: برچسب‌گذاری، backfill و auto-resolve ممیزی‌شده.
@@ -126,12 +133,15 @@ Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-onl
 
 ## کارهای باقی‌مانده
 
-- commit همین task پس از کنترل نهایی Git؛ هیچ `.env` یا secret نباید stage شود.
+- کار runtime این task کامل است؛ فقط push/production rollout با اجازهٔ صریح کاربر انجام می‌شود.
 - push و production rollout انجام نشده‌اند. push فقط با اجازهٔ صریح کاربر و سپس بررسی CI/deploy، SHA/marker، migration، service health، readiness و dashboard عمومی انجام شود.
-- full backend suite در runner موقت این turn معتبر نبود چون source mount و isolated DB کامل نداشت؛ build نهایی و تست‌های مستقیم مرتبط پاس شده‌اند.
+- یک assertion قدیمی و نامرتبط در `asset-highcharts.test.ts` هنوز محل قبلی نمودارهای Asset Detail را انتظار دارد؛ subtest قرارداد Fleet Health جداگانه پاس شده است.
 
 ## دستوراتی که اجرا شده
 
+- build تولیدی backend و frontend، 12 تست متمرکز ظرفیت/projection/vendor، تست مستقل قرارداد dashboard، و guardهای UTF-8/i18n.
+- rebuild لوکال API سپس web با اسکریپت‌های scoped؛ هر دو container healthy و readiness/dashboard برابر HTTP 200.
+- بررسی sanitize‌شدهٔ نمونه‌های زنده و projection فقط برای presence کلیدهای used/total، بدون نام/IP/مقدار تجهیز.
 - build تولیدی backend و frontend در Docker.
 - تست‌های `task60-collector-auth-provenance`، `account-detection-rules` و `task61-application-owned-health-remediation`.
 - rebuild محلی با `scripts/deploy/rebuild-firewall-api.ps1` و `scripts/deploy/rebuild-firewall-web.ps1` و health check.
@@ -140,6 +150,7 @@ Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-onl
 
 ## نکته‌های مهم
 
+- ظرفیت CPU یعنی تعداد هستهٔ گزارش‌شده به‌علاوهٔ درصد بار فعلی؛ «هستهٔ مصرف‌شده» محاسبه نمی‌شود چون تخمینی است. مقدارهای RAM/storage فقط از used/total واقعی همان collection نمایش داده می‌شوند.
 - `ACTION_EXECUTION_MODE=quick_controlled` و `ACTION_ALLOW_LAB_UNRESTRICTED_MANAGEMENT=true` محافظت‌شده‌اند؛ برای template پشتیبانی‌شده در lab یک تأیید کاربر کافی است.
 - `applicationOwned` فقط از provenance دقیق می‌آید. کل حساب اتصال، IP یا vendor را مستثنا نکنید.
 - preview اجرا نیست؛ موفقیت فقط بعد از connector واقعی و `connectorInvoked=true` ثبت شود. PolicyGuard و Audit حذف نشوند.

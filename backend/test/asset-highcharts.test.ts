@@ -54,6 +54,9 @@ test("dashboard retains paged resource summary rings rather than detailed line c
   assert.match(dashboard, /memory.usage_percent/);
   assert.match(dashboard, /disk.usage_percent/);
   assert.match(dashboard, /datastore.usage_percent/);
+  assert.match(dashboard, /مصرف:/);
+  assert.match(dashboard, /ظرفیت:/);
+  assert.match(dashboard, /totalValue/);
   assert.match(dashboard, /device.score:null/);
   assert.doesNotMatch(dashboard, /AssetMiniChart|FleetMiniChart|fleet-device-plots/);
 });

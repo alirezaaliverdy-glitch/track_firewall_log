@@ -1,3 +1,11 @@
+## 2026-10-10 - Show real used and total resource capacity in fleet health
+
+- Asset Health cards now show CPU core capacity with current load, plus measured used/total RAM and disk/datastore capacity. Values come from the same persisted connector collection and matching disk/datastore label; no CPU-core usage or missing capacity is fabricated.
+- Linux persists logical cores, RAM used/total and root-disk used/total. MikroTik persists reported core count, memory and storage pairs. ESXi persists cores, memory and each datastore pair. Cisco persists the measured processor-memory pool pair; unsupported CPU core/storage capacity stays explicitly unavailable.
+- The API contract includes `usedValue`, `totalValue`, `quantityUnit` and the selected series label. The Persian-first UI formats bytes as بایت/کیلوبایت/مگابایت/گیگابایت/ترابایت and remains safe during API/web rolling replacement.
+- Backend/frontend production builds passed. Twelve focused capacity/projection/vendor tests passed, as did the standalone fleet dashboard contract, UTF-8 guard and locale guard. A separate pre-existing Asset Detail location assertion in the shared chart test still fails because that page now keeps resource charts in a disclosure; it is outside this change.
+- Local API and web were rebuilt through the scoped deploy scripts and are healthy; readiness and dashboard return HTTP 200. Sanitized live projection confirmed total/used presence for supported Linux, MikroTik, ESXi and Cisco RAM rows. No migration, device mutation, push or production rollout occurred.
+
 ## 2026-10-10 - Exclude proven application activity and repair fleet-health display
 
 - Linux SSH work performed by collectors, telemetry, controlled actions, backups, restores and live streams is tracked by device, configured integration account, exact command fingerprint and execution window. Only proven application-owned events are excluded; another command or session by the same `alireza` account remains eligible for detection.

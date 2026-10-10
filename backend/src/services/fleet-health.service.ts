@@ -25,7 +25,7 @@ export async function listFleetHealth(ownerId: string, page = 0) {
     prisma.device.findMany({ where, orderBy: { id: "asc" }, skip: page * 12, take: 12,
       select: { id:true,name:true,vendor:true,host:true,status:true,
         statusChecks:{orderBy:{checkedAt:"desc"},take:120,select:{status:true,checkedAt:true}},
-        metricSamples:{where:{metricKey:{in:["cpu.usage_percent","memory.usage_percent","disk.usage_percent","datastore.usage_percent","interfaces.down_count","vpn.active_count","sessions.count"]},timestamp:{gte:new Date(Date.now()-24*3600_000)}},orderBy:{timestamp:"desc"},take:128,select:{metricKey:true,value:true,unit:true,timestamp:true,source:true}}
+        metricSamples:{where:{metricKey:{in:["cpu.usage_percent","cpu.total_cores","memory.usage_percent","memory.used_bytes","memory.total_bytes","disk.usage_percent","disk.used_bytes","disk.total_bytes","datastore.usage_percent","datastore.used_bytes","datastore.total_bytes","interfaces.down_count","vpn.active_count","sessions.count"]},timestamp:{gte:new Date(Date.now()-24*3600_000)}},orderBy:{timestamp:"desc"},take:512,select:{metricKey:true,value:true,unit:true,timestamp:true,source:true,labelsJson:true}}
       } })
   ]);
   const charts = await Promise.all(devices.map(async device => {

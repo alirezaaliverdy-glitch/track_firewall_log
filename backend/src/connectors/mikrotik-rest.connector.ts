@@ -170,6 +170,7 @@ async function discover(device: Device, warnings: DeviceConnectionTestResult["wa
     architecture: String(resource["architecture-name"] ?? "") || undefined,
     uptime: String(resource.uptime ?? "") || undefined,
     cpuLoad: String(resource["cpu-load"] ?? "") || undefined,
+    cpuCount: String(resource["cpu-count"] ?? "") || undefined,
     memoryFree: String(resource["free-memory"] ?? "") || undefined,
     memoryTotal: String(resource["total-memory"] ?? "") || undefined,
     storageFree: String(resource["free-hdd-space"] ?? "") || undefined,

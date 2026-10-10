@@ -307,6 +307,7 @@ function discoveryFrom(results: Record<string, ExecResult>): MikroTikDiscovery {
     architecture: resource["architecture-name"],
     uptime: resource.uptime,
     cpuLoad: resource["cpu-load"],
+    cpuCount: resource["cpu-count"],
     memoryFree: resource["free-memory"],
     memoryTotal: resource["total-memory"],
     storageFree: resource["free-hdd-space"],
