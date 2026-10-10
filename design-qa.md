@@ -19,6 +19,7 @@ The implementation keeps the reference interaction model—editable proposed com
 ## Interaction and runtime checks
 
 - Tab switching: passed
+- Action detail entry point: passed; prominent “ویرایش اسکریپت قبل از اجرا” link is visible and opens the editor in a new tab
 - Text editing: passed
 - Preview request and ready state: passed
 - Final action enablement after preview: passed

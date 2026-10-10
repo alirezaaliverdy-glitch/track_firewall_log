@@ -63,3 +63,9 @@ test("script editor creates a derived preview and never sends edited text to a r
   assert.match(serviceSource, /rawExecution:\s*false/);
   assert.doesNotMatch(serviceSource, /exec\(|spawn\(|ssh2|client\.exec/);
 });
+
+test("script editor can open an empty draft before a custom command preview exists", () => {
+  assert.doesNotMatch(serviceSource, /SCRIPT_PREVIEW_UNAVAILABLE/);
+  assert.match(serviceSource, /script:\s*commands\.join\("\\n"\)/);
+  assert.match(serviceSource, /verificationScript:\s*verificationCommands\.join\("\\n"\)/);
+});

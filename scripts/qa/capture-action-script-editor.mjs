@@ -14,6 +14,29 @@ await page.setRequestInterception(true);
 const consoleErrors = [];
 const pageErrors = [];
 const apiRequests = [];
+const actionCenterItem = {
+  id: "demo",
+  source: "ai",
+  requestedBy: "qa-admin",
+  deviceId: "linux-114",
+  actionType: "custom_vendor_action",
+  status: "dry_run_ready",
+  lifecycleState: "ready_for_confirmation",
+  riskLevel: "medium",
+  createdAt: "2026-10-10T09:00:00.000Z",
+  updatedAt: "2026-10-10T09:00:00.000Z",
+  device: { id: "linux-114", name: "linux-114", host: "192.0.2.114", vendor: "Linux", type: "linux_edge", protocol: "ssh", credentialConfigured: true },
+  support: { state: "verified", execution: "connector", executable: true, reason: null },
+  controls: { canReview: true, canEditParameters: true, canPreview: false, canConfirm: true, canExecute: true, canRetry: false, canCancel: true, canViewEvidence: true, canViewConnectorResult: false, relatedDevicePath: "/assets/devices/linux-114" },
+  parametersJson: { metadata: { executionTemplateRef: "linux.custom-command.v1", connectorType: "ssh" } },
+  validationJson: { valid: true },
+  commandPreview: { plannedCommands: ["systemctl is-active nginx"] },
+  approval: {},
+  connectorResult: {},
+  rollback: {},
+  evidence: { connectorInvoked: false, integrityError: null, approvals: [] },
+  audit: [],
+};
 page.on("console", (message) => {
   if (message.type() === "error") consoleErrors.push(message.text());
 });
@@ -33,6 +56,30 @@ page.on("request", (request) => {
   }
   if (url.includes("/auth/csrf")) {
     void json({ ok: true, csrfToken: "qa-csrf-token" });
+    return;
+  }
+  if (url.includes("/action-center/demo")) {
+    void json(actionCenterItem);
+    return;
+  }
+  if (url.includes("/action-center?")) {
+    void json({ items: [actionCenterItem], total: 1, offset: 0, limit: 10, summary: { ready_for_confirmation: 1 }, generatedAt: "2026-10-10T09:00:00.000Z" });
+    return;
+  }
+  if (url.includes("/commands/catalog/search")) {
+    void json({ items: [], total: 0 });
+    return;
+  }
+  if (url.includes("/devices/linux-114/verification")) {
+    void json({ deviceId: "linux-114", status: "verified", verified: true, connected: true, history: [], checkedAt: "2026-10-10T09:00:00.000Z" });
+    return;
+  }
+  if (url.endsWith("/devices")) {
+    void json({ devices: [actionCenterItem.device] });
+    return;
+  }
+  if (url.endsWith("/credentials")) {
+    void json({ credentials: [] });
     return;
   }
   if (url.includes("/actions/demo/script-editor/preview") && request.method() === "POST") {
@@ -82,6 +129,14 @@ page.on("request", (request) => {
 });
 
 try {
+  await page.goto("http://host.docker.internal/firewall/actions/demo", { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForSelector(".script-editor-launch", { visible: true, timeout: 30_000 });
+  const actionLink = await page.$eval(".script-editor-launch", (element) => ({
+    text: element.textContent?.trim() ?? null,
+    href: element instanceof HTMLAnchorElement ? element.getAttribute("href") : null,
+    target: element instanceof HTMLAnchorElement ? element.target : null,
+  }));
+
   await page.goto("http://host.docker.internal/firewall/actions/demo/script-editor", { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.waitForSelector(".script-editor-page", { timeout: 30_000 });
   await new Promise((resolve) => setTimeout(resolve, 2_000));
@@ -107,9 +162,10 @@ try {
   });
 
   const documentState = await page.evaluate(() => ({ url: location.href, title: document.title, bodyText: document.body.innerText.slice(0, 500), bodyHtml: document.body.innerHTML.slice(0, 500), editorCount: document.querySelectorAll(".script-editor-page").length }));
-  await writeFile("/tmp/action-script-editor-result.json", JSON.stringify({ ok: true, screenshot: "/tmp/action-script-editor.png", consoleErrors, pageErrors, apiRequests, interaction, documentState }));
+  await writeFile("/tmp/action-script-editor-result.json", JSON.stringify({ ok: true, screenshot: "/tmp/action-script-editor.png", consoleErrors, pageErrors, apiRequests, actionLink, interaction, documentState }));
 } catch (error) {
-  await writeFile("/tmp/action-script-editor-result.json", JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error), consoleErrors, pageErrors, apiRequests }));
+  const failureState = await page.evaluate(() => ({ bodyText: document.body.innerText.slice(0, 1200), bodyHtml: document.body.innerHTML.slice(0, 1200) })).catch(() => null);
+  await writeFile("/tmp/action-script-editor-result.json", JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error), consoleErrors, pageErrors, apiRequests, failureState }));
   process.exitCode = 1;
 } finally {
   await browser.close();

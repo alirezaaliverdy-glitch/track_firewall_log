@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import { Activity, Bot, ChevronDown, MessageCircle, ScanSearch, Send, Server, ShieldAlert, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Activity, Bot, ChevronDown, Code2, ExternalLink, MessageCircle, ScanSearch, Send, Server, ShieldAlert, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import {
   getAiProviderStatus,
   getSecuritySummary,
@@ -660,7 +660,19 @@ export default function AiSecurityAssistantPanel() {
               </div>
               <p className="mt-2 text-xs text-slate-300">{executionState.nextStep}</p>
               {executionState.lifecycle && <p className="mt-2 text-[11px] text-slate-500">ActionPlan {executionState.lifecycle.actionPlanId} · revision {executionState.lifecycle.planRevision} · {executionState.lifecycle.planState} · {executionState.executionMode}</p>}
-              {createdPlanId && <button type="button" onClick={() => executionState?.missing.length ? navigate(`/actions/${encodeURIComponent(createdPlanId)}/configure`) : reviewInActionCenter(createdPlanId)} className="mt-3 rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">{executionState?.missing.length ? "تکمیل پارامترها در مرکز عملیات" : "رفتن به مرکز عملیات"}</button>}
+              {createdPlanId && <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  to={`/actions/${encodeURIComponent(createdPlanId)}/script-editor`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-400/40 bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-100 transition hover:bg-violet-500/25"
+                >
+                  <Code2 className="h-4 w-4" aria-hidden="true" />
+                  {isFa ? "ویرایش اسکریپت" : "Edit script"}
+                  <ExternalLink className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+                </Link>
+                <button type="button" onClick={() => executionState?.missing.length ? navigate(`/actions/${encodeURIComponent(createdPlanId)}/configure`) : reviewInActionCenter(createdPlanId)} className="rounded-md bg-cyan-700 px-3 py-2 text-xs font-semibold text-white">{executionState?.missing.length ? "تکمیل پارامترها در مرکز عملیات" : "رفتن به مرکز عملیات"}</button>
+              </div>}
               {!createdPlanId && executionState.missing.length > 0 && <button type="button" onClick={() => setInput(executionState.nextStep)} className="mt-3 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white">تکمیل اطلاعات</button>}
             </div>
           )}

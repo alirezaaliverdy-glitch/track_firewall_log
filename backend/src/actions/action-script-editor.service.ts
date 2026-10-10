@@ -123,10 +123,7 @@ export async function getEditableActionScript(id: string) {
     commands = extracted.execution;
     verificationCommands = extracted.verification;
   }
-  if (!commands.length) {
-    throw new ActionScriptEditorError("SCRIPT_PREVIEW_UNAVAILABLE", "No editable command preview is available for this ActionPlan.", 409);
-  }
-  if (!verificationCommands.length) verificationCommands = [commands[commands.length - 1]];
+  if (!verificationCommands.length && commands.length) verificationCommands = [commands[commands.length - 1]];
 
   return {
     sourceActionPlanId: sourcePlan.id,
