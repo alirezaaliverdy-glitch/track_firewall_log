@@ -395,6 +395,52 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
     await audit(updated, verification.ok ? "post_execution_verification_passed" : "post_execution_verification_failed", verification.ok ? "Post-execution evidence verified." : "Post-execution evidence failed verification.", verification);
     await audit(updated, "execution_result_state_recorded", "Execution result state and verification evidence were persisted.", { resultState, verificationEvidenceCount, approvalBinding: resultPayload.approvalBinding });
     await audit(updated, verification.ok ? "execution_succeeded" : "execution_failed", verification.ok ? "Connector execution succeeded and evidence verified." : "Connector execution evidence failed verification.", resultPayload);
+    if (verification.ok) {
+      const findingId = String(asObject(plan.parametersJson).findingId ?? "").trim();
+      const findingRemediationActions = new Set<ActionType>([
+        ActionType.linux_block_ip,
+        ActionType.mikrotik_block_ip,
+        ActionType.fortigate_create_deny_policy
+      ]);
+      if (findingId && findingRemediationActions.has(plan.actionType)) {
+        try {
+          const resolved = await prisma.finding.updateMany({
+            where: { id: findingId, deviceId: device.id, status: { in: ["active", "open", "new", "acknowledged", "investigating"] } },
+            data: { status: "resolved" }
+          });
+          if (resolved.count) {
+            await prisma.auditLog.create({ data: {
+              deviceId: device.id,
+              actor: plan.requestedBy ?? "system",
+              action: "security.finding.remediated",
+              targetType: "finding",
+              targetId: findingId,
+              dryRun: false,
+              approvalStatus: "approved",
+              metadata: { actionPlanId: plan.id, actionType: plan.actionType, connector: connector.name, reason: "verified_connector_remediation" }
+            } });
+            await audit(updated, "finding_remediation_verified", "The linked finding was resolved after connector-backed remediation passed verification.", { findingId }).catch(() => undefined);
+          }
+        } catch (findingError) {
+          await audit(updated, "finding_remediation_status_update_failed", "The action succeeded, but the linked finding status could not be updated.", {
+            findingId,
+            message: findingError instanceof Error ? findingError.message : "Finding status update failed"
+          }).catch(() => undefined);
+        }
+      }
+      try {
+        const { refreshFleetHealthDevice } = await import("../../services/fleet-health.service.js");
+        const refresh = await refreshFleetHealthDevice(device.id);
+        await audit(updated, refresh.collected ? "post_execution_health_refreshed" : "post_execution_health_refresh_failed", refresh.collected
+          ? "Fresh read-only device evidence was collected after verified execution."
+          : "Verified execution completed, but the follow-up health collection did not complete.", refresh).catch(() => undefined);
+      } catch (refreshError) {
+        await audit(updated, "post_execution_health_refresh_failed", "Verified execution completed, but the follow-up health collection failed.", {
+          code: "POST_EXECUTION_HEALTH_REFRESH_FAILED",
+          message: refreshError instanceof Error ? refreshError.message : "Follow-up collection failed"
+        }).catch(() => undefined);
+      }
+    }
     return updated;
   } catch (error) {
     const structural = connectorErrorLike(error);

@@ -15,7 +15,7 @@ let timer: NodeJS.Timeout | undefined;
 let cycle: Promise<void> | undefined;
 let cursor: string | undefined;
 const attempts = new Map<string, number>();
-const inFlight = new Set<string>();
+const inFlight = new Map<string, Promise<void>>();
 const collectionErrors = new Map<string,string>();
 
 export async function listFleetHealth(ownerId: string, page = 0) {
@@ -38,14 +38,27 @@ export async function listFleetHealth(ownerId: string, page = 0) {
   return { total, page, pageSize:12, collectionIntervalSeconds:PERIOD_MS/1000, generatedAt:new Date().toISOString(), devices: devices.map(({metricSamples,statusChecks,...device},index) => ({...device,...projectFleetResources(metricSamples.filter((sample) => matchesDeviceMetricSource(device.vendor, sample.source))),charts:charts[index],collectionError:collectionErrors.get(device.id)??null, connection:statusChecks[0]?.status ?? device.status, checkedAt:statusChecks[0]?.checkedAt ?? null, collecting:inFlight.has(device.id)})) };
 }
 
-async function collect(id: string) {
-  if (inFlight.has(id) || Date.now() - (attempts.get(id) ?? 0) < PERIOD_MS) return;
-  inFlight.add(id); attempts.set(id,Date.now());
+async function collect(id: string, force = false) {
+  const running = inFlight.get(id);
+  if (running) {
+    await running;
+    if (!force) return;
+  }
+  if (!force && Date.now() - (attempts.get(id) ?? 0) < PERIOD_MS) return;
+  attempts.set(id,Date.now());
   collectionErrors.delete(id);
-  try {
+  const task = (async () => { try {
     const device = await prisma.device.findFirst({where:{id,deletedAt:null,company:{deletedAt:null}}});
-    if (!device || (device.status === "offline" && !/esxi/i.test(device.vendor))) return;
-    if (/linux/i.test(device.vendor)) { await refreshLinuxHealth(id); return; }
+    if (!device) { collectionErrors.set(id, "DEVICE_NOT_FOUND"); return; }
+    if (!force && device.status === "offline" && !/esxi/i.test(device.vendor)) return;
+    if (/linux/i.test(device.vendor)) {
+      await refreshLinuxHealth(id);
+      if (force) {
+        const { collectLinuxSecuritySnapshot } = await import("../telemetry/linux/linux-telemetry.service.js");
+        await collectLinuxSecuritySnapshot(id);
+      }
+      return;
+    }
     if (/cisco/i.test(device.vendor)) {
       const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device,["cpu","memory","interfacesDetailed"]);
       if (result.connectorInvoked) {
@@ -94,8 +107,15 @@ async function collect(id: string) {
     } catch {
       // A secondary telemetry failure must not mark the management connection offline.
     }
-    inFlight.delete(id);
-  }
+  } })().finally(() => inFlight.delete(id));
+  inFlight.set(id, task);
+  return task;
+}
+
+/** Re-collect trusted read-only evidence after a verified device action. */
+export async function refreshFleetHealthDevice(deviceId: string) {
+  await collect(deviceId, true);
+  return { deviceId, collected: !collectionErrors.has(deviceId), errorCode: collectionErrors.get(deviceId) ?? null };
 }
 
 async function tick() {

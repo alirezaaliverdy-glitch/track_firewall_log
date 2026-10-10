@@ -9,6 +9,10 @@ export type PlatformAsset = {
   managementIp: string | null;
   managedState: string;
   healthState: string;
+  healthScore?: number | null;
+  healthCoverage?: "measured" | "partial" | "none";
+  healthReasons?: string[];
+  healthObservedAt?: string | null;
   lastSeenAt: string | null;
   site?: { name: string } | null;
   vendor?: { name: string } | null;

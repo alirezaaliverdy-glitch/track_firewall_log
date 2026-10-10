@@ -6,6 +6,7 @@ import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionE
 import { ACCOUNT_DETECTION_RULES, accountRuleActor, eventMatchesAccountRule } from "../security/account-detection-rule-library.js";
 import { isApplicationOwnedSecurityEvent, isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 import { invalidateVendorUserActivityCache } from "../services/vendor-user-activity.service.js";
+import { assessDeviceHealth } from "../services/device-health-assessment.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
 const MAX_IMPORT_ASSETS = 100;
@@ -397,25 +398,100 @@ export async function applyAssetImport(input: ImportInput) {
 
 export async function listAssets(view: "active" | "archived" | "all" = "active", ownerId?: string, companyId?: string) {
   await syncExistingDevicesToAssets(ownerId);
+  const telemetrySince = new Date(Date.now() - 15 * 60_000);
+  const openFindingWhere = {
+    severity: { in: ["critical", "high"] },
+    status: { notIn: ["resolved", "closed", "false_positive", "suppressed", "accepted_risk"] }
+  };
   const scope = { ...(ownerId ? { company: { ownerId } } : {}), ...(companyId ? { companyId } : {}) };
   const where = view === "all"
     ? scope
     : view === "archived"
       ? { ...scope, OR: [{ managedState: "archived" }, { deletedAt: { not: null } }] }
       : { ...scope, managedState: { not: "archived" }, deletedAt: null, company: ownerId ? { ownerId, deletedAt: null } : undefined };
-  const [assets, total, active, archived, byHealth, byManaged] = await Promise.all([
+  const [assetRows, total, active, archived, byManaged] = await Promise.all([
     prisma.asset.findMany({
       where,
       orderBy: [{ healthState: "asc" }, { name: "asc" }],
       take: 100,
-      include: { company: { select: { id: true, name: true, code: true } }, site: true, vendor: true, platform: true, device: { select: { id: true, name: true, type: true, host: true } }, ipAddresses: { take: 5 } }
+      include: {
+        company: { select: { id: true, name: true, code: true } },
+        site: true,
+        vendor: true,
+        platform: true,
+        device: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            host: true,
+            statusChecks: { orderBy: { checkedAt: "desc" }, take: 1, select: { status: true, checkedAt: true } },
+            collectionRuns: { orderBy: { startedAt: "desc" }, take: 1, select: { status: true, startedAt: true, completedAt: true } },
+            healthSnapshots: { orderBy: { collectedAt: "desc" }, take: 1, select: { state: true, score: true, collectedAt: true } },
+            metricSamples: {
+              where: { timestamp: { gte: telemetrySince }, metricKey: { in: ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent", "datastore.usage_percent"] } },
+              orderBy: { timestamp: "desc" },
+              take: 32,
+              select: { metricKey: true, value: true, timestamp: true }
+            },
+            findings: { where: openFindingWhere, orderBy: { lastSeen: "desc" }, take: 20, select: { id: true, severity: true, status: true } }
+          }
+        },
+        ipAddresses: { take: 5 },
+        collectionRuns: { orderBy: { startedAt: "desc" }, take: 1, select: { status: true, startedAt: true, completedAt: true } },
+        healthSnapshots: { orderBy: { collectedAt: "desc" }, take: 1, select: { state: true, score: true, collectedAt: true } },
+        metricSamples: {
+          where: { timestamp: { gte: telemetrySince }, metricKey: { in: ["cpu.usage_percent", "memory.usage_percent", "disk.usage_percent", "datastore.usage_percent"] } },
+          orderBy: { timestamp: "desc" },
+          take: 32,
+          select: { metricKey: true, value: true, timestamp: true }
+        },
+        findings: { where: openFindingWhere, orderBy: { lastSeen: "desc" }, take: 20, select: { id: true, severity: true, status: true } }
+      }
     }),
     prisma.asset.count({ where }),
     prisma.asset.count({ where: { ...scope, managedState: { not: "archived" }, deletedAt: null } }),
     prisma.asset.count({ where: { ...scope, OR: [{ managedState: "archived" }, { deletedAt: { not: null } }] } }),
-    prisma.asset.groupBy({ by: ["healthState"], where, _count: { _all: true } }),
     prisma.asset.groupBy({ by: ["managedState"], where, _count: { _all: true } })
   ]);
+  const stateRank: Record<string, number> = { critical: 0, warning: 1, unknown: 2, healthy: 3 };
+  const assets = assetRows.map((row) => {
+    const { collectionRuns, healthSnapshots, metricSamples, findings, device, ...asset } = row;
+    if (!device || asset.managedState === "archived") {
+      return { ...asset, device: device ? { id: device.id, name: device.name, type: device.type, host: device.host } : null };
+    }
+    const newest = <T,>(values: T[], date: (value: T) => Date | null | undefined) => values
+      .filter((value) => Boolean(date(value)))
+      .sort((left, right) => (date(right)?.getTime() ?? 0) - (date(left)?.getTime() ?? 0))[0] ?? null;
+    const collection = newest([...device.collectionRuns, ...collectionRuns], (item) => item.completedAt ?? item.startedAt);
+    const snapshot = newest([...device.healthSnapshots, ...healthSnapshots], (item) => item.collectedAt);
+    const mergedFindings = [...new Map([...device.findings, ...findings].map((item) => [item.id, item])).values()];
+    const assessment = assessDeviceHealth({
+      status: device.statusChecks[0] ?? null,
+      collection,
+      snapshot,
+      metrics: [...device.metricSamples, ...metricSamples],
+      findings: mergedFindings
+    });
+    const observedAt = newest([
+      device.statusChecks[0]?.checkedAt,
+      collection?.completedAt ?? collection?.startedAt,
+      snapshot?.collectedAt,
+      ...device.metricSamples.map((item) => item.timestamp),
+      ...metricSamples.map((item) => item.timestamp)
+    ].filter((item): item is Date => Boolean(item)), (item) => item);
+    return {
+      ...asset,
+      device: { id: device.id, name: device.name, type: device.type, host: device.host },
+      healthState: assessment.state,
+      healthScore: assessment.score,
+      healthCoverage: assessment.coverage,
+      healthReasons: assessment.reasons,
+      healthObservedAt: observedAt
+    };
+  }).sort((left, right) => (stateRank[left.healthState] ?? 2) - (stateRank[right.healthState] ?? 2) || left.name.localeCompare(right.name));
+  const byHealth = [...assets.reduce((counts, asset) => counts.set(asset.healthState, (counts.get(asset.healthState) ?? 0) + 1), new Map<string, number>())]
+    .map(([healthState, count]) => ({ healthState, _count: { _all: count } }));
   return { assets, summary: { total, active, archived, view, byHealth, byManaged } };
 }
 

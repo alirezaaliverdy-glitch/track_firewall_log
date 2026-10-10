@@ -47,7 +47,7 @@ import "./DashboardCommandCenter.css";
 
 import { FleetHealthPanel } from "./FleetHealthPanel";
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
-type AttentionItem = { id: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string };
+type AttentionItem = { id: string; deviceKey: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string; observedAt: string | null; priority: number };
 
 const EMPTY_EVENT_SUMMARY: EventsSummary = {
   totalEvents: 0,
@@ -148,7 +148,7 @@ function localizedActionTitle(item: DashboardActionItem, isFa: boolean) {
 }
 
 function isOpenFinding(finding: SecurityFinding) {
-  return OPEN_FINDING_STATUSES.has(finding.status) || !["resolved", "false_positive", "accepted_risk", "suppressed"].includes(finding.status);
+  return OPEN_FINDING_STATUSES.has(finding.status) || !["resolved", "closed", "false_positive", "accepted_risk", "suppressed"].includes(finding.status);
 }
 
 function vendorName(asset: PlatformAsset) {
@@ -288,10 +288,11 @@ export default function DashboardPage() {
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
     const linuxIds = new Set<string>();
+    const actionableFindings = openFindings.filter((finding) => ["critical", "high"].includes(finding.severity));
     const latestFindingForDevice = (deviceId: string | undefined) => deviceId
-      ? [...openFindings]
+      ? [...actionableFindings]
         .filter((finding) => finding.device?.id === deviceId)
-        .sort((left, right) => new Date(right.lastSeen).getTime() - new Date(left.lastSeen).getTime())[0]
+        .sort((left, right) => (left.severity === right.severity ? new Date(right.lastSeen).getTime() - new Date(left.lastSeen).getTime() : left.severity === "critical" ? -1 : 1))[0]
       : undefined;
     const reviewRoute = (deviceId: string | undefined, fallback: string, useFinding = true) => {
       const finding = useFinding ? latestFindingForDevice(deviceId) : undefined;
@@ -308,6 +309,7 @@ export default function DashboardPage() {
       const review = reviewRoute(device.id, `/assets/devices/${device.id}/monitoring`, useFinding);
       items.push({
         id: `linux-${device.id}`,
+        deviceKey: device.id,
         title: device.name,
         reason: finding
           ? `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`
@@ -317,6 +319,8 @@ export default function DashboardPage() {
         tone: stateTone(state),
         actionFa: review.actionFa,
         actionEn: review.actionEn,
+        observedAt: device.diagnosis?.observedAt ?? device.latestHealth?.collectedAt ?? null,
+        priority: finding ? (finding.severity === "critical" ? 0 : 2) : stateTone(state) === "danger" ? 3 : stateTone(state) === "warning" ? 4 : 5,
       });
     }
     for (const asset of assets.assets) {
@@ -326,6 +330,7 @@ export default function DashboardPage() {
       const review = reviewRoute(asset.device?.id, asset.device?.id ? `/assets/devices/${asset.device.id}/monitoring` : "/assets", Boolean(finding));
       items.push({
         id: `asset-${asset.id}`,
+        deviceKey: asset.device?.id ?? `asset:${asset.id}`,
         title: asset.name,
         reason: finding
           ? `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`
@@ -339,6 +344,8 @@ export default function DashboardPage() {
         tone: stateTone(state),
         actionFa: review.actionFa,
         actionEn: review.actionEn,
+        observedAt: asset.healthObservedAt ?? asset.lastSeenAt ?? null,
+        priority: finding ? (finding.severity === "critical" ? 0 : 2) : stateTone(state) === "danger" ? 3 : stateTone(state) === "warning" ? 4 : 5,
       });
     }
     for (const collector of monitoring?.collectors.devices ?? []) {
@@ -346,6 +353,7 @@ export default function DashboardPage() {
       const review = reviewRoute(collector.deviceId, `/assets/devices/${collector.deviceId}/monitoring`, false);
       items.push({
         id: `collector-${collector.deviceId}`,
+        deviceKey: collector.deviceId,
         title: collector.deviceName,
         reason: collectorAttentionReason(collector.lastErrorCode, isFa),
         detail: copy(isFa, `${number(collector.consecutiveFailures, language)} خطای متوالی`, `${number(collector.consecutiveFailures, language)} consecutive failures`),
@@ -353,9 +361,36 @@ export default function DashboardPage() {
         tone: "danger",
         actionFa: review.actionFa,
         actionEn: review.actionEn,
+        observedAt: collector.lastErrorAt,
+        priority: 1,
       });
     }
-    return items.slice(0, 8);
+    for (const finding of actionableFindings) {
+      const deviceId = finding.device?.id ?? finding.deviceId;
+      items.push({
+        id: `finding-${finding.id}`,
+        deviceKey: deviceId || `finding:${finding.id}`,
+        title: finding.device?.name ?? finding.asset?.name ?? copy(isFa, "تجهیز نامشخص", "Unknown device"),
+        reason: `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`,
+        detail: `${finding.vendor || copy(isFa, "وندور نامشخص", "Unknown vendor")} · ${shortDate(finding.lastSeen, language, "—")}`,
+        route: `/security/findings/${finding.id}`,
+        tone: finding.severity === "critical" ? "danger" : "warning",
+        actionFa: "مشاهده یافته و راهکار",
+        actionEn: "Open finding and fix",
+        observedAt: finding.lastSeen,
+        priority: finding.severity === "critical" ? 0 : 2,
+      });
+    }
+    const selected = new Map<string, AttentionItem>();
+    for (const item of items) {
+      const current = selected.get(item.deviceKey);
+      const itemTime = item.observedAt ? new Date(item.observedAt).getTime() : 0;
+      const currentTime = current?.observedAt ? new Date(current.observedAt).getTime() : 0;
+      if (!current || item.priority < current.priority || (item.priority === current.priority && itemTime > currentTime)) selected.set(item.deviceKey, item);
+    }
+    return [...selected.values()]
+      .sort((left, right) => left.priority - right.priority || (new Date(right.observedAt ?? 0).getTime() - new Date(left.observedAt ?? 0).getTime()))
+      .slice(0, 8);
   }, [assets.assets, isFa, language, linux, monitoring, openFindings]);
 
   const dailyChecks = [

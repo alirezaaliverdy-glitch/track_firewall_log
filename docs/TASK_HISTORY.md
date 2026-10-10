@@ -1988,3 +1988,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Updated Persian/English cards to show current CPU load with reported core capacity and `used of total` memory/storage in readable units. Rolling API/web compatibility is guarded and unsupported storage remains omitted rather than shown as an empty English Datastore row.
 - Production API/web builds, 12 focused tests, the isolated dashboard-contract subtest, UTF-8 and locale checks passed. A pre-existing unrelated Asset Detail placement assertion in the broader chart test remains stale.
 - Rebuilt local API then web with the project scripts. Both containers are healthy, routed readiness/dashboard return HTTP 200, and sanitized live checks confirmed the supported capacity fields reach fleet projection. No migration, device write, push or production deployment occurred.
+
+## 2026-10-10 - Make attention live and verify real fixes
+
+- Replaced connectivity-only asset health in the live list with a fresh evidence projection covering connection, collection, snapshots, resource pressure and open high/critical Findings for all managed vendors.
+- Added visible-page Finding polling, severity/time ordering and per-device deduplication so new issues appear quickly and resolved/closed ones disappear without reloading the dashboard.
+- Added immediate read-only health recollection after a connector-backed action passes verification. Linux refreshes deterministic security posture too; verified IP-block/deny-policy remediation resolves only its linked Finding and records audit provenance, while new evidence can reopen it.
+- Production API/web builds, 26 focused regressions and the 227-item command-catalog validation passed. Rebuilt the local API/web through scoped scripts; both are healthy and HTTP checks return 200. No schema migration, test vendor write, push or production deployment occurred.
