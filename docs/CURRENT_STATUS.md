@@ -1,3 +1,8 @@
+## 2026-10-10 - Treat main pushes as immediate production releases
+
+- The operator confirmed that a push to `main` deploys directly to the server. Project workflow now requires production-ready changes: no local-only assumptions, affected production Compose/deploy validation, and additive migrations compatible with the production role and table/type ownership.
+- Push remains an explicit user-authorized action. After an authorized push, completion is not claimed until CI/deploy succeeds and server SHA/marker, migration state, all services, API readiness and the public dashboard are verified.
+
 ## 2026-10-10 - Keep the local runtime current after every code task
 
 - Project workflow now requires rebuilding and deploying each affected local API/web service after every meaningful runtime change, followed by container-health and routed dashboard/API checks. Documentation-only edits are exempt.

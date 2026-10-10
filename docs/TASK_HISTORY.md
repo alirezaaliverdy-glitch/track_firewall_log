@@ -1,3 +1,8 @@
+## 2026-10-10 - Make production readiness a standing workflow rule
+
+- Recorded that `main` pushes are direct production releases. Future changes must be validated for the production Compose/deploy path and must not rely on local-only configuration; migrations must remain additive and executable under the known production ownership model.
+- Preserved explicit push authorization and added mandatory post-push CI, SHA/marker, migration, service-health, readiness and public-dashboard verification before reporting a successful release. Documentation-only workflow update; no local or production runtime change.
+
 ## 2026-10-10 - Deploy equipment health locally and make local refresh mandatory
 
 - Rebuilt and recreated only the local API and web services using the project-scoped deployment scripts. Both became healthy; database and gateway remained healthy, and dashboard/API readiness returned HTTP 200.
