@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>گزارش مدیریتی امن‌سازی سامانه ناظر</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 210mm; height: 297mm; }
+    body {
+      font-family: Tahoma, "Segoe UI", sans-serif;
+      color: #eef7ff;
+      background: #071b36;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page {
+      position: relative;
+      width: 210mm;
+      height: 297mm;
+      overflow: hidden;
+      padding: 11mm 15mm 10mm;
+      background:
+        radial-gradient(circle at 8% 5%, rgba(46, 211, 183, .25), transparent 29%),
+        radial-gradient(circle at 96% 88%, rgba(68, 130, 255, .28), transparent 32%),
+        linear-gradient(145deg, #071a34 0%, #0b2a50 52%, #101d46 100%);
+    }
+    .orb { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,.08); }
+    .orb.one { width: 78mm; height: 78mm; top: -38mm; left: -24mm; }
+    .orb.two { width: 48mm; height: 48mm; bottom: -17mm; right: -14mm; }
+    .topline { height: 2.2mm; width: 100%; border-radius: 3mm; background: linear-gradient(90deg,#3be0b9,#4fa0ff,#896dff); margin-bottom: 6mm; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+    .eyebrow { color: #72e4cb; font-size: 10pt; font-weight: 700; letter-spacing: .2px; }
+    h1 { margin: 2mm 0 1.5mm; font-size: 23pt; line-height: 1.3; color: #fff; }
+    .subtitle { margin: 0; max-width: 128mm; color: #bcd0e5; font-size: 10.3pt; line-height: 1.7; }
+    .status {
+      min-width: 38mm; padding: 4mm 4.5mm; border-radius: 5mm;
+      background: rgba(48, 211, 169, .14); border: 1px solid rgba(77, 234, 190, .42);
+      text-align: center; color: #73f0cb; font-weight: 800; font-size: 12pt;
+    }
+    .status small { display: block; color: #bcebdd; font-size: 8.5pt; margin-top: 1.3mm; font-weight: 400; }
+    .hero {
+      margin-top: 6mm; padding: 4mm 6mm; border-radius: 5mm;
+      background: linear-gradient(120deg, rgba(58,219,179,.16), rgba(65,135,255,.16));
+      border: 1px solid rgba(161,215,255,.2);
+      display: flex; align-items: center; justify-content: space-between; gap: 8mm;
+    }
+    .hero .url { direction: ltr; text-align: left; color: #fff; font-size: 14pt; font-weight: 700; }
+    .hero .label { font-size: 9pt; color: #9fb8d2; margin-bottom: 1.5mm; }
+    .shield { width: 16mm; height: 16mm; display: grid; place-items: center; flex: none; border-radius: 50%; background: #35d6ad; color: #06233b; font-size: 20pt; font-weight: 900; }
+    .section-title { margin: 6mm 0 3mm; font-size: 13pt; color: #fff; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+    .card {
+      min-height: 24mm; padding: 3.4mm; border-radius: 4mm;
+      background: rgba(255,255,255,.075); border: 1px solid rgba(255,255,255,.12);
+    }
+    .card .num { display: inline-grid; place-items: center; width: 8mm; height: 8mm; border-radius: 50%; background: rgba(66,218,183,.2); color: #65edc9; font-weight: 800; font-size: 10pt; margin-left: 2mm; }
+    .card h3 { display: inline; margin: 0; color: #fff; font-size: 10.8pt; }
+    .card p { margin: 1.8mm 0 0; color: #b9cce0; font-size: 8.6pt; line-height: 1.55; }
+    .services { display: flex; flex-wrap: wrap; gap: 2mm; }
+    .pill { padding: 1.8mm 3mm; border-radius: 10mm; background: rgba(98,139,255,.16); border: 1px solid rgba(122,165,255,.28); color: #dce7ff; font-size: 8.7pt; }
+    .result {
+      margin-top: 5mm; padding: 4mm 5mm; border-radius: 4.5mm;
+      background: linear-gradient(90deg, rgba(61,217,177,.18), rgba(77,148,255,.13));
+      border-right: 1.5mm solid #42d9b3;
+    }
+    .result strong { color: #fff; font-size: 11.5pt; }
+    .result p { margin: 1.5mm 0 0; color: #c5d9e9; font-size: 9pt; line-height: 1.65; }
+    .footer { position: absolute; right: 15mm; left: 15mm; bottom: 6mm; display: flex; justify-content: space-between; color: #7895b3; font-size: 8pt; border-top: 1px solid rgba(255,255,255,.1); padding-top: 2.5mm; }
+    .footer span:last-child { direction: ltr; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="orb one"></div><div class="orb two"></div>
+    <div class="topline"></div>
+    <header class="header">
+      <div>
+        <div class="eyebrow">گزارش مدیریتی زیرساخت و امنیت</div>
+        <h1>راه‌اندازی دسترسی امن<br>سامانه ناظر</h1>
+        <p class="subtitle">انتقال سامانه‌ها به بستر امن HTTPS، یکپارچه‌سازی مسیرهای دسترسی و آماده‌سازی سرویس برای استفاده کاربران داخل و خارج سازمان</p>
+      </div>
+      <div class="status">✓ تکمیل شد<small>سرور 185.89.22.116</small></div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <div class="label">نشانی رسمی و امن سامانه</div>
+        <div class="url">https://nazer.makangostar.ir</div>
+      </div>
+      <div class="shield">✓</div>
+    </section>
+
+    <h2 class="section-title">اقدامات انجام‌شده</h2>
+    <section class="grid">
+      <article class="card"><span class="num">۱</span><h3>فعال‌سازی ارتباط امن</h3><p>گواهی معتبر امنیتی نصب شد و تمام ارتباط کاربران با سامانه به‌صورت رمزنگاری‌شده انجام می‌شود.</p></article>
+      <article class="card"><span class="num">۲</span><h3>انتقال خودکار به HTTPS</h3><p>تمام نشانی‌های قدیمی به شکل خودکار و بدون تغییر مسیر کاربر، به نشانی امن جدید منتقل می‌شوند.</p></article>
+      <article class="card"><span class="num">۳</span><h3>بررسی کامل مسیرها</h3><p>مسیرهای سامانه اصلی، داشبورد، نقشه‌ها، پرواز، محیط‌زیست و احراز هویت بررسی و اصلاح شدند.</p></article>
+      <article class="card"><span class="num">۴</span><h3>دسترسی شبکه شرکت</h3><p>تنظیمات DNS داخلی هماهنگ شد تا کاربران شبکه سازمان نیز با همان دامنه رسمی به سامانه دسترسی داشته باشند.</p></article>
+      <article class="card"><span class="num">۵</span><h3>تمدید خودکار گواهی</h3><p>فرآیند تمدید گواهی امنیتی خودکار شد تا سرویس بدون وقفه و بدون نیاز به تمدید دستی فعال بماند.</p></article>
+      <article class="card"><span class="num">۶</span><h3>کنترل نهایی عملکرد</h3><p>دسترسی بیرونی، اعتبار گواهی، پاسخ سرویس‌ها و انتقال صحیح آدرس‌های قدیمی به‌طور عملی آزمایش شد.</p></article>
+    </section>
+
+    <h2 class="section-title">بخش‌های آماده بهره‌برداری</h2>
+    <section class="services">
+      <span class="pill">سامانه اصلی</span><span class="pill">داشبورد مدیریتی</span><span class="pill">خدمات نقشه</span><span class="pill">اطلاعات پرواز</span><span class="pill">داده‌های محیط‌زیست</span><span class="pill">احراز هویت کاربران</span><span class="pill">داده‌های ماهواره‌ای</span>
+    </section>
+
+    <section class="result">
+      <strong>نتیجه نهایی</strong>
+      <p>زیرساخت HTTPS و مسیرهای اصلی سامانه با موفقیت راه‌اندازی شد. سامانه اکنون با دامنه رسمی، گواهی معتبر و دسترسی یکپارچه برای کاربران سازمان قابل استفاده است.</p>
+    </section>
+
+    <footer class="footer"><span>تهیه‌شده جهت ارائه مدیریتی — مهر ۱۴۰۵</span><span>nazer.makangostar.ir</span></footer>
+  </main>
+</body>
+</html>
