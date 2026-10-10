@@ -15,8 +15,6 @@ import { deleteDevice, testDeviceConnection, updateDevice, type DeviceInput } fr
 import { getDeviceWorkspace, type DeviceWorkspace, type WorkspaceChartPoint } from "@/lib/deviceOnboarding";
 import { refreshDeviceVendorCapabilities } from "@/lib/vendors";
 import { refreshLinuxMonitoringDevice } from "@/lib/linuxMonitoring";
-import { createFindingActionPlan } from "@/lib/platform";
-import { reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { securityDisplayText } from "@/features/security/securityPresentation";
 import { Activity, AlertTriangle, ArrowUpLeft, CheckCircle2, Clock3, Database, Gauge, Network, Server, ShieldCheck } from "lucide-react";
 import "./AssetDetailPage.css";
@@ -106,6 +104,9 @@ function statusLabel(status: unknown, t: TFunction) {
     unverified: t("workspace.values.pendingVerification"),
     active: t("workspace.status.active", { defaultValue: "Active" }),
     connected: t("workspace.status.connected"),
+    healthy: t("assets.health.healthy"),
+    warning: t("assets.health.warning"),
+    critical: t("assets.health.critical"),
     needs_review: t("workspace.status.needsReview"),
     not_verified: t("workspace.status.notVerified"),
     connection_verified: t("workspace.status.connectionVerified"),
@@ -114,20 +115,6 @@ function statusLabel(status: unknown, t: TFunction) {
     preview_ready: t("workspace.status.previewReady")
   };
   return known[valueText] ?? valueText;
-}
-
-function diagnosticLabel(message: string, isFa: boolean, port?: number) {
-  if (!isFa) return message;
-  if (/Recent security warnings found/i.test(message)) return "در لاگ‌های اخیر رویداد امنیتی نیازمند بررسی ثبت شده است؛ این مورد به‌تنهایی وقوع نفوذ را ثابت نمی‌کند.";
-  if (/(nginx|apache2|httpd) is inactive/i.test(message)) return "یک سرویس وب غیرفعال گزارش شده است؛ فقط در صورت نیاز سرویس و وابستگی آن را بررسی کنید.";
-  if (/maximum authentication attempts|authentication attempts|failed login|preauth/i.test(message)) return "تلاش‌های ناموفق ورود SSH در لاگ ثبت شده است؛ منبع، زمان و سیاست احراز هویت را بررسی کنید.";
-  if (/connection reset|MaxStartups throttling/i.test(message)) return "سرویس SSH در لاگ، قطع یا محدودشدن تلاش‌های هم‌زمان را گزارش کرده است؛ منبع و ظرفیت احراز هویت را بررسی کنید.";
-  if (/Server is online with warnings/i.test(message)) return "سرور آنلاین است، اما یک یا چند شاخص سلامت نیازمند بررسی است.";
-  if (/SSH_(BANNER|HANDSHAKE)_TIMEOUT/.test(message)) return `SSH روی پورت ${port ?? 22} به‌موقع پاسخ نداده؛ محدودیت فایروال یا وضعیت سرویس را بررسی کنید.`;
-  if (/SSH_AUTH_FAILED/.test(message)) return "ارتباط شبکه برقرار است اما اعتبارنامه SSH پذیرفته نشده است.";
-  if (/SSH_SESSION_CLOSED/.test(message)) return "نشست پایش SSH قطع شده و برنامه در حال اتصال مجدد است.";
-  if (/SSH_RECONNECT_BACKOFF/.test(message)) return "برنامه برای جلوگیری از محدودشدن توسط سرور، اتصال مجدد را با فاصله انجام می‌دهد.";
-  return message;
 }
 
 function interfaceState(row: Record<string, unknown>) {
@@ -302,19 +289,14 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
     ] as Array<[string, unknown]>).filter(([, item]) => item !== null && item !== undefined && item !== "").slice(0, 2);
     const isCisco = currentWorkspace.vendor.key === "cisco";
     const vendorOverview = currentWorkspace.vendorOverview;
-    const latestCollection = currentWorkspace.collections[0];
-    const latestFailedCollection = latestCollection && ["failed", "error"].includes(String(latestCollection.status).toLowerCase()) ? latestCollection : null;
-    const latestCheck = currentWorkspace.statusChecks[0];
-    const latestFailedCheck = latestCheck && ["failed", "offline", "error"].includes(String(latestCheck.status).toLowerCase()) ? latestCheck : null;
-    const diagnosticReasons = Array.from(new Set([
-      ...asArray(asRecord(currentWorkspace.health ?? {}).warningsJson).map(String).map((reason) => diagnosticLabel(reason, isFa, currentWorkspace.device?.managementPort)),
-      ...asArray(currentWorkspace.capabilities?.warnings).map(String).map((reason) => diagnosticLabel(reason, isFa, currentWorkspace.device?.managementPort)),
-      latestFailedCollection?.errorCode ? `${isFa ? "خطای جمع‌آوری" : "Collection error"}: ${String(latestFailedCollection.errorCode)}` : "",
-      latestFailedCheck?.message ? diagnosticLabel(String(latestFailedCheck.message), isFa, currentWorkspace.device?.managementPort) : ""
-    ].map((item) => item.trim()).filter(Boolean)));
-    const needsAttention = !["healthy", "online"].includes(String(overview.healthState).toLowerCase()) || diagnosticReasons.length > 0;
-    const openFindings = currentWorkspace.findings.filter((item) => !["resolved", "closed", "false_positive"].includes(String(item.status ?? "open")));
+    const needsAttention = overview.healthState !== "healthy";
+    const openFindings = currentWorkspace.findings.filter((item) => !["resolved", "closed", "false_positive", "suppressed", "accepted_risk"].includes(String(item.status ?? "open")));
     const dataTime = vendorOverview.collectedAt ?? overview.lastSuccessfulCollection ?? currentWorkspace.capabilities?.refreshedAt;
+    const healthCoverageLabel = overview.healthCoverage === "measured"
+      ? (isFa ? "اندازه‌گیری کامل و تازه" : "Fresh measured evidence")
+      : overview.healthCoverage === "partial"
+        ? (isFa ? "پوشش تازه اما ناقص" : "Fresh but partial evidence")
+        : (isFa ? "بدون شواهد تازهٔ کافی" : "No sufficient fresh evidence");
     const runIssueAction = async (issue: DeviceWorkspace["issues"][number]) => {
       if (issueAction) return;
       setIssueAction(issue.id);
@@ -325,8 +307,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
           if (result.connected !== true) throw new Error(result.message || (isFa ? "اتصال هنوز برقرار نشده است." : "Connection is still unavailable."));
           await load();
         } else if (issue.action.kind === "finding_plan" && issue.action.findingId) {
-          const result = await createFindingActionPlan(issue.action.findingId);
-          reviewInActionCenter(result.actionPlan.id);
+          navigate(`/security/findings/${issue.action.findingId}`);
         } else if (issue.action.kind === "setup") {
           navigate(`/assets/devices/${deviceId}/setup`);
         } else {
@@ -344,15 +325,15 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
         <div className="asset-overview-hero-compact__status"><span><i />{statusLabel(overview.availability, t)}</span><small><Clock3 />{date(dataTime, locale, isFa ? "هنوز جمع‌آوری نشده" : "Not collected yet")}</small><Link className="secondary-link" to={verifiedDevice ? `/actions?deviceId=${encodeURIComponent(deviceId)}` : setupPath}>{verifiedDevice ? (isFa ? "اقدام روی تجهیز" : "Device action") : (isFa ? "بررسی اتصال" : "Check connection")}</Link></div>
       </section>
       <details className="asset-overview-technical"><summary>{isFa ? "نمودارهای منابع و دسترسی" : "Resource and availability charts"}</summary>{renderOverviewTrends()}</details>
-      {needsAttention ? <section className="asset-diagnostic-callout"><AlertTriangle aria-hidden="true" /><div><strong>{isFa ? "چرا این تجهیز نیازمند توجه است؟" : "Why does this device need attention?"}</strong>{diagnosticReasons.length ? <ul>{diagnosticReasons.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}</ul> : <p>{value(asRecord(currentWorkspace.health ?? {}).summary, isFa ? "وضعیت سلامت یا تازگی داده نیازمند بررسی است. یک جمع‌آوری جدید اجرا کنید." : "Health state or evidence freshness needs review. Run a new collection.")}</p>}<small>{isFa ? "جمع‌آوری جدید را اجرا کنید؛ اگر خطا باقی ماند، کانال اتصال و زمان آخرین موفقیت را بررسی کنید." : "Run a new collection; if the issue remains, review the channel and its last success time."}</small></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات سلامت" : "Health details"}<ArrowUpLeft /></Link></section> : null}
+      {needsAttention ? <section className="asset-diagnostic-callout"><AlertTriangle aria-hidden="true" /><div><strong>{overview.healthState === "unknown" ? (isFa ? "برای سنجش سلامت، دادهٔ تازه کافی نیست" : "Not enough fresh data to assess health") : (isFa ? "مشکل ثبت‌شده برای این تجهیز" : "Observed device issue")}</strong>{currentWorkspace.issues.length ? <ul>{currentWorkspace.issues.slice(0, 3).map((issue) => <li key={issue.id}>{isFa ? issue.titleFa : issue.titleEn}</li>)}</ul> : <p>{isFa ? "اتصال و شاخص‌های تجهیز را دوباره پایش کنید؛ نبود داده به معنی سالم بودن نیست." : "Collect fresh connectivity and device metrics; missing data does not mean healthy."}</p>}<small>{isFa ? "بستن یک اخطار، اندازه‌گیری سلامت را تغییر نمی‌دهد؛ وضعیت پس از دریافت شواهد تازه به‌روز می‌شود." : "Closing an alert does not change measured health; the state updates with fresh evidence."}</small></div><Link to={`/assets/devices/${deviceId}/monitoring`}>{isFa ? "جزئیات سلامت" : "Health details"}<ArrowUpLeft /></Link></section> : null}
 
       {currentWorkspace.issues.length ? <section className="asset-issue-guide" aria-label={isFa ? "راهنمای حل مشکل تجهیز" : "Device issue resolution guide"}>
         <header><div><small>{isFa ? "تشخیص مبتنی بر دادهٔ واقعی" : "Evidence-based diagnosis"}</small><h2>{isFa ? "مشکل چیست و قدم بعدی چیست؟" : "What is wrong and what is next?"}</h2></div><span>{currentWorkspace.issues.length.toLocaleString(locale)} {isFa ? "مورد" : "issues"}</span></header>
         <div className="asset-issue-list">{currentWorkspace.issues.map((issue) => <article key={issue.id} className={`asset-issue-card is-${issue.severity}`}>
-          <div className="asset-issue-card__head"><strong>{isFa ? issue.titleFa : issue.titleEn}</strong><StatusBadge value={issue.severity === "critical" ? (isFa ? "بحرانی" : "Critical") : (isFa ? "نیازمند بررسی" : "Needs review")} tone={issue.severity === "critical" ? "danger" : "warning"} /></div>
+           <div className="asset-issue-card__head"><strong>{issue.action.findingId ? securityDisplayText(value(currentWorkspace.findings.find((item) => item.id === issue.action.findingId)?.title, isFa ? issue.titleFa : issue.titleEn), isFa ? "fa" : "en") : (isFa ? issue.titleFa : issue.titleEn)}</strong><StatusBadge value={issue.severity === "critical" ? (isFa ? "بحرانی" : "Critical") : (isFa ? "نیازمند بررسی" : "Needs review")} tone={issue.severity === "critical" ? "danger" : "warning"} /></div>
           <p><b>{isFa ? "علت فعلی: " : "Current cause: "}</b>{isFa ? issue.causeFa : issue.causeEn}</p>
           <p><b>{isFa ? "راه‌حل: " : "Next step: "}</b>{isFa ? issue.nextStepFa : issue.nextStepEn}</p>
-          <div className="asset-issue-card__actions"><button type="button" className="primary-link" disabled={issueAction === issue.id} onClick={() => void runIssueAction(issue)}>{issueAction === issue.id ? (isFa ? "در حال آماده‌سازی…" : "Preparing…") : issue.action.kind === "finding_plan" ? (isFa ? "ساخت برنامهٔ رفع" : "Create remediation plan") : issue.action.kind === "setup" ? (isFa ? "اصلاح اتصال" : "Fix connection") : issue.action.kind === "connection_test" ? (isFa ? "آزمایش دوباره" : "Retest") : (isFa ? "مشاهدهٔ پایش" : "View monitoring")}</button>{issue.observedAt ? <time>{isFa ? "مشاهده: " : "Observed: "}{date(issue.observedAt, locale, fallback)}</time> : null}</div>
+           <div className="asset-issue-card__actions"><button type="button" className="primary-link" disabled={issueAction === issue.id} onClick={() => void runIssueAction(issue)}>{issueAction === issue.id ? (isFa ? "در حال آماده‌سازی…" : "Preparing…") : issue.action.kind === "finding_plan" ? (isFa ? "مشاهدهٔ شواهد و راه‌حل" : "Review evidence and remedy") : issue.action.kind === "setup" ? (isFa ? "اصلاح اتصال" : "Fix connection") : issue.action.kind === "connection_test" ? (isFa ? "آزمایش دوباره" : "Retest") : (isFa ? "مشاهدهٔ پایش" : "View monitoring")}</button>{issue.observedAt ? <time>{isFa ? "مشاهده: " : "Observed: "}{date(issue.observedAt, locale, fallback)}</time> : null}</div>
         </article>)}</div>
         <p className="asset-issue-guide__note">{isFa ? "هیچ تغییر مستقیمی از این کارت انجام نمی‌شود؛ اقدام‌های فنی پس از پیش‌نمایش، تأیید شما، PolicyGuard و ثبت نتیجه اجرا می‌شوند." : "These cards never change a device directly; technical actions run only after preview, your confirmation, PolicyGuard and an audited result."}</p>
       </section> : null}
@@ -370,7 +351,7 @@ export default function AssetDetailPage({ params }: RouteComponentProps) {
 
       <section className="asset-overview-main-grid">
         <article className="asset-identity-card"><header><span><Server /></span><div><small>{isFa ? "هویت و مدیریت" : "Identity and management"}</small><h3>{t("workspace.cards.identity")}</h3></div></header><dl><div><dt>{t("workspace.labels.name")}</dt><dd>{overview.name}</dd></div><div><dt>{t("workspace.labels.vendorPlatform")}</dt><dd dir="ltr">{overview.vendor} / {overview.platform}</dd></div><div><dt>{t("workspace.labels.managementAddress")}</dt><dd dir="ltr">{value(overview.managementIp ?? currentWorkspace.device?.host, fallback)}</dd></div>{optionalIdentity.map(([label, item]) => <div key={String(label)}><dt>{label}</dt><dd dir="ltr">{String(item)}</dd></div>)}</dl></article>
-        <article className="asset-health-card"><header><span><CheckCircle2 /></span><div><small>{isFa ? "سلامت و پوشش" : "Health and coverage"}</small><h3>{isFa ? "وضعیت قابل اقدام" : "Actionable status"}</h3></div></header><dl><div><dt>{t("workspace.labels.healthState")}</dt><dd>{statusLabel(overview.healthState, t)}</dd></div><div><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(dataTime, locale, fallback)}</dd></div><div><dt>{isFa ? "دامنه‌های خوانده‌شده" : "Collected domains"}</dt><dd>{vendorOverview.sections.length.toLocaleString(locale)}</dd></div><div><dt>{isFa ? "اینترفیس" : "Interfaces"}</dt><dd>{interfaces.length.toLocaleString(locale)}</dd></div></dl>{healthSummary !== fallback ? <p dir="ltr">{healthSummary}</p> : null}</article>
+        <article className="asset-health-card"><header><span><CheckCircle2 /></span><div><small>{isFa ? "سلامت و پوشش" : "Health and coverage"}</small><h3>{isFa ? "وضعیت قابل اقدام" : "Actionable status"}</h3></div></header><dl><div><dt>{t("workspace.labels.healthState")}</dt><dd>{statusLabel(overview.healthState, t)}</dd></div><div><dt>{isFa ? "پوشش شواهد" : "Evidence coverage"}</dt><dd>{healthCoverageLabel}</dd></div><div><dt>{t("workspace.labels.lastSuccessfulCheck")}</dt><dd>{date(dataTime, locale, fallback)}</dd></div><div><dt>{isFa ? "دامنه‌های خوانده‌شده" : "Collected domains"}</dt><dd>{vendorOverview.sections.length.toLocaleString(locale)}</dd></div><div><dt>{isFa ? "اینترفیس" : "Interfaces"}</dt><dd>{interfaces.length.toLocaleString(locale)}</dd></div></dl>{healthSummary !== fallback ? <p dir="ltr">{healthSummary}</p> : null}</article>
       </section>
 
       {currentWorkspace.vendor.key !== "esxi" ? <details className="asset-vendor-overview"><summary>{isFa ? "اطلاعات تخصصی وندور" : "Vendor inventory"}</summary>

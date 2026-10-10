@@ -39,3 +39,43 @@ test("turns high findings into reviewed remediation plans, not direct execution"
   assert.equal(issues[0]?.action.kind, "finding_plan");
   assert.match(issues[0]?.nextStepFa ?? "", /پیش‌نمایش/);
 });
+
+test("uses the same five-minute freshness window as the health assessment", () => {
+  const recent = diagnoseDeviceIssues({
+    now,
+    credentialConfigured: true,
+    status: { status: "offline", checkedAt: new Date("2026-10-04T09:56:00.000Z") },
+    findings: [],
+    sensors: []
+  });
+  const stale = diagnoseDeviceIssues({
+    now,
+    credentialConfigured: true,
+    status: { status: "offline", checkedAt: new Date("2026-10-04T09:54:00.000Z") },
+    findings: [],
+    sensors: []
+  });
+  assert.equal(recent[0]?.id, "connection");
+  assert.equal(stale.some((item) => item.id === "connection"), false);
+});
+
+test("surfaces fresh datastore pressure and a snapshot-only warning without inventing detail", () => {
+  const pressure = diagnoseDeviceIssues({
+    now,
+    credentialConfigured: true,
+    findings: [],
+    sensors: [{ key: "datastore.usage_percent", value: 96, measuredAt: new Date("2026-10-04T09:59:00.000Z") }]
+  });
+  assert.equal(pressure[0]?.id, "resource:datastore.usage_percent");
+  assert.equal(pressure[0]?.severity, "critical");
+
+  const snapshot = diagnoseDeviceIssues({
+    now,
+    credentialConfigured: true,
+    snapshot: { state: "warning", collectedAt: new Date("2026-10-04T09:59:00.000Z") },
+    findings: [{ id: "accepted", title: "Reviewed risk", severity: "high", status: "accepted_risk", lastSeen: now }],
+    sensors: []
+  });
+  assert.deepEqual(snapshot.map((item) => item.id), ["health-snapshot"]);
+  assert.equal(snapshot[0]?.action.kind, "monitoring");
+});

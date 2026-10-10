@@ -107,10 +107,27 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
     return evidence ?? reply.code(404).send({ error: "Finding not found" });
   });
 
-  app.patch<{ Params: { id: string }; Body: { status?: string } }>("/api/security/findings/:id/status", async (request, reply) => {
+  app.patch<{ Params: { id: string }; Body: { status?: string; resolutionConfirmed?: boolean } }>("/api/security/findings/:id/status", async (request, reply) => {
     const allowed = new Set(["active", "acknowledged", "resolved", "false_positive", "accepted_risk", "suppressed", "investigating"]);
     if (!request.body?.status || !allowed.has(request.body.status)) return reply.code(400).send({ error: "Invalid finding status" });
-    return prisma.finding.update({ where: { id: request.params.id }, data: { status: request.body.status } });
+    if (request.body.status === "resolved" && request.body.resolutionConfirmed !== true) return reply.code(400).send({ error: "RESOLUTION_CONFIRMATION_REQUIRED" });
+    const finding = await prisma.finding.findUnique({ where: { id: request.params.id }, select: { id: true, deviceId: true, status: true } });
+    if (!finding) return reply.code(404).send({ error: "Finding not found" });
+    if (finding.status === request.body.status) return prisma.finding.findUnique({ where: { id: finding.id } });
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.finding.update({ where: { id: finding.id }, data: { status: request.body.status } });
+      await tx.auditLog.create({ data: {
+        deviceId: finding.deviceId,
+        actor: request.authUser?.username ?? null,
+        action: "security.finding.status_changed",
+        targetType: "finding",
+        targetId: finding.id,
+        dryRun: false,
+        approvalStatus: "not_required",
+        metadata: { previousStatus: finding.status, status: request.body.status, operatorConfirmed: request.body.status === "resolved" }
+      } });
+      return updated;
+    });
   });
 
   app.post<{ Params: { id: string } }>("/api/security/findings/:id/action-plan", async (request, reply) => {

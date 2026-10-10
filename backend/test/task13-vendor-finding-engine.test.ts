@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateVendorTelemetry, resetFindingEngineWindows } from "../src/telemetry/vendor-finding-engine.js";
+import { evaluateVendorTelemetry, resetFindingEngineWindows, shouldReopenResolvedSnapshot, snapshotRuleCleared } from "../src/telemetry/vendor-finding-engine.js";
 import { VENDOR_TELEMETRY_PROFILES } from "../src/telemetry/vendor-telemetry-profiles.js";
 
 test("all requested vendors have profiles and at least five rules", () => {
   for (const vendor of ["linux", "mikrotik", "fortigate", "pfsense", "cisco", "paloalto", "juniper", "windows", "docker", "kubernetes", "aws", "azure"] as const) assert.ok(VENDOR_TELEMETRY_PROFILES[vendor].findingRules.length >= 5, vendor);
+});
+
+test("a fresh explicit safe snapshot clears a condition, but missing data does not", () => {
+  const rule = VENDOR_TELEMETRY_PROFILES.linux.findingRules.find((item) => item.id === "fail2ban-inactive")!;
+  assert.equal(snapshotRuleCleared(rule, { securityTools: { fail2ban: "active" } }), true);
+  assert.equal(snapshotRuleCleared(rule, { securityTools: { fail2ban: "inactive" } }), false);
+  assert.equal(snapshotRuleCleared(rule, { securityTools: { fail2ban: "unknown" } }), false);
+  assert.equal(snapshotRuleCleared(rule, { securityTools: {} }), false);
+});
+
+test("a resolved snapshot finding reopens only for an observation after closure", () => {
+  const closedAt = new Date("2026-10-10T10:00:00.000Z");
+  const resolved = { status: "resolved", updatedAt: closedAt };
+  assert.equal(shouldReopenResolvedSnapshot(resolved, new Date("2026-10-10T09:59:00.000Z")), false);
+  assert.equal(shouldReopenResolvedSnapshot(resolved, new Date("2026-10-10T10:01:00.000Z")), true);
+  assert.equal(shouldReopenResolvedSnapshot({ ...resolved, status: "suppressed" }, new Date("2026-10-10T10:01:00.000Z")), false);
 });
 
 test("Linux SSH failures aggregate into one stable finding after threshold", () => {

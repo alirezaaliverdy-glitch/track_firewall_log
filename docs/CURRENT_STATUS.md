@@ -1,3 +1,11 @@
+## 2026-10-10 - Evidence-based equipment health and verified remediation
+
+- Device workspaces derive health from fresh, bounded evidence: connection checks, collection results, stored health snapshots, CPU/RAM/disk/datastore measurements and open high/critical findings. Stale or missing measurements produce `unknown`, not a false healthy state; measured/partial/none coverage is now visible in the equipment card.
+- Security issue cards open the finding detail first. The detail gives Persian/English, category-specific investigation, remediation and verification steps; creating an ActionPlan remains proposal-only and execution still requires preview, confirmation, PolicyGuard, a registered connector and audit.
+- Marking a finding resolved requires evidence review plus explicit confirmation and writes an audit record. It removes that finding from open alerts but does not directly edit device telemetry. Linux snapshot findings close automatically only after a fresh snapshot explicitly proves the condition safe; missing/unknown data cannot close them, and a later unsafe observation reopens them.
+- Final API and web production builds passed. Focused health, issue-guide, finding-engine and UI/API contract tests passed 23/23; locale parity passed with 884 keys, Persian primary copy passed, and the UTF-8 guard passed across 785 files. A supplemental pre-existing monitoring source-contract test still expects a removed manual Linux refresh symbol; 13/14 tests in that unrelated group passed.
+- No migration, vendor/device mutation, local deployment, push or production rollout was performed. Protected `quick_controlled` lab execution behavior is unchanged.
+
 ## 2026-10-09 - Production access rollout verified
 
 - Pushed through `b9797eb`; GitHub Actions run `37921389342` passed all four jobs including production deployment. Server HEAD and deploy marker matched the pushed SHA; tracked checkout was clean and the managed-account workspace migration was applied.

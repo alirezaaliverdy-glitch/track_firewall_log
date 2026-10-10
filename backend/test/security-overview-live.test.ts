@@ -27,10 +27,16 @@ test("overview counts all open findings and prioritizes critical evidence", () =
 test("overview distinguishes stale monitoring and resolution requires evidence", () => {
   const overview = read("src/features/security/pages/SecurityOverviewPage.tsx");
   const detail = read("src/features/security/pages/FindingDetailPage.tsx");
+  const remediation = read("src/features/security/findingRemediation.ts");
+  const routes = read("backend/src/routes/security-platform.ts");
   assert.match(overview, /monitorReady/);
   assert.match(overview, /security\.live\.noCoverageClaim/);
   assert.match(overview, /security\.live\.refreshFailed/);
   assert.match(detail, /if \(!evidence\)/);
-  assert.match(detail, /updateFindingStatus\(finding\.id, "resolved"\)/);
+  assert.match(detail, /updateFindingStatus\(finding\.id, "resolved", true\)/);
   assert.match(detail, /window\.confirm\(t\("security\.detail\.resolveConfirm"\)\)/);
+  assert.match(routes, /RESOLUTION_CONFIRMATION_REQUIRED/);
+  assert.match(routes, /security\.finding\.status_changed/);
+  assert.match(remediation, /چطور از رفع واقعی مطمئن شویم|صرف بسته‌شدن هشدار کافی نیست/);
+  assert.doesNotMatch(remediation, /(?:Ø.|Ù.){3}/);
 });

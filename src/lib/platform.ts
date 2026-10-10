@@ -355,7 +355,7 @@ export const disconnectGmailSecuritySender = () => request<SecurityEmailAlertSet
 export const testSecurityEmailAlert = () => request<{ ok: boolean }>("/security/alerts/email/test", { method: "POST", body: JSON.stringify({}) });
 export const testSecurityVendorEmails = () => request<{ ok: boolean; sent: number; failed: number; results: Array<{ vendor: string; status: "sent" | "failed"; ruleName?: string; errorCode?: string }> }>("/security/alerts/email/test-vendors", { method: "POST", body: JSON.stringify({}) });
 export const createFindingActionPlan = (id: string) => request<{ actionPlan: { id: string; status: string; parametersJson: Record<string, unknown> } }>(`/security/findings/${id}/action-plan`, { method: "POST" });
-export const updateFindingStatus = (id: string, status: string) => request<SecurityFinding>(`/security/findings/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+export const updateFindingStatus = (id: string, status: string, resolutionConfirmed = false) => request<SecurityFinding>(`/security/findings/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, resolutionConfirmed }) });
 export const listAttackers = (filters: { query?: string; vendor?: string; deviceId?: string; severity?: string; scope?: string; includeResolved?: boolean } = {}) => {
   const query = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {

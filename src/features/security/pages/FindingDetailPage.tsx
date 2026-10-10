@@ -11,6 +11,7 @@ import { publishActionPlanCreated } from "@/lib/actionPlanHandoff";
 import { useFinding } from "../hooks/useFinding";
 import { securityDisplayText } from "../securityPresentation";
 import { categoryLabel, findingVendor, sourceLabel, vendorLabel } from "../vendorSecurityPresentation";
+import { findingRemediation } from "../findingRemediation";
 
 function evidenceRows(value: unknown): Array<[string, string]> {
   if (!value || typeof value !== "object") return value == null ? [] : [["value", String(value)]];
@@ -53,7 +54,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
     if (!finding) return;
     if (!evidence) { setMessage(t("security.detail.verifyFirst")); return; }
     if (!window.confirm(t("security.detail.resolveConfirm"))) return;
-    updateFindingStatus(finding.id, "resolved")
+    updateFindingStatus(finding.id, "resolved", true)
       .then(() => { setMessage(t("security.detail.resolvedSet")); refresh(); })
       .catch((reason: unknown) => setMessage(reason instanceof Error ? reason.message : t("security.detail.statusError")));
   };
@@ -73,6 +74,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
   const assetName = finding.asset?.name ?? finding.device?.name ?? t("security.queue.unknownAsset");
   const address = finding.asset?.managementIp ?? finding.device?.host ?? "—";
   const confidence = Math.round((finding.confidence ?? 0) * 100);
+  const remediation = findingRemediation(finding, language);
 
   return (
     <section className="page-stack security-finding-detail">
@@ -114,7 +116,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
         </> : <div className="security-evidence-placeholder"><Database size={32} /><strong>{t("security.detail.evidenceReady")}</strong><p>{t("security.detail.evidenceReadyDescription")}</p></div>}
       </section>
 
-      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><ol><li>{t("security.detail.resolutionStep1")}</li><li>{t("security.detail.resolutionStep2")}</li><li>{t("security.detail.resolutionStep3")}</li></ol><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button><button type="button" onClick={createPlan}>{t("security.detail.createPlan")}</button><Link to="/actions">{t("dashboard.actions.actionCenter")}</Link><button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
+      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><p>{remediation.problem}</p><ol>{remediation.steps.map((step) => <li key={step}>{step}</li>)}</ol><p><strong>{language.startsWith("fa") ? "چطور از رفع واقعی مطمئن شویم؟ " : "How to verify the actual fix? "}</strong>{remediation.verification}</p><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button><button type="button" onClick={createPlan}>{t("security.detail.createPlan")}</button><Link to="/actions">{t("dashboard.actions.actionCenter")}</Link><button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
       {message ? <p className="security-detail-message">{message}</p> : null}
     </section>
   );

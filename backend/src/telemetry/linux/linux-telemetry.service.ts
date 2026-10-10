@@ -331,8 +331,8 @@ export async function collectLinuxSecuritySnapshot(deviceId: string) {
   const analysis = analyzeLinuxSecuritySnapshot(snapshot);
   snapshot.findings = analysis.findings;
   snapshot.riskSummary = analysis.riskSummary;
-  await prisma.deviceSnapshot.create({ data: { deviceId, vendor: "linux", snapshotType: "linux_security", dataJson: JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue } });
-  await processVendorTelemetry({ device, snapshot });
+  const storedSnapshot = await prisma.deviceSnapshot.create({ data: { deviceId, vendor: "linux", snapshotType: "linux_security", dataJson: JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue } });
+  await processVendorTelemetry({ device, snapshot, snapshotObservedAt: storedSnapshot.collectedAt });
   return snapshot;
 }
 
@@ -374,7 +374,7 @@ export async function analyzeLinuxTelemetry(deviceId: string) {
   const storedEvents = await boundedTelemetryStore.readEvents(deviceId).catch(() => [] as StoredTelemetryEvent[]);
   const rawEvents = storedEvents.map(storedTelemetryToRawEvent);
   const snapshotAnalysis = latest ? analyzeLinuxSecuritySnapshot(latest.snapshot) : { findings: [], riskSummary: { score: 0, severity: "info" as const, topFindings: [] } };
-  const liveAnalysis = await processVendorTelemetry({ device, events: rawEvents, snapshot: latest?.snapshot, now: new Date() });
+  const liveAnalysis = await processVendorTelemetry({ device, events: rawEvents, snapshot: latest?.snapshot, snapshotObservedAt: latest?.collectedAt, now: new Date() });
   const findings = liveAnalysis.findings;
   const countsBySeverity = findings.reduce<Record<string, number>>((acc, finding) => {
     acc[finding.severity] = (acc[finding.severity] ?? 0) + 1;

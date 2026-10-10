@@ -1,3 +1,10 @@
+## 2026-10-10 - Complete evidence-based equipment health
+
+- Replaced inherited/stale health presentation in the device workspace with a fresh-evidence assessment that cannot call a device healthy without both verified reachability and measured health data. Added explicit evidence coverage and ESXi datastore pressure handling.
+- Separated finding workflow state from measured health: closing requires reviewed evidence, operator confirmation and audit, while snapshot conditions are auto-resolved or reopened only from newer explicit observations. Missing telemetry never proves remediation.
+- Routed device security issues to a bilingual evidence/remediation guide before any proposed ActionPlan. Technical execution remains entirely in the existing preview/confirmation/PolicyGuard/connector/audit pipeline.
+- Passed final backend/frontend production builds, 23 focused regressions, locale parity (884 keys), Persian-copy checks and UTF-8 validation (785 files). Recorded one unrelated pre-existing stale Linux monitoring source assertion without changing it. No live device action, migration, deployment or push.
+
 ## 2026-10-09 - Verify live viewer/operator rollout
 
 - GitHub Actions run `37921389342` succeeded after pushing code through `b9797eb`. Server HEAD/deploy marker matched, Prisma recorded the workspace migration, all four services were healthy, gateway PIDs returned to 10, and public dashboard/API readiness were 200. Preserved server-only configuration and user untracked files; no live account or vendor command was used for validation.

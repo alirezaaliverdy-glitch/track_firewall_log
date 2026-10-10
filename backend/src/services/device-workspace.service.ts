@@ -2,6 +2,7 @@ import { prisma } from "../db/prisma.js";
 import { buildDeviceTrafficSeries } from "./device-traffic-series.js";
 import { mergeCiscoWorkspaceInterfaces, projectCiscoWorkspaceDetails, safeCiscoDetail } from "./device-workspace-cisco.js";
 import { diagnoseDeviceIssues } from "./device-issue-guide.js";
+import { assessDeviceHealth } from "./device-health-assessment.js";
 import { metricSourceForVendor } from "./device-metric-source.js";
 
 const PENDING_ACTION_STATES = ["proposed", "validation_failed", "dry_run_ready", "pending_approval", "approved", "executing", "rollback_pending"] as const;
@@ -503,6 +504,7 @@ export async function getDeviceWorkspace(reference: string) {
     "cpu.usage_percent": ["مصرف CPU", "CPU usage"],
     "memory.usage_percent": ["مصرف حافظه", "Memory usage"],
     "disk.usage_percent": ["مصرف دیسک", "Disk usage"],
+    "datastore.usage_percent": ["مصرف فضای داده", "Datastore usage"],
     "swap.usage_percent": ["مصرف Swap", "Swap usage"],
     "cpu.load_1m": ["بار CPU", "CPU load"],
     "services.failed_count": ["سرویس‌های ناموفق", "Failed services"],
@@ -512,7 +514,7 @@ export async function getDeviceWorkspace(reference: string) {
   for (const [key, metric] of latestMetrics) {
     const labels = metricLabels[key];
     if (labels) addSensor(key, labels[0], labels[1], metric.value, metric.unit ?? null, metric.timestamp, metric.source,
-      /^(cpu|memory|disk|swap)\.usage_percent$/.test(key) && metric.value >= 85 ? "attention" : "ok");
+      /^(cpu|memory|disk|datastore|swap)\.usage_percent$/.test(key) && metric.value >= 85 ? "attention" : "ok");
   }
   if (!latestMetrics.has("cpu.usage_percent")) addSensor("vendor.cpu", "بار CPU", "CPU load", factHealth.cpuLoad ?? asObject(factHealth.cpu).fiveSeconds ?? asObject(factHealth.cpu).oneMinute, null, sensorTimestamp, "vendor_connector");
   if (!latestMetrics.has("memory.usage_percent")) addSensor("vendor.memory", "حافظه آزاد", "Free memory", factHealth.memoryFree ?? asObject(factHealth.memory).usedPercent, null, sensorTimestamp, "vendor_connector");
@@ -537,9 +539,17 @@ export async function getDeviceWorkspace(reference: string) {
   const issues = diagnoseDeviceIssues({
     status: latestStatus ? { status: latestStatus.status, checkedAt: latestStatus.checkedAt, message: latestStatus.message } : null,
     collection: newestCollection ? { status: newestCollection.status, startedAt: newestCollection.startedAt, completedAt: newestCollection.completedAt, errorCode: newestCollection.errorCode } : null,
+    snapshot: health ? { state: health.state, collectedAt: health.collectedAt } : null,
     credentialConfigured: Boolean(device?.credentialId || device?.credentialRef),
     findings: findings.map((item) => ({ id: item.id, title: item.title, severity: item.severity, status: item.status, lastSeen: item.lastSeen })),
     sensors: sensorReadings.map((item) => ({ key: item.key, value: item.value, measuredAt: item.measuredAt }))
+  });
+  const healthAssessment = assessDeviceHealth({
+    status: latestStatus,
+    collection: newestCollection,
+    snapshot: health,
+    metrics: metricSamples,
+    findings
   });
   const section = (key: string, titleFa: string, titleEn: string, hasData: boolean, requirement: string, nextAction: string) => ({ key, titleFa, titleEn, state: hasData ? "available" : "no_data", reason: hasData ? null : "No verified collection has been stored for this capability.", requirement, nextAction });
   const ciscoSection = (key: string, group: string, titleFa: string, titleEn: string) => {
@@ -602,8 +612,10 @@ export async function getDeviceWorkspace(reference: string) {
       location: directAsset?.location?.name ?? null,
       managementIp: directAsset?.managementIp ?? device?.host ?? null,
       availability: connectionState.availability,
-      healthScore: health?.score ?? null,
-      healthState: health?.state ?? directAsset?.healthState ?? device?.status ?? "unknown",
+      healthScore: healthAssessment.score,
+      healthState: healthAssessment.state,
+      healthCoverage: healthAssessment.coverage,
+      healthReasons: healthAssessment.reasons,
       connectorState: onboarding.connectorType && connectionState.verificationStatus === "verified" ? "verified" : connectionState.availability,
       connectorType: liveProjection?.connectorType ?? onboarding.connectorType ?? capabilityCache?.connectorType ?? (Object.keys(ciscoCollection).length > 0 ? "cisco-ios-xe-ssh" : null),
       lastContact: connectionState.lastContact ?? directAsset?.lastSeenAt ?? null,

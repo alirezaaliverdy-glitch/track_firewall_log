@@ -10,11 +10,18 @@ export type RawTelemetryEvent = { id?: string; timestamp?: string | Date; source
 const windows = new Map<string, number[]>();
 function text(event: RawTelemetryEvent) { return [event.raw, event.message, event.summary, event.eventType, event.action, event.severity].filter(Boolean).join(" "); }
 function valueAt(input: unknown, path: string) { return path.split(".").reduce<unknown>((v, key) => v && typeof v === "object" ? (v as Record<string, unknown>)[key] : undefined, input); }
-function snapshotMatches(rule: VendorFindingRule, snapshot: unknown) { const value = valueAt(snapshot, rule.snapshotPath ?? ""); const s = String(value ?? "").toLowerCase(); switch (rule.snapshotTest) { case "truthy": return Boolean(value); case "enabled": return ["yes", "true", "enabled", "without-password", "prohibit-password"].includes(s); case "inactive": return !s || /inactive|unknown|unavailable|not.?detected|disabled|failed/.test(s); case "public": return /wildcard|public|0\.0\.0\.0|\[::\]/.test(s); default: return false; } }
+function snapshotMatches(rule: VendorFindingRule, snapshot: unknown) { const value = valueAt(snapshot, rule.snapshotPath ?? ""); const s = String(value ?? "").toLowerCase(); switch (rule.snapshotTest) { case "truthy": return value === true || (typeof value === "number" && value > 0) || (typeof value === "string" && !["", "false", "no", "0", "unknown"].includes(s)); case "enabled": return ["yes", "true", "enabled", "without-password", "prohibit-password"].includes(s); case "inactive": return /^(inactive|disabled|failed|stopped|false|no)$/.test(s); case "public": return /wildcard|public|0\.0\.0\.0|\[::\]/.test(s); default: return false; } }
+export function snapshotRuleCleared(rule: VendorFindingRule, snapshot: unknown) {
+  if (!rule.snapshotPath) return false;
+  const value = valueAt(snapshot, rule.snapshotPath);
+  const textValue = String(value ?? "").trim().toLowerCase();
+  if (value === null || value === undefined || !textValue || /^(unknown|unavailable|not.?detected|not.?collected)$/.test(textValue)) return false;
+  return !snapshotMatches(rule, snapshot);
+}
 function stableFingerprint(deviceId: string, vendor: string, ruleId: string, event?: RawTelemetryEvent) { const subject = event?.srcIp ?? event?.affectedObject ?? "device"; return crypto.createHash("sha256").update(`${deviceId}|${vendor}|${ruleId}|${subject}`).digest("hex"); }
 function evidenceFor(event?: RawTelemetryEvent, snapshotValue?: unknown) { const line = event ? text(event) : String(snapshotValue ?? "Snapshot condition matched"); return [line.replace(/(password|token|secret|api[_-]?key)\s*[:=]\s*\S+/gi, "$1=[REDACTED]").slice(0, 500)]; }
 
-export function evaluateVendorTelemetry(input: { device: Pick<Device, "id" | "vendor" | "type"> | { id: string; vendor: string; type?: unknown }; events?: RawTelemetryEvent[]; snapshot?: unknown; now?: Date }) {
+export function evaluateVendorTelemetry(input: { device: Pick<Device, "id" | "vendor" | "type"> | { id: string; vendor: string; type?: unknown }; events?: RawTelemetryEvent[]; snapshot?: unknown; snapshotObservedAt?: Date | string; now?: Date }) {
   const profile = getVendorTelemetryProfile(input.device.vendor, input.device.type); if (!profile) return { vendor: null, findings: [] as NormalizedFinding[], suppressed: [] as Array<{ reason: string; event: RawTelemetryEvent }> };
   const now = input.now ?? new Date(); const findings: NormalizedFinding[] = []; const suppressed: Array<{ reason: string; event: RawTelemetryEvent }> = [];
   for (const event of input.events ?? []) {
@@ -37,7 +44,8 @@ export async function processVendorTelemetry(input: Parameters<typeof evaluateVe
     const existing = await prisma.finding.findUnique({ where: { deviceId_fingerprint: { deviceId: finding.deviceId, fingerprint: finding.fingerprint } } });
     const existingRefs = new Set(Array.isArray(existing?.rawRefsJson) ? existing.rawRefsJson.map(String) : []);
     const newRefs = finding.rawRefs.filter((reference) => !existingRefs.has(reference));
-    const snapshotAlreadyRecorded = Boolean(existing) && finding.source === "snapshot";
+    const reopenSnapshot = finding.source === "snapshot" && shouldReopenResolvedSnapshot(existing, input.snapshotObservedAt);
+    const snapshotAlreadyRecorded = Boolean(existing) && finding.source === "snapshot" && !reopenSnapshot;
     if (existing && ((finding.rawRefs.length > 0 && newRefs.length === 0) || snapshotAlreadyRecorded)) {
       persisted.push(serializeFinding(existing as unknown as Record<string, unknown>) as unknown as NormalizedFinding);
       continue;
@@ -48,7 +56,27 @@ export async function processVendorTelemetry(input: Parameters<typeof evaluateVe
     await notifySecurityFinding({ finding: saved, eventIds: newRefs.length ? newRefs : [`snapshot:${finding.fingerprint}:${finding.lastSeen}`] });
     persisted.push(serializeFinding(saved as unknown as Record<string, unknown>) as unknown as NormalizedFinding);
   }
+  const observation = input.snapshotObservedAt ? new Date(input.snapshotObservedAt) : null;
+  const observedAt = observation?.getTime() ?? NaN;
+  const now = (input.now ?? new Date()).getTime();
+  if (input.snapshot != null && Number.isFinite(observedAt) && observedAt <= now + 30_000 && now - observedAt <= 15 * 60_000) {
+    const profile = getVendorTelemetryProfile(input.device.vendor, input.device.type);
+    for (const rule of profile?.findingRules ?? []) {
+      if (!snapshotRuleCleared(rule, input.snapshot)) continue;
+      const fingerprint = stableFingerprint(input.device.id, profile!.vendorId, rule.id);
+      const existing = await prisma.finding.findUnique({ where: { deviceId_fingerprint: { deviceId: input.device.id, fingerprint } } });
+      if (!existing || existing.source !== "snapshot" || existing.lastSeen.getTime() >= observedAt) continue;
+      const updated = await prisma.finding.updateMany({ where: { id: existing.id, status: { in: ["active", "acknowledged", "investigating"] } }, data: { status: "resolved" } });
+      if (updated.count) await prisma.auditLog.create({ data: { deviceId: input.device.id, actor: "system", action: "security.finding.auto_resolved", targetType: "finding", targetId: existing.id, dryRun: false, approvalStatus: "not_required", metadata: { snapshotObservedAt: observation!.toISOString(), ruleId: rule.id, reason: "fresh_snapshot_condition_cleared" } } });
+    }
+  }
   return { ...result, findings: persisted };
+}
+
+export function shouldReopenResolvedSnapshot(existing: { status: string; updatedAt: Date } | null, observedAt?: Date | string) {
+  if (existing?.status !== "resolved" || !observedAt) return false;
+  const observed = new Date(observedAt).getTime();
+  return Number.isFinite(observed) && observed > existing.updatedAt.getTime();
 }
 
 export function serializeFinding(record: Record<string, unknown>) { return { ...record, evidence: record.evidenceJson ?? [], rawRefs: record.rawRefsJson ?? [], recommendedActions: record.recommendedActions ?? [], evidenceJson: undefined, rawRefsJson: undefined }; }
