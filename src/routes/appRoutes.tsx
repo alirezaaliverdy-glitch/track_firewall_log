@@ -27,6 +27,7 @@ const EmailAlertsPage = lazy(() => import("@/features/security/pages/EmailAlerts
 const ActionsPage = lazy(() => import("@/features/actions/pages/ActionsPage"));
 const ScheduledTasksPage = lazy(() => import("@/features/actions/pages/ScheduledTasksPage"));
 const ActionConfigurePage = lazy(() => import("@/features/actions/pages/ActionConfigurePage"));
+const ActionScriptEditorPage = lazy(() => import("@/features/actions/pages/ActionScriptEditorPage"));
 const AssistantPage = lazy(() => import("@/features/assistant/pages/AssistantPage"));
 const AttackersPage = lazy(() => import("@/features/attackers/pages/AttackersPage"));
 const ToolsPage = lazy(() => import("@/features/tools/pages/ToolsPage"));
@@ -83,6 +84,7 @@ export const appRoutes: AppRoute[] = [
   { path: "/actions/history", featureKey: "actions.history", labelFa: "تاریخچه اجرا", labelEn: "History", group: "actions", component: ActionsPage },
   { path: "/actions/scheduled", featureKey: "actions.scheduled", labelFa: "زمان‌بندی عملیات", labelEn: "Scheduled tasks", group: "actions", component: ScheduledTasksPage },
   { path: "/actions/:actionId/configure", featureKey: "actions.configure", labelFa: "تنظیم ActionPlan", labelEn: "Configure ActionPlan", group: "actions", component: ActionConfigurePage },
+  { path: "/actions/:actionId/script-editor", featureKey: "actions.script_editor", labelFa: "ویرایش حرفه‌ای اسکریپت", labelEn: "Advanced script editor", group: "actions", component: ActionScriptEditorPage },
   { path: "/actions/:actionId", featureKey: "actions.detail", labelFa: "جزئیات Action", labelEn: "Action detail", group: "actions", component: ActionsPage },
   { path: "/assistant", featureKey: "assistant", labelFa: "دستیار هوشمند", labelEn: "Assistant", group: "assistant", component: AssistantPage },
   { path: "/reports", featureKey: "reports.company_status", labelFa: "گزارش‌گیری", labelEn: "Reports", group: "reports", component: ReportsPage },

@@ -1920,3 +1920,11 @@ The two-page A4 summary now has bounded density, consistent RTL grid placement, 
 - The production frontend is configured for `https://eosnet.ir/`: root is the public landing page and every non-root application URL is protected by login. The old `/firewall/` web path remains accepted by Nginx for compatibility, while the API stays under `/firewall-api`.
 - No database migration and no change to ActionPlan, PolicyGuard, connector invocation, audit, or the protected lab approval behavior.
 - Direct server rollout passed production API/web builds, 29 focused tests, Nginx/Caddy validation, Compose health waits, API readiness and real browser checks. All four persistent services are healthy; `eosnet.ir/` renders Landing and unauthenticated `/dashboard` renders Login. The three active user devices are online/healthy (92/94/94) and the active `alireza` application-account Finding count is zero. Server HEAD is `305a23a`; no GitHub push occurred.
+
+## 2026-10-10 - Professional vendor script editor is complete
+
+- Assistant cards and existing ActionPlan review now open a dedicated Persian RTL editor in a new tab. Execution and post-execution verification are fully editable multiline text with line numbers, copy/reset and structured line feedback.
+- The user may replace, add or remove draft text. Only commands accepted by the registered Linux/MikroTik/FortiGate/Cisco policy can become an executable preview; secrets, catastrophic commands and unsupported text fail closed with Persian guidance.
+- Preview creates a derived registered `custom_vendor_action` without changing the original plan. The final apply button stays disabled until a fresh valid preview exists.
+- One explicit confirmation then enters the protected `quick_controlled` path with `intent=execute`; PolicyGuard, the real connector, result verification and audit remain required.
+- Production API/web builds, 11 focused editor/policy tests, the 227-item command-catalog validation and browser QA passed. No migration, vendor mutation, push or production deployment occurred.

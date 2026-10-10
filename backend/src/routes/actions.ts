@@ -21,6 +21,7 @@ import { requiredExecutionPermissionForRisk } from "../security/authorization.js
 import { hasPermission } from "../security/permissions.js";
 import { getActionParameterSchema } from "../actions/parameter-schema-registry.js";
 import { ACTION_PLAN_SECRET_KEYS, hasActionPlanSecret } from "../services/action-plan-secret.service.js";
+import { ActionScriptEditorError, createEditedScriptPreview, getEditableActionScript } from "../actions/action-script-editor.service.js";
 
 export const actionRoutes: FastifyPluginAsync = async (app) => {
   const actor = (request: { authUser?: { id: string } }) => request.authUser?.id;
@@ -95,6 +96,36 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     const plan = await getActionPlan(request.params.id);
     if (!plan) return reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist.", actionPlanId: request.params.id, retryable: false } });
     return plan;
+  });
+
+  app.get<{ Params: { id: string } }>("/api/actions/:id/script-editor", async (request, reply) => {
+    try {
+      const draft = await getEditableActionScript(request.params.id);
+      return draft ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      if (error instanceof ActionScriptEditorError) {
+        return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message, messageFa: error.messageFa, issues: error.issues } });
+      }
+      throw error;
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { sourceRevision?: number; script?: string; verificationScript?: string } }>("/api/actions/:id/script-editor/preview", async (request, reply) => {
+    try {
+      const result = await createEditedScriptPreview({
+        sourceActionPlanId: request.params.id,
+        sourceRevision: request.body?.sourceRevision,
+        script: request.body?.script,
+        verificationScript: request.body?.verificationScript,
+        requestedBy: actor(request),
+      });
+      return result ? reply.code(201).send(result) : reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
+    } catch (error) {
+      if (error instanceof ActionScriptEditorError) {
+        return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message, messageFa: error.messageFa, issues: error.issues } });
+      }
+      throw error;
+    }
   });
 
   app.get<{ Params: { id: string } }>("/api/actions/:id/parameter-schema", async (request, reply) => {

@@ -170,3 +170,10 @@ Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-onl
 - preview اجرا نیست؛ موفقیت فقط بعد از connector واقعی و `connectorInvoked=true` ثبت شود. PolicyGuard و Audit حذف نشوند.
 - هیچ migration، فرمان تغییردهندهٔ تجهیز، push یا production deployment در این task انجام نشد.
 - secret، credential، raw log، database، upload، dependency folder و build output نباید چاپ، مستند یا commit شوند.
+
+## 2026-10-10 - Professional editable vendor scripts
+
+- Assistant proposals and existing prepared ActionPlans now expose **ویرایش حرفه‌ای اسکریپت** in a new tab. The Persian RTL workspace supports editable multiline execution and verification text, line numbers, copy/reset, per-line feedback, device context and a three-step edit/preview/confirm flow.
+- Edited text is never sent to a raw shell. Preview creates a derived registered `custom_vendor_action`; each executable line is checked by the existing Linux/MikroTik/FortiGate/Cisco policy, while secrets and catastrophic or unknown commands fail closed. The original ActionPlan is preserved.
+- The apply button is enabled only after a fresh successful preview. One explicit confirmation calls the protected quick-controlled flow with `intent=execute`; PolicyGuard, real connector invocation, verification, audit and `connectorInvoked=true` remain mandatory for success.
+- Production API/web builds, 11 focused editor/policy tests and validation of all 227 catalog items passed. Browser QA passed at 1440×1100 with no console/page errors. No real vendor command, schema migration, push or production rollout was performed.

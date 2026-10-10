@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Code2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { ActionCenterItem, ActionLifecycle } from "@/lib/actionCenter";
 import {
@@ -93,6 +94,7 @@ export function InlineActionReviewPanel({
       <footer className="operator-result__actions">
         {item.controls.canPreview && <button className="primary-button operator-execute" type="button" disabled={busy} onClick={onPreview}>{busy ? (isFa ? "در حال اجرا..." : "Running...") : (isFa ? "ساخت پیش‌نمایش" : "Generate Preview")}</button>}
         {item.controls.canEditParameters && <Link className="secondary-button" to={`/actions/${encodeURIComponent(item.id)}/configure`}>{isFa ? "تنظیم پارامترها" : "Configure parameters"}</Link>}
+        {item.deviceId && <Link className="secondary-button" target="_blank" rel="noreferrer" to={`/actions/${encodeURIComponent(item.id)}/script-editor`}><Code2 aria-hidden="true" />{isFa ? "ویرایش حرفه‌ای اسکریپت" : "Edit script"}</Link>}
         {canExecute && <button className="primary-button operator-execute" type="button" disabled={busy || !canReview} title={disabledReason ?? undefined} onClick={onReview}>{busy ? (isFa ? "در حال اجرا..." : "Running...") : item.lifecycleState === "ready_for_confirmation" ? (isFa ? "تأیید و اجرا" : "Confirm and Execute") : (isFa ? "بازبینی اجرا" : "Review execution")}</button>}
         {item.lifecycleState === "failed" && <button className="primary-button" type="button" disabled={busy} onClick={onRetry}>{isFa ? "تلاش دوباره" : "Retry"}</button>}
         {item.lifecycleState === "succeeded" && <button className="primary-button" type="button" disabled={busy} onClick={onRetry}>{isFa ? "اجرای دوباره" : "Run again"}</button>}

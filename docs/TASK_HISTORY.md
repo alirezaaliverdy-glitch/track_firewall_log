@@ -2004,3 +2004,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Changed the production frontend base to `/`, made only `/` public, added a landing login link, extended Nginx root SPA handling, and changed Caddy production routing to domain TLS plus API-first/root-web proxying. Production CI/release builds now use the root base path.
 - No migration or vendor-side mutation. Validation and direct server deployment are performed before handoff; no GitHub push is part of this task.
 - Deployed directly and traceably to the existing Compose project without pushing: both production images built, 29 focused tests passed, Nginx/Caddy/Compose validated, and API/web/gateway/database reached healthy. Browser acceptance confirmed Landing at `/` and Login at `/dashboard`; sanitized database acceptance confirmed devices 114/116/117 are online/healthy and no active Finding remains for the application account. A local-only `/healthz` endpoint replaced the obsolete gateway check against `/firewall/`.
+
+## 2026-10-10 - Add professional script editing before vendor execution
+
+- Added a dedicated Persian RTL editor opened in a new tab from assistant proposals and existing ActionPlan review. Users can replace, add or remove execution and verification lines, inspect per-line feedback and prepare a derived preview before confirming.
+- Added API endpoints to load editable commands and create that preview. The backend compiles edits only into the registered `custom_vendor_action` template and reuses the vendor-policy registry; raw shell execution, secrets, unknown commands and catastrophic patterns fail closed.
+- Preserved the one-confirmation lab flow: the final action sends `intent=execute` to quick-controlled execution, which still requires PolicyGuard, real connector invocation, post-checks and audit. Preview never changes a device.
+- Production API/web Docker builds, 11 focused safety/policy tests, the 227-item catalog validation and 1440×1100 browser QA passed. No vendor mutation, migration, push or production deployment occurred.

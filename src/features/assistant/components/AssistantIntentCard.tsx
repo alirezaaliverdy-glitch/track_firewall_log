@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, ChevronDown, TriangleAlert } from "lucide-react";
+import { CalendarClock, ChevronDown, Code2, ExternalLink, TriangleAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   completeAiActionRequest,
@@ -198,6 +198,16 @@ export function IntentCard({
         <div className="mt-3 rounded border border-green-900/70 bg-green-950/20 p-3">
           <p className="text-xs font-medium text-green-200">{isFa ? "برنامه اقدام ساخته شد؛ می‌توانید آن را بازبینی یا برای زمان دیگری برنامه‌ریزی کنید." : "ActionPlan created. Review it or schedule it for later."}</p>
           <div className="mt-2 flex flex-wrap gap-2">
+            <Link
+              to={`/actions/${encodeURIComponent(createdPlanId)}/script-editor`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-violet-500/35 bg-violet-500/10 px-3 text-xs font-semibold text-violet-100 transition hover:bg-violet-500/20"
+            >
+              <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {isFa ? "ویرایش حرفه‌ای اسکریپت" : "Edit script"}
+              <ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" />
+            </Link>
             <button
               type="button"
               onClick={() => missingFields.length > 0 ? configureInActionCenter(createdPlanId) : reviewInActionCenter(createdPlanId)}
@@ -205,7 +215,7 @@ export function IntentCard({
             >
               {missingFields.length > 0
                 ? (isFa ? "تکمیل پارامترها در مرکز عملیات" : "Complete parameters in Action Center")
-                : (isFa ? "بازبینی در مرکز عملیات" : "Review in Action Center")}
+                : (isFa ? "بازبینی، تأیید و اعمال" : "Review, confirm & apply")}
             </button>
             <Link
               to={`/actions/scheduled?planId=${encodeURIComponent(createdPlanId)}`}
