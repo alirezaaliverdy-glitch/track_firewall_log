@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-11 - Real Docker port unpublish and compact Network Lab
+
+- Closing a Docker-owned Linux port from Ports & Connections now sends the live container identity through the existing controlled ActionPlan flow and removes the selected host-port publication by transactionally recreating that container. The connector preserves unrelated bindings, mounts and networks, verifies the replacement state, and restores the original container automatically if creation, startup or health verification fails.
+- The result records the real connector outcome and warns when Docker Compose can republish the port until its source configuration is updated. Ordinary non-Docker close actions and the existing protected-port/PolicyGuard/audit controls are unchanged.
+- Network scanning now sits as a compact `اسکن شبکه` sub-tab inside Network Lab. The redundant hero, `جدید` marker, range explanation and verbose execution copy were removed; the remaining scope/profile controls are shorter and responsive.
+- Focused Docker evidence tests passed 3/3, backend/frontend production images built, production Compose validates, and the scoped local API/web rebuilds are healthy. Routed API health and Network Lab both return HTTP 200. No vendor/container mutation, migration, push or production deployment occurred.
+
 ## 2026-10-11 - Cisco ACL and expanded MikroTik command catalog
 
 - Promoted 22 RouterOS operations into the Persian command catalog with registered templates and verified connector support: interface/route/address-list/DNS/DHCP/resource/log reads plus managed firewall, NAT, route, DNS, DHCP, management-service, identity, SSH-port and sanitized-export workflows.

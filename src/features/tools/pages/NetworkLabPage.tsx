@@ -58,18 +58,18 @@ export default function NetworkLabPage() {
   };
 
   return <section className="page-stack network-lab" dir="rtl">
-    <PageHeader title="آزمایشگاه شبکه" description="تست اتصال و کشف حرفه‌ای IP، MAC و سرویس‌های شبکه" />
+    <PageHeader title="آزمایشگاه شبکه" />
 
     <nav className="network-lab__primary-tabs" aria-label="بخش‌های آزمایشگاه شبکه">
       <button type="button" className={labTab === "probe" ? "active" : ""} onClick={() => setLabTab("probe")}><Activity/>تست اتصال</button>
-      <button type="button" className={labTab === "scanner" ? "active" : ""} onClick={() => setLabTab("scanner")}><RadioTower/><span>اسکن IP و MAC<small>جدید</small></span></button>
+      <button type="button" className={labTab === "scanner" ? "active" : ""} onClick={() => setLabTab("scanner")}><RadioTower/>اسکن شبکه</button>
     </nav>
 
     {labTab === "scanner" ? <NetworkInventoryScanner devices={devices} /> : <>
 
     <div className="network-lab__grid">
       <section className="network-lab__card network-lab__form">
-        <header><Activity/><h2>تست جدید</h2></header>
+        <header><Activity/><h2>تست اتصال</h2></header>
         <div className="network-lab__modes">
           <button type="button" className={kind === "icmp" ? "active" : ""} onClick={() => setKind("icmp")}><Wifi/><span><b>Ping</b><small>ICMP</small></span></button>
           <button type="button" className={kind === "tcp" ? "active" : ""} onClick={() => setKind("tcp")}><Unplug/><span><b>بررسی پورت</b><small>TCP</small></span></button>

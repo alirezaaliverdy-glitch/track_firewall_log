@@ -1,3 +1,10 @@
+## 2026-10-11 - Real Docker unpublish and cleaner Network Lab UI
+
+- Docker-published Linux ports are no longer reported closed after only changing UFW. The controlled close action verifies the current owner, transactionally recreates it without the selected host binding, verifies `docker ps`, and automatically restores the original container on failure.
+- Mounted volumes, unrelated port bindings and network membership are preserved. Compose-managed results warn that the source Compose port must also be removed to prevent a later deploy from reopening it.
+- Network discovery is now a compact `اسکن شبکه` sub-tab. Redundant heading cards, the `جدید` badge and explanatory filler were removed; vendor/range and quick/full controls remain with responsive styling.
+- Focused tests pass 3/3. Backend/frontend production builds and Compose validation pass. Local API/web/database/Nginx are healthy and routed API health plus Network Lab return HTTP 200. No live device/container action, migration, push or production release occurred.
+
 ## 2026-10-11 - Stronger executable Cisco and MikroTik catalog
 
 - The main catalog now exposes 22 additional verified MikroTik operations instead of leaving implemented RouterOS compiler capabilities hidden.

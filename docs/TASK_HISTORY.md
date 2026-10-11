@@ -1,3 +1,10 @@
+## 2026-10-11 - Remove Docker publication for real and simplify Network Lab
+
+- Replaced the misleading Docker-port close result with a transactional unpublish path using current topology evidence, exact container validation, post-state verification and automatic restoration on failure.
+- Preserved the controlled preview/confirm/PolicyGuard/connector/audit path and existing protected-port rules; no raw command path was added.
+- Moved scanning under the Network Lab sub-tabs and removed the extra hero, `جدید` label and verbose helper text while retaining vendor discovery, CIDR mode and scan depth controls.
+- Docker tests passed 3/3, production API/web builds and Compose validation passed, and the scoped local deployments are healthy with HTTP 200 checks. No live vendor mutation or push occurred.
+
 ## 2026-10-11 - Expand Cisco and MikroTik controlled operations
 
 - Added 22 verified MikroTik catalog entries backed by registered ActionTypes, RouterOS compiler, SSH connector and execution templates.
