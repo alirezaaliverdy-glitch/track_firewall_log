@@ -19,7 +19,7 @@ export type EditableActionScript = {
   script: string;
   verificationScript: string;
   limits: { maxExecutionLines: number; maxLineLength: number };
-  safety: { rawExecution: false; requiresPreview: true; requiresConfirmation: true; messageFa: string };
+  safety: { rawExecution: boolean; adminExpertAvailable: boolean; requiresPreview: true; requiresConfirmation: true; messageFa: string };
 };
 
 export class ScriptEditorApiError extends Error {
@@ -58,13 +58,14 @@ export async function createEditedScriptPreview(actionPlanId: string, input: {
   sourceRevision: number;
   script: string;
   verificationScript: string;
-}): Promise<{ actionPlan: ActionPlan; validation: { valid: true; warnings: string[]; normalizedLines: number; verificationLines: number; rawExecution: false } }> {
+  executionMode?: "controlled" | "admin_expert";
+}): Promise<{ actionPlan: ActionPlan; validation: { valid: true; warnings: string[]; normalizedLines: number; verificationLines: number; rawExecution: boolean } }> {
   const payload = await request(`/actions/${encodeURIComponent(actionPlanId)}/script-editor/preview`, {
     method: "POST",
     body: JSON.stringify(input),
   });
   return {
     actionPlan: normalizeActionPlan(payload.actionPlan),
-    validation: normalizeObject(payload.validation) as { valid: true; warnings: string[]; normalizedLines: number; verificationLines: number; rawExecution: false },
+    validation: normalizeObject(payload.validation) as { valid: true; warnings: string[]; normalizedLines: number; verificationLines: number; rawExecution: boolean },
   };
 }

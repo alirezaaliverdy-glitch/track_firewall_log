@@ -11,6 +11,7 @@ const actionService = [
   "../src/actions/action-plan/action-plan-execution.service.ts",
 ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const policyGuard = readFileSync(new URL("../src/services/policy-guard.service.ts", import.meta.url), "utf8");
+const customPlanSource = readFileSync(new URL("../src/ai/custom-action-plan.ts", import.meta.url), "utf8");
 const assistantUi = readFileSync(new URL("../../src/components/ai/AiSecurityAssistantPanel.tsx", import.meta.url), "utf8");
 const linuxConnector = readFileSync(new URL("../src/connectors/linux-ssh.connector.ts", import.meta.url), "utf8");
 const mikrotikConnector = readFileSync(new URL("../src/connectors/mikrotik-ssh.connector.ts", import.meta.url), "utf8");
@@ -119,7 +120,7 @@ test("explicit approval remains required for custom execution", () => {
   assert.match(actionService, /approvalPreconditionError/);
   assert.match(actionService, /ACTION_NOT_APPROVED/);
   assert.match(actionService, /customConnectorControlled/);
-  assert.match(actionService, /metadata\.source === "ai_custom_connector_plan"/);
+  assert.match(actionService, /"ai_custom_connector_plan", "admin_expert_connector_plan"/);
 });
 
 test("custom execution remains connector-only", () => {
@@ -177,9 +178,11 @@ test("verification failure is still persisted through execution evidence and aud
 
 test("PolicyGuard normalizes and validates custom connector plans", () => {
   assert.match(policyGuard, /validateCustomCommandPlan/);
-  assert.match(policyGuard, /source: "ai_custom_connector_plan"/);
+  assert.match(policyGuard, /allowAdminExpert \? "admin_expert_connector_plan" : "ai_custom_connector_plan"/);
   assert.match(policyGuard, /executionTemplateRef: custom\.normalizedPlan\.executionTemplateRef/);
-  assert.match(policyGuard, /rawCommandExecution: false/);
+  assert.match(policyGuard, /rawCommandExecution: allowAdminExpert/);
+  assert.match(policyGuard, /role: "admin", isActive: true/);
+  assert.match(customPlanSource, /rawCommandExecution: false/);
 });
 
 test("switching devices clears stale plans in the Assistant UI", () => {

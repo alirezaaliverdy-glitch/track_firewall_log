@@ -5,6 +5,7 @@ import { linuxCustomCommandPolicy } from "./linux.policy.js";
 import { mikrotikCustomCommandPolicy } from "./mikrotik.policy.js";
 import { fortigateCustomCommandPolicy } from "./fortigate.policy.js";
 import { ciscoCustomCommandPolicy } from "./cisco.policy.js";
+import { baseDecision } from "./shared.js";
 
 const POLICIES: Record<CustomConnectorVendor, VendorCustomCommandPolicy> = {
   linux: linuxCustomCommandPolicy,
@@ -50,6 +51,7 @@ export function evaluateCustomCommandPolicy(input: {
   plan: CustomCommandPlan | null;
   device: CustomCommandPolicyDevice | null;
   actionType: ActionType | string;
+  allowAdminExpert?: boolean;
 }): CustomCommandValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -59,21 +61,36 @@ export function evaluateCustomCommandPolicy(input: {
   if (!input.plan) errors.push("Custom connector action requires a normalized customCommandPlan.");
   if (!input.plan || !input.device) return { valid: false, errors, warnings, missingFields, normalizedPlan: null, rollbackJson: {} };
 
-  const policy = getCustomCommandPolicy(input.plan.vendor);
+  const adminExpert = input.plan.source === "admin_expert" && input.plan.rawCommandExecution === true;
+  if (adminExpert && !input.allowAdminExpert) errors.push("Administrator expert execution requires an authenticated administrator.");
+  const effectivePlan: CustomCommandPlan = adminExpert
+    ? { ...input.plan, riskLevel: "high" as CustomCommandPlan["riskLevel"] }
+    : input.plan;
+  const policy = getCustomCommandPolicy(effectivePlan.vendor);
   const selectedVendor = vendorFromDevice(input.device);
-  const requestedVendor = requestedVendorFromText(input.plan.intent);
-  const template = VENDOR_TEMPLATES[input.plan.vendor];
-  if (!selectedVendor || selectedVendor !== input.plan.vendor) errors.push("Custom command vendor does not match the selected device vendor/platform.");
-  if (requestedVendor && requestedVendor !== input.plan.vendor) errors.push("Custom command text references a different vendor than the selected device.");
+  const requestedVendor = requestedVendorFromText(effectivePlan.intent);
+  const template = VENDOR_TEMPLATES[effectivePlan.vendor];
+  if (!selectedVendor || selectedVendor !== effectivePlan.vendor) errors.push("Custom command vendor does not match the selected device vendor/platform.");
+  if (requestedVendor && requestedVendor !== effectivePlan.vendor) errors.push("Custom command text references a different vendor than the selected device.");
   if (!policy.supportsDevice(input.device)) errors.push("Custom connector actions require an SSH-backed registered connector for the selected vendor.");
-  if (input.plan.connectorType !== template.connectorType || input.plan.executionTemplateRef !== template.executionTemplateRef) errors.push("Custom command template does not match the selected vendor connector.");
+  if (effectivePlan.connectorType !== template.connectorType || effectivePlan.executionTemplateRef !== template.executionTemplateRef) errors.push("Custom command template does not match the selected vendor connector.");
 
-  const decision = policy.evaluate({ plan: input.plan, device: input.device });
+  const decision = adminExpert
+    ? baseDecision({
+        plan: effectivePlan,
+        device: input.device,
+        vendor: effectivePlan.vendor,
+        commandAllowed: () => true,
+        fallbackOperation: `${effectivePlan.vendor}_admin_expert_command`,
+        adminExpert: true,
+        warnings: ["Administrator-authored expert commands bypass the curated vendor allowlist but still require preview, confirmation, PolicyGuard, connector execution, and audit."],
+      })
+    : policy.evaluate({ plan: effectivePlan, device: input.device });
   errors.push(...decision.errors);
   warnings.push(...decision.warnings);
 
   const normalizedPlan = {
-    ...input.plan,
+    ...effectivePlan,
     orderedCommands: decision.normalizedOperation.orderedCommands,
     typedParameters: {
       ...decision.normalizedOperation.typedParameters,
@@ -91,7 +108,7 @@ export function evaluateCustomCommandPolicy(input: {
       vendorPlatformCompatible: Boolean(selectedVendor && selectedVendor === input.plan.vendor && policy.supportsDevice(input.device)),
       commandSafety: errors.length === 0 ? "passed" as const : "failed" as const,
     },
-    rawCommandExecution: false as const,
+    rawCommandExecution: adminExpert,
   };
 
   const policyMissingFields = Array.from(new Set([...missingFields, ...decision.missingFields]));
@@ -110,7 +127,7 @@ export function evaluateCustomCommandPolicy(input: {
       requiresBackup: decision.requiresBackup,
       timeoutMs: decision.normalizedOperation.timeoutMs,
       outputLimitBytes: decision.normalizedOperation.outputLimitBytes,
-      rawCommandExecution: false,
+      rawCommandExecution: adminExpert,
     },
   };
 }

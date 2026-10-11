@@ -623,7 +623,9 @@ export const mikrotikSshConnector: DeviceConnector = {
           actionType: actionPlan.actionType,
           deviceId: device.id,
           commands,
-          warnings: ["AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered MikroTik connector dispatch."],
+          warnings: [customPlan.source === "admin_expert"
+            ? "Administrator-authored expert commands executed after preview, confirmation, PolicyGuard, and registered MikroTik connector dispatch."
+            : "AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered MikroTik connector dispatch."],
           rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification: { ok: true, summary: "Custom MikroTik verification commands completed." } }
         };
       });

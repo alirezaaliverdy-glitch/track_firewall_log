@@ -105,7 +105,7 @@ function issuesFor(errors: string[], script: string[], verification: string[]): 
   });
 }
 
-export async function getEditableActionScript(id: string) {
+export async function getEditableActionScript(id: string, requesterRole?: string) {
   const sourcePlan = await getActionPlan(id);
   if (!sourcePlan) return null;
   if (!sourcePlan.device) throw new ActionScriptEditorError("SCRIPT_DEVICE_REQUIRED", "A selected device is required.", 409);
@@ -151,9 +151,12 @@ export async function getEditableActionScript(id: string) {
     limits: { maxExecutionLines: 64, maxLineLength: 320 },
     safety: {
       rawExecution: false,
+      adminExpertAvailable: requesterRole === "admin",
       requiresPreview: true,
       requiresConfirmation: true,
-      messageFa: "متن آزاد است، اما فقط خطوط معتبرِ وندور پس از پیش‌نمایش، تأیید شما، PolicyGuard و Connector اجرا می‌شوند.",
+      messageFa: requesterRole === "admin"
+        ? "در حالت حرفه‌ای مدیر می‌توانید فرمان دلخواه خود را وارد کنید؛ اجرا پس از پیش‌نمایش و یک تأیید، با Connector و ثبت Audit انجام می‌شود."
+        : "متن آزاد است، اما فقط خطوط معتبرِ وندور پس از پیش‌نمایش، تأیید شما، PolicyGuard و Connector اجرا می‌شوند.",
     },
   };
 }
@@ -164,6 +167,8 @@ export async function createEditedScriptPreview(input: {
   script?: string;
   verificationScript?: string;
   requestedBy?: string;
+  requestedByRole?: string;
+  executionMode?: "controlled" | "admin_expert";
 }) {
   const source = await getActionPlan(input.sourceActionPlanId);
   if (!source) return null;
@@ -176,13 +181,23 @@ export async function createEditedScriptPreview(input: {
   }
   const vendor = customVendorFromDevice(source.device);
   if (!vendor) throw new ActionScriptEditorError("SCRIPT_VENDOR_NOT_SUPPORTED", "This vendor does not have a registered SSH script policy.", 409);
+  const adminExpert = input.executionMode === "admin_expert";
+  if (adminExpert && input.requestedByRole !== "admin") {
+    throw new ActionScriptEditorError(
+      "SCRIPT_ADMIN_REQUIRED",
+      "Administrator expert execution is available only to authenticated administrators.",
+      403,
+      [],
+      "حالت اجرای فرمان دلخواه فقط برای مدیر سامانه فعال است.",
+    );
+  }
 
   const commands = executableLines(input.script);
   const verificationCommands = executableLines(input.verificationScript);
   const existingCustom = customPlanFromParameters(source.parametersJson);
   const sourceMetadata = asObject(source.parametersJson).metadata;
   const sourceRollback = textArray(asObject(source.rollbackJson).rollbackGuidance);
-  const draft = buildCustomCommandPlan({
+  const baseDraft = buildCustomCommandPlan({
     message: `Advanced script editor for ${vendor} ActionPlan ${source.id}`,
     device,
     parameters: {
@@ -196,7 +211,7 @@ export async function createEditedScriptPreview(input: {
           sourceRevision: currentRevision,
         },
         missingFields: [],
-        riskLevel: source.riskLevel,
+        riskLevel: adminExpert ? AiRiskLevel.high : source.riskLevel,
         expectedImpact: existingCustom?.expectedImpact ?? `Applies an operator-edited ${vendor} command plan derived from ${source.actionType}.`,
         rollbackGuidance: existingCustom?.rollbackGuidance?.length
           ? existingCustom.rollbackGuidance
@@ -206,14 +221,34 @@ export async function createEditedScriptPreview(input: {
       },
     },
   });
-  const validation = validateCustomCommandPlan({ plan: draft, device, actionType: ActionType.custom_vendor_action });
+  const draft = baseDraft && adminExpert
+    ? {
+        ...baseDraft,
+        source: "admin_expert" as const,
+        riskLevel: AiRiskLevel.high,
+        rawCommandExecution: true,
+        typedParameters: {
+          ...baseDraft.typedParameters,
+          authoringMode: "admin_expert",
+          adminAuthored: true,
+        },
+      }
+    : baseDraft;
+  const validation = validateCustomCommandPlan({
+    plan: draft,
+    device,
+    actionType: ActionType.custom_vendor_action,
+    allowAdminExpert: adminExpert && input.requestedByRole === "admin",
+  });
   if (!validation.valid || !validation.normalizedPlan) {
     throw new ActionScriptEditorError(
       "SCRIPT_POLICY_REJECTED",
-      "One or more edited lines are not allowed by the registered vendor policy.",
+      adminExpert ? "One or more expert command lines failed the mandatory safety checks." : "One or more edited lines are not allowed by the registered vendor policy.",
       422,
       issuesFor(validation.errors, commands, verificationCommands),
-      "یک یا چند خط با سیاست اجرای امن این وندور سازگار نیست. خط‌های مشخص‌شده را اصلاح کنید.",
+      adminExpert
+        ? "یک یا چند خط از بررسی‌های پایهٔ ایمنی عبور نکرد. فرمان‌های فاجعه‌بار و اطلاعات محرمانه قابل اجرا نیستند."
+        : "یک یا چند خط با سیاست اجرای امن این وندور سازگار نیست. خط‌های مشخص‌شده را اصلاح کنید.",
     );
   }
 
@@ -234,8 +269,10 @@ export async function createEditedScriptPreview(input: {
       customCommandPlan: normalized,
       orderedCommands: normalized.orderedCommands,
       metadata: {
-        source: "ai_custom_connector_plan",
+        source: adminExpert ? "admin_expert_connector_plan" : "ai_custom_connector_plan",
         editorSource: "advanced_script_editor",
+        authoringMode: adminExpert ? "admin_expert" : "controlled",
+        adminAuthorId: adminExpert ? input.requestedBy ?? null : null,
         sourceActionPlanId: source.id,
         sourceActionType: source.actionType,
         sourceRevision: currentRevision,
@@ -264,7 +301,7 @@ export async function createEditedScriptPreview(input: {
       warnings: validation.warnings,
       normalizedLines: normalized.orderedCommands.length,
       verificationLines: normalized.verificationCommands.length,
-      rawExecution: false,
+      rawExecution: adminExpert,
     },
   };
 }

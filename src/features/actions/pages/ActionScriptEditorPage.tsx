@@ -17,6 +17,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { quickExecuteAction, type ActionPlan } from "@/lib/actions";
+import { useAuth } from "@/context/AuthContext";
 import {
   createEditedScriptPreview,
   getEditableActionScript,
@@ -26,6 +27,7 @@ import {
 } from "@/lib/actionScriptEditor";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import "./ActionScriptEditorPage.css";
+import "./ActionScriptEditorExpertMode.css";
 
 type EditorTab = "script" | "verification";
 
@@ -47,6 +49,7 @@ function statusCopy(plan: ActionPlan | null, isFa: boolean) {
 export default function ActionScriptEditorPage({ params }: RouteComponentProps) {
   const actionId = params.actionId ?? "";
   const { i18n } = useTranslation();
+  const { user } = useAuth();
   const isFa = i18n.language?.startsWith("fa") ?? false;
   const [draft, setDraft] = useState<EditableActionScript | null>(null);
   const [script, setScript] = useState("");
@@ -58,6 +61,7 @@ export default function ActionScriptEditorPage({ params }: RouteComponentProps) 
   const [previewPlan, setPreviewPlan] = useState<ActionPlan | null>(null);
   const [issues, setIssues] = useState<ScriptEditorIssue[]>([]);
   const [message, setMessage] = useState("");
+  const [expertMode, setExpertMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,10 +112,11 @@ export default function ActionScriptEditorPage({ params }: RouteComponentProps) 
         sourceRevision: draft.sourceRevision,
         script,
         verificationScript: verification,
+        executionMode: expertMode ? "admin_expert" : "controlled",
       });
       setPreviewPlan(result.actionPlan);
       setMessage(isFa
-        ? `هر ${result.validation.normalizedLines.toLocaleString("fa-IR")} خط اجرا و ${result.validation.verificationLines.toLocaleString("fa-IR")} خط بررسی تأیید شدند. هنوز چیزی روی تجهیز اجرا نشده است.`
+        ? `${result.validation.normalizedLines.toLocaleString("fa-IR")} خط اجرا و ${result.validation.verificationLines.toLocaleString("fa-IR")} خط بررسی تأیید شدند. هنوز چیزی روی تجهیز اجرا نشده است.`
         : "The edited script passed policy validation. Nothing has executed yet.");
     } catch (error) {
       if (error instanceof ScriptEditorApiError) {
@@ -207,9 +212,27 @@ export default function ActionScriptEditorPage({ params }: RouteComponentProps) 
         </main>
 
         <aside className="script-editor-review">
+          {draft?.safety.adminExpertAvailable && user?.role === "admin" ? <section className={`script-editor-expert ${expertMode ? "is-active" : ""}`}>
+            <div>
+              <strong>{isFa ? "حالت فرمان دلخواه مدیر" : "Administrator expert commands"}</strong>
+              <p>{isFa ? "فرمان‌های آمادهٔ خودتان را بدون محدودیت کاتالوگ وارد کنید. بررسی secret و فرمان‌های فاجعه‌بار همچنان فعال است." : "Enter your own commands outside the curated catalog. Secret and catastrophic-command checks remain active."}</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-label={isFa ? "فعال‌سازی حالت فرمان دلخواه مدیر" : "Enable administrator expert commands"}
+              aria-checked={expertMode}
+              onClick={() => {
+                setExpertMode((value) => !value);
+                setPreviewPlan(null);
+                setIssues([]);
+                setMessage("");
+              }}
+            ><span /></button>
+          </section> : null}
           <section className="script-editor-safety">
             <span><ShieldCheck aria-hidden="true" /></span>
-            <div><strong>{isFa ? "اجرای خام غیرفعال است" : "Raw execution is disabled"}</strong><p>{draft?.safety.messageFa ?? (isFa ? "اسکریپت پس از اعتبارسنجی قابل اجراست." : "The script must pass validation.")}</p></div>
+            <div><strong>{expertMode ? (isFa ? "اجرای مستقیم مدیر فعال است" : "Administrator direct execution enabled") : (isFa ? "اجرای کنترل‌شده" : "Controlled execution")}</strong><p>{expertMode ? (isFa ? "متن واردشده توسط مدیر پس از پیش‌نمایش و یک تأیید، با Connector واقعی اجرا و در Audit ثبت می‌شود." : "Administrator-authored text runs through the real connector after preview and one confirmation, with full audit logging.") : (draft?.safety.messageFa ?? (isFa ? "اسکریپت پس از اعتبارسنجی قابل اجراست." : "The script must pass validation."))}</p></div>
           </section>
 
           <section className={`script-editor-status ${issues.length ? "has-error" : previewPlan ? "is-ready" : ""}`}>

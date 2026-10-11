@@ -113,7 +113,7 @@ function timeoutFromDuration(value: unknown) {
 export function normalizeParameters(actionType: ActionType, parameters: Record<string, unknown>) {
   const canonical = normalizeIntent({ ...parameters, actionType });
   delete canonical.actionType;
-  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
+  if (typeof parameters.source === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan", "admin_expert_connector_plan"].includes(parameters.source) && canonical.sourceIp === parameters.source) {
     delete canonical.sourceIp;
     delete canonical.srcInterface;
   }
@@ -508,14 +508,15 @@ export async function ensureControlledCatalogAction(plan: ActionPlan) {
   }
   const device = plan.deviceId ? await prisma.device.findUnique({ where: { id: plan.deviceId } }) : null;
   const customPlan = customPlanFromParameters(plan.parametersJson);
-  if (plan.actionType === ActionType.custom_vendor_action && customPlan && previewMetadata.source === "ai_custom_connector_plan") {
+  const customConnectorSource = ["ai_custom_connector_plan", "admin_expert_connector_plan"].includes(String(previewMetadata.source ?? ""));
+  if (plan.actionType === ActionType.custom_vendor_action && customPlan && customConnectorSource) {
     const selectedVendor = customVendorFromDevice(device);
     const expected = customTemplateForVendor(customPlan.vendor);
     if (!device) throw new ActionExecutionError("DEVICE_REQUIRED", "Custom connector ActionPlan requires a selected device.", 409);
     if (!selectedVendor || selectedVendor !== customPlan.vendor) throw new ActionExecutionError("CUSTOM_VENDOR_MISMATCH", "Custom command vendor does not match the selected device.", 409);
     if (customPlan.connectorType !== expected.connectorType || customPlan.executionTemplateRef !== expected.executionTemplateRef) throw new ActionExecutionError("CUSTOM_TEMPLATE_MISMATCH", "Custom command template does not match the selected vendor connector.", 409);
     if (previewExecutionSupport !== "connector") throw new ActionExecutionError("CUSTOM_CONNECTOR_REQUIRED", "Custom ActionPlan execution requires connector support.", 409);
-    return { controlled: true, catalogCommandId: null, source: "ai_custom_connector_plan", executionTemplateRef: customPlan.executionTemplateRef, connectorType: customPlan.connectorType, vendor: customPlan.vendor };
+    return { controlled: true, catalogCommandId: null, source: String(previewMetadata.source), executionTemplateRef: customPlan.executionTemplateRef, connectorType: customPlan.connectorType, vendor: customPlan.vendor };
   }
   const productCatalog = resolveCatalogAction(plan, device);
   if (productCatalog.matched) {
@@ -644,7 +645,7 @@ export function buildPostExecutionVerification(input: {
     },
     connectorVerification,
     checks,
-    rawCommandExecution: false
+    rawCommandExecution: customPlanFromParameters(input.plan.parametersJson)?.source === "admin_expert"
   };
 }
 
@@ -776,7 +777,7 @@ export function executionApprovalError(plan: Pick<ActionPlan, "actionType" | "st
     return new ActionExecutionError("PREVIEW_ONLY_GUIDED_ACTION", "این اکشن هنوز اجرای واقعی کامل ندارد.");
   }
   const productCatalogControlled = ["command_catalog", "command_search_ai_fallback", "ai_mapped_template"].includes(String(metadata.source)) && metadata.supportState === "verified" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
-  const customConnectorControlled = plan.actionType === ActionType.custom_vendor_action && metadata.source === "ai_custom_connector_plan" && metadata.supportState === "verified" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
+  const customConnectorControlled = plan.actionType === ActionType.custom_vendor_action && ["ai_custom_connector_plan", "admin_expert_connector_plan"].includes(String(metadata.source ?? "")) && metadata.supportState === "verified" && metadata.executionSupport === "connector" && typeof metadata.executionTemplateRef === "string";
   const controlled = customConnectorControlled || productCatalogControlled || Boolean(catalog) || VENDOR_COMMAND_CATALOG.some((entry) => entry.supported && entry.actionType === plan.actionType);
   if ((mode === "direct_controlled" || mode === "quick_controlled") && controlled) return null;
   const readOnly = catalog?.requiresApproval === false || (isMikroTikAction(plan.actionType) && plan.actionType === ActionType.mikrotik_read_firewall_summary);

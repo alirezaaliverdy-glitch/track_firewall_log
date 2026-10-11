@@ -100,7 +100,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>("/api/actions/:id/script-editor", async (request, reply) => {
     try {
-      const draft = await getEditableActionScript(request.params.id);
+      const draft = await getEditableActionScript(request.params.id, actorRole(request));
       return draft ?? reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
     } catch (error) {
       if (error instanceof ActionScriptEditorError) {
@@ -110,7 +110,7 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post<{ Params: { id: string }; Body: { sourceRevision?: number; script?: string; verificationScript?: string } }>("/api/actions/:id/script-editor/preview", async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { sourceRevision?: number; script?: string; verificationScript?: string; executionMode?: "controlled" | "admin_expert" } }>("/api/actions/:id/script-editor/preview", async (request, reply) => {
     try {
       const result = await createEditedScriptPreview({
         sourceActionPlanId: request.params.id,
@@ -118,6 +118,8 @@ export const actionRoutes: FastifyPluginAsync = async (app) => {
         script: request.body?.script,
         verificationScript: request.body?.verificationScript,
         requestedBy: actor(request),
+        requestedByRole: actorRole(request),
+        executionMode: request.body?.executionMode,
       });
       return result ? reply.code(201).send(result) : reply.code(404).send({ error: { code: "ACTION_PLAN_NOT_FOUND", message: "The requested ActionPlan does not exist." } });
     } catch (error) {

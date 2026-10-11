@@ -1,3 +1,11 @@
+## 2026-10-11 - Administrator expert commands
+
+- Advanced script editing has a visible admin-only expert mode for user-authored commands outside the curated allowlist on registered Linux/MikroTik/FortiGate/Cisco SSH connectors.
+- Expert plans are high risk, use the registered custom execution template, and still require preview, one confirmation, PolicyGuard, real connector execution, evidence, and audit. Verification commands are optional in this mode.
+- AI plans remain on the strict vendor policy path. PolicyGuard verifies that the stored requester is an active administrator; operators cannot spoof expert metadata.
+- Secrets, catastrophic commands, empty/oversized scripts, and vendor/template mismatches remain blocked. The root-recursive-delete matcher was repaired.
+- Production builds and Compose validation passed; 33 focused tests plus one isolated-database integration test passed; catalog 227, i18n 884, Persian copy, and UTF-8 passed. The disposable DB was removed and local API/web were rebuilt. No vendor execution, migration, push, or production release.
+
 ## 2026-10-11 - Complete command editing and actionable mobile remediation
 
 - Catalog and assistant ActionPlans expose their full connector commands in the professional editor. Read-only command bundles remain in the main script tab; write plans keep explicit read-only post-checks separate. Linux Daily Check now shows all six real commands, and Linux read actions show the exact shell command instead of a label.

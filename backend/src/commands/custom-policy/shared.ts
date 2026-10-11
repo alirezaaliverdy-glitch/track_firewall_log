@@ -4,7 +4,7 @@ import type { CustomCommandPolicyDecision, CustomCommandPolicyDevice, Normalized
 
 export const SECRET_PATTERN = /(password|passphrase|private[-_ ]?key|secret|token|api[-_ ]?key)\s*[=:]\s*\S+/i;
 export const LINUX_SHELL_META_PATTERN = /[`$<>]|\$\(|[;&|]|\b(curl|wget|nc|netcat|bash|sh|python|perl|ruby|powershell|cmd\.exe)\b/i;
-export const CATASTROPHIC_COMMAND_PATTERN = /\b(factory[- ]?reset|reset-configuration|erase\s+(startup-)?config|write erase|format|delete\s+\*|rm\s+-rf\s+\/|shutdown|factoryreset|export\s+show-sensitive)\b/i;
+export const CATASTROPHIC_COMMAND_PATTERN = /(?:\b(?:factory[- ]?reset|reset-configuration|erase\s+(?:startup-)?config|write erase|format|delete\s+\*|shutdown|factoryreset|export\s+show-sensitive)\b|\brm\s+-rf\s+\/(?:\s|$))/i;
 
 export function commandLines(plan: Pick<CustomCommandPlan, "orderedCommands" | "verificationCommands">) {
   return [...plan.orderedCommands, ...plan.verificationCommands].map((line) => line.trim()).filter(Boolean);
@@ -51,23 +51,25 @@ export function baseDecision(input: {
   requiresBackup?: boolean;
   extraErrors?: string[];
   warnings?: string[];
+  adminExpert?: boolean;
 }): CustomCommandPolicyDecision {
   const operation = operationFromPlan(input.plan, input.fallbackOperation);
+  if (input.adminExpert) operation.riskLevel = AiRiskLevel.high;
   const errors = [...commonCommandErrors(input.plan), ...(input.extraErrors ?? [])];
   for (const command of commandLines(input.plan)) {
-    if (!input.commandAllowed(command)) errors.push(`Custom command is not allowed for ${input.vendor}: ${command}`);
+    if (!input.adminExpert && !input.commandAllowed(command)) errors.push(`Custom command is not allowed for ${input.vendor}: ${command}`);
   }
   if (input.plan.missingFields.length > 0) errors.push(`Missing custom ActionPlan fields: ${input.plan.missingFields.join(", ")}`);
-  if (input.plan.verificationCommands.length === 0) errors.push("Mutable custom operations require explicit verification.");
+  if (!input.adminExpert && input.plan.verificationCommands.length === 0) errors.push("Mutable custom operations require explicit verification.");
   const highRisk = operation.riskLevel === AiRiskLevel.high || operation.riskLevel === AiRiskLevel.critical;
   return {
     allowed: errors.length === 0,
     errors,
     warnings: input.warnings ?? [],
     missingFields: Array.from(new Set(input.plan.missingFields)),
-    requiredRole: highRisk ? "admin" : "operator",
-    requiredPermission: executionPermissionForRisk(operation.riskLevel),
-    requiresBackup: input.requiresBackup ?? highRisk,
+    requiredRole: input.adminExpert ? "admin" : highRisk ? "admin" : "operator",
+    requiredPermission: input.adminExpert ? "actions.execute.high_risk" : executionPermissionForRisk(operation.riskLevel),
+    requiresBackup: input.adminExpert ? true : input.requiresBackup ?? highRisk,
     normalizedOperation: operation,
   };
 }

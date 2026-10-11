@@ -2019,3 +2019,11 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Preserved full editing for assistant and catalog plans: unchanged controlled catalog commands are policy-recognized; changed/new lines still require the vendor allowlist and all existing preview, confirmation, PolicyGuard, connector and audit gates.
 - Changed finding remediation to canonicalize the source IP, prepare the dry-run server-side, prevent duplicate taps and navigate directly to the exact ActionPlan. Fixed hardcoded Linux service-status errors so missing credential/device setup points at the real action and field.
 - Production builds, production Compose config validation, 36 focused tests, catalog/i18n/UTF-8 checks and an isolated DB API test passed. The temporary database container was removed. Rebuilt local API/web and verified healthy services plus HTTP 200 routes and six-line Daily Check editor output. No vendor command, migration, push or production release.
+
+## 2026-10-11 - Add administrator expert command mode
+
+- Added an admin-only toggle to the advanced editor for manually authored Linux, MikroTik, FortiGate, and Cisco SSH commands outside the curated allowlist; verification lines are optional.
+- Kept user confirmation, PolicyGuard, the registered custom template, real connector dispatch, result evidence and audit. Expert plans are high risk and the backend revalidates the requester as an active admin on every PolicyGuard pass.
+- Preserved strict AI behavior: AI-authored commands still use vendor allowlists and cannot mark themselves as expert. Secrets, catastrophic commands, empty/oversized scripts, and vendor/template mismatches still fail closed.
+- Fixed the catastrophic-command regex so root-recursive deletion is reliably rejected. Updated connector warnings and Action Center UI recognition for the distinct admin-authored source.
+- Backend/frontend production builds, production Compose validation, 33 focused regressions, one disposable PostgreSQL integration test, catalog/i18n/Persian/UTF-8 checks passed. Rebuilt local API/web; no vendor command, migration, push, or production rollout.

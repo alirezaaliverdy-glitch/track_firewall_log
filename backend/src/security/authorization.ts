@@ -47,6 +47,7 @@ export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "POST", path: "/api/actions/:id/validate", permission: "actions.propose" },
   { method: "PATCH", path: "/api/actions/:id/parameters", permission: "actions.propose" },
   { method: "POST", path: "/api/actions/:id/dry-run", permission: "actions.propose" },
+  { method: "POST", path: "/api/actions/:id/script-editor/preview", permission: "actions.propose" },
   { method: "POST", path: "/api/actions/:id/approve", permission: "actions.approve" },
   { method: "POST", path: "/api/actions/:id/reject", permission: "actions.approve" },
   { method: "POST", path: "/api/actions/:id/execute", permission: "actions.execute.write" },

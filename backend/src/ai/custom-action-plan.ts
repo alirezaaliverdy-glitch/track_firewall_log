@@ -11,7 +11,7 @@ export type CustomCommandPlan = {
   vendor: CustomConnectorVendor;
   platform: string | null;
   intent: string;
-  source: "ai_custom";
+  source: "ai_custom" | "admin_expert";
   orderedCommands: string[];
   orderedOperations: Array<{
     id: string;
@@ -35,7 +35,7 @@ export type CustomCommandPlan = {
     vendorPlatformCompatible: boolean;
     commandSafety: "pending" | "passed" | "failed";
   };
-  rawCommandExecution: false;
+  rawCommandExecution: boolean;
 };
 
 export type CustomCommandValidation = {
@@ -448,6 +448,7 @@ export function validateCustomCommandPlan(input: {
   plan: CustomCommandPlan | null;
   device: Pick<Device, "id" | "type" | "vendor" | "protocol"> | null;
   actionType: ActionType | string;
+  allowAdminExpert?: boolean;
 }): CustomCommandValidation {
   return evaluateCustomCommandPolicy(input);
 }
@@ -456,7 +457,9 @@ export function customDryRun(plan: CustomCommandPlan): ConnectorDryRun {
   return {
     plannedCommands: [...plan.orderedCommands, ...plan.verificationCommands],
     validationWarnings: [
-      "AI-generated custom commands were normalized and validated by the backend; no command has executed during preview.",
+      plan.source === "admin_expert"
+        ? "Administrator-authored expert commands were validated by the backend; no command has executed during preview."
+        : "AI-generated custom commands were normalized and validated by the backend; no command has executed during preview.",
       ...(!plan.verificationCommands.length ? ["No explicit verification command was provided."] : []),
     ],
     affectedPorts: [],

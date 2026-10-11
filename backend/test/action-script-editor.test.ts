@@ -7,6 +7,8 @@ import { linuxDailyCheckCommands, linuxReadCommand } from "../src/connectors/lin
 
 const serviceSource = readFileSync(new URL("../src/actions/action-script-editor.service.ts", import.meta.url), "utf8");
 const routeSource = readFileSync(new URL("../src/routes/actions.ts", import.meta.url), "utf8");
+const policyGuardSource = readFileSync(new URL("../src/services/policy-guard.service.ts", import.meta.url), "utf8");
+const editorUiSource = readFileSync(new URL("../../src/features/actions/pages/ActionScriptEditorPage.tsx", import.meta.url), "utf8");
 
 const linuxDevice = {
   id: "linux-script-editor",
@@ -55,14 +57,55 @@ test("advanced editor fails closed for arbitrary unsupported or secret-bearing t
   }
 });
 
+test("authenticated administrator expert mode accepts operator-authored commands outside the curated allowlist", () => {
+  const controlled = editorPlan(["printf 'status' | tee /tmp/vendor-status"], []);
+  assert.ok(controlled);
+  const expert = {
+    ...controlled,
+    source: "admin_expert" as const,
+    rawCommandExecution: true,
+  };
+  const denied = validateCustomCommandPlan({ plan: expert, device: linuxDevice, actionType: ActionType.custom_vendor_action });
+  assert.equal(denied.valid, false);
+  assert.ok(denied.errors.some((error) => error.includes("authenticated administrator")));
+
+  const allowed = validateCustomCommandPlan({ plan: expert, device: linuxDevice, actionType: ActionType.custom_vendor_action, allowAdminExpert: true });
+  assert.equal(allowed.valid, true, allowed.errors.join("; "));
+  assert.deepEqual(allowed.normalizedPlan?.orderedCommands, ["printf 'status' | tee /tmp/vendor-status"]);
+  assert.equal(allowed.normalizedPlan?.verificationCommands.length, 0);
+  assert.equal(allowed.normalizedPlan?.riskLevel, "high");
+  assert.equal(allowed.normalizedPlan?.rawCommandExecution, true);
+  assert.equal(allowed.normalizedPlan?.typedParameters.requiredRole, "admin");
+});
+
+test("administrator expert mode still rejects secrets and catastrophic commands", () => {
+  for (const command of ["password=do-not-store-this", "rm -rf /"]) {
+    const controlled = editorPlan([command], []);
+    assert.ok(controlled);
+    const expert = { ...controlled, source: "admin_expert" as const, rawCommandExecution: true };
+    const validation = validateCustomCommandPlan({ plan: expert, device: linuxDevice, actionType: ActionType.custom_vendor_action, allowAdminExpert: true });
+    assert.equal(validation.valid, false, command);
+  }
+});
+
 test("script editor creates a derived preview and never sends edited text to a raw executor", () => {
   assert.match(routeSource, /\/api\/actions\/:id\/script-editor/);
   assert.match(routeSource, /createEditedScriptPreview/);
   assert.match(serviceSource, /ActionType\.custom_vendor_action/);
-  assert.match(serviceSource, /source:\s*"ai_custom_connector_plan"/);
+  assert.match(serviceSource, /adminExpert \? "admin_expert_connector_plan" : "ai_custom_connector_plan"/);
   assert.match(serviceSource, /dryRunActionPlan\(previewPlan\.id\)/);
   assert.match(serviceSource, /rawExecution:\s*false/);
   assert.doesNotMatch(serviceSource, /exec\(|spawn\(|ssh2|client\.exec/);
+});
+
+test("administrator expert mode is role-gated in API, PolicyGuard, and UI", () => {
+  assert.match(routeSource, /requestedByRole:\s*actorRole\(request\)/);
+  assert.match(serviceSource, /SCRIPT_ADMIN_REQUIRED/);
+  assert.match(serviceSource, /admin_expert_connector_plan/);
+  assert.match(policyGuardSource, /role:\s*"admin",\s*isActive:\s*true/);
+  assert.match(policyGuardSource, /allowAdminExpert/);
+  assert.match(editorUiSource, /user\?\.role === "admin"/);
+  assert.match(editorUiSource, /executionMode:\s*expertMode \? "admin_expert" : "controlled"/);
 });
 
 test("script editor can open an empty draft before a custom command preview exists", () => {

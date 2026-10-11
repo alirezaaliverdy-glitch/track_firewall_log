@@ -60,7 +60,7 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function isActionPlanControlSource(value: unknown) {
-  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan"].includes(value);
+  return typeof value === "string" && ["command_catalog", "command_search_ai_fallback", "ai_mapped_template", "guided_action_wizard", "ai_custom_connector_plan", "admin_expert_connector_plan"].includes(value);
 }
 
 function numberParam(parameters: Record<string, unknown>, key: string) {
@@ -269,7 +269,13 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   if (containsShellShape(parameters)) errors.push("Free-form shell, command, script, or exec parameters are not allowed.");
 
   if (plan.actionType === ActionType.custom_vendor_action) {
-    const custom = validateCustomCommandPlan({ plan: customPlanFromParameters(parameters), device, actionType: plan.actionType });
+    const customPlan = customPlanFromParameters(parameters);
+    const adminExpertRequested = customPlan?.source === "admin_expert" && customPlan.rawCommandExecution === true;
+    const adminAuthor = adminExpertRequested && plan.requestedBy
+      ? await prisma.appUser.findFirst({ where: { id: plan.requestedBy, role: "admin", isActive: true }, select: { id: true } })
+      : null;
+    const allowAdminExpert = adminExpertRequested && Boolean(adminAuthor);
+    const custom = validateCustomCommandPlan({ plan: customPlan, device, actionType: plan.actionType, allowAdminExpert });
     errors.push(...custom.errors);
     warnings.push(...custom.warnings);
     const normalizedParameters = custom.normalizedPlan
@@ -288,7 +294,7 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
           executable: custom.valid && custom.missingFields.length === 0,
           metadata: {
             ...asObject(parameters.metadata),
-            source: "ai_custom_connector_plan",
+            source: allowAdminExpert ? "admin_expert_connector_plan" : "ai_custom_connector_plan",
             vendor: custom.normalizedPlan.vendor,
             platform: custom.normalizedPlan.platform,
             actionType: ActionType.custom_vendor_action,
@@ -303,7 +309,7 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
             normalizedParams: custom.normalizedPlan.typedParameters,
             requiredParamsSatisfied: custom.missingFields.length === 0,
             missingFields: custom.missingFields,
-            rawCommandExecution: false,
+            rawCommandExecution: allowAdminExpert,
           }
         }
       : parameters;

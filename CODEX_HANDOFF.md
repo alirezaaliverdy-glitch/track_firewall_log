@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-11 administrator expert command execution
+
+The advanced script editor now exposes an administrator-only expert toggle. An authenticated active admin may enter their own Linux, MikroTik, FortiGate, or Cisco SSH command lines outside the curated vendor allowlist; post-check lines are optional. These user-authored plans are always normalized to high risk and use the existing registered `custom_vendor_action` execution template and real vendor connector. Preview, one explicit confirmation in protected quick-controlled mode, PolicyGuard, connector invocation, result evidence, and audit remain mandatory.
+
+AI-authored custom plans remain allowlist-controlled with `rawCommandExecution=false`. The backend rechecks the ActionPlan requester against the active `AppUser` admin record during every validation and execution-time PolicyGuard pass, so an operator or forged client flag cannot enable expert mode. Secret-bearing input, empty/oversized plans, cross-vendor/template mismatches, and catastrophic commands remain blocked; the catastrophic matcher was corrected to reliably reject `rm -rf /`. The UI shows the expert toggle only to admins and clearly distinguishes it from controlled catalog mode.
+
+Backend and frontend production builds, production Compose validation, 33 focused safety/policy tests, one isolated PostgreSQL integration test, the 227-item catalog validation, locale parity, Persian-copy, and UTF-8 checks passed. The integration test proved operator rejection and admin `dry_run_ready` without connector invocation; its disposable database container and data were removed. Local API and web were rebuilt with the scoped scripts. No vendor command, schema migration, push, or production deployment occurred.
+
 ## 2026-10-11 complete script sources and preview-ready finding remediation
 
 The advanced editor now loads the complete connector command list for catalog and assistant ActionPlans instead of treating read-only `commandSpecs` as post-checks or showing the Linux Daily Check placeholder. Linux Daily Check and read actions share one command library between planner, dry-run, editor and real connector execution; the existing local Daily Check plan now returns six full editable commands and no placeholder. Unchanged registered read bundles are accepted by the vendor policy, while new or changed text still must pass the existing vendor allowlist, secret/catastrophic checks, preview, explicit confirmation, PolicyGuard, connector and audit. The editor line limit is 64 and long commands retain one-line horizontal editing.

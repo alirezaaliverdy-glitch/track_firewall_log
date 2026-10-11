@@ -556,7 +556,7 @@ export const fortigateSshConnector: DeviceConnector = {
         const verification = { ok: true, summary: "Custom FortiGate verification commands completed." };
         await audit?.("post_verification_passed", verification.summary, verification);
         await audit?.("rollback_available", "Rollback guidance is available for this FortiGate custom action.", { steps: customPlan.rollbackGuidance, verification });
-        return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: ["AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered FortiGate connector dispatch."], rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification } };
+        return { executed: true, actionType: actionPlan.actionType, deviceId: device.id, commands, warnings: [customPlan.source === "admin_expert" ? "Administrator-authored expert commands executed after preview, confirmation, PolicyGuard, and registered FortiGate connector dispatch." : "AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered FortiGate connector dispatch."], rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification } };
       });
     }
     const rawParams = asObject(actionPlan.parametersJson);

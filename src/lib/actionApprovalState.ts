@@ -16,7 +16,7 @@ export function actionExecutionUiState(action: ActionPlan) {
   const supportState = String(metadata.supportState ?? metadataValue(parameters, "supportState") ?? (catalogState === "implemented" && executionSupport === "connector" ? "verified" : ""));
   const customAction = action.actionType === "custom_vendor_action" || action.actionType === "generic_security_action";
   const customConnectorPlan = customAction &&
-    metadata.source === "ai_custom_connector_plan" &&
+    ["ai_custom_connector_plan", "admin_expert_connector_plan"].includes(String(metadata.source ?? "")) &&
     catalogState === "implemented" &&
     supportState === "verified" &&
     executionSupport === "connector" &&

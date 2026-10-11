@@ -165,7 +165,9 @@ export const ciscoIosXeConnector: DeviceConnector = {
         actionType: plan.actionType,
         deviceId: device.id,
         commands: result.results.map((entry) => ({ template: entry.commandId, stdout: entry.stdout, stderr: entry.stderr, exitCode: entry.exitCode })),
-        warnings: [...result.warnings, "AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered Cisco connector dispatch."],
+        warnings: [...result.warnings, customPlan.source === "admin_expert"
+          ? "Administrator-authored expert commands executed after preview, confirmation, PolicyGuard, and registered Cisco connector dispatch."
+          : "AI-generated custom commands executed only after backend validation, approval, PolicyGuard, and registered Cisco connector dispatch."],
         rollbackJson: { customConnectorPlan: true, steps: customPlan.rollbackGuidance, verification: { ok: true, summary: "Custom Cisco verification commands completed." } }
       };
     }
