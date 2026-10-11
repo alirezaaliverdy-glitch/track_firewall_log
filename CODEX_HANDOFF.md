@@ -1,5 +1,11 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-11 Docker-aware port control and quieter shell
+
+Ports & Connections now identifies Linux ports published by Docker from live `docker ps` evidence and shows the owning container, image, host-to-container mapping, protocol, and current `DOCKER-USER` enforcement state. Closing a Docker-published port no longer relies on UFW: the controlled Linux connector inserts an idempotent DROP rule in `DOCKER-USER`, verifies that exact original-destination port rule, records container evidence and rollback commands, and leaves the container running. Non-Docker ports keep the existing UFW/firewalld/nftables/iptables path. Protected management ports and the current SSH port remain blocked from closure.
+
+The Network Lab scanner header is now a compact functional label instead of a marketing hero, and the selected-device widget and its extra device fetch were removed from the global topbar. Backend/frontend production builds, 26 topology/Docker regressions, UTF-8/i18n checks and development/production Compose validation passed. Local API/web were rebuilt through the scoped scripts; all four services are healthy and readiness/topology return HTTP 200. No vendor command, container stop/removal, migration, push or production deployment occurred.
+
 ## 2026-10-11 professional IP/MAC network inventory
 
 Network Lab now has a dedicated `اسکن IP و MAC` tab. The operator selects a workspace device and an RFC1918 CIDR bounded to at most 256 addresses, then chooses fast discovery or a deeper service/version scan with up to 24 explicit TCP ports. The result keeps every address in the range and shows active/vendor-seen/down state, latency, hostname, normalized MAC, Nmap OUI manufacturer when available, open ports and detected service product/version, probable device class, interface/VLAN, evidence sources and an evidence-confidence label. Search, evidence filters, expandable details, CSV export, per-user audit history and a separate mobile card layout are included.

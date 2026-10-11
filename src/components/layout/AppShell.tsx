@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import type { Device } from "@/lib/devices";
 import type { ProductNavigationGroup } from "@/lib/productState";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { getMobilePreference, setMobilePreference } from "@/lib/mobileStorage";
@@ -48,13 +47,6 @@ const fallbackNavigation: ProductNavigationGroup[] = [
   { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", route: "/settings", mobilePrimary: false, items: [] },
 ];
 
-function deviceIdFromLocation(pathname: string, search: string) {
-  const queryDeviceId = new URLSearchParams(search).get("deviceId");
-  if (queryDeviceId) return queryDeviceId;
-  const match = pathname.match(/^\/assets\/devices\/([^/]+)/);
-  return match && !["new", "onboarding"].includes(match[1]) ? decodeURIComponent(match[1]) : "";
-}
-
 function deferAfterFirstPaint(callback: () => void) {
   let timeoutId: number | undefined;
   const frameId = window.requestAnimationFrame(() => {
@@ -79,13 +71,10 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const [navigation, setNavigation] = useState<ProductNavigationGroup[]>([]);
   const [navigationError, setNavigationError] = useState(false);
-  const [devices, setDevices] = useState<Device[]>([]);
   const online = useOnlineStatus();
   const isFa = i18n.language?.startsWith("fa");
   const direction = isFa ? "rtl" : "ltr";
   const activeGroup = currentGroup;
-  const selectedDeviceId = useMemo(() => deviceIdFromLocation(location.pathname, location.search), [location.pathname, location.search]);
-  const selectedDevice = devices.find((device) => device.id === selectedDeviceId) ?? null;
   const localNavigation = useMemo(() => fallbackNavigation.filter((group) => (
     group.key === "settings" || user?.role === "admin" || (user?.allowedSections ?? []).includes(group.key)
   )), [user?.allowedSections, user?.role]);
@@ -140,24 +129,6 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
       if (retryId !== undefined) window.clearTimeout(retryId);
     };
   }, []);
-
-  useEffect(() => {
-    if (!selectedDeviceId) {
-      setDevices([]);
-      return;
-    }
-    let active = true;
-    const cancelDeferred = deferAfterFirstPaint(() => {
-      void import("@/lib/devices")
-        .then(({ listDevices }) => listDevices())
-        .then((items) => { if (active) setDevices(items); })
-        .catch(() => { if (active) setDevices([]); });
-    });
-    return () => {
-      active = false;
-      cancelDeferred();
-    };
-  }, [selectedDeviceId]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -241,9 +212,6 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
             <i className={`topbar-health-dot ${connectionHealthy ? "is-online" : "is-offline"}`} title={connectionHealthy ? t("shell.backendConnected") : t("shell.backendUnavailable")} />
           </div>
           <nav className="topbar-tools" aria-label={t("shell.operationContext")}>
-            <Link to={selectedDevice ? `/assets/devices/${selectedDevice.id}` : "/assets/devices"} className="topbar-device">
-              <Server aria-hidden="true" /><span><small>{t("shell.selectedDevice")}</small><strong dir={selectedDevice ? "ltr" : direction}>{selectedDevice ? `${selectedDevice.name} · ${selectedDevice.vendor}` : t("shell.noDeviceSelected")}</strong></span>
-            </Link>
             {user?.role !== "viewer" ? <Link to="/actions" className="topbar-create"><Plus aria-hidden="true" /><span>{isFa ? "اقدام جدید" : "New action"}</span></Link> : null}
             <details ref={accountMenuRef} className="topbar-account">
               <summary aria-label={isFa ? "منوی حساب" : "Account menu"}><span>{(user?.displayName || user?.username || "U").slice(0, 1).toLocaleUpperCase()}</span><strong>{user?.displayName || user?.username}</strong><ChevronDown aria-hidden="true" /></summary>

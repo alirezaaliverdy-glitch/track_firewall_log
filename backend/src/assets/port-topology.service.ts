@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js";
 import { syncDeviceRecordToAsset } from "./asset-intelligence.service.js";
 import { testDeviceConnection } from "../services/device.service.js";
 import { probeLinuxListeningPorts } from "../connectors/linux-ssh.connector.js";
+import { parseDockerPublishedPorts, type DockerPublishedPort } from "../connectors/linux/docker-port-evidence.js";
 import { refreshDeviceVendorCapabilities, VendorCapabilityRefreshError } from "../vendors/capability-discovery.service.js";
 
 type PortMetadata = {
@@ -42,11 +43,13 @@ type ServiceEndpoint = {
   discoveredAt?: string;
   bindings?: ServiceBinding[];
   replacesKey?: string;
+  container?: DockerPublishedPort;
 };
 
 type ServiceBinding = Pick<ServiceEndpoint, "address" | "exposure" | "state" | "source" | "confidence" | "discoveredAt"> & {
   process?: string;
   serviceName?: string;
+  container?: DockerPublishedPort;
 };
 
 type ServiceTopologyMetadata = {
@@ -160,7 +163,8 @@ function serviceCandidate(input: Partial<ServiceEndpoint>) {
     serviceName: text(input.serviceName, 100) || undefined,
     source: text(input.source, 60) || "inventory",
     confidence: Math.min(1, Math.max(0, Number(input.confidence) || 0.7)),
-    discoveredAt: input.discoveredAt ?? new Date().toISOString()
+    discoveredAt: input.discoveredAt ?? new Date().toISOString(),
+    container: input.container
   };
   item.key = endpointKey(item);
   item.bindings = [serviceBinding(item)];
@@ -176,7 +180,8 @@ function serviceBinding(item: ServiceBinding): ServiceBinding {
     serviceName: item.serviceName,
     source: item.source,
     confidence: item.confidence,
-    discoveredAt: item.discoveredAt
+    discoveredAt: item.discoveredAt,
+    container: item.container
   };
 }
 
@@ -223,12 +228,15 @@ function endpointRank(item: ServiceEndpoint) {
 function mergeServiceEndpoints(left: ServiceEndpoint, right: ServiceEndpoint, preferRight = false): ServiceEndpoint {
   const preferred = preferRight || endpointRank(right) > endpointRank(left) ? right : left;
   const fallback = preferred === right ? left : right;
+  const container = preferred.container ?? fallback.container;
   return {
     ...fallback,
     ...preferred,
     key: endpointKey(preferred),
     process: preferred.process ?? fallback.process,
     serviceName: preferred.serviceName ?? fallback.serviceName,
+    container,
+    state: container?.blockedByDockerUser ? "disabled" : preferred.state,
     confidence: Math.max(left.confidence, right.confidence),
     bindings: mergeBindings(left, right)
   };
@@ -297,6 +305,21 @@ function parseLinuxFirewallPorts(output: string) {
   return items;
 }
 
+export function parseLinuxDockerPorts(output: string, dockerUserRules = "") {
+  return parseDockerPublishedPorts(output, dockerUserRules).map((container) => serviceCandidate({
+    protocol: container.protocol,
+    address: container.hostIp,
+    port: container.hostPort,
+    state: container.blockedByDockerUser ? "disabled" : "listening",
+    exposure: exposure(container.hostIp),
+    process: `docker:${container.containerName || container.containerId.slice(0, 12)}`,
+    serviceName: container.image || "Docker container",
+    source: "linux-docker",
+    confidence: 0.99,
+    container
+  })).filter((item): item is ServiceEndpoint => Boolean(item));
+}
+
 function parseMikroTikService(line: string) {
   const values = Object.fromEntries(Array.from(line.matchAll(/([\w-]+)=("[^"]*"|\S+)/g)).map((match) => [match[1], match[2].replace(/^"|"$/g, "")]));
   const port = Number(values.port);
@@ -343,6 +366,7 @@ export function collectServiceEndpoints(device: Device, snapshot?: unknown, opti
     const firewallEvidence = linuxStatus.firewallPortsCollected === true ? text(linuxStatus.firewallPorts, 300_000)
       : linuxStatus.firewallPortsCollected === false ? "" : `${text(linuxStatus.firewallPorts, 300_000)}\n__UFW__\n${text(linuxStatus.ufwStatus, 100_000)}`;
     for (const item of parseLinuxFirewallPorts(firewallEvidence)) add(item);
+    for (const item of parseLinuxDockerPorts(text(linuxStatus.dockerPublishedPorts, 300_000), text(linuxStatus.dockerUserRules, 100_000))) add(item);
   }
 
   const snapshotNetwork = object(object(snapshot).network);
@@ -889,6 +913,9 @@ async function refreshLinuxServicePortsNow(deviceId: string, userId?: string) {
               listeningPortsCollected: true,
               firewallPorts: result.firewallPorts,
               firewallPortsCollected: result.firewallPortsCollected,
+              dockerPublishedPorts: result.dockerPublishedPorts,
+              dockerInventoryCollected: result.dockerInventoryCollected,
+              dockerUserRules: result.dockerUserRules,
               ufwStatus: "",
               listeningPortsCheckedAt: result.checkedAt,
               listeningPortsError: null
@@ -898,6 +925,9 @@ async function refreshLinuxServicePortsNow(deviceId: string, userId?: string) {
               listeningPortsCollected: false,
               firewallPortsCollected: false,
               firewallPorts: "",
+              dockerPublishedPorts: "",
+              dockerInventoryCollected: false,
+              dockerUserRules: "",
               listeningPortsCheckedAt: result.checkedAt,
               listeningPortsError: result.errorCode ?? "LISTENER_PROBE_FAILED"
             }

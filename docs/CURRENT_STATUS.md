@@ -1956,3 +1956,9 @@ The two-page A4 summary now has bounded density, consistent RTL grid placement, 
 - One explicit confirmation then enters the protected `quick_controlled` path with `intent=execute`; PolicyGuard, the real connector, result verification and audit remain required.
 - Production API/web builds, 11 focused editor/policy tests, the 227-item command-catalog validation and browser QA passed. No migration, vendor mutation, push or production deployment occurred.
 - Follow-up fixed the missing visible entry point reported from the public UI: both the current assistant card and the inline Action detail controls expose a prominent new-tab edit link. A proposal that has not produced preview commands can start with an empty draft. Local Chromium confirmed the visible Persian link, correct route/target, editor tabs, preview and apply enablement with zero console/page errors.
+## 2026-10-11 - Docker-aware port control and simplified chrome
+
+- Linux service discovery now attributes Docker-published ports to the exact container/image and preserves the host-to-container port mapping in the topology response and UI.
+- Closing a Docker-published port uses a verified, idempotent `DOCKER-USER` original-destination DROP rule with recorded rollback instead of incorrectly treating UFW as authoritative. Containers are not stopped or removed.
+- Simplified the Network Lab scanner header and removed the selected-device block plus its background fetch from the global topbar.
+- API/frontend production builds, 26 focused regressions, UTF-8/i18n and both Compose paths passed. Local API/web are deployed and healthy; readiness and topology return HTTP 200. No live vendor mutation or production release occurred.

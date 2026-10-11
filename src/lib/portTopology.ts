@@ -26,11 +26,18 @@ export type ServiceEndpoint = {
   exposure: "all_interfaces" | "loopback" | "interface" | "policy" | "unknown";
   process?: string; serviceName?: string; source: string; confidence: number; note?: string;
   manualOverride?: boolean; discoveredAt?: string; bindings?: ServiceBinding[]; replacesKey?: string;
+  container?: DockerPublishedPort;
+};
+
+export type DockerPublishedPort = {
+  containerId: string; containerName: string; image: string; hostIp: string;
+  hostPort: number; containerPort: number; protocol: "tcp" | "udp"; blockedByDockerUser: boolean;
 };
 
 export type ServiceBinding = {
   address: string; exposure: ServiceEndpoint["exposure"]; state: ServiceEndpoint["state"];
   process?: string; serviceName?: string; source: string; confidence: number; discoveredAt?: string;
+  container?: DockerPublishedPort;
 };
 
 async function json<T>(response: Response): Promise<T> {

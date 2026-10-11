@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, EthernetPort, History, LoaderCircle, Network, Radar, Router, Search, ShieldCheck, Trash2, WifiOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, EthernetPort, History, LoaderCircle, Network, Radar, Router, Search, Trash2, WifiOff } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Device } from "@/lib/devices";
 import { clearNetworkInventoryScans, listNetworkInventoryScans, runNetworkInventoryScan, type NetworkInventoryHost, type NetworkInventoryScan } from "@/lib/diagnostics";
@@ -122,8 +122,7 @@ export function NetworkInventoryScanner({ devices }: Props) {
   return <div className="network-scanner">
     <section className="network-scanner__hero">
       <div className="network-scanner__hero-icon"><Radar/></div>
-      <div><span>کشف دارایی از روی شواهد واقعی</span><h2>اسکن حرفه‌ای IP، MAC و Hostname</h2><p>تمام IP و MACهای شناخته‌شده توسط تجهیز را بدون واردکردن بازه بخوانید؛ hostname از DHCP/DNS وندور، PTR و کشف فعال تکمیل می‌شود.</p></div>
-      <div className="network-scanner__limits"><ShieldCheck/><span><b>کشف بدون حدس</b>فقط اطلاعات واقعی وندور و شبکه نمایش داده می‌شود</span></div>
+      <div><h2>اسکن شبکه</h2><p>IP، MAC و نام دستگاه‌های شناخته‌شده توسط تجهیز</p></div>
     </section>
 
     <section className="network-scanner__setup">

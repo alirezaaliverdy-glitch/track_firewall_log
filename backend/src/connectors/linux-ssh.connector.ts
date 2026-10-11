@@ -100,6 +100,7 @@ const LINUX_READ_ACTIONS = new Set<ActionType>([
 const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 
 import { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "./linux/firewall-parsers.js";
+import { dockerPublishedPortGuard, parseDockerPublishedPorts } from "./linux/docker-port-evidence.js";
 export { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "./linux/firewall-parsers.js";
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -637,6 +638,8 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
       throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing protected port ${port} is blocked by Linux connector policy.`);
     }
     plannedCommands = [
+      "detect whether Docker publishes the requested host port",
+      "when Docker owns the port, enforce and verify a DOCKER-USER drop rule without stopping the container",
       "detect active firewall adapter (UFW, firewalld, nftables, or iptables)",
       `inspect effective allow rules for ${port}/${protocol}`,
       `remove only matching allow rules for ${port}/${protocol} when present`,
@@ -802,13 +805,41 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       if (port === sshPort) {
         throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing current SSH port ${port} is blocked.`);
       }
-      const detection = await pushCommand(
-        "firewall adapter detection",
-        `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then echo ufw; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then echo firewalld; elif command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then echo nftables; elif command -v iptables >/dev/null 2>&1; then echo iptables; else echo none; fi'`
+      const dockerInventory = await pushCommand(
+        "docker published-port detection",
+        `${sudo}sh -c 'if command -v docker >/dev/null 2>&1; then docker ps --no-trunc --format "{{json .}}" 2>/dev/null; fi'`
       );
-      const adapter = detection.stdout.trim().split(/\r?\n/).at(-1)?.trim();
+      const dockerPorts = parseDockerPublishedPorts(dockerInventory.stdout).filter((item) => item.hostPort === port && item.protocol === protocol);
       let changed = false;
+      let adapter = "";
 
+      if (dockerPorts.length) {
+        adapter = "docker-user";
+        const guard = dockerPublishedPortGuard(port, protocol);
+        const before = await pushCommand(
+          "docker DOCKER-USER guard precheck",
+          `${sudo}sh -c 'if ! command -v iptables >/dev/null 2>&1 || ! iptables -nL DOCKER-USER >/dev/null 2>&1; then echo "Docker owns this published port, but its DOCKER-USER enforcement chain is unavailable." >&2; exit 43; fi; if ${guard.check} >/dev/null 2>&1; then echo PRESENT; else echo ABSENT; fi'`
+        );
+        changed = /\bABSENT\b/.test(before.stdout);
+        await pushCommand("docker DOCKER-USER IPv4 guard", `${sudo}sh -c '${guard.check} >/dev/null 2>&1 || ${guard.insert}'`);
+        await pushCommand("docker DOCKER-USER IPv6 guard", `${sudo}sh -c 'if command -v ip6tables >/dev/null 2>&1 && ip6tables -nL DOCKER-USER >/dev/null 2>&1; then ${guard.ipv6Check} >/dev/null 2>&1 || ${guard.ipv6Insert}; fi'`);
+        await pushCommand("docker published-port block verification", `${sudo}sh -c '${guard.check} >/dev/null 2>&1'`);
+        rollbackJson.containerPorts = dockerPorts.map((item) => ({
+          containerId: item.containerId,
+          containerName: item.containerName,
+          image: item.image,
+          hostIp: item.hostIp,
+          hostPort: item.hostPort,
+          containerPort: item.containerPort,
+          protocol: item.protocol
+        }));
+        rollbackJson.steps = [`${sudo}${guard.remove}`, `${sudo}${guard.ipv6Remove} (when the IPv6 DOCKER-USER chain exists)`];
+      } else {
+        const detection = await pushCommand(
+          "firewall adapter detection",
+          `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then echo ufw; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then echo firewalld; elif command -v nft >/dev/null 2>&1 && nft list ruleset >/dev/null 2>&1; then echo nftables; elif command -v iptables >/dev/null 2>&1; then echo iptables; else echo none; fi'`
+        );
+        adapter = detection.stdout.trim().split(/\r?\n/).at(-1)?.trim() ?? "";
       if (adapter === "ufw") {
         const before = await pushCommand("ufw status before close", `${sudo}ufw status numbered`);
         const rules = parseUfwAllowRuleNumbers(before.stdout, port, protocol);
@@ -847,6 +878,7 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       } else {
         throw new ConnectorError("FIREWALL_ADAPTER_NOT_FOUND", "No supported active Linux firewall adapter was detected.");
       }
+      }
 
       const outcome = changed ? "completed" : "verified_no_change";
       warnings.push(outcome.toUpperCase());
@@ -856,8 +888,9 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.port = port;
       rollbackJson.protocol = protocol;
       rollbackJson.connectorInvoked = true;
-      rollbackJson.steps = changed ? [`Restore an allow rule for ${port}/${protocol} through the detected ${adapter} adapter after explicit review.`] : [];
-      await audit?.(changed ? "effective_state_verified" : "already_compliant", changed ? "Firewall effective state was verified after removing matching allow rules." : "Firewall effective state was inspected and was already compliant.", { adapter, port, protocol, outcome, connectorInvoked: true });
+      rollbackJson.enforcementPath = adapter;
+      if (adapter !== "docker-user") rollbackJson.steps = changed ? [`Restore an allow rule for ${port}/${protocol} through the detected ${adapter} adapter after explicit review.`] : [];
+      await audit?.(changed ? "effective_state_verified" : "already_compliant", changed ? (adapter === "docker-user" ? "Docker published-port access was blocked and verified in DOCKER-USER." : "Firewall effective state was verified after removing matching allow rules.") : "Firewall effective state was inspected and was already compliant.", { adapter, port, protocol, outcome, connectorInvoked: true });
     } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
       const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
       const durationMinutes = Number(parameters.durationMinutes ?? 30);
@@ -934,6 +967,9 @@ export type LinuxListeningPortProbeResult = {
   listeningPorts: string;
   firewallPorts: string;
   firewallPortsCollected: boolean;
+  dockerPublishedPorts: string;
+  dockerInventoryCollected: boolean;
+  dockerUserRules: string;
   checkedAt: string;
   errorCode?: string;
   message?: string;
@@ -945,9 +981,11 @@ export async function probeLinuxListeningPorts(device: Device): Promise<LinuxLis
     const credential = await getCredential(device);
     return await withSshWithCredential(device, credential, async (client) => {
       const sudo = sudoPrefix(credential);
-      const [listeners, firewall] = await Promise.all([
+      const [listeners, firewall, dockerInventory, dockerUserRules] = await Promise.all([
         exec(client, "ss -H -lntup 2>/dev/null || ss -H -lntp 2>/dev/null"),
-        exec(client, `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then printf "__UFW__\\n"; ufw status 2>/dev/null; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then printf "__FIREWALLD__\\n"; firewall-cmd --list-ports 2>/dev/null; elif command -v nft >/dev/null 2>&1; then printf "__NFT__\\n"; nft list ruleset 2>/dev/null; elif command -v iptables >/dev/null 2>&1; then printf "__IPTABLES__\\n"; iptables -S 2>/dev/null; else printf "__NONE__\\n"; fi'`)
+        exec(client, `${sudo}sh -c 'if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then printf "__UFW__\\n"; ufw status 2>/dev/null; elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then printf "__FIREWALLD__\\n"; firewall-cmd --list-ports 2>/dev/null; elif command -v nft >/dev/null 2>&1; then printf "__NFT__\\n"; nft list ruleset 2>/dev/null; elif command -v iptables >/dev/null 2>&1; then printf "__IPTABLES__\\n"; iptables -S 2>/dev/null; else printf "__NONE__\\n"; fi'`),
+        exec(client, `${sudo}sh -c 'if command -v docker >/dev/null 2>&1; then docker ps --no-trunc --format "{{json .}}" 2>/dev/null; fi'`),
+        exec(client, `${sudo}sh -c 'if command -v iptables >/dev/null 2>&1; then iptables -S DOCKER-USER 2>/dev/null || true; fi'`)
       ]);
       if (listeners.exitCode !== 0) {
         throw new ConnectorError("SSH_COMMAND_FAILED", listeners.stderr || "Could not read listening ports.");
@@ -957,6 +995,9 @@ export async function probeLinuxListeningPorts(device: Device): Promise<LinuxLis
         listeningPorts: listeners.stdout,
         firewallPorts: firewall.exitCode === 0 ? firewall.stdout : "",
         firewallPortsCollected: firewall.exitCode === 0,
+        dockerPublishedPorts: dockerInventory.exitCode === 0 ? dockerInventory.stdout : "",
+        dockerInventoryCollected: dockerInventory.exitCode === 0,
+        dockerUserRules: dockerUserRules.exitCode === 0 ? dockerUserRules.stdout : "",
         checkedAt
       };
     });
@@ -967,6 +1008,9 @@ export async function probeLinuxListeningPorts(device: Device): Promise<LinuxLis
       listeningPorts: "",
       firewallPorts: "",
       firewallPortsCollected: false,
+      dockerPublishedPorts: "",
+      dockerInventoryCollected: false,
+      dockerUserRules: "",
       checkedAt,
       errorCode: connectorError.code,
       message: connectorError.message

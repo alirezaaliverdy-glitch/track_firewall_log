@@ -2038,3 +2038,10 @@ Entries are chronological and compact. Validation reflects what was known at the
 - Preserved strict AI behavior: AI-authored commands still use vendor allowlists and cannot mark themselves as expert. Secrets, catastrophic commands, empty/oversized scripts, and vendor/template mismatches still fail closed.
 - Fixed the catastrophic-command regex so root-recursive deletion is reliably rejected. Updated connector warnings and Action Center UI recognition for the distinct admin-authored source.
 - Backend/frontend production builds, production Compose validation, 33 focused regressions, one disposable PostgreSQL integration test, catalog/i18n/Persian/UTF-8 checks passed. Rebuilt local API/web; no vendor command, migration, push, or production rollout.
+## 2026-10-11 - Fix Docker-published port blocking and simplify UI
+
+- Added read-only Docker publish discovery to Linux port inventory and displayed container ownership, image, mapping and enforcement state.
+- Changed controlled `close_port` execution to enforce Docker-owned ports in `DOCKER-USER` with exact verification and rollback evidence while preserving the running container.
+- Kept UFW/firewalld/nftables/iptables handling for non-Docker ports and preserved protected/current-SSH safeguards.
+- Made the scanner hero compact and removed the global selected-device widget.
+- Passed production builds, 26 topology/Docker tests, UTF-8/i18n, Compose validation and local health checks; no remote mutation or push.
