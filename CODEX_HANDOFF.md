@@ -1,5 +1,13 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-11 professional IP/MAC network inventory
+
+Network Lab now has a dedicated `اسکن IP و MAC` tab. The operator selects a workspace device and an RFC1918 CIDR bounded to at most 256 addresses, then chooses fast discovery or a deeper service/version scan with up to 24 explicit TCP ports. The result keeps every address in the range and shows active/vendor-seen/down state, latency, hostname, normalized MAC, Nmap OUI manufacturer when available, open ports and detected service product/version, probable device class, interface/VLAN, evidence sources and an evidence-confidence label. Search, evidence filters, expandable details, CSV export, per-user audit history and a separate mobile card layout are included.
+
+The backend combines non-root Nmap 7.99 evidence with fresh read-only neighbor tables from registered Linux, MikroTik SSH/REST, FortiGate, Cisco IOS/IOS-XE and ESXi SSH connectors. Other vendors remain usable through active discovery and explicitly report that their current connector does not expose a live neighbor table. MAC is never fabricated: it is shown only when Nmap can observe layer 2 or the selected device returns ARP/MAC evidence. Vendor reads run only on an explicit scan, not in the routine collection loop. Requests require authentication and workspace device scope; public ranges and ranges larger than `/24` fail closed. Scan results are stored in `AuditLog`; there is no schema migration.
+
+Backend and frontend production builds, four CIDR/Nmap/vendor-merge unit tests, UTF-8, locale/Persian-copy and production Compose validation passed. The complete API image contains Nmap and its non-root loopback probe succeeded. Local API/web were rebuilt with the scoped scripts; API, web, database and Nginx are healthy, the dashboard/readiness routes return 200, and the unauthenticated scanner API correctly returns 401. No real vendor/network scan, device mutation, migration, push or production deployment occurred.
+
 ## 2026-10-11 administrator expert command execution
 
 The advanced script editor now exposes an administrator-only expert toggle. An authenticated active admin may enter their own Linux, MikroTik, FortiGate, or Cisco SSH command lines outside the curated vendor allowlist; post-check lines are optional. These user-authored plans are always normalized to high risk and use the existing registered `custom_vendor_action` execution template and real vendor connector. Preview, one explicit confirmation in protected quick-controlled mode, PolicyGuard, connector invocation, result evidence, and audit remain mandatory.

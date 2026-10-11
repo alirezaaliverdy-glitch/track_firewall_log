@@ -57,6 +57,16 @@ export async function testEsxiSsh(device: Device): Promise<DeviceConnectionTestR
       capabilities: {canConnect: false, canExecuteWriteActions: false}, errorCode: code, message};
   }
 }
+
+export async function collectEsxiNetworkNeighbors(device: Device) {
+  const credential = device.credentialId ? await resolveCredentialById(device.credentialId)
+    : device.credentialRef ? await resolveCredentialByName(device.credentialRef) : null;
+  if (!credential) throw new EsxiSoapError("ESXI_SSH_CREDENTIAL_REQUIRED", "Select a stored SSH credential.");
+  const config = esxiSshConfig(device, device.host, device.managementPort, credential);
+  return withSharedSsh(esxiSshSessionId(device), config, async client => ({
+    "esxcli network ip neighbor list": await esxiExec(client, "esxcli network ip neighbor list", 15_000)
+  }));
+}
 export const esxiSshConnector: DeviceConnector = {
   name: "esxi", supportedActions: [],
   supports: device => Boolean(device?.vendor.toLowerCase() === "esxi" && device.protocol === DeviceProtocol.ssh),

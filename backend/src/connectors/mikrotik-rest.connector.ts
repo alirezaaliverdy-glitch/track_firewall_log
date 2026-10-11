@@ -63,6 +63,10 @@ function lineRows(value: unknown, limit = 1_000) {
   return rows(value).slice(0, limit).map((item) => compact(item));
 }
 
+function keyValueRows(value: unknown, limit = 2_000) {
+  return rows(value).slice(0, limit).map((item) => Object.entries(item).map(([key, field]) => `${key}=${String(field)}`).join(" ")).join("\n");
+}
+
 export function assertMikroTikRestTlsPolicy(device: Device) {
   if (record(device.capabilities).mikrotikTlsVerify === false) {
     throw new MikroTikRestError("MIKROTIK_REST_TLS_VERIFICATION_REQUIRED", "RouterOS REST certificate verification is disabled. Install a trusted HTTPS certificate or use the SSH/CLI connection before sending credentials.", 409);
@@ -142,6 +146,12 @@ async function optional(device: Device, path: string, warnings: DeviceConnection
     warnings.push({ code: failure.code, message: `${path}: ${failure.message}` });
     return [];
   }
+}
+
+export async function collectMikroTikRestNetworkNeighbors(device: Device) {
+  const paths = ["/rest/ip/arp", "/rest/ip/dhcp-server/lease", "/rest/interface/bridge/host"] as const;
+  const values = await Promise.all(paths.map(async (path) => [path, await requestJson(device, path)] as const));
+  return Object.fromEntries(values.map(([path, value]) => [path, keyValueRows(value)]));
 }
 
 async function discover(device: Device, warnings: DeviceConnectionTestResult["warnings"]): Promise<MikroTikDiscovery> {

@@ -1,3 +1,11 @@
+## 2026-10-11 - Add evidence-based IP/MAC network inventory
+
+- Added a new `اسکن IP و MAC` Network Lab tab inspired by professional IP scanners while retaining the product's Persian-first visual system and a dedicated mobile result layout.
+- Implemented workspace-scoped RFC1918 `/24`-maximum scanning with fast discovery and deep service/version profiles, normalized host rows, search/filters/details, CSV and audited per-user history.
+- Merged active Nmap results with explicit read-only Linux, MikroTik SSH/REST, FortiGate, Cisco and ESXi neighbor-table commands. Kept coverage limitations visible and never synthesized MAC or identity fields.
+- Installed Nmap in the production API image and verified version 7.99 plus a non-root loopback discovery. Backend/frontend production builds, four unit tests, UTF-8/i18n/Persian-copy and production Compose validation passed.
+- Rebuilt the local API/web using scoped deploy scripts and confirmed all four services healthy plus HTTP 200 readiness/Network Lab. No real network scan, vendor change, migration, push or production deployment.
+
 ## 2026-10-10 - Make production readiness a standing workflow rule
 
 - Recorded that `main` pushes are direct production releases. Future changes must be validated for the production Compose/deploy path and must not rely on local-only configuration; migrations must remain additive and executable under the known production ownership model.

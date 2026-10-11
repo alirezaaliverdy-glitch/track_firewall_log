@@ -84,7 +84,12 @@ const OPTIONAL_COMMANDS = [
   "execute log display"
 ] as const;
 
-const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...DISCOVERY_COMMANDS, ...OPTIONAL_COMMANDS]);
+const NETWORK_NEIGHBOR_COMMANDS = [
+  "get system arp",
+  "diagnose ip arp list"
+] as const;
+
+const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...DISCOVERY_COMMANDS, ...OPTIONAL_COMMANDS, ...NETWORK_NEIGHBOR_COMMANDS]);
 const FORBIDDEN_READ_PATTERN = /\b(config|edit|set|unset|delete|purge|execute\s+(factoryreset|reboot|restore|backup)|diagnose\s+debug|show\s+full-configuration\s*\|\s*grep\s+password)\b/i;
 const FORBIDDEN_EXEC_PATTERN = /\b(factoryreset|format|reboot|shutdown|show\s+full-configuration\s+.*password|set\s+password|private-key|set\s+(?!psksecret\b)[A-Za-z0-9_-]*secret)\b|;|`|\|\s*(?!grep\b)/i;
 
@@ -283,6 +288,18 @@ export async function collectFortiGateRecentLogs(device: Device) {
       throw new FortiGateConnectorError("FORTIGATE_COMMAND_FAILED", result.stderr || "FortiGate log collection failed.", 502);
     }
     return lines(result.stdout, 500);
+  });
+}
+
+export async function collectFortiGateNetworkNeighbors(device: Device) {
+  const credential = await getCredential(device);
+  return withSshWithCredential(device, credential, async (client) => {
+    const output: Record<string, string> = {};
+    for (const command of NETWORK_NEIGHBOR_COMMANDS) {
+      const result = await exec(client, command, Math.max(env.sshCommandTimeoutMs, 15_000));
+      if (result.exitCode === 0) output[command] = result.stdout;
+    }
+    return output;
   });
 }
 

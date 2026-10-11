@@ -68,7 +68,13 @@ const READONLY_DISCOVERY_COMMANDS = [
   "/log print without-paging"
 ] as const;
 
-const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...READONLY_DISCOVERY_COMMANDS]);
+const NETWORK_NEIGHBOR_COMMANDS = [
+  "/ip arp print terse without-paging",
+  "/ip dhcp-server lease print terse without-paging",
+  "/interface bridge host print terse without-paging"
+] as const;
+
+const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...READONLY_DISCOVERY_COMMANDS, ...NETWORK_NEIGHBOR_COMMANDS]);
 const FORBIDDEN_COMMAND_PATTERN = /\b(add|set|remove|disable|enable|reset|reboot|password|user)\b|export\s+show-sensitive|certificate\s+private-key\s+export/i;
 const MIKROTIK_SSH_RECOVERY_PORTS = [22, 2222, 22022] as const;
 
@@ -277,6 +283,18 @@ export async function collectMikroTikRecentLogs(device: Device) {
       throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", result.stderr || "RouterOS log collection failed.", 502);
     }
     return lines(result.stdout, 500);
+  });
+}
+
+export async function collectMikroTikNetworkNeighbors(device: Device) {
+  const credential = await getCredential(device);
+  return withSshWithCredential(device, credential, async (client) => {
+    const output: Record<string, string> = {};
+    for (const command of NETWORK_NEIGHBOR_COMMANDS) {
+      const result = await exec(client, command, Math.max(env.sshCommandTimeoutMs, 15_000));
+      if (result.exitCode === 0) output[command] = result.stdout;
+    }
+    return output;
   });
 }
 

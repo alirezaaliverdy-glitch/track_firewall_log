@@ -68,6 +68,54 @@ export type NetworkProbeInput = {
   attempts?: number;
 };
 
+export type NetworkInventoryPort = {
+  protocol: "tcp";
+  port: number;
+  state: string;
+  service: string | null;
+  product: string | null;
+  version: string | null;
+};
+
+export type NetworkInventoryHost = {
+  key: string;
+  ip: string | null;
+  mac: string | null;
+  manufacturer: string | null;
+  hostname: string | null;
+  state: "up" | "vendor_seen" | "down";
+  latencyMs: number | null;
+  ports: NetworkInventoryPort[];
+  web: string | null;
+  deviceHint: string | null;
+  interfaceName: string | null;
+  vlan: string | null;
+  evidence: string[];
+  confidence: "high" | "medium" | "low";
+};
+
+export type NetworkInventoryScan = {
+  id: string;
+  state: "completed" | "partial" | "failed";
+  createdAt: string;
+  device: { id: string; name: string; host: string; vendor: string; type: string };
+  cidr: string;
+  profile: "discovery" | "deep";
+  ports: number[];
+  durationMs: number;
+  summary: { addressCount: number; up: number; vendorSeen: number; down: number; macKnown: number; hostnameKnown: number; openPorts: number };
+  hosts: NetworkInventoryHost[];
+  coverage: { activeProbe: "available" | "failed"; vendorNeighbors: "available" | "partial" | "unsupported" | "failed"; macScope: string };
+  warnings: string[];
+};
+
+export type NetworkInventoryScanInput = {
+  deviceId: string;
+  cidr: string;
+  profile: "discovery" | "deep";
+  ports: number[];
+};
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
@@ -106,4 +154,16 @@ export function listNetworkProbes() {
 
 export function clearNetworkProbes() {
   return requestJson<{ deleted: number }>("/diagnostics/network-probes", { method: "DELETE" });
+}
+
+export function runNetworkInventoryScan(input: NetworkInventoryScanInput) {
+  return requestJson<{ scan: NetworkInventoryScan }>("/diagnostics/network-inventory", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listNetworkInventoryScans() {
+  return requestJson<{ scans: NetworkInventoryScan[] }>("/diagnostics/network-inventory");
+}
+
+export function clearNetworkInventoryScans() {
+  return requestJson<{ deleted: number }>("/diagnostics/network-inventory", { method: "DELETE" });
 }

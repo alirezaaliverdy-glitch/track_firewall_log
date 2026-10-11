@@ -11,7 +11,7 @@ RUN pnpm build
 
 FROM node:22-alpine
 WORKDIR /app
-RUN apk add --no-cache iputils chromium fontconfig \
+RUN apk add --no-cache iputils nmap chromium fontconfig \
   && corepack enable
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

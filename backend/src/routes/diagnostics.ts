@@ -2,8 +2,33 @@ import type { FastifyPluginAsync } from "fastify";
 import { getDiagnosticSession, listDiagnosticSessions, runDiagnosticSession } from "../services/diagnostics.service.js";
 import { listNmapScans, runNmapScan } from "../services/nmap-worker.service.js";
 import { clearNetworkProbes, listNetworkProbes, runNetworkProbe, type NetworkProbeKind } from "../services/network-probe.service.js";
+import { clearNetworkInventoryScans, listNetworkInventoryScans, runNetworkInventoryScan, type NetworkInventoryProfile } from "../services/network-inventory-scan.service.js";
 
 export const diagnosticRoutes: FastifyPluginAsync = async (app) => {
+  app.get<{ Querystring: { limit?: string } }>("/api/diagnostics/network-inventory", async (request, reply) => {
+    if (!request.authUser) return reply.code(401).send({ error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
+    const ownerId = request.authUser.scopeOwnerId ?? request.authUser.id;
+    return { scans: await listNetworkInventoryScans(request.authUser.username, ownerId, Number(request.query.limit ?? 12)) };
+  });
+
+  app.post<{ Body: { deviceId?: string; cidr?: string; profile?: NetworkInventoryProfile; ports?: number[] } }>("/api/diagnostics/network-inventory", async (request, reply) => {
+    if (!request.authUser) return reply.code(401).send({ error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
+    try {
+      const scan = await runNetworkInventoryScan(request.body ?? {}, request.authUser);
+      return reply.code(201).send({ scan });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "NETWORK_INVENTORY_SCAN_FAILED";
+      const status = code === "DEVICE_NOT_FOUND" ? 404 : ["SCAN_CIDR_INVALID", "SCAN_RANGE_TOO_LARGE", "SCAN_PRIVATE_RANGE_REQUIRED", "SCAN_PORTS_INVALID"].includes(code) ? 400 : 500;
+      return reply.code(status).send({ error: { code, message: code } });
+    }
+  });
+
+  app.delete("/api/diagnostics/network-inventory", async (request, reply) => {
+    if (!request.authUser) return reply.code(401).send({ error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
+    const ownerId = request.authUser.scopeOwnerId ?? request.authUser.id;
+    return { deleted: await clearNetworkInventoryScans(request.authUser.username, ownerId) };
+  });
+
   app.get<{ Querystring: { limit?: string } }>("/api/diagnostics/network-probes", async (request, reply) => {
     if (!request.authUser) return reply.code(401).send({ error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
     return { probes: await listNetworkProbes(request.authUser.username, Number(request.query.limit ?? 30)) };
