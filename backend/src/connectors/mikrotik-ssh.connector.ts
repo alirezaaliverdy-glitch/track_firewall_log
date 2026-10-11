@@ -71,7 +71,8 @@ const READONLY_DISCOVERY_COMMANDS = [
 const NETWORK_NEIGHBOR_COMMANDS = [
   "/ip arp print terse without-paging",
   "/ip dhcp-server lease print terse without-paging",
-  "/interface bridge host print terse without-paging"
+  "/interface bridge host print terse without-paging",
+  "/ip dns cache print detail without-paging"
 ] as const;
 
 const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...READONLY_DISCOVERY_COMMANDS, ...NETWORK_NEIGHBOR_COMMANDS]);

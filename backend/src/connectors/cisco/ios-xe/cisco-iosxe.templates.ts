@@ -24,6 +24,7 @@ export const CISCO_IOSXE_READ_COMMANDS = Object.freeze({
   nat: "show ip nat translations",
   dhcpPools: "show ip dhcp pool",
   dhcpBindings: "show ip dhcp binding",
+  hosts: "show hosts",
   aaa: "show aaa servers",
   localUsers: "show running-config | include ^username",
   sshStatus: "show ip ssh",

@@ -2,6 +2,8 @@
 
 - Added a new `اسکن IP و MAC` Network Lab tab inspired by professional IP scanners while retaining the product's Persian-first visual system and a dedicated mobile result layout.
 - Follow-up made the scanner the default Network Lab tab and added a visible `جدید` marker after the first deployed view still opened on the legacy connection test.
+- Added a default vendor-known discovery mode that needs no CIDR, enriches hostnames from vendor DHCP/DNS/host evidence plus bounded PTR/Nmap reverse lookup, and keeps the explicit private-range scanner available for targeted scans.
+- Verified the final backend/frontend builds, six focused scan tests, command catalog and locale/UTF-8 guards; deployed API and web locally and confirmed all four services healthy, routed readiness/UI 200 and unauthenticated scan protection 401.
 - Implemented workspace-scoped RFC1918 `/24`-maximum scanning with fast discovery and deep service/version profiles, normalized host rows, search/filters/details, CSV and audited per-user history.
 - Merged active Nmap results with explicit read-only Linux, MikroTik SSH/REST, FortiGate, Cisco and ESXi neighbor-table commands. Kept coverage limitations visible and never synthesized MAC or identity fields.
 - Installed Nmap in the production API image and verified version 7.99 plus a non-root loopback discovery. Backend/frontend production builds, four unit tests, UTF-8/i18n/Persian-copy and production Compose validation passed.

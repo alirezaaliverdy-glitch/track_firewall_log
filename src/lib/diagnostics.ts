@@ -99,19 +99,21 @@ export type NetworkInventoryScan = {
   state: "completed" | "partial" | "failed";
   createdAt: string;
   device: { id: string; name: string; host: string; vendor: string; type: string };
-  cidr: string;
+  mode?: "vendor" | "range";
+  cidr: string | null;
   profile: "discovery" | "deep";
   ports: number[];
   durationMs: number;
   summary: { addressCount: number; up: number; vendorSeen: number; down: number; macKnown: number; hostnameKnown: number; openPorts: number };
   hosts: NetworkInventoryHost[];
-  coverage: { activeProbe: "available" | "failed"; vendorNeighbors: "available" | "partial" | "unsupported" | "failed"; macScope: string };
+  coverage: { activeProbe: "available" | "failed" | "skipped"; vendorNeighbors: "available" | "partial" | "unsupported" | "failed"; hostnameResolution?: "available" | "partial" | "unavailable"; macScope: string };
   warnings: string[];
 };
 
 export type NetworkInventoryScanInput = {
   deviceId: string;
-  cidr: string;
+  mode: "vendor" | "range";
+  cidr?: string;
   profile: "discovery" | "deep";
   ports: number[];
 };

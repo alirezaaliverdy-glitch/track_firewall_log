@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { promises as dns } from "node:dns";
 import { isIP } from "node:net";
 import type { Device, Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
@@ -10,6 +11,7 @@ import { collectEsxiNetworkNeighbors } from "../connectors/esxi-ssh.connector.js
 import { ciscoIosXeSshConnector } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
 
 export type NetworkInventoryProfile = "discovery" | "deep";
+export type NetworkInventoryMode = "vendor" | "range";
 export type NetworkInventoryPort = { protocol: "tcp"; port: number; state: string; service: string | null; product: string | null; version: string | null };
 export type NetworkInventoryHost = {
   key: string;
@@ -33,13 +35,14 @@ export type NetworkInventoryScan = {
   state: "completed" | "partial" | "failed";
   createdAt: string;
   device: { id: string; name: string; host: string; vendor: string; type: string };
-  cidr: string;
+  mode: NetworkInventoryMode;
+  cidr: string | null;
   profile: NetworkInventoryProfile;
   ports: number[];
   durationMs: number;
   summary: { addressCount: number; up: number; vendorSeen: number; down: number; macKnown: number; hostnameKnown: number; openPorts: number };
   hosts: NetworkInventoryHost[];
-  coverage: { activeProbe: "available" | "failed"; vendorNeighbors: "available" | "partial" | "unsupported" | "failed"; macScope: string };
+  coverage: { activeProbe: "available" | "failed" | "skipped"; vendorNeighbors: "available" | "partial" | "unsupported" | "failed"; hostnameResolution: "available" | "partial" | "unavailable"; macScope: string };
   warnings: string[];
 };
 
@@ -50,6 +53,8 @@ type ParsedNmapHost = { ip: string; mac: string | null; manufacturer: string | n
 const DEFAULT_PORTS = [22, 53, 80, 443, 445, 3389, 8291, 8443];
 const MAX_ADDRESSES = 256;
 const MAX_PORTS = 24;
+const MAX_VENDOR_ROWS = 2_048;
+const MAX_HOSTNAME_LOOKUPS = 512;
 const IPV4_RE = /(?<![\d.])(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?![\d.])/;
 const MAC_RE = /(?<![0-9a-f])(?:[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}|[0-9a-f]{4}(?:\.[0-9a-f]{4}){2})(?![0-9a-f])/i;
 
@@ -174,7 +179,7 @@ function nmap(args: string[], timeoutMs: number) {
 }
 
 async function activeDiscovery(cidr: string, profile: NetworkInventoryProfile, ports: number[], vendorTargets: string[]) {
-  const discoveryXml = await nmap(["--unprivileged", "-sn", "--max-retries", "1", "--host-timeout", "8s", "-T4", "-oX", "-", cidr], 90_000);
+  const discoveryXml = await nmap(["--unprivileged", "-sn", "-R", "--max-retries", "1", "--host-timeout", "8s", "-T4", "-oX", "-", cidr], 90_000);
   let hosts = parseNmapXml(discoveryXml);
   if (profile === "deep") {
     const targets = [...new Set([...hosts.map((host) => host.ip), ...vendorTargets.filter((ip) => cidrContains(cidr, ip))])].slice(0, MAX_ADDRESSES);
@@ -199,6 +204,30 @@ async function activeDiscovery(cidr: string, profile: NetworkInventoryProfile, p
   return hosts;
 }
 
+async function activeDiscoveryTargets(input: string[], profile: NetworkInventoryProfile, ports: number[]) {
+  const targets = [...new Set(input.filter(isPrivateIpv4))].slice(0, MAX_ADDRESSES);
+  if (!targets.length) return [];
+  const discoveryXml = await nmap(["--unprivileged", "-sn", "-R", "--max-retries", "1", "--host-timeout", "8s", "-T4", "-oX", "-", ...targets], 90_000);
+  const discovered = parseNmapXml(discoveryXml);
+  if (profile !== "deep") return discovered;
+  const serviceXml = await nmap(["--unprivileged", "-Pn", "-R", "-sT", "-sV", "--version-light", "--max-retries", "1", "--host-timeout", "20s", "-T3", "-p", ports.join(","), "-oX", "-", ...targets], 180_000);
+  const byDiscovery = new Map(discovered.map((host) => [host.ip, host]));
+  const byService = new Map(parseNmapXml(serviceXml).map((host) => [host.ip, host]));
+  return targets.flatMap((ip) => {
+    const host = byDiscovery.get(ip);
+    const service = byService.get(ip);
+    if (!host && !service?.ports.length) return [];
+    return [{
+      ip,
+      mac: service?.mac ?? host?.mac ?? null,
+      manufacturer: service?.manufacturer ?? host?.manufacturer ?? null,
+      hostname: service?.hostname ?? host?.hostname ?? null,
+      latencyMs: host?.latencyMs ?? service?.latencyMs ?? null,
+      ports: service?.ports ?? []
+    }];
+  });
+}
+
 function vendorKind(device: Device) {
   const source = `${device.vendor} ${device.type}`.toLowerCase();
   if (source.includes("mikrotik") || source.includes("routeros")) return "mikrotik";
@@ -209,6 +238,22 @@ function vendorKind(device: Device) {
   return "unsupported";
 }
 
+function hostnameCandidate(value: string | undefined) {
+  const candidate = value?.replace(/[(),]/g, "").trim();
+  if (!candidate || candidate.length > 253 || !/[a-z]/i.test(candidate) || !/^[a-z0-9_.-]+$/i.test(candidate)) return null;
+  if (["ip", "dev", "lladdr", "arpa", "dynamic", "static", "reachable", "stale", "delay", "failed", "incomplete"].includes(candidate.toLowerCase())) return null;
+  return candidate;
+}
+
+function hostnameFromLine(line: string, ip: string | null, evidence: string) {
+  const explicit = line.match(/(?:^|\s)(?:host-name|hostname|dns-name|name)\s*[=:]\s*['"]?([^\s'"]+)/i)?.[1];
+  if (hostnameCandidate(explicit)) return hostnameCandidate(explicit);
+  if (!ip) return null;
+  if (evidence.startsWith("linux:") && line.startsWith(ip)) return hostnameCandidate(line.slice(ip.length).trim().split(/\s+/)[0]);
+  const ciscoHost = evidence === "cisco:hosts" ? line.match(/^([^\s]+)\s+.*\bIP\s+(?:\*\*)?\s*(?:\[[^\]]+\]\s*)?\b\d{1,3}(?:\.\d{1,3}){3}\b/i)?.[1] : undefined;
+  return hostnameCandidate(ciscoHost);
+}
+
 function parseNeighborText(output: string, evidence: string): VendorNeighbor[] {
   return output.split(/\r?\n/).flatMap((raw) => {
     const line = raw.trim();
@@ -216,7 +261,7 @@ function parseNeighborText(output: string, evidence: string): VendorNeighbor[] {
     const ip = line.match(IPV4_RE)?.[0] ?? null;
     const mac = normalizeMac(line.match(MAC_RE)?.[0]);
     if (!ip && !mac) return [];
-    const hostname = line.match(/(?:host-name|hostname|name)=['"]?([^\s'"]+)/i)?.[1] ?? null;
+    const hostname = hostnameFromLine(line, ip, evidence);
     const explicitInterface = line.match(/(?:interface|on-interface|interface-name|dev)=['"]?([^\s'"]+)/i)?.[1]
       ?? line.match(/\bdev\s+(\S+)/i)?.[1]
       ?? line.match(/\b(?:ARPA|DYNAMIC|STATIC)\s+(\S+)\s*$/i)?.[1]
@@ -247,6 +292,34 @@ export function mergeVendorNeighbors(rows: VendorNeighbor[]) {
   return [...new Set([...byIp.values(), ...byMac.values()])];
 }
 
+async function resolvePtrHostnames(rows: VendorNeighbor[]) {
+  const unresolved = [...new Set(rows.filter((row) => row.ip && !row.hostname).map((row) => row.ip!))].slice(0, MAX_HOSTNAME_LOOKUPS);
+  const resolved = new Map<string, string>();
+  for (let offset = 0; offset < unresolved.length; offset += 24) {
+    await Promise.all(unresolved.slice(offset, offset + 24).map(async (ip) => {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        const names = await Promise.race([
+          dns.reverse(ip),
+          new Promise<string[]>((resolve) => { timer = setTimeout(() => resolve([]), 1_200); })
+        ]);
+        const name = hostnameCandidate(names[0]?.replace(/\.$/, ""));
+        if (name) resolved.set(ip, name);
+      } catch {
+        // A missing PTR record is normal and must not fail vendor inventory.
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }));
+  }
+  return rows.map((row): VendorNeighbor => {
+    const hostname = row.hostname ?? (row.ip ? resolved.get(row.ip) ?? null : null);
+    return hostname && hostname !== row.hostname
+      ? { ...row, hostname, evidence: [...new Set([...row.evidence, "dns:ptr"])] }
+      : row;
+  });
+}
+
 async function collectVendorNeighbors(device: Device): Promise<{ state: NetworkInventoryScan["coverage"]["vendorNeighbors"]; rows: VendorNeighbor[]; warnings: string[] }> {
   const kind = vendorKind(device);
   try {
@@ -260,11 +333,14 @@ async function collectVendorNeighbors(device: Device): Promise<{ state: NetworkI
     else if (kind === "fortigate") outputs = await collectFortiGateNetworkNeighbors(device);
     else if (kind === "esxi") outputs = await collectEsxiNetworkNeighbors(device);
     else if (kind === "cisco") {
-      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["arp", "macAddressTable", "dhcpBindings", "cdpNeighbors", "lldpNeighbors"]);
+      const result = await ciscoIosXeSshConnector.runReadOnlyCommands(device, ["arp", "macAddressTable", "dhcpBindings", "hosts", "cdpNeighbors", "lldpNeighbors"]);
       outputs = Object.fromEntries(result.results.map((item) => [item.commandId, item.stdout]));
     } else return { state: "unsupported", rows: [], warnings: ["این وندور جدول همسایهٔ زنده را از Connector فعلی ارائه نمی‌کند؛ نتیجهٔ اسکن فعال همچنان نمایش داده می‌شود."] };
-    const rows = mergeVendorNeighbors(Object.entries(outputs).flatMap(([source, output]) => parseNeighborText(output, `${kind}:${source}`)));
-    return { state: rows.length ? "available" : "partial", rows, warnings: rows.length ? [] : ["Connector وندور پاسخ داد، اما جدول ARP/MAC فعالی در این بازه پیدا نشد."] };
+    const allRows = mergeVendorNeighbors(Object.entries(outputs).flatMap(([source, output]) => parseNeighborText(output, `${kind}:${source}`)));
+    const rows = allRows.slice(0, MAX_VENDOR_ROWS);
+    const warnings = allRows.length > MAX_VENDOR_ROWS ? [`وندور بیش از ${MAX_VENDOR_ROWS} رکورد برگرداند؛ ${MAX_VENDOR_ROWS} رکورد نخست برای جلوگیری از سنگین‌شدن گزارش نگه‌داری شد.`] : [];
+    if (!rows.length) warnings.push("Connector وندور پاسخ داد، اما جدول ARP/MAC فعالی پیدا نشد.");
+    return { state: rows.length ? "available" : "partial", rows, warnings };
   } catch {
     return { state: "failed", rows: [], warnings: ["خواندن جدول ARP/MAC از تجهیز ناموفق بود؛ اتصال و سطح دسترسی حساب وندور را بررسی کنید."] };
   }
@@ -322,6 +398,33 @@ function buildHosts(cidr: string, active: ParsedNmapHost[], vendor: VendorNeighb
   return [...addressRows, ...macRows];
 }
 
+function buildVendorHosts(active: ParsedNmapHost[], vendor: VendorNeighbor[]) {
+  const activeByIp = new Map(active.map((host) => [host.ip, host]));
+  return vendor.map((observed): NetworkInventoryHost => {
+    const live = observed.ip ? activeByIp.get(observed.ip) : undefined;
+    const ports = live?.ports ?? [];
+    const evidence = [...new Set([...observed.evidence, ...(live ? ["active:nmap"] : [])])];
+    const host: NetworkInventoryHost = {
+      key: observed.ip ?? observed.mac ?? evidence.join(":"),
+      ip: observed.ip,
+      mac: observed.mac ?? live?.mac ?? null,
+      manufacturer: live?.manufacturer ?? null,
+      hostname: observed.hostname ?? live?.hostname ?? null,
+      state: live ? "up" : "vendor_seen",
+      latencyMs: live?.latencyMs ?? null,
+      ports,
+      web: webSummary(ports),
+      deviceHint: null,
+      interfaceName: observed.interfaceName,
+      vlan: observed.vlan,
+      evidence,
+      confidence: live ? "high" : observed.ip && observed.mac ? "medium" : "low"
+    };
+    host.deviceHint = deviceHint(host);
+    return host;
+  });
+}
+
 function scanSummary(hosts: NetworkInventoryHost[]) {
   return {
     addressCount: hosts.filter((host) => host.ip).length,
@@ -338,35 +441,48 @@ function normalizeRecord(record: { id: string; metadata: unknown; createdAt: Dat
   return { id: record.id, createdAt: record.createdAt.toISOString(), ...(record.metadata as Omit<NetworkInventoryScan, "id" | "createdAt">) } as NetworkInventoryScan;
 }
 
-export async function runNetworkInventoryScan(input: { deviceId?: string; cidr?: string; profile?: NetworkInventoryProfile; ports?: number[] }, user: AuthUser) {
+export async function runNetworkInventoryScan(input: { deviceId?: string; mode?: NetworkInventoryMode; cidr?: string; profile?: NetworkInventoryProfile; ports?: number[] }, user: AuthUser) {
   const ownerId = user.scopeOwnerId ?? user.id;
   const device = input.deviceId ? await prisma.device.findFirst({ where: { id: input.deviceId, deletedAt: null, company: { ownerId, deletedAt: null } } }) : null;
   if (!device) throw new Error("DEVICE_NOT_FOUND");
-  const cidr = normalizePrivateCidr(String(input.cidr ?? ""));
+  const mode: NetworkInventoryMode = input.mode === "vendor" || (!input.mode && !String(input.cidr ?? "").trim()) ? "vendor" : "range";
+  const cidr = mode === "range" ? normalizePrivateCidr(String(input.cidr ?? "")) : null;
   const profile: NetworkInventoryProfile = input.profile === "deep" ? "deep" : "discovery";
   const ports = normalizePorts(input.ports);
   const startedAt = Date.now();
-  const vendorResult = await collectVendorNeighbors(device);
-  const vendorTargets = vendorResult.rows.flatMap((row) => row.ip ? [row.ip] : []);
-  const activeResult = await activeDiscovery(cidr, profile, ports, vendorTargets)
-    .then((hosts) => ({ hosts, error: null as string | null }))
-    .catch((error) => ({ hosts: [] as ParsedNmapHost[], error: error instanceof Error ? error.message : "SCAN_WORKER_FAILED" }));
-  const warnings = [...vendorResult.warnings];
+  const collectedVendor = await collectVendorNeighbors(device);
+  const vendorRows = await resolvePtrHostnames(collectedVendor.rows);
+  const vendorTargets = vendorRows.flatMap((row) => row.ip ? [row.ip] : []);
+  const activeTargets = vendorTargets.filter(isPrivateIpv4).slice(0, MAX_ADDRESSES);
+  const activeRun = mode === "range"
+    ? activeDiscovery(cidr!, profile, ports, vendorTargets)
+    : activeTargets.length ? activeDiscoveryTargets(activeTargets, profile, ports) : null;
+  const activeResult = activeRun
+    ? await activeRun.then((hosts) => ({ hosts, error: null as string | null, skipped: false })).catch((error) => ({ hosts: [] as ParsedNmapHost[], error: error instanceof Error ? error.message : "SCAN_WORKER_FAILED", skipped: false }))
+    : { hosts: [] as ParsedNmapHost[], error: null as string | null, skipped: true };
+  const warnings = [...collectedVendor.warnings];
+  if (mode === "vendor" && vendorTargets.filter(isPrivateIpv4).length > MAX_ADDRESSES) warnings.push("همهٔ رکوردهای وندور نمایش داده می‌شوند؛ غنی‌سازی فعال Nmap برای ۲۵۶ IP خصوصی نخست محدود شده است.");
+  if (mode === "vendor" && vendorTargets.length > MAX_HOSTNAME_LOOKUPS) warnings.push("جست‌وجوی PTR برای ۵۱۲ IP نخست انجام شد؛ hostnameهای ثبت‌شده توسط خود وندور بدون محدودیت نمایش داده می‌شوند.");
   if (activeResult.error) warnings.push(activeResult.error === "NMAP_BINARY_NOT_FOUND" ? "موتور Nmap روی سرویس API نصب نیست." : activeResult.error === "SCAN_TIMEOUT" ? "اسکن فعال به محدودیت زمانی رسید؛ شواهد وندور همچنان نمایش داده می‌شود." : "اسکن فعال شبکه کامل نشد؛ مسیر شبکهٔ سرویس API را بررسی کنید.");
-  const hosts = buildHosts(cidr, activeResult.hosts, vendorResult.rows);
-  const state: NetworkInventoryScan["state"] = activeResult.error && vendorResult.rows.length === 0 ? "failed" : activeResult.error || vendorResult.state !== "available" ? "partial" : "completed";
+  const hosts = mode === "range" ? buildHosts(cidr!, activeResult.hosts, vendorRows) : buildVendorHosts(activeResult.hosts, vendorRows);
+  const state: NetworkInventoryScan["state"] = mode === "vendor"
+    ? hosts.length === 0 ? "failed" : activeResult.error || collectedVendor.state !== "available" ? "partial" : "completed"
+    : activeResult.error && vendorRows.length === 0 ? "failed" : activeResult.error || collectedVendor.state !== "available" ? "partial" : "completed";
+  const summary = scanSummary(hosts);
   const metadata: Omit<NetworkInventoryScan, "id" | "createdAt"> = {
     state,
     device: { id: device.id, name: device.name, host: device.host, vendor: device.vendor, type: device.type },
+    mode,
     cidr,
     profile,
     ports,
     durationMs: Date.now() - startedAt,
-    summary: scanSummary(hosts),
+    summary,
     hosts,
     coverage: {
-      activeProbe: activeResult.error ? "failed" : "available",
-      vendorNeighbors: vendorResult.state,
+      activeProbe: activeResult.skipped ? "skipped" : activeResult.error ? "failed" : "available",
+      vendorNeighbors: collectedVendor.state,
+      hostnameResolution: summary.hostnameKnown === 0 ? "unavailable" : summary.hostnameKnown < summary.addressCount ? "partial" : "available",
       macScope: "MAC فقط وقتی قطعی است که جدول ARP/MAC تجهیز یا همان دامنهٔ لایهٔ ۲ آن را گزارش کند."
     },
     warnings
@@ -376,7 +492,7 @@ export async function runNetworkInventoryScan(input: { deviceId?: string; cidr?:
     actor: user.username,
     action: "network_inventory_scan",
     targetType: "network_inventory_scan",
-    targetId: cidr,
+    targetId: cidr ?? `vendor:${device.id}`,
     dryRun: false,
     approvalStatus: "not_required",
     metadata: metadata as unknown as Prisma.InputJsonValue
@@ -398,4 +514,4 @@ export async function clearNetworkInventoryScans(username: string, ownerId: stri
   return result.count;
 }
 
-export const networkInventoryScanInternalsForTest = { normalizePrivateCidr, cidrAddresses, cidrContains, normalizePorts, normalizeMac, parseNmapXml, parseNeighborText, mergeVendorNeighbors, buildHosts, scanSummary };
+export const networkInventoryScanInternalsForTest = { normalizePrivateCidr, cidrAddresses, cidrContains, normalizePorts, normalizeMac, parseNmapXml, parseNeighborText, mergeVendorNeighbors, buildHosts, buildVendorHosts, scanSummary };

@@ -86,7 +86,8 @@ const OPTIONAL_COMMANDS = [
 
 const NETWORK_NEIGHBOR_COMMANDS = [
   "get system arp",
-  "diagnose ip arp list"
+  "diagnose ip arp list",
+  "diagnose user device list"
 ] as const;
 
 const READONLY_COMMANDS = new Set<string>([...BASIC_COMMANDS, ...DISCOVERY_COMMANDS, ...OPTIONAL_COMMANDS, ...NETWORK_NEIGHBOR_COMMANDS]);

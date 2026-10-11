@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { getDiagnosticSession, listDiagnosticSessions, runDiagnosticSession } from "../services/diagnostics.service.js";
 import { listNmapScans, runNmapScan } from "../services/nmap-worker.service.js";
 import { clearNetworkProbes, listNetworkProbes, runNetworkProbe, type NetworkProbeKind } from "../services/network-probe.service.js";
-import { clearNetworkInventoryScans, listNetworkInventoryScans, runNetworkInventoryScan, type NetworkInventoryProfile } from "../services/network-inventory-scan.service.js";
+import { clearNetworkInventoryScans, listNetworkInventoryScans, runNetworkInventoryScan, type NetworkInventoryMode, type NetworkInventoryProfile } from "../services/network-inventory-scan.service.js";
 
 export const diagnosticRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: { limit?: string } }>("/api/diagnostics/network-inventory", async (request, reply) => {
@@ -11,7 +11,7 @@ export const diagnosticRoutes: FastifyPluginAsync = async (app) => {
     return { scans: await listNetworkInventoryScans(request.authUser.username, ownerId, Number(request.query.limit ?? 12)) };
   });
 
-  app.post<{ Body: { deviceId?: string; cidr?: string; profile?: NetworkInventoryProfile; ports?: number[] } }>("/api/diagnostics/network-inventory", async (request, reply) => {
+  app.post<{ Body: { deviceId?: string; mode?: NetworkInventoryMode; cidr?: string; profile?: NetworkInventoryProfile; ports?: number[] } }>("/api/diagnostics/network-inventory", async (request, reply) => {
     if (!request.authUser) return reply.code(401).send({ error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
     try {
       const scan = await runNetworkInventoryScan(request.body ?? {}, request.authUser);

@@ -150,7 +150,9 @@ async function optional(device: Device, path: string, warnings: DeviceConnection
 
 export async function collectMikroTikRestNetworkNeighbors(device: Device) {
   const paths = ["/rest/ip/arp", "/rest/ip/dhcp-server/lease", "/rest/interface/bridge/host"] as const;
-  const values = await Promise.all(paths.map(async (path) => [path, await requestJson(device, path)] as const));
+  const values: Array<readonly [string, unknown]> = await Promise.all(paths.map(async (path) => [path, await requestJson(device, path)] as const));
+  try { values.push(["/rest/ip/dns/cache", await requestJson(device, "/rest/ip/dns/cache")]); }
+  catch { values.push(["/rest/ip/dns/cache", []]); }
   return Object.fromEntries(values.map(([path, value]) => [path, keyValueRows(value)]));
 }
 

@@ -35,6 +35,17 @@ test("vendor ARP and MAC rows merge without inventing missing identity", () => {
   assert.deepEqual(neighbor.evidence.sort(), ["cisco:arp", "cisco:mac"]);
 });
 
+test("vendor DHCP, DNS cache and resolver rows expose real hostnames", () => {
+  const mikrotik = scan.parseNeighborText("address=192.168.88.20 mac-address=AA:BB:CC:DD:EE:20 host-name=office-printer", "mikrotik:dhcp");
+  const dns = scan.parseNeighborText("name=nas.home type=A data=192.168.88.30", "mikrotik:dns-cache");
+  const linux = scan.parseNeighborText("192.168.88.40 camera.local camera", "linux:resolver");
+  const ciscoBinding = scan.parseNeighborText("192.168.88.50 01aa.bbcc.ddee.ff Oct 11 2026 Automatic Active Vlan10", "cisco:dhcpBindings");
+  assert.equal(mikrotik[0]?.hostname, "office-printer");
+  assert.equal(dns[0]?.hostname, "nas.home");
+  assert.equal(linux[0]?.hostname, "camera.local");
+  assert.equal(ciscoBinding[0]?.hostname, null);
+});
+
 test("host table retains every address and grades evidence confidence", () => {
   const hosts = scan.buildHosts("192.168.1.0/30", [{ ip: "192.168.1.1", mac: null, manufacturer: null, hostname: "gw", latencyMs: 1.4, ports: [] }], [{ ip: "192.168.1.1", mac: "AA:BB:CC:DD:EE:FF", hostname: null, interfaceName: "bridge", vlan: null, evidence: ["mikrotik:arp"] }]);
   assert.equal(hosts.length, 2);
@@ -42,4 +53,19 @@ test("host table retains every address and grades evidence confidence", () => {
   assert.equal(hosts[0].confidence, "high");
   assert.equal(hosts[1].state, "down");
   assert.equal(scan.scanSummary(hosts).addressCount, 2);
+});
+
+test("vendor discovery table needs no CIDR and retains only vendor-known devices", () => {
+  const hosts = scan.buildVendorHosts(
+    [{ ip: "192.168.1.20", mac: null, manufacturer: "Example", hostname: "printer.local", latencyMs: 2, ports: [] }],
+    [
+      { ip: "192.168.1.20", mac: "AA:BB:CC:DD:EE:20", hostname: null, interfaceName: "bridge", vlan: "10", evidence: ["mikrotik:arp"] },
+      { ip: null, mac: "AA:BB:CC:DD:EE:21", hostname: null, interfaceName: "ether2", vlan: null, evidence: ["mikrotik:bridge"] }
+    ]
+  );
+  assert.equal(hosts.length, 2);
+  assert.equal(hosts[0]?.hostname, "printer.local");
+  assert.equal(hosts[0]?.state, "up");
+  assert.equal(hosts[1]?.state, "vendor_seen");
+  assert.equal(scan.scanSummary(hosts).addressCount, 1);
 });
