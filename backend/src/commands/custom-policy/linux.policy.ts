@@ -1,7 +1,11 @@
 import type { VendorCustomCommandPolicy } from "./custom-command-policy.types.js";
 import { baseDecision, LINUX_SHELL_META_PATTERN, vendorText } from "./shared.js";
+import { controlledLinuxCatalogCommands } from "../../connectors/linux/command-library.js";
+
+const CONTROLLED_CATALOG_COMMANDS = controlledLinuxCatalogCommands();
 
 function commandAllowed(command: string) {
+  if (CONTROLLED_CATALOG_COMMANDS.has(command)) return true;
   if (LINUX_SHELL_META_PATTERN.test(command)) return false;
   return /^(sudo -n )?systemctl (restart|reload|start|stop|enable|disable|is-active|is-enabled|status|show) [a-zA-Z0-9_.@:-]+( --no-pager)?$/.test(command) ||
     /^(sudo -n )?ufw (status|allow|deny|delete)\b[A-Za-z0-9_ ./'"-]*$/.test(command) ||

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { ActionType, DeviceProtocol, DeviceType } from "@prisma/client";
 import { buildCustomCommandPlan, validateCustomCommandPlan } from "../src/ai/custom-action-plan.js";
+import { linuxDailyCheckCommands, linuxReadCommand } from "../src/connectors/linux/command-library.js";
 
 const serviceSource = readFileSync(new URL("../src/actions/action-script-editor.service.ts", import.meta.url), "utf8");
 const routeSource = readFileSync(new URL("../src/routes/actions.ts", import.meta.url), "utf8");
@@ -68,4 +69,23 @@ test("script editor can open an empty draft before a custom command preview exis
   assert.doesNotMatch(serviceSource, /SCRIPT_PREVIEW_UNAVAILABLE/);
   assert.match(serviceSource, /script:\s*commands\.join\("\\n"\)/);
   assert.match(serviceSource, /verificationScript:\s*verificationCommands\.join\("\\n"\)/);
+});
+
+test("catalog read-only commands stay in the main editable script and are never reduced to labels", () => {
+  const daily = linuxDailyCheckCommands();
+  assert.equal(daily.length, 6);
+  assert.equal(daily.some((item) => item.command.includes("controlled Linux daily-check bundle")), false);
+  assert.ok(daily.every((item) => item.command.length > 20));
+  assert.equal(linuxReadCommand(ActionType.linux_read_auth_logs, "sudo -n ")?.command.startsWith("sudo -n journalctl"), true);
+  assert.match(serviceSource, /const hasWriteCommand = specs\.some/);
+  assert.match(serviceSource, /!hasWriteCommand \|\| item\.write !== false/);
+});
+
+test("the complete registered daily-check bundle remains previewable after opening it in the editor", () => {
+  const commands = linuxDailyCheckCommands().map((item) => item.command);
+  const plan = editorPlan(commands, [commands.at(-1)!]);
+  assert.ok(plan);
+  const validation = validateCustomCommandPlan({ plan, device: linuxDevice, actionType: ActionType.custom_vendor_action });
+  assert.equal(validation.valid, true, validation.errors.join("; "));
+  assert.deepEqual(validation.normalizedPlan?.orderedCommands, commands);
 });

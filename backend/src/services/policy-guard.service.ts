@@ -125,10 +125,12 @@ function isPrivateOrLocalIp(ip: string) {
 function missingFieldsFromErrors(errors: string[]) {
   return Array.from(new Set(errors.flatMap((error) => {
     if (/Allowed source is required/i.test(error)) return ["trustedSourceCidr"];
+    if (/existing credential/i.test(error)) return ["credentialId"];
+    if (/registered .*connector|SSH protocol|valid registered .*device/i.test(error)) return ["deviceId"];
     const required = error.match(/\b([A-Za-z0-9_]+) is required\b/);
     if (required) return [required[1]];
     const requires = error.match(/requires ([A-Za-z0-9_]+)/);
-    if (requires) return [requires[1].replace(/\.$/, "")];
+    if (requires && !["a", "an", "the", "existing", "registered", "valid"].includes(requires[1].toLowerCase())) return [requires[1].replace(/\.$/, "")];
     if (error.includes("deviceId")) return ["deviceId"];
     if (error.includes("target device") || error.includes("registered device")) return ["deviceId"];
     return [];
@@ -179,9 +181,11 @@ function connectorExists(device: Device | null, vendor: "mikrotik" | "fortigate"
 
 function inferFieldError(message: string, parameters: Record<string, unknown>, actionType: ActionType): StructuredValidationError {
   let field = message.match(/^([A-Za-z][A-Za-z0-9_]*)\s+(?:is|has|must|may|requires)/)?.[1];
+  if (field === actionType) field = undefined;
   const aliases: Record<string, string> = { srcIp: "sourceIp", address: "sourceIp", ip: "sourceIp", cidr: "sourceCidr", dstCidr: "destinationCidr", trustedSourceIp: "trustedSource", toPort: "newPort", srcintf: "srcInterface", dstintf: "dstInterface", scheduleName: "schedule", service: "serviceName" };
   if (field && aliases[field]) field = aliases[field];
-  if (!field && /device|credential|connector/i.test(message)) field = "deviceId";
+  if (!field && /credential/i.test(message)) field = "credentialId";
+  if (!field && /device|connector/i.test(message)) field = "deviceId";
   if (/Allowed source is required/i.test(message)) field = "trustedSourceCidr";
   if (!field && /interface\/zone|Policy interface\/zone/i.test(message)) {
     const value = message.match(/(?:interface\/zone|zone)\s+([^ ]+)/i)?.[1];
@@ -434,11 +438,11 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
 
   if (plan.actionType.startsWith("linux_")) {
     if (device && device.type !== "linux_edge" && !String(device.vendor ?? "").toLowerCase().includes("linux")) {
-      errors.push("linux_check_service_status requires a Linux Edge device.");
+      errors.push(`${plan.actionType} requires a Linux Edge device.`);
     }
-    if (device && device.protocol !== "ssh") errors.push("linux_check_service_status requires SSH protocol.");
-    if (device && !await credentialExists(device)) errors.push("linux_check_service_status requires an existing credential for the target device.");
-    if (device && !connectorExists(device, "linux_edge")) errors.push("linux_check_service_status requires a registered Linux connector.");
+    if (device && device.protocol !== "ssh") errors.push(`${plan.actionType} requires SSH protocol.`);
+    if (device && !await credentialExists(device)) errors.push(`${plan.actionType} requires an existing credential for the target device.`);
+    if (device && !connectorExists(device, "linux_edge")) errors.push(`${plan.actionType} requires a registered Linux connector.`);
     if (plan.actionType === ActionType.linux_check_service_status) {
       const service = textParam(parameters, "serviceName") ?? textParam(parameters, "service");
       if (!service) errors.push("linux_check_service_status requires serviceName.");

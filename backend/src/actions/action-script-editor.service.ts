@@ -55,24 +55,30 @@ function revisionOf(parametersJson: unknown) {
   return Number.isInteger(revision) && revision > 0 ? revision : 1;
 }
 
-function previewCommands(dryRunJson: unknown) {
+export function previewCommands(dryRunJson: unknown) {
   const dryRun = asObject(dryRunJson);
   const specs = Array.isArray(dryRun.commandSpecs)
     ? dryRun.commandSpecs.map(asObject).filter((item) => typeof item.command === "string")
     : [];
-  const execution = specs.filter((item) => item.write !== false).map((item) => String(item.command).trim()).filter(Boolean);
-  const verification = specs.filter((item) => item.write === false).map((item) => String(item.command).trim()).filter(Boolean);
+  const hasWriteCommand = specs.some((item) => item.write === true);
+  const execution = specs
+    .filter((item) => !hasWriteCommand || item.write !== false)
+    .map((item) => String(item.command).trim()).filter(Boolean);
+  const verification = hasWriteCommand
+    ? specs.filter((item) => item.write === false).map((item) => String(item.command).trim()).filter(Boolean)
+    : [];
   const fallback = textArray(dryRun.plannedCommands).length
     ? textArray(dryRun.plannedCommands)
     : textArray(dryRun.commands);
   return {
     execution: execution.length ? execution : fallback,
     verification,
+    readOnly: specs.length > 0 && !hasWriteCommand,
   };
 }
 
 function persianIssue(error: string) {
-  if (error.includes("at most 12")) return "حداکثر ۱۲ خط اجرایی مجاز است.";
+  if (error.includes("at most 64")) return "حداکثر ۶۴ خط اجرایی مجاز است.";
   if (error.includes("maximum length")) return "طول این خط بیشتر از حد مجاز است.";
   if (error.includes("contain a secret")) return "این خط شبیه اطلاعات محرمانه است؛ رمز یا کلید را داخل اسکریپت ننویسید.";
   if (error.includes("hard-denied as catastrophic")) return "این دستور تخریبی است و اجازه اجرا ندارد.";
@@ -117,13 +123,15 @@ export async function getEditableActionScript(id: string) {
   const customPlan = customPlanFromParameters(sourcePlan.parametersJson);
   let commands = customPlan?.orderedCommands ?? [];
   let verificationCommands = customPlan?.verificationCommands ?? [];
+  let reuseLastReadCommandForVerification = false;
   if (!commands.length) {
     const previewPlan = await dryRunActionPlan(id);
     const extracted = previewCommands(previewPlan?.dryRunJson ?? sourcePlan.dryRunJson);
     commands = extracted.execution;
     verificationCommands = extracted.verification;
+    reuseLastReadCommandForVerification = extracted.readOnly;
   }
-  if (!verificationCommands.length && commands.length) verificationCommands = [commands[commands.length - 1]];
+  if (!verificationCommands.length && commands.length && reuseLastReadCommandForVerification) verificationCommands = [commands[commands.length - 1]];
 
   return {
     sourceActionPlanId: sourcePlan.id,
@@ -140,7 +148,7 @@ export async function getEditableActionScript(id: string) {
     },
     script: commands.join("\n"),
     verificationScript: verificationCommands.join("\n"),
-    limits: { maxExecutionLines: 12, maxLineLength: 320 },
+    limits: { maxExecutionLines: 64, maxLineLength: 320 },
     safety: {
       rawExecution: false,
       requiresPreview: true,

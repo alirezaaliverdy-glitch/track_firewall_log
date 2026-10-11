@@ -1,3 +1,11 @@
+## 2026-10-11 - Complete command editing and actionable mobile remediation
+
+- Catalog and assistant ActionPlans expose their full connector commands in the professional editor. Read-only command bundles remain in the main script tab; write plans keep explicit read-only post-checks separate. Linux Daily Check now shows all six real commands, and Linux read actions show the exact shell command instead of a label.
+- Planner, dry-run, editor and execution reuse one Linux command library. Registered catalog commands may be preserved in an edited plan, while arbitrary additions still fail unless the vendor policy accepts them; raw AI/user shell execution remains disabled. The bounded editor now supports up to 64 execution lines.
+- Repeated-login remediation now creates and validates the real IP-block ActionPlan using the finding's source IP and device, then opens that exact operation. With a configured credential it is immediately `dry_run_ready`; missing setup produces a specific credential validation message rather than an inert proposal.
+- Backend/frontend production builds, 36 focused tests, 227 catalog entries, 884 locale keys, UTF-8 and both production Compose configurations passed. The disposable integration database was removed. Local API/web are rebuilt and healthy; routed API/dashboard/editor checks return 200, and the existing Daily Check plan projects six editable lines without the old placeholder.
+- No migration, connector execution, vendor mutation, push or production deployment occurred. Protected `quick_controlled` confirmation, PolicyGuard and audit behavior is unchanged.
+
 ## 2026-10-10 - Show real used and total resource capacity in fleet health
 
 - Asset Health cards now show CPU core capacity with current load, plus measured used/total RAM and disk/datastore capacity. Values come from the same persisted connector collection and matching disk/datastore label; no CPU-core usage or missing capacity is fabricated.

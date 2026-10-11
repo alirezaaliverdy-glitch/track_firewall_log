@@ -13,7 +13,7 @@ export function commandLines(plan: Pick<CustomCommandPlan, "orderedCommands" | "
 export function commonCommandErrors(plan: CustomCommandPlan) {
   const errors: string[] = [];
   if (plan.orderedCommands.length === 0 && plan.missingFields.length === 0) errors.push("Custom ActionPlan requires at least one ordered command.");
-  if (plan.orderedCommands.length > 12) errors.push("Custom ActionPlan may contain at most 12 ordered commands.");
+  if (plan.orderedCommands.length > 64) errors.push("Custom ActionPlan may contain at most 64 ordered commands.");
   for (const command of commandLines(plan)) {
     if (command.length > 320) errors.push("Custom command exceeds maximum length.");
     if (SECRET_PATTERN.test(command)) errors.push("Custom command appears to contain a secret.");

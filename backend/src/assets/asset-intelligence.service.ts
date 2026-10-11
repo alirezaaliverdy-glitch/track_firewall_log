@@ -1,6 +1,6 @@
 import { ActionPlanSource, ActionType, AiRiskLevel, DetectionRuleType, IncidentSeverity, type Device, type Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
-import { proposeActionPlan } from "../services/action-plan.service.js";
+import { dryRunActionPlan, proposeActionPlan } from "../services/action-plan.service.js";
 import { notifySecurityFinding } from "../services/security-alert-email.service.js";
 import { PRIORITY_EMAIL_RULE_KEYS, VENDOR_DETECTION_RULES, deduplicateDetectionEvents, eventMatchesVendorRule, groupSubject, normalizeDetectionVendor } from "../security/vendor-detection-rule-library.js";
 import { ACCOUNT_DETECTION_RULES, accountRuleActor, eventMatchesAccountRule } from "../security/account-detection-rule-library.js";
@@ -792,7 +792,7 @@ export async function createFindingActionPlan(id: string) {
         ? ActionType.fortigate_create_deny_policy
         : ActionType.custom_vendor_action;
   const responseParameters: Record<string, unknown> = responseAction === ActionType.linux_block_ip
-    ? { ipAddress: sourceIp, durationMinutes: 60 }
+    ? { srcIp: sourceIp, ipAddress: sourceIp, durationMinutes: 60 }
     : responseAction === ActionType.mikrotik_block_ip
       ? { sourceIp, address: sourceIp, timeout: "1h", listName: "firewall-log-analyzer-blocked", comment: `finding:${finding.id}` }
       : responseAction === ActionType.fortigate_create_deny_policy
@@ -829,8 +829,10 @@ export async function createFindingActionPlan(id: string) {
       requiresExplicitReview: true
     }
   });
-  const updated = await prisma.actionPlan.update({ where: { id: plan.id }, data: { assetId: finding.assetId ?? undefined }, include: { device: true, asset: true } });
-  return { findingId: finding.id, actionPlan: updated };
+  await prisma.actionPlan.update({ where: { id: plan.id }, data: { assetId: finding.assetId ?? undefined } });
+  const preview = await dryRunActionPlan(plan.id);
+  const actionPlan = preview ?? await prisma.actionPlan.findUnique({ where: { id: plan.id }, include: { device: true, asset: true } });
+  return { findingId: finding.id, actionPlan };
 }
 
 export function validateRuleDsl(rule: unknown) {

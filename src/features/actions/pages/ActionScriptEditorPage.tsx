@@ -189,6 +189,7 @@ export default function ActionScriptEditorPage({ params }: RouteComponentProps) 
             <textarea
               aria-label={tab === "script" ? (isFa ? "متن اسکریپت اجرا" : "Execution script") : (isFa ? "متن بررسی پس از اجرا" : "Verification script")}
               spellCheck={false}
+              wrap="off"
               value={activeValue}
               onChange={(event) => updateActive(event.target.value)}
               onKeyDown={(event) => {

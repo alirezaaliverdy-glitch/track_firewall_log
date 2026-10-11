@@ -9,6 +9,7 @@ import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxS
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { ACTION_PLAN_SECRET_KEYS, resolveActionPlanSecret } from "../services/action-plan-secret.service.js";
 import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
+import { linuxDailyCheckCommands, linuxReadCommand } from "./linux/command-library.js";
 import type {
   ConnectorAudit,
   ConnectorDryRun,
@@ -95,30 +96,6 @@ const LINUX_READ_ACTIONS = new Set<ActionType>([
   ActionType.linux_read_users, ActionType.linux_read_docker, ActionType.linux_read_nginx,
   "linux_list_running_services" as ActionType, "linux_list_failed_services" as ActionType, "linux_check_important_services" as ActionType
 ]);
-
-function linuxReadCommand(actionType: ActionType, sudo = "") {
-  const commands: Partial<Record<ActionType, { template: string; command: string }>> = {
-    [ActionType.linux_check_ssh_status]: { template: "SSH service status", command: "systemctl is-active ssh || systemctl is-active sshd || service ssh status || service sshd status" },
-    [ActionType.linux_check_failed_logins]: { template: "failed SSH logins in last 24 hours", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null || ${sudo}tail -n 300 /var/log/auth.log 2>/dev/null || ${sudo}tail -n 300 /var/log/secure 2>/dev/null` },
-    [ActionType.linux_check_sudo_users]: { template: "sudo, wheel, and UID 0 users", command: "getent group sudo; getent group wheel; awk -F: '$3==0 {print $1}' /etc/passwd" },
-    [ActionType.linux_check_fail2ban_status]: { template: "fail2ban service status", command: `systemctl is-active fail2ban; command -v fail2ban-client >/dev/null 2>&1 && ${sudo}fail2ban-client status || true` },
-    [ActionType.linux_read_hostname]: { template: "hostname", command: "hostname" },
-    [ActionType.linux_read_interfaces]: { template: "ip -brief address", command: "ip -brief address" },
-    [ActionType.linux_read_routes]: { template: "ip route show", command: "ip route show" },
-    [ActionType.linux_list_open_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
-    [ActionType.linux_read_listening_ports]: { template: "ss/netstat listening ports", command: "ss -lntup || netstat -lntup" },
-    [ActionType.linux_check_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
-    [ActionType.linux_read_firewall_status]: { template: "firewall status", command: `${sudo}ufw status verbose || ${sudo}nft list ruleset || ${sudo}iptables -S` },
-    [ActionType.linux_read_auth_logs]: { template: "journalctl SSH authentication events", command: `${sudo}journalctl -u ssh -u sshd --since '24 hours ago' --no-pager -n 200` },
-    [ActionType.linux_read_users]: { template: "getent passwd", command: "getent passwd" },
-    [ActionType.linux_read_docker]: { template: "docker ps", command: "docker ps --no-trunc" },
-    [ActionType.linux_read_nginx]: { template: "nginx -t", command: `${sudo}nginx -t` },
-    ["linux_list_running_services" as ActionType]: { template: "running services", command: "systemctl list-units --type=service --state=running --no-pager --plain" },
-    ["linux_list_failed_services" as ActionType]: { template: "failed services", command: "systemctl --failed --type=service --no-pager --plain" },
-    ["linux_check_important_services" as ActionType]: { template: "important services", command: "for s in ssh sshd nginx apache2 httpd docker fail2ban postgresql mysql mariadb redis; do if systemctl list-unit-files --type=service 2>/dev/null | grep -q \"^${s}\\.service\"; then printf '=== %s ===\\n' \"$s\"; systemctl is-active \"$s\" 2>/dev/null || true; systemctl status \"$s\" --no-pager --lines=5 2>/dev/null || true; fi; done" }
-  };
-  return commands[actionType];
-}
 
 const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 
@@ -634,7 +611,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
   });
 }
 
-function dryRunFor(plan: ActionPlan, _device: Device): ConnectorDryRun {
+function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   if (plan.actionType === ActionType.custom_vendor_action) {
     const customPlan = customPlanFromParameters(plan.parametersJson);
     if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
@@ -684,7 +661,7 @@ function dryRunFor(plan: ActionPlan, _device: Device): ConnectorDryRun {
   } else if (plan.actionType === ActionType.change_ssh_port) {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Changing SSH port has an execution preview but is not enabled in this connector.");
   } else if (plan.actionType === ActionType.linux_daily_check) {
-    plannedCommands = ["controlled Linux daily-check bundle (read-only)"];
+    plannedCommands = linuxDailyCheckCommands().map((item) => item.command);
     rollbackSteps = [];
   } else if (plan.actionType === ActionType.linux_reboot || plan.actionType === ActionType.linux_shutdown) {
     const verb = plan.actionType === ActionType.linux_reboot ? "reboot" : "poweroff";
@@ -711,15 +688,16 @@ function dryRunFor(plan: ActionPlan, _device: Device): ConnectorDryRun {
     if (plan.actionType === ActionType.linux_lock_user) { plannedCommands = [`sudo -n usermod -L ${username}`, `passwd -S ${username} || true`]; rollbackSteps = [`sudo -n usermod -U ${username}`]; }
     if (plan.actionType === ActionType.linux_unlock_user) { plannedCommands = [`sudo -n usermod -U ${username}`, `passwd -S ${username} || true`]; rollbackSteps = [`sudo -n usermod -L ${username}`]; }
   } else if (LINUX_READ_ACTIONS.has(plan.actionType)) {
-    const read = linuxReadCommand(plan.actionType);
+    const read = linuxReadCommand(plan.actionType, "sudo -n ");
     if (!read) throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} has no controlled read template.`);
-    plannedCommands = [read.template];
+    plannedCommands = [read.command];
     rollbackSteps = [];
     validationWarnings.push("Read-only inventory command. No device state change is planned.");
   } else {
     throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `${plan.actionType} is not supported by the Linux SSH connector.`);
   }
 
+  const readOnly = plan.actionType === ActionType.linux_daily_check || LINUX_READ_ACTIONS.has(plan.actionType) || plan.actionType === ActionType.linux_check_service_status;
   return {
     plannedCommands,
     validationWarnings,
@@ -727,7 +705,14 @@ function dryRunFor(plan: ActionPlan, _device: Device): ConnectorDryRun {
     affectedServices,
     rollbackSteps,
     riskLevel: plan.riskLevel,
-    requiresApproval: true
+    requiresApproval: true,
+    commandSpecs: plannedCommands.map((command, index) => ({
+      template: plan.actionType === ActionType.linux_daily_check ? linuxDailyCheckCommands()[index]?.template ?? `daily check ${index + 1}` : `linux command ${index + 1}`,
+      command,
+      write: readOnly ? false : index === 0,
+      target: { deviceId: device.id, actionType: plan.actionType },
+    })),
+    exactTarget: { deviceId: device.id, actionType: plan.actionType },
   };
 }
 
@@ -793,15 +778,7 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.steps = customPlan.rollbackGuidance;
       rollbackJson.verification = { ok: true, summary: "Custom Linux command sequence and verification commands completed." };
     } else if (plan.actionType === ActionType.linux_daily_check) {
-      const daily = [
-        "printf '===SYSTEM===\\n'; uptime; free -m; swapon --show 2>/dev/null || true; df -h; df -i",
-        "printf '===SERVICES===\\n'; systemctl --failed --no-pager 2>/dev/null || true; systemctl is-active ssh sshd nginx apache2 httpd docker fail2ban 2>/dev/null || true",
-        "printf '===NETWORK===\\n'; ip -brief address; ip route; ss -lntup 2>/dev/null || ss -lntp 2>/dev/null || true",
-        `${sudo}sh -c "printf '===FIREWALL===\\n'; ufw status verbose 2>/dev/null || nft list ruleset 2>/dev/null || iptables -S 2>/dev/null || true"`,
-        `${sudo}sh -c "printf '===LOGS===\\n'; journalctl -p err..alert --since '24 hours ago' -n 150 --no-pager 2>/dev/null || true; journalctl -u ssh -u sshd --since '24 hours ago' --no-pager 2>/dev/null | grep -Ei 'failed|invalid user|authentication failure' | tail -n 100 || true"`,
-        "printf '===UPDATES===\\n'; (apt list --upgradable 2>/dev/null || dnf check-update 2>/dev/null || yum check-update 2>/dev/null || true) | head -n 100"
-      ];
-      for (const command of daily) await pushCommand("linux daily check", command);
+      for (const item of linuxDailyCheckCommands(sudo)) await pushCommand(item.template, item.command);
       rollbackJson.readOnly = true;
     } else if (plan.actionType === ActionType.linux_reboot || plan.actionType === ActionType.linux_shutdown) {
       const verb = plan.actionType === ActionType.linux_reboot ? "reboot" : "poweroff";

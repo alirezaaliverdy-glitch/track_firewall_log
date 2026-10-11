@@ -42,3 +42,12 @@ test("verified actions trigger a read-only health refresh without fabricating ex
   assert.match(fleet, /collect\(deviceId, true\)/);
   assert.match(fleet, /if \(force\)[\s\S]*collectLinuxSecuritySnapshot/);
 });
+
+test("finding remediation prepares a real preview and opens its exact Action Center item", () => {
+  const service = backend("assets/asset-intelligence.service.ts");
+  const detail = frontend("features/security/pages/FindingDetailPage.tsx");
+  assert.match(service, /srcIp: sourceIp, ipAddress: sourceIp/);
+  assert.match(service, /dryRunActionPlan\(plan\.id\)/);
+  assert.match(detail, /reviewInActionCenter\(result\.actionPlan\.id\)/);
+  assert.match(detail, /disabled=\{creatingPlan\}/);
+});

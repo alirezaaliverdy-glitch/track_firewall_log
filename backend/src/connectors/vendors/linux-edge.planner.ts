@@ -1,6 +1,7 @@
 import { ActionType, DeviceType } from "@prisma/client";
 import type { PlannerInput, VendorCommandPlan, VendorPlanner } from "../types.js";
 import { customPlanFromParameters } from "../../ai/custom-action-plan.js";
+import { linuxDailyCheckCommands } from "../linux/command-library.js";
 
 const WARNING_PORTS = new Set([22, 80, 443, 8080, 4000, 4050, 50]);
 const READ_ACTIONS = new Map<ActionType, string>([
@@ -144,7 +145,7 @@ export const linuxEdgePlanner: VendorPlanner = {
     }
     if (input.actionType === ActionType.linux_daily_check) {
       const plan = base(input);
-      plan.commands = ["controlled Linux daily-check bundle (read-only)"];
+      plan.commands = linuxDailyCheckCommands().map((item) => item.command);
       plan.requiresApproval = false;
       return plan;
     }
