@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-11 - Dashboard proposal and evidence-gated remediation
+
+- Dashboard now exposes one compact Persian-first action composer: choose a managed device, type the desired change, and let the existing catalog-first resolver map it to a registered ActionPlan or guided workflow. The dashboard shows the proposed action and opens its review/configuration path; it never executes from the composer.
+- High-priority finding cards offer a direct `پیشنهاد اقدام` button. This reuses the finding's existing preview-ready ActionPlan and opens that exact item in Action Center; unsupported/manual cases remain review-only.
+- Finding remediation no longer proposes an IP block merely because a finding has a source IP. Blocking is limited to open, credible attack categories; account, privilege, configuration and already-denied traffic findings remain manual proposals. Protected quick-controlled confirmation, PolicyGuard, connector and audit behavior are unchanged.
+- Frontend and backend production builds passed, the focused remediation gate test passed, and development/production Compose structure validated. Local web/API were rebuilt healthy, with routed dashboard and API health HTTP 200. No device action, migration, push or production rollout occurred.
+
 ## 2026-10-11 - Real Docker port unpublish and compact Network Lab
 
 - Closing a Docker-owned Linux port from Ports & Connections now sends the live container identity through the existing controlled ActionPlan flow and removes the selected host-port publication by transactionally recreating that container. The connector preserves unrelated bindings, mounts and networks, verifies the replacement state, and restores the original container automatically if creation, startup or health verification fails.

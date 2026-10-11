@@ -1,3 +1,9 @@
+## 2026-10-11 - Dashboard action proposal and safer finding response
+
+- The dashboard has a compact device-aware natural-language action entry point and a direct finding proposal button. Both create reviewable plans through existing catalog/finding routes; actual vendor execution remains preview + explicit confirmation + PolicyGuard + connector + audit.
+- Finding remediation proposes an IP block only for open, sufficiently credible attack categories with a source IP. Other findings produce manual review plans instead of an unrelated block.
+- Backend/frontend production builds, focused gate test, development/production Compose validation and local API/web health/dashboard checks passed. Local services were rebuilt; no vendor mutation, migration, push or production deployment occurred.
+
 ## 2026-10-11 - Real Docker unpublish and cleaner Network Lab UI
 
 - Docker-published Linux ports are no longer reported closed after only changing UFW. The controlled close action verifies the current owner, transactionally recreates it without the selected host binding, verifies `docker ps`, and automatically restores the original container on failure.

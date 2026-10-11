@@ -7,6 +7,7 @@ import { ACCOUNT_DETECTION_RULES, accountRuleActor, eventMatchesAccountRule } fr
 import { isApplicationOwnedSecurityEvent, isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 import { invalidateVendorUserActivityCache } from "../services/vendor-user-activity.service.js";
 import { assessDeviceHealth } from "../services/device-health-assessment.js";
+import { findingSupportsIpResponse } from "./finding-remediation-policy.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
 const MAX_IMPORT_ASSETS = 100;
@@ -783,7 +784,7 @@ export async function createFindingActionPlan(id: string) {
     orderBy: [{ timestamp: "desc" }, { receivedAt: "desc" }],
     select: { interfaceIn: true, interfaceOut: true, dstIp: true, dstPort: true, protocol: true }
   }) : null;
-  const sourceIp = finding.srcIp ?? undefined;
+  const sourceIp = findingSupportsIpResponse(finding) ? finding.srcIp ?? undefined : undefined;
   const responseAction = vendor === "linux" && sourceIp
     ? ActionType.linux_block_ip
     : vendor === "mikrotik" && sourceIp

@@ -505,8 +505,30 @@
 .dashboard-attention-item strong { overflow:hidden;color:#e8f3f7;font-size:.84rem;text-overflow:ellipsis;white-space:nowrap; }
 .dashboard-attention-item small { color:#9bb0bc;font-size:.74rem;line-height:1.75; }
 .dashboard-attention-item em { color:#657f8e;font-size:.68rem;font-style:normal; }
-.dashboard-attention-item>b { display:inline-flex;align-items:center;gap:5px;color:#74d6df;font-size:.72rem;white-space:nowrap; }
-.dashboard-attention-item>b svg { width:14px; }
+.dashboard-attention-item__actions { display:grid;justify-items:start;gap:7px; }
+.dashboard-attention-item__actions a { display:inline-flex;align-items:center;gap:5px;color:#74d6df;font-size:.72rem;font-weight:800;white-space:nowrap; }
+.dashboard-attention-item__actions svg { width:14px;height:14px; }
+.dashboard-attention-item__actions button { border:1px solid rgba(45,212,232,.26);border-radius:8px;padding:7px 10px;color:#b4f2f3;background:rgba(45,212,232,.09);font:inherit;font-size:.69rem;font-weight:800;cursor:pointer; }
+.dashboard-attention-item__actions button:hover:not(:disabled) { background:rgba(45,212,232,.17); }
+.dashboard-attention-item__actions button:disabled { opacity:.55;cursor:wait; }
+.dashboard-attention-error { position:relative;z-index:2;margin:0 19px 12px;color:#fda4af;font-size:.74rem; }
+
+.dashboard-action-composer { display:grid;gap:14px;padding:19px; }
+.dashboard-action-composer__heading { position:relative;z-index:2;display:flex;align-items:center;gap:11px; }
+.dashboard-action-composer__heading p { margin-top:3px;font-size:.72rem; }
+.dashboard-action-composer form { position:relative;z-index:2;display:grid;grid-template-columns:minmax(170px,.85fr) minmax(220px,1.7fr) auto;gap:9px; }
+.dashboard-action-composer select,.dashboard-action-composer input { width:100%;min-width:0;min-height:42px;border:1px solid rgba(102,159,185,.25);border-radius:10px;padding:0 12px;color:#e1f2f7;background:#061925;font:inherit;font-size:.75rem;outline:none; }
+.dashboard-action-composer select:focus,.dashboard-action-composer input:focus { border-color:rgba(45,212,232,.68);box-shadow:0 0 0 3px rgba(45,212,232,.08); }
+.dashboard-action-composer input::placeholder { color:#658094; }
+.dashboard-action-composer form button,.dashboard-action-composer__result a { display:inline-flex;min-height:42px;align-items:center;justify-content:center;gap:7px;border:1px solid rgba(45,212,232,.28);border-radius:10px;padding:0 15px;color:#d9fcff;background:linear-gradient(115deg,rgba(7,113,133,.62),rgba(8,79,103,.5));font:inherit;font-size:.73rem;font-weight:850;white-space:nowrap;cursor:pointer; }
+.dashboard-action-composer form button:disabled { opacity:.48;cursor:not-allowed; }
+.dashboard-action-composer form button svg,.dashboard-action-composer__result svg { width:15px;height:15px; }
+.dashboard-action-composer__error { position:relative;z-index:2;margin:0!important;color:#fda4af!important;font-size:.74rem!important; }
+.dashboard-action-composer__result { position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:15px;border:1px solid rgba(52,211,153,.2);border-radius:11px;padding:11px 13px;background:rgba(52,211,153,.065); }
+.dashboard-action-composer__result div { display:grid;gap:3px;min-width:0; }
+.dashboard-action-composer__result strong { color:#e4f8f0;font-size:.8rem; }
+.dashboard-action-composer__result small { color:#8cb9ac;font-size:.7rem;line-height:1.5; }
+.dashboard-action-composer__result a { flex:none;min-height:36px; }
 
 @media (max-width: 860px) {
   .dashboard-attention-list { grid-template-columns:1fr; }
@@ -515,5 +537,14 @@
 @media (max-width: 520px) {
   .dashboard-attention-list { padding-inline:14px; }
   .dashboard-attention-item { grid-template-columns:34px minmax(0,1fr); }
-  .dashboard-attention-item>b { grid-column:2; }
+  .dashboard-attention-item__actions { grid-column:2; }
+}
+@media (max-width: 900px) {
+  .dashboard-action-composer form { grid-template-columns:1fr; }
+  .dashboard-action-composer form button { width:100%; }
+}
+@media (max-width: 520px) {
+  .dashboard-action-composer { padding:14px; }
+  .dashboard-action-composer__result { align-items:stretch;flex-direction:column; }
+  .dashboard-action-composer__result a { width:100%; }
 }

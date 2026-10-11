@@ -1,3 +1,9 @@
+## 2026-10-11 - Dashboard command-to-action handoff
+
+- Connected a short dashboard request form to the existing device-scoped catalog/AI resolver, preserving supported template selection, parameter completion, guided workflows and Action Center review.
+- Added a direct high-priority finding action proposal from dashboard attention cards and narrowed source-IP blocking to credible attack categories; account/configuration findings no longer inherit an arbitrary IP block.
+- Built frontend/backend production images, passed the focused remediation policy test, validated both Compose structures and rebuilt the local API/web. No live connector call or production push.
+
 ## 2026-10-11 - Remove Docker publication for real and simplify Network Lab
 
 - Replaced the misleading Docker-port close result with a transactional unpublish path using current topology evidence, exact container validation, post-state verification and automatic restoration on failure.
