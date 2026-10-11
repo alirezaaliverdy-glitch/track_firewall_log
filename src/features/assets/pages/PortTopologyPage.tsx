@@ -254,8 +254,16 @@ function serviceOperation(device: PortMapDevice, endpoint: ServiceEndpoint, enab
   const key = vendorKey(device);
   if (key === "linux") return {
     catalogId: enable ? "linux.open-port" : "linux.close-port",
-    title: enable ? (fa ? `اجازه پورت ${endpoint.port} در فایروال` : `Allow port ${endpoint.port} in firewall`) : (fa ? `مسدود کردن پورت ${endpoint.port} در فایروال` : `Deny port ${endpoint.port} in firewall`),
-    params: { port: endpoint.port, protocol: endpoint.protocol === "udp" ? "udp" : "tcp" }
+    title: enable
+      ? (fa ? `اجازه پورت ${endpoint.port} در فایروال` : `Allow port ${endpoint.port} in firewall`)
+      : endpoint.container
+        ? (fa ? `حذف انتشار Docker پورت ${endpoint.port}` : `Remove Docker publication for port ${endpoint.port}`)
+        : (fa ? `مسدود کردن پورت ${endpoint.port} در فایروال` : `Deny port ${endpoint.port} in firewall`),
+    params: {
+      port: endpoint.port,
+      protocol: endpoint.protocol === "udp" ? "udp" : "tcp",
+      ...(endpoint.container && !enable ? { dockerAction: "unpublish", containerId: endpoint.container.containerId } : {})
+    }
   };
   if (key === "mikrotik" && endpoint.serviceName) return {
     catalogId: enable ? "mikrotik.enable-service" : "mikrotik.disable-service",
@@ -285,7 +293,7 @@ function ServiceEndpointEditor({ device, endpoint, fa, editable, onClose, onSave
     <header><div><small>{device.name} · {endpoint.source}</small><h2 dir="ltr">{draft.port}/{draft.protocol.toUpperCase()}</h2></div><button type="button" onClick={onClose}><X /></button></header>
     <div className={`service-editor__exposure is-${draft.exposure}`}><ShieldAlert /><div><strong>{exposureLabel(draft.exposure, fa)}</strong><small>{fa ? "بازبودن Listener الزاماً به معنی عبور از فایروال نیست." : "A listener is not necessarily reachable through the firewall."}</small></div></div>
     {endpoint.container ? <section className={`service-editor__container ${endpoint.container.blockedByDockerUser ? "is-blocked" : ""}`}><Boxes /><div><small>{fa ? "منبع واقعی پورت" : "Actual port source"}</small><strong>{fa ? "منتشرشده توسط Docker" : "Published by Docker"}</strong><code dir="ltr">{endpoint.container.containerName || endpoint.container.containerId.slice(0, 12)}</code><span dir="ltr">{endpoint.container.image}</span><em dir="ltr">{endpoint.container.hostIp}:{endpoint.container.hostPort} → {endpoint.container.containerPort}/{endpoint.container.protocol}</em><b>{endpoint.container.blockedByDockerUser ? (fa ? "دسترسی بیرونی در DOCKER-USER مسدود است" : "External access is blocked in DOCKER-USER") : (fa ? "دسترسی بیرونی هنوز Publish است" : "External access is still published")}</b></div></section> : null}
-    {enableOperation && disableOperation ? <section className="port-live-controls service-live-controls"><header><div><ShieldCheck /><span><strong>{fa ? "کنترل واقعی دسترسی" : "Live access control"}</strong><small>{vendorKey(device) === "linux" ? (fa ? "قانون فایروال؛ سرویس متوقف نمی‌شود" : "Firewall rule; process is not stopped") : "RouterOS IP service"}</small></span></div><i className="is-ready">{fa ? "آماده" : "Ready"}</i></header><div className="port-power-actions"><button type="button" className="is-enable" disabled={!editable || saving || execution.working || endpoint.key === "new"} onClick={() => void execution.prepare(device.id, enableOperation)}><Power />{fa ? "اجازه / روشن" : "Allow / enable"}</button><button type="button" className="is-disable" disabled={!editable || saving || execution.working || endpoint.key === "new"} onClick={() => void execution.prepare(device.id, disableOperation)}><Power />{fa ? "مسدود / خاموش" : "Deny / disable"}</button></div></section> : null}
+    {enableOperation && disableOperation ? <section className="port-live-controls service-live-controls"><header><div><ShieldCheck /><span><strong>{fa ? "کنترل واقعی دسترسی" : "Live access control"}</strong><small>{vendorKey(device) === "linux" ? endpoint.container ? (fa ? "Publish انتخاب‌شده از Docker حذف می‌شود؛ در خطا کانتینر قبلی خودکار برمی‌گردد" : "The selected Docker publication is removed; the original container is restored on failure") : (fa ? "قانون فایروال؛ سرویس متوقف نمی‌شود" : "Firewall rule; process is not stopped") : "RouterOS IP service"}</small></span></div><i className="is-ready">{fa ? "آماده" : "Ready"}</i></header><div className="port-power-actions"><button type="button" className="is-enable" disabled={!editable || saving || execution.working || endpoint.key === "new"} onClick={() => void execution.prepare(device.id, enableOperation)}><Power />{fa ? "اجازه / روشن" : "Allow / enable"}</button><button type="button" className="is-disable" disabled={!editable || saving || execution.working || endpoint.key === "new"} onClick={() => void execution.prepare(device.id, disableOperation)}><Power />{endpoint.container ? (fa ? "حذف انتشار Docker" : "Remove Docker publication") : (fa ? "مسدود / خاموش" : "Deny / disable")}</button></div></section> : null}
     {execution.pending ? <InlineActionReview pending={execution.pending} working={execution.working} fa={fa} onConfirm={() => void execution.execute()} onCancel={execution.cancel} /> : null}
     <section className="service-editor__bindings" aria-label={fa ? "آدرس‌های Listen تشخیص‌داده‌شده" : "Detected listen bindings"}>
       <div><strong>{fa ? "Bindهای تشخیص‌داده‌شده" : "Detected bindings"}</strong><small>{bindings.length}</small></div>

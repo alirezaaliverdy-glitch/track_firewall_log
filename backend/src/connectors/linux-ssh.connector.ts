@@ -101,6 +101,7 @@ const DANGEROUS_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]
 
 import { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "./linux/firewall-parsers.js";
 import { dockerPublishedPortGuard, parseDockerPublishedPorts } from "./linux/docker-port-evidence.js";
+import { dockerUnpublishCommand } from "./linux/docker-unpublish.js";
 export { firewalldHasPort, parseIptablesAllowRuleNumbers, parseNftAllowRules, parseUfwAllowRuleNumbers } from "./linux/firewall-parsers.js";
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -633,20 +634,33 @@ function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
     rollbackSteps = [`sudo -n ufw delete allow ${port}/${protocol}`];
   } else if (plan.actionType === ActionType.close_port) {
     const port = portParam(parameters.port);
+    const dockerAction = text(parameters.dockerAction);
     affectedPorts.push(port);
     if (DANGEROUS_CLOSE_PORTS.has(port)) {
       throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing protected port ${port} is blocked by Linux connector policy.`);
     }
-    plannedCommands = [
-      "detect whether Docker publishes the requested host port",
-      "when Docker owns the port, enforce and verify a DOCKER-USER drop rule without stopping the container",
-      "detect active firewall adapter (UFW, firewalld, nftables, or iptables)",
-      `inspect effective allow rules for ${port}/${protocol}`,
-      `remove only matching allow rules for ${port}/${protocol} when present`,
-      `verify ${port}/${protocol} is not effectively allowed`
-    ];
-    rollbackSteps = [`restore the removed ${port}/${protocol} allow rule through the detected adapter after explicit review`];
-    validationWarnings.push("Idempotent execution: if no matching effective allow rule exists, return verified_no_change after connector inspection.");
+    if (dockerAction === "unpublish") {
+      plannedCommands = [
+        "verify the selected container still owns the requested Docker host-port binding",
+        "transactionally recreate that container with the selected host-port binding removed",
+        "restore and restart the original container automatically if recreation or startup fails",
+        `verify Docker no longer publishes ${port}/${protocol}`
+      ];
+      rollbackSteps = ["restore the Docker port in the owning Compose/service definition, then recreate the service after explicit review"];
+      validationWarnings.push("The running container is recreated without the selected published port; mounted data and all unrelated bindings are preserved.");
+      validationWarnings.push("If Docker Compose owns the container, a later Compose deployment can restore the port until its source configuration is updated.");
+    } else {
+      plannedCommands = [
+        "detect whether Docker publishes the requested host port",
+        "when Docker owns the port, enforce and verify a DOCKER-USER drop rule without stopping the container",
+        "detect active firewall adapter (UFW, firewalld, nftables, or iptables)",
+        `inspect effective allow rules for ${port}/${protocol}`,
+        `remove only matching allow rules for ${port}/${protocol} when present`,
+        `verify ${port}/${protocol} is not effectively allowed`
+      ];
+      rollbackSteps = [`restore the removed ${port}/${protocol} allow rule through the detected adapter after explicit review`];
+      validationWarnings.push("Idempotent execution: if no matching effective allow rule exists, return verified_no_change after connector inspection.");
+    }
   } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
     const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
     const durationMinutes = Number(parameters.durationMinutes ?? 30);
@@ -798,6 +812,8 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.steps = [`${sudo}ufw delete allow ${port}/${protocol}`];
     } else if (plan.actionType === ActionType.close_port) {
       const port = portParam(parameters.port);
+      const dockerAction = text(parameters.dockerAction);
+      const requestedContainerId = text(parameters.containerId);
       if (DANGEROUS_CLOSE_PORTS.has(port)) {
         throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", `Closing protected port ${port} is blocked by Linux connector policy.`);
       }
@@ -813,7 +829,52 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       let changed = false;
       let adapter = "";
 
-      if (dockerPorts.length) {
+      if (dockerAction === "unpublish") {
+        if (!requestedContainerId || !/^[a-fA-F0-9]{12,64}$/.test(requestedContainerId)) {
+          throw new ConnectorError("INVALID_DOCKER_CONTAINER", "Docker unpublish requires the validated container ID from current topology evidence.");
+        }
+        const owners = [...new Map(dockerPorts.filter((item) => item.containerId === requestedContainerId).map((item) => [item.containerId, item])).values()];
+        if (owners.length !== 1) {
+          throw new ConnectorError("DOCKER_BINDING_STALE", `The selected container no longer publishes ${port}/${protocol}; refresh topology before retrying.`);
+        }
+        await pushCommand(
+          "docker unpublish prerequisites",
+          `${sudo}sh -c 'command -v docker >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 && test -S /var/run/docker.sock'`
+        );
+        const transaction = await pushCommand(
+          "docker transactional port unpublish",
+          dockerUnpublishCommand(requestedContainerId, port, protocol, sudo)
+        );
+        const verifiedInventory = await pushCommand(
+          "docker unpublished-port verification",
+          `${sudo}sh -c 'docker ps --no-trunc --format "{{json .}}" 2>/dev/null'`
+        );
+        const remaining = parseDockerPublishedPorts(verifiedInventory.stdout).filter((item) => item.hostPort === port && item.protocol === protocol && item.containerName === owners[0].containerName);
+        if (remaining.length) throw new ConnectorError("POSTCHECK_FAILED", `Docker still publishes ${port}/${protocol} after container recreation.`);
+        const staleGuard = dockerPublishedPortGuard(port, protocol);
+        await pushCommand("docker stale IPv4 guard cleanup", `${sudo}sh -c 'if command -v iptables >/dev/null 2>&1 && iptables -nL DOCKER-USER >/dev/null 2>&1; then ${staleGuard.check} >/dev/null 2>&1 && ${staleGuard.remove} || true; fi'`);
+        await pushCommand("docker stale IPv6 guard cleanup", `${sudo}sh -c 'if command -v ip6tables >/dev/null 2>&1 && ip6tables -nL DOCKER-USER >/dev/null 2>&1; then ${staleGuard.ipv6Check} >/dev/null 2>&1 && ${staleGuard.ipv6Remove} || true; fi'`);
+        adapter = "docker-unpublish";
+        changed = true;
+        const transactionResult = transaction.stdout.trim().split(/\r?\n/).at(-1);
+        try {
+          const parsed = transactionResult ? JSON.parse(transactionResult) as Record<string, unknown> : {};
+          rollbackJson.dockerTransaction = parsed;
+          if (parsed.composeManaged === true) warnings.push("COMPOSE_SOURCE_CAN_REPUBLISH_PORT");
+        } catch {
+          warnings.push("DOCKER_TRANSACTION_RESULT_UNPARSED");
+        }
+        rollbackJson.containerPorts = owners.map((item) => ({
+          containerId: item.containerId,
+          containerName: item.containerName,
+          image: item.image,
+          hostIp: item.hostIp,
+          hostPort: item.hostPort,
+          containerPort: item.containerPort,
+          protocol: item.protocol
+        }));
+        rollbackJson.steps = ["Restore the removed port in the owning Docker Compose/service definition and recreate that service."];
+      } else if (dockerPorts.length) {
         adapter = "docker-user";
         const guard = dockerPublishedPortGuard(port, protocol);
         const before = await pushCommand(
@@ -889,8 +950,8 @@ async function runAction(plan: ActionPlan, device: Device, audit?: ConnectorAudi
       rollbackJson.protocol = protocol;
       rollbackJson.connectorInvoked = true;
       rollbackJson.enforcementPath = adapter;
-      if (adapter !== "docker-user") rollbackJson.steps = changed ? [`Restore an allow rule for ${port}/${protocol} through the detected ${adapter} adapter after explicit review.`] : [];
-      await audit?.(changed ? "effective_state_verified" : "already_compliant", changed ? (adapter === "docker-user" ? "Docker published-port access was blocked and verified in DOCKER-USER." : "Firewall effective state was verified after removing matching allow rules.") : "Firewall effective state was inspected and was already compliant.", { adapter, port, protocol, outcome, connectorInvoked: true });
+      if (adapter !== "docker-user" && adapter !== "docker-unpublish") rollbackJson.steps = changed ? [`Restore an allow rule for ${port}/${protocol} through the detected ${adapter} adapter after explicit review.`] : [];
+      await audit?.(changed ? "effective_state_verified" : "already_compliant", changed ? (adapter === "docker-unpublish" ? "Docker host-port publication was removed and verified after transactional container recreation." : adapter === "docker-user" ? "Docker published-port access was blocked and verified in DOCKER-USER." : "Firewall effective state was verified after removing matching allow rules.") : "Firewall effective state was inspected and was already compliant.", { adapter, port, protocol, outcome, connectorInvoked: true });
     } else if (plan.actionType === ActionType.block_source_ip_temporary || plan.actionType === ActionType.linux_block_ip) {
       const srcIp = ipParam(parameters.srcIp ?? parameters.ipAddress);
       const durationMinutes = Number(parameters.durationMinutes ?? 30);

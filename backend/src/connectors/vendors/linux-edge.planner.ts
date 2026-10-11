@@ -56,8 +56,21 @@ function portPlan(input: PlannerInput, verb: "allow" | "deny"): VendorCommandPla
   const protocol = str(input.parameters.protocol) ?? "tcp";
   if (!port || port < 1 || port > 65535) return needs(input, ["port"], ["Which valid TCP/UDP port should UFW target?"]);
   const plan = base(input);
-  plan.commands = [`ufw ${verb} ${port}/${protocol}`];
-  plan.rollbackSteps = [`ufw delete ${verb} ${port}/${protocol}`];
+  if (verb === "deny" && input.parameters.dockerAction === "unpublish") {
+    const containerId = str(input.parameters.containerId);
+    if (!containerId || !/^[a-fA-F0-9]{12,64}$/.test(containerId)) return needs(input, ["containerId"], ["Which currently detected Docker container owns this published port?"]);
+    plan.commands = [
+      `verify container ${containerId.slice(0, 12)} still publishes ${port}/${protocol}`,
+      `transactionally recreate the container without host port ${port}/${protocol}`,
+      `verify docker ps no longer publishes ${port}/${protocol}`
+    ];
+    plan.rollbackSteps = ["Restore the port in the owning Docker Compose/service definition and recreate the service."];
+    plan.warnings.push("The original container is restored automatically if replacement creation or startup fails.");
+    plan.warnings.push("A later Compose deployment can republish the port until its source configuration is updated.");
+  } else {
+    plan.commands = [`ufw ${verb} ${port}/${protocol}`];
+    plan.rollbackSteps = [`ufw delete ${verb} ${port}/${protocol}`];
+  }
   if (WARNING_PORTS.has(port)) plan.warnings.push(`Port ${port} is operationally sensitive.`);
   return plan;
 }

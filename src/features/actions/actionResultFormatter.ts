@@ -137,9 +137,10 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
     const port = String(params.port ?? params.toPort ?? "-");
     const protocol = String(params.protocol ?? "tcp");
     const isOpen = action.actionType === "linux_open_port";
+    const dockerUnpublish = params.dockerAction === "unpublish";
     return {
-      summaryFa: isOpen ? `درخواست باز کردن پورت ${port}/${protocol} ثبت و اجرا/بررسی شد.` : `درخواست بستن پورت ${port}/${protocol} ثبت و اجرا/بررسی شد.`,
-      nextActionsFa: ["وضعیت فایروال و دسترسی سرویس روی همین پورت را دوباره بررسی کنید."],
+      summaryFa: dockerUnpublish ? `انتشار Docker پورت ${port}/${protocol} حذف و راستی‌آزمایی شد.` : isOpen ? `درخواست باز کردن پورت ${port}/${protocol} ثبت و اجرا/بررسی شد.` : `درخواست بستن پورت ${port}/${protocol} ثبت و اجرا/بررسی شد.`,
+      nextActionsFa: [dockerUnpublish ? "در تنظیمات اصلی Docker Compose نیز این پورت را حذف کنید تا در استقرار بعدی بازنگردد." : "وضعیت فایروال و دسترسی سرویس روی همین پورت را دوباره بررسی کنید."],
       structuredSections: mapRows("جزئیات عملیات", [
         { label: "پورت", value: port },
         { label: "پروتکل", value: protocol },

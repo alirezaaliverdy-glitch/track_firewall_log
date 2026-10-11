@@ -504,8 +504,11 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
     const port = numberParam(parameters, "port");
     if (!validPort(port)) errors.push("close_port requires a valid port between 1 and 65535.");
     if (!validProtocol(parameters.protocol)) errors.push("close_port protocol must be tcp or udp.");
+    if (parameters.dockerAction !== undefined && parameters.dockerAction !== "unpublish") errors.push("close_port dockerAction must be unpublish when provided.");
+    if (parameters.dockerAction === "unpublish" && !/^[a-fA-F0-9]{12,64}$/.test(String(parameters.containerId ?? ""))) errors.push("Docker unpublish requires a valid current containerId.");
     if (port && PROTECTED_CLOSE_PORTS.has(port)) errors.push(`Closing protected port ${port} is blocked by policy.`);
     if (port && WARNING_PORTS.has(port)) warnings.push(`Port ${port} is operationally sensitive.`);
+    if (parameters.dockerAction === "unpublish") warnings.push("Docker will recreate the selected container transactionally and verify that the host port is no longer published.");
   }
 
   if (plan.actionType === ActionType.open_port || plan.actionType === ActionType.linux_open_port) {
