@@ -168,10 +168,14 @@ export function compileRouterOsAction(input: {
   if (actionType === ActionType.mikrotik_create_filter_rule || actionType === ActionType.mikrotik_create_managed_blocklist_rule) {
     const chain = safeName(p, "chain", "forward");
     const action = safeName(p, "action", "drop");
+    if (chain !== "input" && chain !== "forward") throw new Error("chain must be input or forward.");
+    if (action !== "accept" && action !== "drop") throw new Error("action must be accept or drop.");
     const srcAddressList = text(p, "srcAddressList") ?? text(p, "listName");
     const srcAddress = text(p, "sourceCidr") ?? text(p, "sourceIp") ?? text(p, "srcAddress");
     const protocol = text(p, "protocol");
+    if (protocol && !["tcp", "udp", "icmp"].includes(protocol)) throw new Error("protocol must be tcp, udp, or icmp.");
     const dstPort = p.dstPort ?? p.port;
+    if (dstPort && protocol !== "tcp" && protocol !== "udp") throw new Error("dstPort requires tcp or udp protocol.");
     const comment = managedComment(safeText(p, "comment", "managed filter rule") ?? "managed filter rule");
     const disabled = bool(p, "disabled", true);
     const parts = [`/ip firewall filter add chain=${quote(chain)}`, `action=${quote(action)}`, `comment=${quote(comment)}`, `disabled=${disabled ? "yes" : "no"}`];
@@ -180,7 +184,8 @@ export function compileRouterOsAction(input: {
     if (protocol) parts.push(`protocol=${quote(safeName({ protocol }, "protocol"))}`);
     if (dstPort) parts.push(`dst-port=${quote(numberPort({ dstPort }, "dstPort"))}`);
     const riskLevel = chain === "input" ? AiRiskLevel.high : AiRiskLevel.medium;
-    return result({ category: "firewall", riskLevel, normalizedParameters: { chain, action, srcAddressList, sourceIp: text(p, "sourceIp") ?? null, sourceCidr: text(p, "sourceCidr") ?? null, protocol, dstPort, comment, disabled }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: chain === "input", warnings: ["Created firewall filter rules are disabled by default unless explicitly requested."], commandSpecs: [spec({ template: "/ip firewall filter add ... disabled=yes", command: parts.join(" "), target: { chain, comment }, rollbackSteps: [`Remove only managed filter rule comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_created_managed_filter_rule", comment } });
+    const verify = `:if ([:len [/ip firewall filter find where comment=${quote(comment)}]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "managed filter verification failed"}`;
+    return result({ category: "firewall", riskLevel, normalizedParameters: { chain, action, srcAddressList, sourceIp: text(p, "sourceIp") ?? null, sourceCidr: text(p, "sourceCidr") ?? null, protocol, dstPort, comment, disabled }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: chain === "input", warnings: ["Created firewall filter rules are disabled by default unless explicitly requested."], commandSpecs: [spec({ template: "/ip firewall filter add ... disabled=yes", command: parts.join(" "), target: { chain, comment }, rollbackSteps: [`Remove only managed filter rule comment=${comment}.`], warnings: [] }), spec({ template: "verify exact managed filter rule", command: verify, write: false, target: { comment }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "remove_created_managed_filter_rule", comment } });
   }
 
   if (actionType === ActionType.mikrotik_create_dstnat_rule) {
@@ -188,9 +193,11 @@ export function compileRouterOsAction(input: {
     const toAddress = address(p, "toAddress");
     const toPort = p.toPort ? numberPort(p, "toPort") : dstPort;
     const protocol = safeName(p, "protocol", "tcp");
+    if (protocol !== "tcp" && protocol !== "udp") throw new Error("protocol must be tcp or udp.");
     const comment = managedComment(safeText(p, "comment", "managed dstnat") ?? "managed dstnat");
     const command = `/ip firewall nat add chain="dstnat" protocol=${quote(protocol)} dst-port=${quote(dstPort)} action="dst-nat" to-addresses=${quote(toAddress)} to-ports=${quote(toPort)} comment=${quote(comment)} disabled=yes`;
-    return result({ category: "nat", riskLevel: AiRiskLevel.medium, normalizedParameters: { dstPort, toAddress, toPort, protocol, comment, disabled: true }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["DST-NAT rule is created disabled by default."], commandSpecs: [spec({ template: "/ip firewall nat add chain=dstnat ... disabled=yes", command, target: { dstPort, toAddress, toPort, comment }, rollbackSteps: [`Remove only managed NAT rule comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_created_managed_nat_rule", comment } });
+    const verify = `:if ([:len [/ip firewall nat find where comment=${quote(comment)} chain="dstnat" dst-port=${dstPort}]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "managed dstnat verification failed"}`;
+    return result({ category: "nat", riskLevel: AiRiskLevel.medium, normalizedParameters: { dstPort, toAddress, toPort, protocol, comment, disabled: true }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["DST-NAT rule is created disabled by default."], commandSpecs: [spec({ template: "/ip firewall nat add chain=dstnat ... disabled=yes", command, target: { dstPort, toAddress, toPort, comment }, rollbackSteps: [`Remove only managed NAT rule comment=${comment}.`], warnings: [] }), spec({ template: "verify exact managed dstnat rule", command: verify, write: false, target: { comment, dstPort }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "remove_created_managed_nat_rule", comment } });
   }
 
   if (actionType === ActionType.mikrotik_create_srcnat_masquerade_rule) {
@@ -198,7 +205,8 @@ export function compileRouterOsAction(input: {
     const srcAddress = text(p, "srcAddress");
     const comment = managedComment(safeText(p, "comment", "managed masquerade") ?? "managed masquerade");
     const command = `/ip firewall nat add chain="srcnat" out-interface=${quote(outInterface)}${srcAddress ? ` src-address=${quote(cidr({ srcAddress }, "srcAddress"))}` : ""} action="masquerade" comment=${quote(comment)} disabled=yes`;
-    return result({ category: "nat", riskLevel: AiRiskLevel.medium, normalizedParameters: { outInterface, srcAddress, comment, disabled: true }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["Masquerade rule is created disabled by default."], commandSpecs: [spec({ template: "/ip firewall nat add chain=srcnat action=masquerade disabled=yes", command, target: { outInterface, comment }, rollbackSteps: [`Remove only managed NAT rule comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_created_managed_nat_rule", comment } });
+    const verify = `:if ([:len [/ip firewall nat find where comment=${quote(comment)} chain="srcnat" action="masquerade"]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "managed masquerade verification failed"}`;
+    return result({ category: "nat", riskLevel: AiRiskLevel.medium, normalizedParameters: { outInterface, srcAddress, comment, disabled: true }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, warnings: ["Masquerade rule is created disabled by default."], commandSpecs: [spec({ template: "/ip firewall nat add chain=srcnat action=masquerade disabled=yes", command, target: { outInterface, comment }, rollbackSteps: [`Remove only managed NAT rule comment=${comment}.`], warnings: [] }), spec({ template: "verify exact managed masquerade rule", command: verify, write: false, target: { comment, outInterface }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "remove_created_managed_nat_rule", comment } });
   }
 
   const managedRuleActions = new Set<ActionType>([ActionType.mikrotik_enable_filter_rule, ActionType.mikrotik_disable_filter_rule, ActionType.mikrotik_remove_managed_filter_rule, ActionType.mikrotik_enable_nat_rule, ActionType.mikrotik_disable_nat_rule, ActionType.mikrotik_remove_managed_nat_rule, ActionType.mikrotik_disable_rule_by_id, ActionType.mikrotik_remove_rule_by_id]);
@@ -223,7 +231,7 @@ export function compileRouterOsAction(input: {
 
   const serviceActions = new Set<ActionType>([ActionType.mikrotik_disable_unused_service, ActionType.mikrotik_restrict_service_by_address, ActionType.mikrotik_change_service_port, ActionType.mikrotik_enable_service, ActionType.mikrotik_disable_service]);
   if (serviceActions.has(actionType)) {
-    const service = safeName(p, "service");
+    const service = safeName({ service: p.service ?? p.serviceName }, "service");
     const addressValue = text(p, "address");
     const port = p.newPort !== undefined ? numberPort(p, "newPort") : p.port !== undefined ? numberPort(p, "port") : undefined;
     if (actionType === ActionType.mikrotik_change_service_port && service === "ssh") {
@@ -244,7 +252,7 @@ export function compileRouterOsAction(input: {
 
       const ensureRule = `:if ([:len [/ip firewall filter find where chain="input" action="accept" protocol="tcp" src-address=${quote(trustedSource)} dst-port=${newPort} comment=${quote(SSH_PORT_RULE_COMMENT)}]] = 0) do={/ip firewall filter add chain="input" action="accept" protocol="tcp" src-address=${quote(trustedSource)} dst-port=${newPort} comment=${quote(SSH_PORT_RULE_COMMENT)}}`;
       const changePort = `/ip service set [find where name="ssh"] port=${newPort}`;
-      const verify = "/ip service print where name=ssh";
+      const verify = `:if ([/ip service get [find where name="ssh"] port] = ${newPort}) do={:put "FLA_VERIFY_OK"} else={:error "ssh port verification failed"}`;
       const rollbackSteps = [
         ...(oldPortValue ? [`Restore SSH with /ip service set [find where name=\"ssh\"] port=${oldPortValue}.`] : ["Old SSH port was not detected; verify the previous port before attempting rollback."]),
         `Optionally remove the firewall rule whose exact comment is ${SSH_PORT_RULE_COMMENT}.`
@@ -286,7 +294,7 @@ export function compileRouterOsAction(input: {
             warnings: []
           }),
           spec({
-            template: "/ip service print where name=ssh",
+            template: "verify MikroTik SSH service port",
             command: verify,
             write: false,
             target: { service: "ssh", expectedPort: newPort },
@@ -310,7 +318,11 @@ export function compileRouterOsAction(input: {
     else if (actionType === ActionType.mikrotik_change_service_port) command = `/ip service set [find where name=${quote(service)}] port=${quote(port ?? failParam("port"))}`;
     else command = `/ip service ${actionType === ActionType.mikrotik_enable_service ? "enable" : "disable"} [find where name=${quote(service)}]`;
     const sensitive = ["ssh", "winbox", "api", "api-ssl"].includes(service);
-    return result({ category: "management", riskLevel: sensitive || actionType === ActionType.mikrotik_change_service_port ? AiRiskLevel.high : AiRiskLevel.medium, normalizedParameters: { service, address: addressValue, port }, requiresBackup: true, requiresBreakGlass: service === "ssh" && actionType === ActionType.mikrotik_disable_service, lockoutSensitive: sensitive, warnings: sensitive ? ["Management service change may lock out administrators."] : [], commandSpecs: [spec({ template: "/ip service controlled update", command, target: { service, address: addressValue, port }, rollbackSteps: ["Restore service state from backup/export if needed."], warnings: [] })], rollbackJson: { type: "restore_service_state_manual", service } });
+    const expected = actionType === ActionType.mikrotik_restrict_service_by_address
+      ? `address=${quote(cidr({ address: addressValue }, "address"))}`
+      : actionType === ActionType.mikrotik_enable_service ? "disabled=no" : actionType === ActionType.mikrotik_disable_service ? "disabled=yes" : `port=${port}`;
+    const verify = `:if ([:len [/ip service find where name=${quote(service)} ${expected}]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "service verification failed"}`;
+    return result({ category: "management", riskLevel: sensitive || actionType === ActionType.mikrotik_change_service_port ? AiRiskLevel.high : AiRiskLevel.medium, normalizedParameters: { service, address: addressValue, port }, requiresBackup: true, requiresBreakGlass: service === "ssh" && actionType === ActionType.mikrotik_disable_service, lockoutSensitive: sensitive, warnings: sensitive ? ["Management service change may lock out administrators."] : [], commandSpecs: [spec({ template: "/ip service controlled update", command, target: { service, address: addressValue, port }, rollbackSteps: ["Restore service state from backup/export if needed."], warnings: [] }), spec({ template: "verify management service state", command: verify, write: false, target: { service }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "restore_service_state_manual", service } });
   }
 
   const interfaceActions = new Set<ActionType>([ActionType.mikrotik_enable_interface, ActionType.mikrotik_disable_interface, ActionType.mikrotik_set_interface_comment]);
@@ -330,7 +342,8 @@ export function compileRouterOsAction(input: {
       const gateway = address(p, "gateway");
       const comment = managedComment(safeText(p, "comment", "managed static route") ?? "managed static route");
       const command = `/ip route add dst-address=${quote(dstAddress)} gateway=${quote(gateway)} comment=${quote(comment)} disabled=yes`;
-      return result({ category: "routes", riskLevel: AiRiskLevel.high, normalizedParameters: { dstAddress, gateway, comment, disabled: true }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Static route is created disabled by default."], commandSpecs: [spec({ template: "/ip route add ... disabled=yes", command, target: { dstAddress, gateway, comment }, rollbackSteps: [`Remove managed static route comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_created_managed_static_route", comment } });
+      const verify = `:if ([:len [/ip route find where comment=${quote(comment)} dst-address=${quote(dstAddress)}]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "static route verification failed"}`;
+      return result({ category: "routes", riskLevel: AiRiskLevel.high, normalizedParameters: { dstAddress, gateway, comment, disabled: true }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: true, warnings: ["Static route is created disabled by default."], commandSpecs: [spec({ template: "/ip route add ... disabled=yes", command, target: { dstAddress, gateway, comment }, rollbackSteps: [`Remove managed static route comment=${comment}.`], warnings: [] }), spec({ template: "verify exact managed static route", command: verify, write: false, target: { dstAddress, comment }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "remove_created_managed_static_route", comment } });
     }
     const id = ruleId(p, "routeId");
     const verb = actionType === ActionType.mikrotik_disable_static_route ? "disable" : "remove";
@@ -343,7 +356,8 @@ export function compileRouterOsAction(input: {
     const safeServers = servers.map((item) => item.trim()).filter(Boolean);
     if (safeServers.length === 0 || safeServers.some((item) => net.isIP(item) === 0)) failParam("servers");
     const command = `/ip dns set servers=${quote(safeServers.join(","))}`;
-    return result({ category: "dns-dhcp", riskLevel: AiRiskLevel.medium, normalizedParameters: { servers: safeServers }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip dns set servers=<servers>", command, target: { servers: safeServers }, rollbackSteps: ["Restore previous DNS servers from backup/export."], warnings: [] })], rollbackJson: { type: "restore_dns_servers_manual" } });
+    const verify = `:if ([/ip dns get servers] = ${quote(safeServers.join(","))}) do={:put "FLA_VERIFY_OK"} else={:error "dns verification failed"}`;
+    return result({ category: "dns-dhcp", riskLevel: AiRiskLevel.medium, normalizedParameters: { servers: safeServers }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip dns set servers=<servers>", command, target: { servers: safeServers }, rollbackSteps: ["Restore previous DNS servers from backup/export."], warnings: [] }), spec({ template: "verify DNS servers", command: verify, write: false, target: { servers: safeServers }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "restore_dns_servers_manual" } });
   }
 
   const dhcpLeaseActions = new Set<ActionType>([ActionType.mikrotik_add_static_dhcp_lease, ActionType.mikrotik_remove_static_dhcp_lease]);
@@ -354,7 +368,8 @@ export function compileRouterOsAction(input: {
       const ip = address(p);
       const comment = managedComment(safeText(p, "comment", "managed dhcp lease") ?? "managed dhcp lease");
       const command = `/ip dhcp-server lease add mac-address=${quote(macAddress)} address=${quote(ip)} comment=${quote(comment)}`;
-      return result({ category: "dns-dhcp", riskLevel: AiRiskLevel.medium, normalizedParameters: { macAddress, address: ip, comment }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip dhcp-server lease add mac-address=<mac> address=<address>", command, target: { macAddress, address: ip }, rollbackSteps: [`Remove managed DHCP lease comment=${comment}.`], warnings: [] })], rollbackJson: { type: "remove_static_dhcp_lease", macAddress, address: ip } });
+      const verify = `:if ([:len [/ip dhcp-server lease find where mac-address=${quote(macAddress)} address=${quote(ip)} dynamic=no]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "dhcp lease verification failed"}`;
+      return result({ category: "dns-dhcp", riskLevel: AiRiskLevel.medium, normalizedParameters: { macAddress, address: ip, comment }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/ip dhcp-server lease add mac-address=<mac> address=<address>", command, target: { macAddress, address: ip }, rollbackSteps: [`Remove managed DHCP lease comment=${comment}.`], warnings: [] }), spec({ template: "verify exact static DHCP lease", command: verify, write: false, target: { macAddress, address: ip }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "remove_static_dhcp_lease", macAddress, address: ip } });
     }
     const leaseId = ruleId(p, "leaseId");
     const command = `:local ids [/ip dhcp-server lease find where .id=${quote(leaseId)} dynamic=no]; :if ([:len $ids] = 1) do={/ip dhcp-server lease remove $ids} else={:error "expected exactly one static lease match"}`;
@@ -366,13 +381,16 @@ export function compileRouterOsAction(input: {
     const name = safeName(p, "name", `firewall-log-analyzer-${Date.now()}`);
     const backup = actionType === ActionType.mikrotik_create_backup;
     const command = backup ? `/system backup save name=${quote(name)}` : `/export hide-sensitive file=${quote(name)}`;
-    return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: { name }, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: backup ? "/system backup save name=<name>" : "/export hide-sensitive file=<name>", command, target: { name }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "none_backup_artifact", name } });
+    const fileName = `${name}.${backup ? "backup" : "rsc"}`;
+    const verify = `:if ([:len [/file find where name=${quote(fileName)}]] = 1) do={:put "FLA_VERIFY_OK"} else={:error "backup artifact verification failed"}`;
+    return result({ category: "system", riskLevel: AiRiskLevel.low, normalizedParameters: { name }, requiresBackup: false, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: backup ? "/system backup save name=<name>" : "/export hide-sensitive file=<name>", command, target: { name }, rollbackSteps: [], warnings: [] }), spec({ template: "verify backup artifact", command: verify, write: false, target: { fileName }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "none_backup_artifact", name } });
   }
 
   if (actionType === ActionType.mikrotik_set_identity) {
     const name = safeText(p, "name") ?? failParam("name");
     const command = `/system identity set name=${quote(name)}`;
-    return result({ category: "system", riskLevel: AiRiskLevel.medium, normalizedParameters: { name }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/system identity set name=<name>", command, target: { name }, rollbackSteps: ["Restore previous identity from backup/export."], warnings: [] })], rollbackJson: { type: "restore_identity_manual" } });
+    const verify = `:if ([/system identity get name] = ${quote(name)}) do={:put "FLA_VERIFY_OK"} else={:error "identity verification failed"}`;
+    return result({ category: "system", riskLevel: AiRiskLevel.medium, normalizedParameters: { name }, requiresBackup: true, requiresBreakGlass: false, lockoutSensitive: false, commandSpecs: [spec({ template: "/system identity set name=<name>", command, target: { name }, rollbackSteps: ["Restore previous identity from backup/export."], warnings: [] }), spec({ template: "verify system identity", command: verify, write: false, target: { name }, rollbackSteps: [], warnings: [] })], rollbackJson: { type: "restore_identity_manual" } });
   }
 
   const rebootActions = new Set<ActionType>([ActionType.mikrotik_reboot, ActionType.mikrotik_shutdown, ActionType.mikrotik_schedule_reboot]);

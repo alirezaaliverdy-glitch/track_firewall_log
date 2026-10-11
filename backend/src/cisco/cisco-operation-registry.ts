@@ -140,6 +140,37 @@ function cidrRoute(params: Record<string, unknown>, key = "destinationCidr") {
   const maskText = [24, 16, 8, 0].map((shift) => String((maskNumber >>> shift) & 255)).join(".");
   return `${network} ${maskText}`;
 }
+function aclName(params: Record<string, unknown>) {
+  const value = text(params, "aclName");
+  if (!/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(value)) throw new Error("aclName is invalid.");
+  return value;
+}
+function aclDirection(params: Record<string, unknown>) {
+  const value = text(params, "direction").toLowerCase();
+  if (value !== "in" && value !== "out") throw new Error("direction must be in or out.");
+  return value;
+}
+function aclAction(params: Record<string, unknown>) {
+  const value = text(params, "action").toLowerCase();
+  if (value !== "permit" && value !== "deny") throw new Error("action must be permit or deny.");
+  return value;
+}
+function aclSequence(params: Record<string, unknown>) {
+  const value = Number(params.sequence);
+  if (!Number.isInteger(value) || value < 1 || value > 2147483647) throw new Error("sequence must be a positive IOS ACL sequence number.");
+  return value;
+}
+function iosCidr(params: Record<string, unknown>, key: string) {
+  const [network, prefixText] = cidr(params, key).split("/");
+  const octets = network.split(".").map(Number);
+  if (octets.some((octet) => octet < 0 || octet > 255)) throw new Error(`${key} must be a valid IPv4 CIDR.`);
+  const prefix = Number(prefixText);
+  if (prefix === 32) return `host ${network}`;
+  if (prefix === 0) return "any";
+  const maskNumber = (0xffffffff << (32 - prefix)) >>> 0;
+  const wildcard = [24, 16, 8, 0].map((shift) => String(255 - ((maskNumber >>> shift) & 255))).join(".");
+  return `${network} ${wildcard}`;
+}
 function cli(commandId: string, command: string, options: Partial<CiscoCliCommandSpec> = {}): CiscoCliCommandSpec { return { commandId, command, ...options }; }
 export function buildCiscoAccessEtherChannelSpecs(params: Record<string, unknown>): CiscoCliCommandSpec[] {
   return buildChannel("create-access", params);
@@ -201,10 +232,17 @@ const BASE_CISCO_OPERATIONS: readonly CiscoOperationDefinition[] = Object.freeze
 
   planned("configure-snmp", "Configure SNMP destination", "services", "configure", "high", ["server", "secretRef"], ["snmp-server", "secure secret handling"]),
   planned("configure-local-user", "Create local user", "security", "configure", "high", ["username", "secretRef"], ["username secret", "encrypted secret storage"]),
-  planned("create-standard-acl", "Create standard ACL", "security", "configure", "high", ["aclName", "entries"], ["standard ACL"]),
+  implementedCli("create-standard-acl", "Create a standard named ACL entry", "security", "configure", "high", false, ["aclName", "sequence", "action", "sourceCidr"], ["standard ACL", "access list", "permit", "deny"], (params) => {
+    const name = aclName(params); const sequence = aclSequence(params);
+    return configWorkflow("standard-acl", [`ip access-list standard ${name}`, `${sequence} ${aclAction(params)} ${iosCidr(params, "sourceCidr")}`], [`show ip access-lists ${name}`]);
+  }, { titleFa: "افزودن قانون به ACL استاندارد", rollback: configRollback(["همان sequence را از ACL نام‌دار حذف کنید؛ تنظیمات قبلی از بک‌آپ ایمنی قابل بازبینی است."]) }),
   planned("create-extended-acl", "Create extended ACL", "security", "configure", "high", ["aclName", "entries"], ["extended ACL"]),
-  planned("apply-acl-interface", "Apply ACL to interface", "security", "configure", "high", ["interfaceName", "aclName", "direction"], ["ip access-group"]),
-  planned("remove-acl-interface", "Remove ACL from interface", "security", "configure", "high", ["interfaceName", "aclName", "direction"], ["no ip access-group"]),
+  implementedCli("remove-standard-acl-entry", "Remove one standard named ACL entry", "security", "configure", "high", false, ["aclName", "sequence"], ["standard ACL", "remove ACL sequence"], (params) => {
+    const name = aclName(params); const sequence = aclSequence(params);
+    return configWorkflow("standard-acl-remove", [`ip access-list standard ${name}`, `no ${sequence}`], [`show ip access-lists ${name}`]);
+  }, { titleFa: "حذف یک قانون ACL با شماره ترتیب", rollback: configRollback(["قانون حذف‌شده را با action و source ثبت‌شده در بک‌آپ ایمنی دوباره ایجاد کنید."]) }),
+  implementedCli("apply-acl-interface", "Apply named ACL to an interface", "security", "configure", "high", false, ["interfaceName", "aclName", "direction"], ["ip access-group"], (params) => configWorkflow("apply-acl", [`interface ${iface(params)}`, `ip access-group ${aclName(params)} ${aclDirection(params)}`], [`show ip interface ${iface(params)}`]), { titleFa: "اعمال ACL روی اینترفیس", rollback: configRollback(["ACL را با no ip access-group از همان جهت اینترفیس جدا کنید."]) }),
+  implementedCli("remove-acl-interface", "Remove named ACL from an interface", "security", "configure", "high", false, ["interfaceName", "aclName", "direction"], ["no ip access-group"], (params) => configWorkflow("remove-acl", [`interface ${iface(params)}`, `no ip access-group ${aclName(params)} ${aclDirection(params)}`], [`show ip interface ${iface(params)}`]), { titleFa: "جداکردن ACL از اینترفیس", rollback: configRollback(["ACL نام‌دار را دوباره در همان جهت اینترفیس اعمال کنید."]) }),
   implementedCli("reload-device", "Reload device", "configuration", "configure", "critical", false, [], ["reload", "reboot device"], () => [
     cli("reload.schedule", "reload in 1 reason Firewall-SOAR-approved-action", { write: true, confirmationPattern: /Proceed with reload.*\[confirm\]/i, confirmationResponse: "\n" })
   ], { verification: ["Cisco accepted the interactive confirmation and scheduled reload in one minute."], rollback: configRollback(["Run reload cancel before the timer expires if the reboot must be cancelled."]) }),

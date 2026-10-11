@@ -42,6 +42,16 @@ const templates: ExecutionTemplate[] = [
   ,{ id: "mikrotik_disable_service", actionType: "mikrotik_disable_service", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "mikrotik_reboot", actionType: "mikrotik_reboot", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "mikrotik_shutdown", actionType: "mikrotik_shutdown", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
+  ,...[
+    "mikrotik_list_interfaces", "mikrotik_list_routes", "mikrotik_list_address_list",
+    "mikrotik_show_dns_settings", "mikrotik_list_dhcp_servers", "mikrotik_list_dhcp_leases",
+    "mikrotik_show_resources", "mikrotik_show_logs", "mikrotik_create_filter_rule",
+    "mikrotik_enable_filter_rule", "mikrotik_disable_filter_rule", "mikrotik_create_dstnat_rule",
+    "mikrotik_create_srcnat_masquerade_rule", "mikrotik_enable_nat_rule", "mikrotik_disable_nat_rule",
+    "mikrotik_add_static_route", "mikrotik_set_dns_servers", "mikrotik_add_static_dhcp_lease",
+    "mikrotik_restrict_service_by_address", "mikrotik_change_service_port", "mikrotik_set_identity",
+    "mikrotik_create_export_sanitized"
+  ].map((id) => ({ id, actionType: id, connectorType: "mikrotik-ssh" as const, handler: "routerosCommandCompiler" }))
   ,{ id: "mikrotik_custom_connector_command", actionType: "custom_vendor_action", connectorType: "mikrotik-ssh", handler: "routerosCommandCompiler" }
   ,{ id: "fortigate_daily_check", actionType: "fortigate_daily_check", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }
   ,{ id: "fortigate_show_interfaces", actionType: "fortigate_show_interfaces", connectorType: "fortigate-ssh", handler: "fortigatePlanner" }

@@ -1,3 +1,10 @@
+## 2026-10-11 - Expand Cisco and MikroTik controlled operations
+
+- Added 22 verified MikroTik catalog entries backed by registered ActionTypes, RouterOS compiler, SSH connector and execution templates.
+- Added exact RouterOS post-verification scripts and kept raw command execution blocked; exposure rules are created disabled and require a separate managed-rule enable operation.
+- Added four Cisco ACL workflows with strict ACL name/sequence/action/CIDR/direction validation and exact IOS preview commands.
+- Updated regression expectations for the now-verified MikroTik SSH-port workflow; production build, catalog validation and focused suites passed.
+
 ## 2026-10-11 - Add evidence-based IP/MAC network inventory
 
 - Added a new `اسکن IP و MAC` Network Lab tab inspired by professional IP scanners while retaining the product's Persian-first visual system and a dedicated mobile result layout.

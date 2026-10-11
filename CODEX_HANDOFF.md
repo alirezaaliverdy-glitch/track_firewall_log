@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-11 - Cisco ACL and expanded MikroTik command catalog
+
+- Promoted 22 RouterOS operations into the Persian command catalog with registered templates and verified connector support: interface/route/address-list/DNS/DHCP/resource/log reads plus managed firewall, NAT, route, DNS, DHCP, management-service, identity, SSH-port and sanitized-export workflows.
+- RouterOS write workflows now use bounded parameters and explicit post-change sentinel checks. Newly created firewall/NAT/routes remain disabled until a separate confirmed enable action.
+- Added four executable Cisco named-standard-ACL operations: create/remove an exact sequence and apply/detach an ACL on an interface direction. They use the existing Cisco preview, safety-backup, connector and audit path.
+- Production build, production Compose validation, the 248-item catalog validator, 55 focused regressions and an isolated PostgreSQL ActionPlan sweep passed. The local API was rebuilt and is healthy/readiness 200. No remote vendor command or production push occurred.
+
 ## 2026-10-11 Docker-aware port control and quieter shell
 
 Ports & Connections now identifies Linux ports published by Docker from live `docker ps` evidence and shows the owning container, image, host-to-container mapping, protocol, and current `DOCKER-USER` enforcement state. Closing a Docker-published port no longer relies on UFW: the controlled Linux connector inserts an idempotent DROP rule in `DOCKER-USER`, verifies that exact original-destination port rule, records container evidence and rollback commands, and leaves the container running. Non-Docker ports keep the existing UFW/firewalld/nftables/iptables path. Protected management ports and the current SSH port remain blocked from closure.

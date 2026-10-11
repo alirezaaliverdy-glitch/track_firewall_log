@@ -122,7 +122,8 @@ test("MikroTik SSH preflight discovers current port and reuses the existing allo
   assert.equal(validation.valid, true);
   assert.match(validation.commandSpecs[0].command, /dst-port=756/);
   assert.match(validation.commandSpecs[1].command, /port=756/);
-  assert.match(validation.commandSpecs[2].command, /print where name=ssh/);
+  assert.match(validation.commandSpecs[2].command, /FLA_VERIFY_OK/);
+  assert.match(validation.commandSpecs[2].command, /port.*756/);
 });
 
 test("missing trusted source produces one Allowed source value with a device subnet suggestion", () => {

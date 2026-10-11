@@ -1,3 +1,10 @@
+## 2026-10-11 - Stronger executable Cisco and MikroTik catalog
+
+- The main catalog now exposes 22 additional verified MikroTik operations instead of leaving implemented RouterOS compiler capabilities hidden.
+- Complex writes are structured, parameter-validated and auditable; raw CLI remains blocked. Managed filter/NAT/static-route creation is disabled by default, and enabling is a separate confirmed operation restricted to system-managed rules.
+- Cisco now supports controlled standard named ACL entry creation/removal and interface attachment/detachment, with exact IOS command previews and post-read verification.
+- Backend production build, production Compose validation and 248-item catalog validation pass. Focused Cisco/MikroTik/quick-controlled regressions pass (55/55), and an isolated PostgreSQL sweep confirmed every implemented catalog entry either creates an ActionPlan or explicitly requests missing inputs. Local API is rebuilt, healthy and returns readiness HTTP 200.
+
 ## 2026-10-11 - Professional IP/MAC scanner in Network Lab
 
 - Added a first-class Network Lab tab that combines a selected managed device's live ARP/MAC/neighbor evidence with bounded active Nmap discovery. Fast and deep profiles, explicit port selection, all-address state, hostname, MAC/OUI vendor, service/version, likely device type, interface/VLAN, evidence confidence, filters, detail expansion, CSV and user-scoped history are available.

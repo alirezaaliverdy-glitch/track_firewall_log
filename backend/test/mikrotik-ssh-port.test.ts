@@ -103,7 +103,8 @@ test("dry-run commands allow the trusted source before changing SSH and then ver
   assert.match(result.commandSpecs[0].command, /firewall filter add/);
   assert.match(result.commandSpecs[0].command, /src-address="192\.168\.10\.0\/24"/);
   assert.match(result.commandSpecs[1].command, /ip service set.*name="ssh".*port=22022/);
-  assert.equal(result.commandSpecs[2].command, "/ip service print where name=ssh");
+  assert.match(result.commandSpecs[2].command, /FLA_VERIFY_OK/);
+  assert.match(result.commandSpecs[2].command, /port.*22022/);
   assert.equal(result.rollbackJson.oldPort, 22);
 });
 

@@ -37,7 +37,7 @@ test("missing parameters return needsInput and never create broken plans", async
   assert.equal(await prisma.actionPlan.count({ where: { deviceId: linux.id } }), before);
 });
 
-test("Linux SSH needs no serviceName, completed inputs work, and planned commands are rejected", async (t) => {
+test("Linux SSH needs no serviceName and verified MikroTik SSH changes request missing inputs", async (t) => {
   const app = await buildApp({ authRequired: false });
   const linux = await prisma.device.create({ data: { name: "Task 14.1 Linux", vendor: "Linux", type: "linux_edge", host: "192.0.2.142", managementPort: 22, protocol: "ssh", environment: "lab" } });
   const mikrotik = await prisma.device.create({ data: { name: "Task 14.1 MikroTik", vendor: "MikroTik", type: "mikrotik", host: "192.0.2.143", managementPort: 22, protocol: "ssh", environment: "lab" } });
@@ -49,8 +49,9 @@ test("Linux SSH needs no serviceName, completed inputs work, and planned command
   assert.equal(service.statusCode, 201);
   const blocked = await app.inject({ method: "POST", url: "/api/commands/catalog/linux.block-ip/create-action-plan", payload: { deviceId: linux.id, params: { ipAddress: "203.0.113.7" } } });
   assert.equal(blocked.statusCode, 201); assert.equal(blocked.json().parametersJson.srcIp, "203.0.113.7");
-  const planned = await app.inject({ method: "POST", url: "/api/commands/catalog/mikrotik.change-ssh-port/create-action-plan", payload: { deviceId: mikrotik.id, params: {} } });
-  assert.equal(planned.statusCode, 409);
+  const needsInput = await app.inject({ method: "POST", url: "/api/commands/catalog/mikrotik.change-ssh-port/create-action-plan", payload: { deviceId: mikrotik.id, params: {} } });
+  assert.equal(needsInput.statusCode, 422);
+  assert.equal(needsInput.json().needsInput, true);
 });
 
 test("every implemented command creates a plan or explicitly requests input; manual and AI stay non-executable", async (t) => {
