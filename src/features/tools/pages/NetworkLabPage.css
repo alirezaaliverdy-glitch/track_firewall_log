@@ -2,6 +2,8 @@
 .network-lab__primary-tabs { display:flex;align-items:center;gap:8px;width:max-content;max-width:100%;padding:5px;border:1px solid var(--app-border);border-radius:15px;background:#061722b8; }
 .network-lab__primary-tabs button { min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:9px 18px;border:0;border-radius:11px;background:transparent;color:var(--app-muted);font:inherit;font-weight:750;cursor:pointer; }
 .network-lab__primary-tabs button svg { width:18px;height:18px; }
+.network-lab__primary-tabs button > span { display:inline-flex;align-items:center;gap:7px; }
+.network-lab__primary-tabs button > span small { padding:2px 6px;border-radius:999px;background:#3ed9e525;color:#7df5ff;font-size:9px; }
 .network-lab__primary-tabs button.active { color:#dffcff;background:linear-gradient(105deg,#0f667d,#157d87);box-shadow:0 8px 22px #06111866; }
 .network-lab button { cursor: pointer; font: inherit; }
 .network-lab button:disabled { cursor: wait; opacity: .55; }

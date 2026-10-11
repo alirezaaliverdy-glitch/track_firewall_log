@@ -1,6 +1,7 @@
 ## 2026-10-11 - Professional IP/MAC scanner in Network Lab
 
 - Added a first-class Network Lab tab that combines a selected managed device's live ARP/MAC/neighbor evidence with bounded active Nmap discovery. Fast and deep profiles, explicit port selection, all-address state, hostname, MAC/OUI vendor, service/version, likely device type, interface/VLAN, evidence confidence, filters, detail expansion, CSV and user-scoped history are available.
+- Made IP/MAC Scanner the default view and added a clear `جدید` marker; the existing connection test remains available as the adjacent tab.
 - Registered read-only neighbor collection for Linux, MikroTik SSH/REST, FortiGate, Cisco and ESXi. Unsupported vendor tables degrade honestly to active discovery; absent MAC/manufacturer/hostname data remains unavailable rather than inferred. These heavier commands run only for an explicit scan.
 - Restricted scans to an authenticated workspace device and private IPv4 ranges no larger than `/24`, with at most 24 ports, bounded worker timeouts, non-root Nmap and AuditLog persistence. No database migration was needed.
 - Added a responsive mobile card view in addition to the desktop evidence table. Production API/web builds, four focused parser/policy tests, UTF-8, i18n/Persian-copy and production Compose validation passed. Nmap 7.99 was verified in the runtime image as non-root.

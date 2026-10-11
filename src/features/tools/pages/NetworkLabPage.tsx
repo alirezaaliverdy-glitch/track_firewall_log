@@ -11,7 +11,7 @@ const tone = (item: NetworkProbe) => ["reachable", "open"].includes(item.status)
 const number = (input: number | null, suffix = "") => input === null ? "—" : `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 }).format(input)}${suffix}`;
 
 export default function NetworkLabPage() {
-  const [labTab, setLabTab] = useState<"probe" | "scanner">("probe");
+  const [labTab, setLabTab] = useState<"probe" | "scanner">("scanner");
   const [devices, setDevices] = useState<Device[]>([]);
   const [history, setHistory] = useState<NetworkProbe[]>([]);
   const [kind, setKind] = useState<"icmp" | "tcp">("icmp");
@@ -62,7 +62,7 @@ export default function NetworkLabPage() {
 
     <nav className="network-lab__primary-tabs" aria-label="بخش‌های آزمایشگاه شبکه">
       <button type="button" className={labTab === "probe" ? "active" : ""} onClick={() => setLabTab("probe")}><Activity/>تست اتصال</button>
-      <button type="button" className={labTab === "scanner" ? "active" : ""} onClick={() => setLabTab("scanner")}><RadioTower/>اسکن IP و MAC</button>
+      <button type="button" className={labTab === "scanner" ? "active" : ""} onClick={() => setLabTab("scanner")}><RadioTower/><span>اسکن IP و MAC<small>جدید</small></span></button>
     </nav>
 
     {labTab === "scanner" ? <NetworkInventoryScanner devices={devices} /> : <>
