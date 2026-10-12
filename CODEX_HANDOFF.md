@@ -1,5 +1,7 @@
 # CODEX_HANDOFF.md
 
+Latest correction (2026-10-12): Removed the Action Center journey panel from Security Overview because it was misplaced there. The Action Center workflow itself and the account-menu dismissal remain unchanged. Frontend production build passed; the local web was rebuilt healthy, and security/dashboard/API readiness routes return 200. No vendor operation or production push.
+
 Latest UI task (2026-10-12): security action journey and account-menu dismissal.
 
 - Replaced the six-card NIST capability map on Security Overview with a compact, responsive action journey driven by actual Action Center records. It shows the selected recent ActionPlan, recorded command preview, approval/execution stage, and a direct link to review or the result. It never calls execution from the overview or claims success without `connectorInvoked=true`; refresh failures are marked as potentially stale.

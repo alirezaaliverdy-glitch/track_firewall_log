@@ -19,7 +19,6 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { useSecurityOperations } from "../hooks/useSecurityOperations";
 import type { SecurityFinding } from "@/lib/platform";
 import { securityDisplayText } from "../securityPresentation";
-import { SecurityActionJourney } from "../components/SecurityActionJourney";
 
 const severityWeight: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
@@ -97,8 +96,6 @@ export default function SecurityOverviewPage() {
         <Link to="/security/rules" className="security-metric-card security-metric-card--violet"><span><CircleGauge size={20} /></span><div><small>{t("security.metrics.detectionCoverage")}</small><strong>{rules.length ? `${stats.ruleCoverage.toLocaleString(locale)}٪` : "—"}</strong><p>{t("security.metrics.detectionCoverageHelp", { enabled: stats.enabledRules, total: rules.length })}</p></div></Link>
         <article className="security-metric-card security-metric-card--amber"><span><Siren size={20} /></span><div><small>{t("security.metrics.openIncidents")}</small><strong>{stats.openIncidents.length.toLocaleString(locale)}</strong><p>{t("security.metrics.openIncidentsHelp")}</p></div></article>
       </div>
-
-      <SecurityActionJourney />
 
       <div className="security-work-grid">
         <section className="security-priority-panel">

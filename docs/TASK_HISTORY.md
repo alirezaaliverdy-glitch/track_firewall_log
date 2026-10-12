@@ -1,6 +1,11 @@
+## 2026-10-12 - Remove misplaced Security Overview action panel
+
+- Removed the Action Center journey from the Security Overview render tree at the user's request. No ActionPlan, PolicyGuard, connector, or audit behavior changed.
+- Frontend production build passed; the local web was rebuilt healthy and security/dashboard/API readiness routes return 200. No vendor execution or production push.
+
 ## 2026-10-12 - Simplify security overview and make action state explicit
 
-- Replaced the defense-capability map with a responsive action journey showing real ActionPlan stages, recorded command preview, confirmation handoff, and connector-backed result. Added honest stale/error/empty states.
+- The earlier action journey replaced the defense-capability map; the journey was subsequently removed from Security Overview as recorded above.
 - Added outside-click and Escape dismissal to the account dropdown, plus close-on-language selection.
 - Frontend build and scoped local web deploy passed; security/dashboard/API health 200, anonymous Action Center 401, production Compose structure valid with placeholders. No execution, push, or production rollout.
 

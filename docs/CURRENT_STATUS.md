@@ -1,6 +1,11 @@
+## 2026-10-12 - Remove misplaced action panel from Security Overview
+
+- The Action Center journey panel is no longer rendered on `/security`. Action Center review, confirmation, execution, and audit behavior remain unchanged.
+- Frontend production build passed; the local web was rebuilt healthy and security/dashboard/API readiness routes return 200. No vendor operation or production push.
+
 ## 2026-10-12 - Security action journey and shared account-menu behavior
 
-- Security Overview now uses an Action Center-backed four-stage action panel instead of the crowded NIST capability map. Preview lines and execution status come from actual persisted plans; successful execution requires recorded connector invocation. Review and result links keep the existing controlled confirmation path.
+- The earlier Action Center-backed four-stage panel was removed from Security Overview in the correction above. The crowded NIST capability map remains removed; Action Center retains the controlled review and result path.
 - The account menu closes on outside click, Escape, navigation, or language selection. Escape restores keyboard focus to its trigger.
 - Frontend Docker build and local web deployment passed. All four local services are healthy; routed security/dashboard/API health return 200 and anonymous Action Center returns 401. Production Compose structure validated with non-secret placeholders. No production push or vendor execution.
 
