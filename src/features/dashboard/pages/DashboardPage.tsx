@@ -3,7 +3,6 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { useAssets } from "@/features/assets/hooks/useAssets";
 import { useFindings } from "@/features/security/hooks/useFindings";
 import { securityDisplayText } from "@/features/security/securityPresentation";
-import { actionPlanPath, publishActionPlanCreated } from "@/lib/actionPlanHandoff";
 import {
   getOperationalDashboardActivity,
   type DashboardActionItem,
@@ -17,7 +16,6 @@ import {
 } from "@/lib/linuxMonitoring";
 import {
   getSecurityMonitoringStatus,
-  createFindingActionPlan,
   type PlatformAsset,
   type SecurityFinding,
   type SecurityMonitoringStatus,
@@ -43,14 +41,14 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import "./DashboardPage.css";
 import "./DashboardCommandCenter.css";
 
 import { FleetHealthPanel } from "./FleetHealthPanel";
 import { DashboardActionComposer } from "./DashboardActionComposer";
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
-type AttentionItem = { id: string; deviceKey: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string; observedAt: string | null; priority: number; findingId?: string };
+type AttentionItem = { id: string; deviceKey: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string; observedAt: string | null; priority: number };
 
 const EMPTY_EVENT_SUMMARY: EventsSummary = {
   totalEvents: 0,
@@ -219,7 +217,6 @@ function ActionRows({ items, language, isFa }: { items: DashboardActionItem[]; l
 }
 
 export default function DashboardPage() {
-  const navigate = useNavigate();
   const { i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fa";
   const isFa = language.startsWith("fa");
@@ -230,8 +227,6 @@ export default function DashboardPage() {
   const [monitoring, setMonitoring] = useState<SecurityMonitoringStatus | null>(null);
   const [eventSummary, setEventSummary] = useState<EventsSummary>(EMPTY_EVENT_SUMMARY);
   const [activityError, setActivityError] = useState(false);
-  const [creatingFindingId, setCreatingFindingId] = useState<string | null>(null);
-  const [proposalError, setProposalError] = useState("");
   const [, setLinuxError] = useState(false);
 
   const loadLinuxHealth = useCallback(async () => {
@@ -303,7 +298,7 @@ export default function DashboardPage() {
     const reviewRoute = (deviceId: string | undefined, fallback: string, useFinding = true) => {
       const finding = useFinding ? latestFindingForDevice(deviceId) : undefined;
       return finding
-        ? { route: `/security/findings/${finding.id}`, actionFa: "مشاهده یافته و راهکار", actionEn: "Open finding and fix" }
+        ? { route: `/security/findings/${finding.id}`, actionFa: "تصمیم و اقدام", actionEn: "Decision and action" }
         : { route: fallback, actionFa: "بررسی مشکل تجهیز", actionEn: "Review device issue" };
     };
     for (const device of linux?.devices ?? []) {
@@ -327,7 +322,6 @@ export default function DashboardPage() {
         actionEn: review.actionEn,
         observedAt: device.diagnosis?.observedAt ?? device.latestHealth?.collectedAt ?? null,
         priority: finding ? (finding.severity === "critical" ? 0 : 2) : stateTone(state) === "danger" ? 3 : stateTone(state) === "warning" ? 4 : 5,
-        findingId: finding?.id,
       });
     }
     for (const asset of assets.assets) {
@@ -353,7 +347,6 @@ export default function DashboardPage() {
         actionEn: review.actionEn,
         observedAt: asset.healthObservedAt ?? asset.lastSeenAt ?? null,
         priority: finding ? (finding.severity === "critical" ? 0 : 2) : stateTone(state) === "danger" ? 3 : stateTone(state) === "warning" ? 4 : 5,
-        findingId: finding?.id,
       });
     }
     for (const collector of monitoring?.collectors.devices ?? []) {
@@ -383,11 +376,10 @@ export default function DashboardPage() {
         detail: `${finding.vendor || copy(isFa, "وندور نامشخص", "Unknown vendor")} · ${shortDate(finding.lastSeen, language, "—")}`,
         route: `/security/findings/${finding.id}`,
         tone: finding.severity === "critical" ? "danger" : "warning",
-        actionFa: "مشاهده یافته و راهکار",
-        actionEn: "Open finding and fix",
+        actionFa: "تصمیم و اقدام",
+        actionEn: "Decision and action",
         observedAt: finding.lastSeen,
         priority: finding.severity === "critical" ? 0 : 2,
-        findingId: finding.id,
       });
     }
     const selected = new Map<string, AttentionItem>();
@@ -401,21 +393,6 @@ export default function DashboardPage() {
       .sort((left, right) => left.priority - right.priority || (new Date(right.observedAt ?? 0).getTime() - new Date(left.observedAt ?? 0).getTime()))
       .slice(0, 8);
   }, [assets.assets, isFa, language, linux, monitoring, openFindings]);
-
-  async function prepareFindingAction(findingId: string) {
-    if (creatingFindingId) return;
-    setCreatingFindingId(findingId);
-    setProposalError("");
-    try {
-      const result = await createFindingActionPlan(findingId);
-      publishActionPlanCreated(result.actionPlan.id);
-      navigate(actionPlanPath(result.actionPlan.id));
-    } catch (error) {
-      setProposalError(error instanceof Error ? error.message : copy(isFa, "ساخت برنامهٔ رفع مشکل ناموفق بود.", "Could not prepare the remediation plan."));
-    } finally {
-      setCreatingFindingId(null);
-    }
-  }
 
   const dailyChecks = [
     { label: copy(isFa, "وضعیت تجهیزات", "Device health"), ok: assets.stats.needsReview === 0, value: `${number(assets.stats.online, language)} / ${number(assets.stats.total, language)}` },
@@ -467,11 +444,10 @@ export default function DashboardPage() {
 
       {attentionItems.length ? <article id="dashboard-attention" className="command-panel dashboard-attention-panel">
         <header className="command-panel-heading"><div><span className="command-panel__icon"><CircleAlert /></span><div><h2>{copy(isFa, "علت‌های نیازمند توجه", "Attention causes")}</h2><p>{copy(isFa, "علت ثبت‌شده، زمان آخرین داده و مسیر بررسی هر تجهیز", "Recorded cause, latest evidence time, and review path for each device")}</p></div></div><span>{number(attentionItems.length, language)} {copy(isFa, "مورد", "items")}</span></header>
-        {proposalError ? <p className="dashboard-attention-error" role="alert">{proposalError}</p> : null}
         <div className="dashboard-attention-list">{attentionItems.map((item) => <div key={item.id} className={`dashboard-attention-item is-${item.tone}`}>
           <span className="dashboard-attention-item__state"><CircleAlert /></span>
           <span><strong>{item.title}</strong><small>{item.reason}</small><em>{item.detail}</em></span>
-          <span className="dashboard-attention-item__actions"><Link to={item.route}>{copy(isFa, item.actionFa, item.actionEn)}<ArrowUpLeft /></Link>{item.findingId ? <button type="button" disabled={Boolean(creatingFindingId)} onClick={() => void prepareFindingAction(item.findingId!)}>{creatingFindingId === item.findingId ? copy(isFa, "در حال آماده‌سازی…", "Preparing…") : copy(isFa, "پیشنهاد اقدام", "Propose action")}</button> : null}</span>
+          <span className="dashboard-attention-item__actions"><Link to={item.route}>{copy(isFa, item.actionFa, item.actionEn)}<ArrowUpLeft /></Link></span>
         </div>)}</div>
       </article> : null}
 

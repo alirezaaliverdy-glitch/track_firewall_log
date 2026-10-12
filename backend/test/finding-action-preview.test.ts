@@ -29,6 +29,21 @@ test("a repeated-login finding opens as a preview-ready IP block without invokin
       },
     });
     deviceId = device.id;
+    const evidence = await Promise.all([0, 1].map((index) => prisma.securityEvent.create({
+      data: {
+        deviceId: device.id,
+        timestamp: new Date(),
+        sourceType: "linux_journal",
+        vendor: "linux",
+        eventType: "authentication_failure",
+        action: "auth_failed",
+        srcIp: sourceIp,
+        username: "root",
+        rawSnippet: `Failed password for root from ${sourceIp} attempt ${index}`,
+        normalizedJson: { result: "denied" },
+        dedupeKey: `${runId}-event-${index}`,
+      },
+    })));
     const finding = await prisma.finding.create({
       data: {
         deviceId: device.id,
@@ -41,7 +56,7 @@ test("a repeated-login finding opens as a preview-ready IP block without invokin
         summary: "Repeated failed SSH logins from one public source.",
         evidenceJson: [],
         source: "seeded_detection_rule",
-        rawRefsJson: [],
+        rawRefsJson: evidence.map((event) => event.id),
         firstSeen: new Date(),
         lastSeen: new Date(),
         count: 11,
@@ -68,9 +83,20 @@ test("a repeated-login finding opens as a preview-ready IP block without invokin
     assert.equal(plan.parametersJson.ipAddress, sourceIp);
     assert.ok(plan.dryRunJson.plannedCommands?.some((command) => command.includes(sourceIp)));
     assert.notEqual(plan.resultJson?.connectorInvoked, true);
+
+    await prisma.securityEvent.updateMany({ where: { id: { in: evidence.map((event) => event.id) } }, data: { tags: { applicationOwned: true } } });
+    const decisionResponse = await app.inject({ method: "GET", url: `/api/security/findings/${finding.id}/decision` });
+    assert.equal(decisionResponse.statusCode, 200);
+    assert.equal(decisionResponse.json().mode, "investigate");
+    assert.equal(decisionResponse.json().supportingReferenceCount, 0);
+    assert.equal(decisionResponse.json().applicationOwnedReferenceCount, 2);
+    const reviewResponse = await app.inject({ method: "POST", url: `/api/security/findings/${finding.id}/action-plan` });
+    assert.equal(reviewResponse.statusCode, 409);
+    assert.equal(reviewResponse.json().code, "ACTION_NOT_IN_CATALOG");
   } finally {
     if (deviceId) {
       await prisma.actionPlan.deleteMany({ where: { deviceId } });
+      await prisma.securityEvent.deleteMany({ where: { deviceId } });
       await prisma.finding.deleteMany({ where: { deviceId } });
       await prisma.device.deleteMany({ where: { id: deviceId } });
     }

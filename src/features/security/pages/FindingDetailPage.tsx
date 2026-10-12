@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Database, FileCode2, Fingerprint, Network, Server, ShieldCheck, Tags } from "lucide-react";
@@ -6,7 +6,8 @@ import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { createFindingActionPlan, getFindingEvidence, updateFindingStatus, type FindingEvidence } from "@/lib/platform";
+import { createFindingActionPlan, getFindingDecision, getFindingEvidence, updateFindingStatus, type FindingDecision, type FindingEvidence } from "@/lib/platform";
+import { FindingDecisionCard } from "../components/FindingDecisionCard";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { useFinding } from "../hooks/useFinding";
 import { securityDisplayText } from "../securityPresentation";
@@ -28,8 +29,21 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
   const [expandedEvent, setExpandedEvent] = useState("");
   const [copiedEvent, setCopiedEvent] = useState("");
   const [creatingPlan, setCreatingPlan] = useState(false);
+  const [decision, setDecision] = useState<FindingDecision | null>(null);
+  const [decisionError, setDecisionError] = useState(false);
   const language = i18n.resolvedLanguage ?? i18n.language;
   const locale = language.startsWith("fa") ? "fa-IR" : "en-US";
+
+  useEffect(() => {
+    if (!params.findingId) return;
+    let cancelled = false;
+    setDecision(null);
+    setDecisionError(false);
+    const load = () => { if (document.visibilityState === "visible") void getFindingDecision(params.findingId!).then((result) => { if (!cancelled) { setDecision(result); setDecisionError(false); } }).catch(() => { if (!cancelled) setDecisionError(true); }); };
+    load();
+    const timer = window.setInterval(load, 15_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [params.findingId]);
 
   const loadEvidence = () => {
     if (!finding || evidenceLoading) return;
@@ -85,7 +99,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
 
   return (
     <section className="page-stack security-finding-detail">
-      <PageHeader title={localizedTitle} eyebrow={t("security.detail.eyebrow")} description={localizedSummary} actions={<div className="security-detail-actions"><button type="button" className="secondary-button" onClick={setInvestigating}>{t("security.detail.startInvestigation")}</button><button type="button" disabled={creatingPlan} onClick={createPlan}>{creatingPlan ? t("security.detail.planCreating") : t("security.detail.createPlan")}</button></div>} />
+      <PageHeader title={localizedTitle} eyebrow={t("security.detail.eyebrow")} description={localizedSummary} actions={<div className="security-detail-actions"><button type="button" className="secondary-button" onClick={setInvestigating}>{t("security.detail.startInvestigation")}</button></div>} />
       <section className={`security-finding-hero security-finding-hero--${finding.severity}`}>
         <div className="security-finding-hero__identity"><span><ShieldCheck size={29} /></span><div><small>{t("security.detail.vendorDetection")}</small><strong>{vendorLabel(vendor)}</strong><p>{categoryLabel(finding.category, language)} · {sourceLabel(finding.source, language)}</p></div></div>
         <dl>
@@ -102,12 +116,14 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
         <article><span><Fingerprint size={19} /></span><div><small>{t("security.detail.detectionSource")}</small><strong>{sourceLabel(finding.source, language)}</strong><b>{categoryLabel(finding.category, language)}</b></div></article>
       </div>
 
+      {decision ? <FindingDecisionCard decision={decision} isFa={language.startsWith("fa")} busy={creatingPlan} onAction={createPlan} onEvidence={() => { loadEvidence(); document.querySelector(".security-evidence-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} /> : decisionError ? <div className="security-evidence-notice is-error" role="alert"><AlertTriangle size={18} /><p>{language.startsWith("fa") ? "بررسی شواهد در دسترس نیست. دوباره تلاش کنید." : "The evidence decision is unavailable. Please try again."}</p><button type="button" onClick={() => { setDecisionError(false); void getFindingDecision(finding.id).then(setDecision).catch(() => setDecisionError(true)); }}>{t("security.detail.retry")}</button></div> : <div className="finding-decision finding-decision--loading" role="status">{language.startsWith("fa") ? "در حال بررسی شواهد…" : "Checking evidence…"}</div>}
+
       <div className="security-finding-analysis-grid">
         <section className="security-detail-panel"><header><span><AlertTriangle size={19} /></span><div><small>{t("security.detail.analysisEyebrow")}</small><h2>{t("security.detail.whatHappened")}</h2></div></header><p>{localizedSummary}</p><div className="security-detail-facts">{technicalContext.length ? technicalContext.map(([label, value]) => <span key={label}><small>{label}</small><b dir={label.includes("IP") ? "ltr" : undefined}>{value}</b></span>) : <p>{t("security.detail.noTechnicalContext")}</p>}</div></section>
         <section className="security-detail-panel"><header><span><Tags size={19} /></span><div><small>{t("security.detail.classificationEyebrow")}</small><h2>{t("security.detail.classification")}</h2></div></header><div className="security-classification-tags"><span>{vendorLabel(vendor)}</span><span>{categoryLabel(finding.category, language)}</span>{finding.mitreTags?.map((tag) => <span key={tag} dir="ltr">MITRE {tag}</span>)}</div><p>{t("security.detail.classificationHelp")}</p></section>
       </div>
 
-      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><p>{remediation.problem}</p><ol>{remediation.steps.map((step) => <li key={step}>{step}</li>)}</ol><p><strong>{language.startsWith("fa") ? "چطور از رفع واقعی مطمئن شویم؟ " : "How to verify the actual fix? "}</strong>{remediation.verification}</p><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button><button type="button" disabled={creatingPlan} onClick={createPlan}>{creatingPlan ? t("security.detail.planCreating") : t("security.detail.createPlan")}</button><Link to="/actions">{t("dashboard.actions.actionCenter")}</Link><button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
+      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><p>{remediation.problem}</p><ol>{remediation.steps.map((step) => <li key={step}>{step}</li>)}</ol><p><strong>{language.startsWith("fa") ? "چطور از رفع واقعی مطمئن شویم؟ " : "How to verify the actual fix? "}</strong>{remediation.verification}</p><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button><Link to="/actions">{t("dashboard.actions.actionCenter")}</Link><button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
 
       <section className="security-evidence-workspace">
         <header><div><span>{t("security.detail.evidenceEyebrow")}</span><h2>{t("security.detail.realLogs")}</h2><p>{t("security.detail.realLogsDescription")}</p></div>{!evidence ? <button type="button" onClick={loadEvidence} disabled={evidenceLoading}><Database size={17} />{evidenceLoading ? t("security.detail.loadingLogs") : t("security.detail.showLogs")}</button> : <span className={`security-evidence-availability security-evidence-availability--${evidence.availability}`}><i />{t(`security.detail.availability.${evidence.availability}`)}</span>}</header>

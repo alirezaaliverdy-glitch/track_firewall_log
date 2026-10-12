@@ -1,3 +1,9 @@
+## 2026-10-12 - Evidence correlation and decision/action card
+
+- Added a workspace-scoped finding decision endpoint and a responsive Persian-first decision card with evidence coverage, correlated context, a clear investigation/review split and raw-log navigation. Dashboard finding items now route through that card.
+- Gated source-IP action previews on fresh, source-matched, non-application-owned referenced evidence; trusted sources and later successful logins stay investigation-only. Unsupported manual plans still fail closed instead of presenting a fake executable draft.
+- Verified backend/frontend builds, five focused tests using an isolated migrated local database, and both Compose configurations; deployed API/web locally and checked health/dashboard 200 and decision auth 401. Removed the disposable test DB and two test-only images. No connector invocation, vendor change, migration in the application database, push or production deployment.
+
 ## 2026-10-11 - Dashboard command-to-action handoff
 
 - Connected a short dashboard request form to the existing device-scoped catalog/AI resolver, preserving supported template selection, parameter completion, guided workflows and Action Center review.

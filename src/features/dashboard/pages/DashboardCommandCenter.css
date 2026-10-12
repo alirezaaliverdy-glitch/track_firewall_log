@@ -508,9 +508,6 @@
 .dashboard-attention-item__actions { display:grid;justify-items:start;gap:7px; }
 .dashboard-attention-item__actions a { display:inline-flex;align-items:center;gap:5px;color:#74d6df;font-size:.72rem;font-weight:800;white-space:nowrap; }
 .dashboard-attention-item__actions svg { width:14px;height:14px; }
-.dashboard-attention-item__actions button { border:1px solid rgba(45,212,232,.26);border-radius:8px;padding:7px 10px;color:#b4f2f3;background:rgba(45,212,232,.09);font:inherit;font-size:.69rem;font-weight:800;cursor:pointer; }
-.dashboard-attention-item__actions button:hover:not(:disabled) { background:rgba(45,212,232,.17); }
-.dashboard-attention-item__actions button:disabled { opacity:.55;cursor:wait; }
 .dashboard-attention-error { position:relative;z-index:2;margin:0 19px 12px;color:#fda4af;font-size:.74rem; }
 
 .dashboard-action-composer { display:grid;gap:14px;padding:19px; }

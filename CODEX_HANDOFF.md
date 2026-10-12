@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+## 2026-10-12 - Evidence correlation and decision/action card
+
+- Finding detail now presents a compact Persian-first decision card: why the finding matters, matching/retrievable log coverage, related devices, later successful logins, trusted/application-owned source cautions, and one clear next step. The card refreshes while visible and has a mobile layout and an explicit error/retry state. Dashboard attention items now open this decision instead of attempting an unsupported plan directly.
+- The new workspace-scoped `/api/security/findings/:id/decision` endpoint correlates exact referenced logs with the finding source, device and current age. It does not treat detector confidence as proof: missing/stale/mismatched or application-owned references, trusted IPs, and later successful logins prevent an IP-block suggestion. Only fresh, sufficiently supported attack findings expose the review action.
+- Finding-to-ActionPlan handoff now uses that same decision. An action is still only previewed; registered catalog support, user confirmation, PolicyGuard, real connector result and audit remain mandatory. Unsupported/investigation-only items show logs rather than a misleading action button; direct unsupported plan requests remain 409. No schema migration or vendor command was made.
+- Backend/frontend production builds passed. Five focused unit/integration tests passed against a separate local test database, including application-owned exclusion and exact evidence API behavior; both Compose paths validated. Local API/web were rebuilt healthy; dashboard and API health return 200, and the unauthenticated decision route returns 401. The disposable test database and two test-only images were removed. No push or production rollout occurred.
+
 ## 2026-10-11 - Dashboard proposal and evidence-gated remediation
 
 - Dashboard now exposes one compact Persian-first action composer: choose a managed device, type the desired change, and let the existing catalog-first resolver map it to a registered ActionPlan or guided workflow. The dashboard shows the proposed action and opens its review/configuration path; it never executes from the composer.

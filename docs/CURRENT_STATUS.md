@@ -1,3 +1,9 @@
+## 2026-10-12 - Evidence correlation and decision card
+
+- Finding detail now has a Persian-first, responsive evidence decision card with concise supporting facts, raw-log access and a single review action only when warranted. Dashboard attention items open that decision instead of directly trying unsupported plans. The card updates while visible and reports/retries API failures.
+- Exact source-matched log references, application-owned provenance, freshness, trusted IPs, related devices and later successful logins drive the decision. Weak or contradictory evidence stays investigation-only; the same gate protects finding-created IP-block ActionPlans. No connector execution occurs during preview.
+- API/frontend builds, five focused tests on an isolated PostgreSQL database, and local/production Compose validation passed. Local API/web redeployed healthy; routed dashboard/health are 200 and the protected decision API is 401 without login. Test-only DB/images were removed; no application migration, vendor mutation or push.
+
 ## 2026-10-11 - Dashboard action proposal and safer finding response
 
 - The dashboard has a compact device-aware natural-language action entry point and a direct finding proposal button. Both create reviewable plans through existing catalog/finding routes; actual vendor execution remains preview + explicit confirmation + PolicyGuard + connector + audit.

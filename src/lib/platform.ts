@@ -192,6 +192,25 @@ export type FindingEvidence = {
   snapshotEvidence: unknown;
 };
 
+export type FindingDecision = {
+  mode: "closed" | "review_action" | "investigate";
+  evidenceScore: number;
+  evidenceLabelFa: string;
+  evidenceLabelEn: string;
+  explanationFa: string;
+  explanationEn: string;
+  nextStepFa: string;
+  nextStepEn: string;
+  observedAt: string;
+  deviceCount: number;
+  authSuccessCount: number;
+  referenceCount: number;
+  resolvedReferenceCount: number;
+  supportingReferenceCount: number;
+  applicationOwnedReferenceCount: number;
+  signals: Array<{ key: string; level: "observed" | "caution"; fa: string; en: string }>;
+};
+
 export type AttackerEvidenceEvent = {
   id: string;
   timestamp: string;
@@ -350,6 +369,7 @@ export const listSecurityFindings = (filters: { vendor?: string; deviceId?: stri
 };
 export const listVendorFindingProfiles = () => request<{ profiles: VendorFindingProfile[] }>("/security/vendor-profiles");
 export const getFindingEvidence = (id: string) => request<FindingEvidence>(`/security/findings/${id}/evidence`);
+export const getFindingDecision = (id: string) => request<FindingDecision>(`/security/findings/${id}/decision`);
 export const listDetectionRules = () => request<{ rules: DetectionRule[] }>("/security/rules");
 export const setDetectionRuleEnabled = (id: string, enabled: boolean) => request<DetectionRule>(`/security/rules/${id}/${enabled ? "enable" : "disable"}`, { method: "POST" });
 export const runSecurityDetections = () => request<{ rulesEvaluated: number; eventsEvaluated: number; findingsCreated: number; findingsUpdated: number }>("/security/detections/run", { method: "POST", body: JSON.stringify({}) });

@@ -217,6 +217,16 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
         }
       ]
     });
+    const firstLinuxEvidence = await prisma.securityEvent.findUniqueOrThrow({ where: { dedupeKey: `${runId}-event-linux` } });
+    const secondLinuxEvidence = await prisma.securityEvent.create({ data: {
+      deviceId: linux.id, assetId: linuxAsset.id, timestamp: now, sourceType: "linux_journal", vendor: "linux",
+      eventType: "authentication_failure", action: "denied", severity: "high", srcIp: publicIp,
+      dstIp: linux.host, dstPort: 22, protocol: "tcp", username: "root",
+      rawSnippet: "second failed login", normalizedJson: { result: "denied" }, dedupeKey: `${runId}-event-linux-2`
+    } });
+    await prisma.finding.update({ where: { deviceId_fingerprint: { deviceId: linux.id, fingerprint: `${runId}-linux-public` } }, data: {
+      rawRefsJson: [firstLinuxEvidence.id, secondLinuxEvidence.id]
+    } });
 
     const response = await app.inject({ method: "GET", url: "/api/security/attackers" });
     assert.equal(response.statusCode, 200);
@@ -252,7 +262,17 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
     assert.match(detail.latestEvidence[0].message + detail.latestEvidence[1].message, /\[REDACTED\]/);
     assert.doesNotMatch(JSON.stringify(detail), /super-secret|must-not-leak|token=hidden/);
 
-    const responsePlan = await app.inject({ method: "POST", url: `/api/security/findings/${detail.findings.find((item: { vendor: string }) => item.vendor === "linux").id}/action-plan` });
+    const linuxFindingId = detail.findings.find((item: { vendor: string }) => item.vendor === "linux").id;
+    const decisionResponse = await app.inject({ method: "GET", url: `/api/security/findings/${linuxFindingId}/decision` });
+    assert.equal(decisionResponse.statusCode, 200);
+    assert.equal(decisionResponse.json().mode, "review_action");
+    assert.equal(decisionResponse.json().supportingReferenceCount, 2);
+    const noiseFinding = await prisma.finding.findUniqueOrThrow({ where: { deviceId_fingerprint: { deviceId: linux.id, fingerprint: `${runId}-linux-session-noise` } } });
+    const noiseDecision = await app.inject({ method: "GET", url: `/api/security/findings/${noiseFinding.id}/decision` });
+    assert.equal(noiseDecision.statusCode, 200);
+    assert.equal(noiseDecision.json().mode, "investigate");
+
+    const responsePlan = await app.inject({ method: "POST", url: `/api/security/findings/${linuxFindingId}/action-plan` });
     assert.equal(responsePlan.statusCode, 201);
     assert.equal(responsePlan.json().actionPlan.actionType, "linux_block_ip");
     assert.equal(responsePlan.json().actionPlan.parametersJson.ipAddress, publicIp);
@@ -264,13 +284,19 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
     const fortiFinding = await prisma.finding.create({
       data: {
         deviceId: fortigate.id, vendor: "fortigate", title: "FortiGate: high-severity security threat", severity: "critical", category: "threat-prevention", status: "active", confidence: 0.98,
-        summary: "FortiGate IPS blocked a signature", evidenceJson: [{ attack: "test-signature" }], source: "seeded_detection_rule", rawRefsJson: [], firstSeen: now, lastSeen: now, count: 1,
+        summary: "FortiGate IPS blocked a signature", evidenceJson: [{ attack: "test-signature" }], source: "seeded_detection_rule", rawRefsJson: [], firstSeen: now, lastSeen: now, count: 2,
         mitreTags: ["T1190"], srcIp: "198.51.100.55", dstIp: "10.0.0.10", dstPort: 443, recommendedActions: [], fingerprint: `${runId}-fortigate-threat`
       }
     });
-    await prisma.securityEvent.create({
+    const fortiEvidence = await prisma.securityEvent.create({
       data: { deviceId: fortigate.id, timestamp: now, sourceType: "fortigate_log", vendor: "fortigate", eventType: "fortigate_ips_attack", action: "blocked", severity: "critical", srcIp: "198.51.100.55", dstIp: "10.0.0.10", dstPort: 443, protocol: "tcp", interfaceIn: "wan1", interfaceOut: "port1", rawSnippet: "IPS signature blocked", normalizedJson: {}, dedupeKey: `${runId}-event-fortigate` }
     });
+    const secondFortiEvidence = await prisma.securityEvent.create({ data: {
+      deviceId: fortigate.id, timestamp: now, sourceType: "fortigate_log", vendor: "fortigate", eventType: "fortigate_ips_attack",
+      action: "blocked", severity: "critical", srcIp: "198.51.100.55", dstIp: "10.0.0.10", dstPort: 443,
+      protocol: "tcp", interfaceIn: "wan1", interfaceOut: "port1", rawSnippet: "Second IPS signature blocked", normalizedJson: {}, dedupeKey: `${runId}-event-fortigate-2`
+    } });
+    await prisma.finding.update({ where: { id: fortiFinding.id }, data: { rawRefsJson: [fortiEvidence.id, secondFortiEvidence.id] } });
     const fortiResponsePlan = await app.inject({ method: "POST", url: `/api/security/findings/${fortiFinding.id}/action-plan` });
     assert.equal(fortiResponsePlan.statusCode, 201);
     assert.equal(fortiResponsePlan.json().actionPlan.actionType, "fortigate_create_deny_policy");

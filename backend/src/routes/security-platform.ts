@@ -12,6 +12,7 @@ import {
 import { mockWazuhAssets, mockWazuhEvents, mockWazuhHealth } from "../integrations/wazuh/mock-adapter.js";
 import { applyAssetImport, previewAssetImport } from "../assets/asset-intelligence.service.js";
 import { getFindingEvidence, listPublicVendorTelemetryProfiles } from "../services/finding-evidence.service.js";
+import { getFindingDecision } from "../services/finding-decision.service.js";
 import { getAttackerDetails, listAttackers } from "../services/attacker-intelligence.service.js";
   import { getAttackerGeoStatus, refreshAttackerGeoDatabase } from "../services/attacker-geoip.service.js";
 import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityEmailAlertSettings, sendSecurityEmailTest, sendSecurityVendorEmailTests, updateSecurityEmailAlertSettings } from "../services/security-alert-email.service.js";
@@ -105,6 +106,11 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/api/security/findings/:id/evidence", async (request, reply) => {
     const evidence = await getFindingEvidence(request.params.id);
     return evidence ?? reply.code(404).send({ error: "Finding not found" });
+  });
+
+  app.get<{ Params: { id: string } }>("/api/security/findings/:id/decision", async (request, reply) => {
+    const decision = await getFindingDecision(request.params.id, request.authUser?.scopeOwnerId);
+    return decision ?? reply.code(404).send({ error: "Finding not found" });
   });
 
   app.patch<{ Params: { id: string }; Body: { status?: string; resolutionConfirmed?: boolean } }>("/api/security/findings/:id/status", async (request, reply) => {
