@@ -1,3 +1,9 @@
+## 2026-10-12 - Compact traffic dashboard and NetFlow v9
+
+- Device traffic is now a full-width, low-noise dashboard section with three primary measurements and on-demand interface/port/IP detail. The receiver form has a concise status and device-specific setup hint; no log count is presented as byte volume.
+- NetFlow v9 IPv4 records are accepted only after a valid exporter-scoped template with a byte counter. Unknown templates, malformed packets and unsupported formats produce no volume. V5 and v9 are never summed. FortiGate v9 and MikroTik/Cisco v5/v9 are supported where the specific device exports compatible records; IPFIX and sFlow are not yet supported.
+- Backend/frontend builds and focused v5/v9 tests passed. Local API/web were rebuilt healthy; routed dashboard and health return 200, anonymous traffic access returns 401. Desktop/mobile mocked browser QA passed. No live exporter, vendor change, server push or production deployment.
+
 ## 2026-10-12 - Per-device measured traffic
 
 - Dashboard traffic is now device-specific. Interface Mbps is computed from fresh counters; IP/port bytes come from configured NetFlow v5 or allowed logs with explicit byte fields. Log counts remain visibly separate.

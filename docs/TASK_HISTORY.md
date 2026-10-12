@@ -1,3 +1,9 @@
+## 2026-10-12 - Refine traffic UX and extend NetFlow coverage
+
+- Promoted device traffic to a full-width dashboard section, reduced its default view to three facts, and moved detailed interface/IP/port tables and vendor setup into accessible expandable sections. Verified desktop/mobile renders with mocked non-sensitive data.
+- Added bounded NetFlow v9 template decoding for IPv4 traffic, with source/domain scoping, expiry and malformed/unknown-template rejection. Rollups remain version-specific and are never double-counted with log bytes or another NetFlow version.
+- Built both local services, passed focused parser/interface tests and Compose validation, and verified local deployment and routes. No actual exporter or production system was modified.
+
 ## 2026-10-12 - Device traffic visibility and NetFlow intake
 
 - Implemented a per-device traffic explorer in the dashboard, including separately labeled measured interface rates, IP/port/interface byte volume and log event counts.

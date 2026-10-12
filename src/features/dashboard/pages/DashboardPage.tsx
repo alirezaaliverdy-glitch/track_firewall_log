@@ -403,14 +403,13 @@ export default function DashboardPage() {
         </article>
 
         <div className="command-side-stack">
-          <DeviceTrafficPanel isFa={isFa} />
-
           <article className="command-panel latest-findings-panel">
             <header className="command-panel-heading"><div><span className="command-panel__icon"><ShieldAlert /></span><div><h2>{copy(isFa, "آخرین یافته‌ها", "Latest findings")}</h2><p>{copy(isFa, "نیازمند بررسی امنیتی", "Awaiting security review")}</p></div></div><Link to="/security/findings">{copy(isFa, "مشاهده همه", "View all")}<ArrowUpLeft size={14} /></Link></header>
             {latestFindings.length ? <ul>{latestFindings.map((finding) => <li key={finding.id}><i className={`is-${finding.severity}`} /><div><Link to={`/security/findings/${finding.id}`}>{finding.title}</Link><span>{finding.device?.name ?? finding.asset?.name ?? finding.vendor}</span></div><time>{relativeDate(finding.lastSeen, language, "—")}</time></li>)}</ul> : <div className="command-empty command-empty--compact"><CheckCircle2 /><p>{copy(isFa, "یافته بازی وجود ندارد.", "No open findings.")}</p></div>}
           </article>
         </div>
       </div>
+      <DeviceTrafficPanel isFa={isFa} />
         </div>
       </div>
 

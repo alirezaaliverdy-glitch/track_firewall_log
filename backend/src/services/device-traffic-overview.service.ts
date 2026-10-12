@@ -17,16 +17,22 @@ export function normalizedFlowBytes(normalized: unknown): number | null {
 }
 
 async function flowVolumes(deviceId: string, since: Date) {
-  const netflowRows = await prisma.$queryRaw<FlowVolumeRow[]>(Prisma.sql`
-    SELECT "labelsJson"->>'kind' AS kind, "labelsJson"->>'value' AS value,
-      SUM(value)::numeric::text AS bytes,
-      SUM(COALESCE(("labelsJson"->>'records')::int, 1))::int AS records,
-      BOOL_OR(COALESCE(("labelsJson"->>'samplingRate')::int, 1) > 1) AS sampled
-    FROM "MetricSample"
-    WHERE "deviceId" = ${deviceId} AND source = 'netflow-v5' AND "metricKey" = 'flow.bytes' AND timestamp >= ${since}
-      AND "labelsJson"->>'kind' IN ('port', 'sourceIp', 'destinationIp', 'interfaceIn', 'interfaceOut')
-    GROUP BY "labelsJson"->>'kind', "labelsJson"->>'value'
-  `);
+  const latestFlow = await prisma.metricSample.findFirst({ where: { deviceId, timestamp: { gte: since }, source: { in: ["netflow-v5", "netflow-v9"] }, metricKey: "flow.bytes" }, orderBy: { timestamp: "desc" }, select: { source: true } });
+  const netflowRows = latestFlow ? await prisma.$queryRaw<FlowVolumeRow[]>(Prisma.sql`
+    WITH totals AS (
+      SELECT "labelsJson"->>'kind' AS kind, "labelsJson"->>'value' AS value,
+        SUM(value)::numeric::text AS bytes,
+        SUM(COALESCE(("labelsJson"->>'records')::int, 1))::int AS records,
+        BOOL_OR(COALESCE(("labelsJson"->>'samplingRate')::int, 1) > 1) AS sampled
+      FROM "MetricSample"
+      WHERE "deviceId" = ${deviceId} AND source = ${latestFlow.source} AND "metricKey" = 'flow.bytes' AND timestamp >= ${since}
+        AND "labelsJson"->>'kind' IN ('port', 'sourceIp', 'destinationIp', 'interfaceIn', 'interfaceOut')
+      GROUP BY "labelsJson"->>'kind', "labelsJson"->>'value'
+    ), ranked AS (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY kind ORDER BY bytes::numeric DESC) AS rank FROM totals
+    )
+    SELECT kind, value, bytes, records, sampled FROM ranked WHERE rank <= 8
+  `) : [];
   // Only explicit allow records with numeric byte evidence represent confirmed forwarded volume.
   // No byte count is inferred from log frequency or interface totals.
   const rows = netflowRows.length ? netflowRows : await prisma.$queryRaw<FlowVolumeRow[]>(Prisma.sql`
@@ -56,7 +62,7 @@ async function flowVolumes(deviceId: string, since: Date) {
   const list = (kind: string) => rows.filter((row) => row.kind === kind && Number.isFinite(Number(row.bytes)))
     .map((row) => ({ value: row.value, bytes: Number(row.bytes), records: row.records }))
     .sort((a, b) => b.bytes - a.bytes).slice(0, 8);
-  return { source: netflowRows.length ? "netflow-v5" : rows.length ? "allowed-flow-logs" : "none", sampled: netflowRows.some((row) => row.sampled), ports: list("port"), sourceIps: list("sourceIp"), destinationIps: list("destinationIp"), interfaceIn: list("interfaceIn"), interfaceOut: list("interfaceOut") };
+  return { source: netflowRows.length ? latestFlow!.source : rows.length ? "allowed-flow-logs" : "none", sampled: latestFlow?.source === "netflow-v9" ? null : netflowRows.some((row) => row.sampled), ports: list("port"), sourceIps: list("sourceIp"), destinationIps: list("destinationIp"), interfaceIn: list("interfaceIn"), interfaceOut: list("interfaceOut") };
 }
 
 function interfaceName(labels: unknown): string | null {

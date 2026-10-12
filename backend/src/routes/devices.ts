@@ -18,9 +18,9 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/api/devices/:id/netflow", async (request, reply) => {
     const device = await getDeviceById(request.params.id, request.authUser?.scopeOwnerId);
     if (!device) return reply.code(404).send({ error: "Device not found" });
-    const latest = await prisma.metricSample.findFirst({ where: { deviceId: device.id, source: "netflow-v5", metricKey: "flow.bytes" }, orderBy: { timestamp: "desc" }, select: { timestamp: true } });
+    const latest = await prisma.metricSample.findFirst({ where: { deviceId: device.id, source: { in: ["netflow-v5", "netflow-v9"] }, metricKey: "flow.bytes" }, orderBy: { timestamp: "desc" }, select: { timestamp: true, source: true } });
     const receiver = netflowReceiverStatus();
-    return { ...netflowExporterSettings(device.capabilities), lastSeenAt: latest?.timestamp ?? null, receiver: { listening: receiver.listening, port: receiver.port, hostBind: receiver.hostBind, lastError: receiver.lastError }, packets: netflowDeviceStatus(device.id) };
+    return { ...netflowExporterSettings(device.capabilities), lastSeenAt: latest?.timestamp ?? null, lastFormat: latest?.source ?? null, receiver: { listening: receiver.listening, port: receiver.port, hostBind: receiver.hostBind, lastError: receiver.lastError }, packets: netflowDeviceStatus(device.id) };
   });
 
   app.put<{ Params: { id: string }; Body: { enabled?: unknown; exporterIp?: unknown } }>("/api/devices/:id/netflow", async (request, reply) => {

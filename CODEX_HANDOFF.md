@@ -1,5 +1,11 @@
 # CODEX_HANDOFF.md
 
+Latest follow-up (2026-10-12): broader flow compatibility and a compact dashboard.
+
+- The dashboard traffic panel now spans the dashboard width and shows only three immediate answers per selected device: busiest interface rate, top destination port bytes, and top IP bytes. Interface, port, IP, log-count and receiver details are progressively disclosed. The receiver state distinguishes off, waiting, receiving, stopped and offline; vendor hints are short and conditional.
+- Added bounded NetFlow v9 template/data decoding for standard IPv4 endpoints, byte counters, ports and ifIndex. Templates are scoped by exporter and observation domain, expire, and do not turn missing/malformed records into traffic. V5 and v9 rollups remain separate; the dashboard chooses the latest format rather than adding both. IPFIX/sFlow and v9 IPv6 remain unsupported. FortiGate v9 and MikroTik/Cisco v5/v9 are the main intended exporters; interface counter rates still work independently.
+- Backend/frontend container builds, v5/v9 parser tests, production Compose validation and local API/web deployment passed. Mocked-data browser screenshots at 1440px and 390px passed without runtime errors or horizontal overflow. No real exporter was configured, no vendor command was run, and nothing was pushed to production.
+
 Latest task (2026-10-12): per-device traffic and NetFlow v5 receiver.
 
 - Replaced the misleading cross-device “real high-traffic ports” event chart with a per-device dashboard panel. It ranks fresh interface throughput from device counters/Cisco five-minute averages and separates measured IP/port/interface bytes from log event counts. Linux polling now stores counters for up to 20 interfaces.

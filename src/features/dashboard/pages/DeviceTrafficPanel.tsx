@@ -1,27 +1,39 @@
 import { useEffect, useState } from "react";
-import { Activity, ArrowDown, ArrowUp, Network, RefreshCw } from "lucide-react";
+import { ArrowDown, ArrowUp, Network, RefreshCw } from "lucide-react";
 import { getDeviceTrafficOverview, type DeviceTraffic, type TrafficRank, type VolumeRank } from "@/lib/deviceTraffic";
-import "./DeviceTrafficPanel.css";
 import { DeviceNetflowSetup } from "./DeviceNetflowSetup";
+import "./DeviceTrafficPanel.css";
 
-function formatRate(value: number | null, isFa: boolean) {
-  return value === null ? "—" : `${new Intl.NumberFormat(isFa ? "fa-IR" : "en-US", { maximumFractionDigits: 2 }).format(value)} Mbps`;
+const label = (isFa: boolean, fa: string, en: string) => isFa ? fa : en;
+const number = (value: number, isFa: boolean, digits = 1) =>
+  new Intl.NumberFormat(isFa ? "fa-IR" : "en-US", { maximumFractionDigits: digits }).format(value);
+
+function rate(value: number | null, isFa: boolean) {
+  if (value === null) return "—";
+  return value >= 1000 ? number(value / 1000, isFa, 2) + " Gbps" : number(value, isFa, 2) + " Mbps";
 }
 
-function formatBytes(value: number, isFa: boolean) {
+function bytes(value: number, isFa: boolean) {
   const units = ["B", "KB", "MB", "GB", "TB"];
-  let scaled = value;
+  let amount = value;
   let unit = 0;
-  while (scaled >= 1000 && unit < units.length - 1) { scaled /= 1000; unit += 1; }
-  return `${new Intl.NumberFormat(isFa ? "fa-IR" : "en-US", { maximumFractionDigits: 2 }).format(scaled)} ${units[unit]}`;
-}
-
-function RankList({ rows, isFa }: { rows: TrafficRank[]; isFa: boolean }) {
-  return rows.length ? <div className="device-traffic-ranks">{rows.map((row) => <div key={row.value}><code dir="ltr">{row.value}</code><span>{new Intl.NumberFormat(isFa ? "fa-IR" : "en-US").format(row.count)} {isFa ? "رخداد" : "events"}</span></div>)}</div> : <p className="device-traffic-muted">{isFa ? "رخداد دارای این شناسه ثبت نشده است." : "No matching log event was recorded."}</p>;
+  while (amount >= 1000 && unit < units.length - 1) { amount /= 1000; unit += 1; }
+  return number(amount, isFa, 2) + " " + units[unit];
 }
 
 function VolumeList({ rows, isFa }: { rows: VolumeRank[]; isFa: boolean }) {
-  return <div className="device-traffic-ranks">{rows.map((row) => <div key={row.value}><code dir="ltr">{row.value}</code><span>{formatBytes(row.bytes, isFa)}</span></div>)}</div>;
+  const max = Math.max(...rows.map((row) => row.bytes), 1);
+  return <div className="device-traffic-list">{rows.map((row) => <div className="device-traffic-list__row" key={row.value}>
+    <code dir="ltr">{row.value}</code>
+    <span className="device-traffic-list__track"><i style={{ width: Math.max(2, row.bytes / max * 100) + "%" }} /></span>
+    <strong dir="ltr">{bytes(row.bytes, isFa)}</strong>
+  </div>)}</div>;
+}
+
+function LogList({ rows, isFa }: { rows: TrafficRank[]; isFa: boolean }) {
+  return <div className="device-traffic-list">{rows.map((row) => <div className="device-traffic-list__row" key={row.value}>
+    <code dir="ltr">{row.value}</code><span /><strong>{number(row.count, isFa, 0)}</strong>
+  </div>)}</div>;
 }
 
 export function DeviceTrafficPanel({ isFa }: { isFa: boolean }) {
@@ -31,30 +43,80 @@ export function DeviceTrafficPanel({ isFa }: { isFa: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
     let active = true;
-    const refresh = () => { if (document.visibilityState !== "visible") return; getDeviceTrafficOverview().then((result) => { if (active) { setDevices(result.devices); setError(false); setLoading(false); } }).catch(() => { if (active) { setError(true); setLoading(false); } }); };
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void getDeviceTrafficOverview().then((result) => {
+        if (active) { setDevices(result.devices); setLoading(false); setError(false); }
+      }).catch(() => { if (active) { setLoading(false); setError(true); } });
+    };
     refresh();
     const timer = window.setInterval(refresh, 60_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [refreshKey]);
-  const orderedDevices = [...devices].sort((left, right) => (right.interfaces[0]?.totalMbps ?? -1) - (left.interfaces[0]?.totalMbps ?? -1) || left.name.localeCompare(right.name));
-  const selected = orderedDevices.find((device) => device.id === selectedId) ?? orderedDevices[0];
-  return <article className="command-panel device-traffic-panel">
-    <header className="command-panel-heading"><div><span className="command-panel__icon"><Network /></span><div><h2>{isFa ? "ترافیک هر تجهیز" : "Traffic by device"}</h2><p>{isFa ? "نرخ اینترفیس و حجم ثبت‌شدهٔ IP و پورت" : "Interface rates and measured IP/port volume"}</p></div></div><button type="button" className="device-traffic-refresh" onClick={() => setRefreshKey((value) => value + 1)} aria-label={isFa ? "به‌روزرسانی" : "Refresh"}><RefreshCw size={16} /></button></header>
-    {loading && !devices.length ? <p className="device-traffic-muted device-traffic-pad">{isFa ? "در حال دریافت دادهٔ تجهیزات…" : "Loading device data…"}</p> : null}
-    {error ? <p className="device-traffic-error device-traffic-pad">{isFa ? "دادهٔ ترافیک به‌روز نشد؛ دوباره تلاش کنید." : "Traffic data could not refresh."}</p> : null}
-    {!loading && !devices.length ? <p className="device-traffic-muted device-traffic-pad">{isFa ? "تجهیزی برای نمایش وجود ندارد." : "No device is available."}</p> : null}
-    {devices.length ? <><div className="device-traffic-picker" aria-label={isFa ? "تجهیزات" : "Devices"}>{orderedDevices.map((device) => {
-      const top = device.interfaces.find((item) => item.totalMbps !== null);
-      return <button type="button" key={device.id} className={device.id === selected?.id ? "is-selected" : ""} onClick={() => { setSelectedId(device.id); setView("interfaces"); }}><span><strong>{device.name}</strong><small>{device.vendor} · <span dir="ltr">{device.host}</span></small><small>{device.volume.ports[0] ? `${isFa ? "پورت" : "port"} ${device.volume.ports[0].value} · ${formatBytes(device.volume.ports[0].bytes, isFa)}` : isFa ? "حجم پورت: بدون داده" : "Port volume: unavailable"}{device.volume.sourceIps[0] ? ` · IP ${device.volume.sourceIps[0].value}` : ""}</small></span><b>{top ? formatRate(top.totalMbps, isFa) : "—"}</b><em>{top?.name ?? (isFa ? "دادهٔ نرخ موجود نیست" : "No rate data")}</em></button>;
-    })}</div>{selected ? <div className="device-traffic-detail">
-      <div className="device-traffic-detail__heading"><strong>{selected.name}</strong><small>{selected.vendor} · {isFa ? "جزئیات هر تجهیز" : "Device details"}</small></div>
-      <div className="device-traffic-tabs" role="tablist" aria-label={isFa ? "نوع داده" : "Traffic view"}>{([
-        ["interfaces", isFa ? "اینترفیس‌ها" : "Interfaces"], ["ports", isFa ? "پورت‌ها" : "Ports"], ["sourceIps", isFa ? "IP مبدأ" : "Source IP"], ["destinationIps", isFa ? "IP مقصد" : "Destination IP"]
-      ] as const).map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={view === key} className={view === key ? "is-active" : ""} onClick={() => setView(key)}>{label}</button>)}</div>
-      {view === "interfaces" ? <>{selected.interfaces.length ? <div className="device-traffic-interfaces">{selected.interfaces.map((iface) => <div key={iface.name}><strong dir="ltr">{iface.name}</strong><span><ArrowDown size={13} />{formatRate(iface.rxMbps, isFa)}</span><span><ArrowUp size={13} />{formatRate(iface.txMbps, isFa)}</span><b>{formatRate(iface.totalMbps, isFa)}</b>{iface.stale ? <small>{isFa ? "داده قدیمی است" : "Stale data"}</small> : null}</div>)}</div> : <p className="device-traffic-muted">{isFa ? "این تجهیز هنوز نرخ ترافیک اینترفیس گزارش نکرده است." : "This device has not reported interface rates yet."}</p>}{selected.volume.interfaceIn.length || selected.volume.interfaceOut.length ? <div className="device-traffic-flow-pair"><div><h3>{isFa ? "اینترفیس ورودی؛ بایت ثبت‌شده" : "Ingress observed bytes"}</h3><VolumeList rows={selected.volume.interfaceIn} isFa={isFa} /></div><div><h3>{isFa ? "اینترفیس خروجی؛ بایت ثبت‌شده" : "Egress observed bytes"}</h3><VolumeList rows={selected.volume.interfaceOut} isFa={isFa} /></div></div> : null}<p className="device-traffic-note"><Activity size={13} />{isFa ? "Mbps از شمارندهٔ تجهیز یا میانگین ۵ دقیقه‌ای آن است. اینترفیس‌های دارای دادهٔ قدیمی رتبه‌بندی نمی‌شوند. در NetFlow v5 شناسهٔ اینترفیس به‌صورت ifIndex نمایش داده می‌شود." : "Mbps comes from device counters or its 5-minute average. Stale interfaces are not ranked. NetFlow v5 exposes interface ifIndex."}</p></> : <>{selected.volume[view].length ? <><p className="device-traffic-section-label">{selected.volume.source === "netflow-v5" ? isFa ? "بایت ثبت‌شدهٔ NetFlow v5" : "NetFlow v5 observed bytes" : isFa ? "بایت لاگ‌های عبور مجاز" : "Allowed-flow log bytes"}</p><VolumeList rows={selected.volume[view]} isFa={isFa} /></> : <p className="device-traffic-muted">{isFa ? "حجم برای این دسته ثبت نشده؛ NetFlow v5 یا لاگ جریان بایت‌دار را فعال کنید." : "No volume recorded; enable NetFlow v5 or byte-bearing flow logs."}</p>}{selected.observed[view].length ? <details className="device-traffic-log-fallback"><summary>{isFa ? "تعداد رخدادهای لاگ" : "Log event counts"}</summary><RankList rows={selected.observed[view]} isFa={isFa} /></details> : null}<p className="device-traffic-note">{selected.volume.sampled ? isFa ? "این صادرکننده نمونه‌برداری دارد؛ بایت‌ها فقط جریان‌های مشاهده‌شده‌اند و کل ترافیک نیستند." : "This exporter samples flows; bytes cover observed flows only, not total traffic." : isFa ? "جمع بایت‌های مشاهده‌شده در ۲۴ ساعت اخیر است؛ پوشش کامل به تنظیم صادرکننده و نبود افت بسته بستگی دارد." : "24-hour observed bytes; complete coverage depends on exporter settings and no packet loss."}</p></>}
-      <DeviceNetflowSetup deviceId={selected.id} host={selected.host} isFa={isFa} />
-    </div> : null}</> : null}
-  </article>;
+
+  const ordered = [...devices].sort((a, b) => (b.interfaces[0]?.totalMbps ?? -1) - (a.interfaces[0]?.totalMbps ?? -1) || a.name.localeCompare(b.name));
+  const selected = ordered.find((device) => device.id === selectedId) ?? ordered[0];
+  const topInterface = selected?.interfaces.find((item) => item.totalMbps !== null);
+  const topPort = selected?.volume.ports[0];
+  const sourceIp = selected?.volume.sourceIps[0];
+  const destinationIp = selected?.volume.destinationIps[0];
+  const topIp = sourceIp && destinationIp ? sourceIp.bytes >= destinationIp.bytes ? sourceIp : destinationIp : sourceIp ?? destinationIp;
+  const ipDirection = topIp === sourceIp ? label(isFa, "مبدأ", "Source") : label(isFa, "مقصد", "Destination");
+  const source = selected?.volume.source;
+  const sourceName = source === "netflow-v5" || source === "netflow-v9" ? "NetFlow " + source.slice(-2)
+    : source === "allowed-flow-logs" ? label(isFa, "لاگ بایت‌دار", "Byte-bearing logs") : label(isFa, "بدون دادهٔ جریان", "No flow data");
+
+  return <section className="command-panel device-traffic-panel" aria-labelledby="device-traffic-title">
+    <header className="command-panel-heading device-traffic-header">
+      <div><span className="command-panel__icon"><Network /></span><div>
+        <h2 id="device-traffic-title">{label(isFa, "ترافیک تجهیزات", "Device traffic")}</h2>
+        <p>{label(isFa, "نرخ اینترفیس‌ها · حجم ۲۴ ساعت اخیر", "Interface rate · volume over 24 hours")}</p>
+      </div></div>
+      <button type="button" className="device-traffic-refresh" onClick={() => setRefreshKey((value) => value + 1)} aria-label={label(isFa, "به‌روزرسانی ترافیک", "Refresh traffic")}><RefreshCw size={17} /></button>
+    </header>
+    {error ? <p className="device-traffic-message is-error" role="alert">{label(isFa, "داده به‌روز نشد. دوباره تلاش کنید.", "Could not refresh. Try again.")}</p> : null}
+    {loading && !devices.length ? <p className="device-traffic-message">{label(isFa, "در حال دریافت…", "Loading…")}</p> : null}
+    {!loading && !devices.length ? <p className="device-traffic-message">{label(isFa, "تجهیزی برای نمایش وجود ندارد.", "No device available.")}</p> : null}
+    {selected ? <div className="device-traffic-content">
+      <div className="device-traffic-toolbar">
+        <label htmlFor="device-traffic-select">{label(isFa, "تجهیز", "Device")}</label>
+        <select id="device-traffic-select" value={selected.id} onChange={(event) => { setSelectedId(event.target.value); setView("interfaces"); }}>
+          {ordered.map((device) => <option key={device.id} value={device.id}>{device.name} · {device.vendor} · {device.host}</option>)}
+        </select>
+        <span className={"device-traffic-source" + (source === "none" ? " is-empty" : "")}>{sourceName}</span>
+      </div>
+      <div className="device-traffic-highlights">
+        <div><span>{label(isFa, "شلوغ‌ترین اینترفیس", "Busiest interface")}</span><strong dir="ltr">{topInterface ? rate(topInterface.totalMbps, isFa) : "—"}</strong><small dir="ltr">{topInterface?.name ?? label(isFa, "نرخ موجود نیست", "No rate")}</small></div>
+        <div><span>{label(isFa, "پورت مقصد", "Destination port")}</span><strong dir="ltr">{topPort ? bytes(topPort.bytes, isFa) : "—"}</strong><small dir="ltr">{topPort ? ":" + topPort.value : label(isFa, "حجم موجود نیست", "No volume")}</small></div>
+        <div><span>{label(isFa, "IP پرترافیک", "Top IP")}</span><strong dir="ltr">{topIp ? bytes(topIp.bytes, isFa) : "—"}</strong><small dir="ltr">{topIp ? topIp.value + " · " + ipDirection : label(isFa, "حجم موجود نیست", "No volume")}</small></div>
+      </div>
+      <details className="device-traffic-explore">
+        <summary>{label(isFa, "جزئیات ترافیک", "Explore traffic")}</summary>
+        <div className="device-traffic-tabs" role="tablist" aria-label={label(isFa, "نوع داده", "Traffic view")}>
+          {([["interfaces", label(isFa, "اینترفیس", "Interfaces")], ["ports", label(isFa, "پورت", "Ports")], ["sourceIps", label(isFa, "IP مبدأ", "Source IP")], ["destinationIps", label(isFa, "IP مقصد", "Destination IP")]] as const)
+            .map(([key, title]) => <button key={key} type="button" role="tab" aria-selected={view === key} className={view === key ? "is-active" : ""} onClick={() => setView(key)}>{title}</button>)}
+        </div>
+        {view === "interfaces" ? <>{selected.interfaces.length ? <div className="device-traffic-list">
+          {selected.interfaces.map((item) => <div className="device-traffic-interface" key={item.name}>
+            <code dir="ltr">{item.name}</code><span><ArrowDown size={14} />{rate(item.rxMbps, isFa)}</span><span><ArrowUp size={14} />{rate(item.txMbps, isFa)}</span><strong dir="ltr">{rate(item.totalMbps, isFa)}</strong>
+          </div>)}
+        </div> : <p className="device-traffic-empty">{label(isFa, "هنوز نرخ اینترفیس دریافت نشده است.", "No interface rate yet.")}</p>}
+        {selected.volume.interfaceIn.length ? <div className="device-traffic-direction"><h3>{label(isFa, "حجم ورودی", "Ingress volume")}</h3><VolumeList rows={selected.volume.interfaceIn} isFa={isFa} /></div> : null}
+        {selected.volume.interfaceOut.length ? <div className="device-traffic-direction"><h3>{label(isFa, "حجم خروجی", "Egress volume")}</h3><VolumeList rows={selected.volume.interfaceOut} isFa={isFa} /></div> : null}</>
+        : selected.volume[view].length ? <VolumeList rows={selected.volume[view]} isFa={isFa} />
+          : <p className="device-traffic-empty">{label(isFa, "حجم این دسته ثبت نشده است.", "No volume for this view.")}</p>}
+        {view !== "interfaces" && selected.observed[view].length ? <details className="device-traffic-log-fallback">
+          <summary>{label(isFa, "فقط تعداد رخدادهای لاگ", "Log event counts only")}</summary>
+          <LogList rows={selected.observed[view]} isFa={isFa} />
+        </details> : null}
+        <p className="device-traffic-note">{view === "interfaces"
+          ? label(isFa, "نرخ از شمارندهٔ تجهیز است؛ Cisco ممکن است میانگین ۵ دقیقه‌ای بدهد.", "Rates come from device counters; Cisco may provide a five-minute average.")
+          : label(isFa, "حجم فقط جریان‌های مشاهده‌شده است؛ نمونه‌برداری یا افت بسته ممکن است آن را ناقص کند.", "Observed flows only; sampling or packet loss can make volume incomplete.")}</p>
+      </details>
+      <DeviceNetflowSetup deviceId={selected.id} host={selected.host} vendor={selected.vendor} isFa={isFa} />
+    </div> : null}
+  </section>;
 }
