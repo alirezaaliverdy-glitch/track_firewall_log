@@ -1,3 +1,9 @@
+## 2026-10-12 - Simplify security overview and make action state explicit
+
+- Replaced the defense-capability map with a responsive action journey showing real ActionPlan stages, recorded command preview, confirmation handoff, and connector-backed result. Added honest stale/error/empty states.
+- Added outside-click and Escape dismissal to the account dropdown, plus close-on-language selection.
+- Frontend build and scoped local web deploy passed; security/dashboard/API health 200, anonymous Action Center 401, production Compose structure valid with placeholders. No execution, push, or production rollout.
+
 ## 2026-10-12 - Refine traffic UX and extend NetFlow coverage
 
 - Promoted device traffic to a full-width dashboard section, reduced its default view to three facts, and moved detailed interface/IP/port tables and vendor setup into accessible expandable sections. Verified desktop/mobile renders with mocked non-sensitive data.

@@ -136,6 +136,25 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
   }, [location.pathname, location.search]);
 
   useEffect(() => {
+    const closeAccountOnOutsideClick = (event: PointerEvent) => {
+      const menu = accountMenuRef.current;
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+    };
+    const closeAccountOnEscape = (event: KeyboardEvent) => {
+      const menu = accountMenuRef.current;
+      if (event.key !== "Escape" || !menu?.open) return;
+      menu.open = false;
+      menu.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", closeAccountOnOutsideClick);
+    document.addEventListener("keydown", closeAccountOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeAccountOnOutsideClick);
+      document.removeEventListener("keydown", closeAccountOnEscape);
+    };
+  }, []);
+
+  useEffect(() => {
     document.body.classList.toggle("platform-drawer-open", mobileNavOpen);
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMobileNavOpen(false);
@@ -217,7 +236,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
               <summary aria-label={isFa ? "منوی حساب" : "Account menu"}><span>{(user?.displayName || user?.username || "U").slice(0, 1).toLocaleUpperCase()}</span><strong>{user?.displayName || user?.username}</strong><ChevronDown aria-hidden="true" /></summary>
               <div className="topbar-account__menu">
                 <header><span>{(user?.displayName || user?.username || "U").slice(0, 1).toLocaleUpperCase()}</span><div><strong>{user?.displayName || user?.username}</strong><small>{user?.role === "admin" ? (isFa ? "مدیر سامانه" : "Administrator") : user?.role}</small></div></header>
-                <div className="topbar-language" aria-label={isFa ? "زبان" : "Language"}><button type="button" aria-pressed={isFa} onClick={() => void i18n.changeLanguage("fa")}>فارسی</button><button type="button" aria-pressed={!isFa} onClick={() => void i18n.changeLanguage("en")}>English</button></div>
+                <div className="topbar-language" aria-label={isFa ? "زبان" : "Language"}><button type="button" aria-pressed={isFa} onClick={() => { accountMenuRef.current?.removeAttribute("open"); void i18n.changeLanguage("fa"); }}>فارسی</button><button type="button" aria-pressed={!isFa} onClick={() => { accountMenuRef.current?.removeAttribute("open"); void i18n.changeLanguage("en"); }}>English</button></div>
                 <Link to="/settings"><Settings aria-hidden="true" />{isFa ? "حساب و تنظیمات" : "Account & settings"}</Link>
                 {isNativeAndroidApp() ? <button type="button" className="topbar-native-server" onClick={() => void clearNativeSessionToken().finally(() => { clearNativeServerUrl(); window.location.reload(); })}><Server aria-hidden="true" />{isFa ? "تغییر سرور" : "Change server"}</button> : null}
                 <button type="button" className="topbar-logout" onClick={() => void logout()}><LogOut aria-hidden="true" />{t("auth.logout")}</button>

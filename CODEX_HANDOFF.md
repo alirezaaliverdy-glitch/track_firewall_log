@@ -1,5 +1,11 @@
 # CODEX_HANDOFF.md
 
+Latest UI task (2026-10-12): security action journey and account-menu dismissal.
+
+- Replaced the six-card NIST capability map on Security Overview with a compact, responsive action journey driven by actual Action Center records. It shows the selected recent ActionPlan, recorded command preview, approval/execution stage, and a direct link to review or the result. It never calls execution from the overview or claims success without `connectorInvoked=true`; refresh failures are marked as potentially stale.
+- Account dropdown now closes on outside pointer interaction, Escape (restoring focus), route changes, and language selection while preserving inside-menu interaction.
+- Frontend Docker production build passed; local web was rebuilt healthy. Security/dashboard/API health routes return 200, anonymous Action Center remains 401, and production Compose structure validates with temporary placeholders because production secrets are not available locally. No backend, schema, vendor, production server, or push change occurred.
+
 Latest follow-up (2026-10-12): broader flow compatibility and a compact dashboard.
 
 - The dashboard traffic panel now spans the dashboard width and shows only three immediate answers per selected device: busiest interface rate, top destination port bytes, and top IP bytes. Interface, port, IP, log-count and receiver details are progressively disclosed. The receiver state distinguishes off, waiting, receiving, stopped and offline; vendor hints are short and conditional.

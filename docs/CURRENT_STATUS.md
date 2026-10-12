@@ -1,3 +1,9 @@
+## 2026-10-12 - Security action journey and shared account-menu behavior
+
+- Security Overview now uses an Action Center-backed four-stage action panel instead of the crowded NIST capability map. Preview lines and execution status come from actual persisted plans; successful execution requires recorded connector invocation. Review and result links keep the existing controlled confirmation path.
+- The account menu closes on outside click, Escape, navigation, or language selection. Escape restores keyboard focus to its trigger.
+- Frontend Docker build and local web deployment passed. All four local services are healthy; routed security/dashboard/API health return 200 and anonymous Action Center returns 401. Production Compose structure validated with non-secret placeholders. No production push or vendor execution.
+
 ## 2026-10-12 - Compact traffic dashboard and NetFlow v9
 
 - Device traffic is now a full-width, low-noise dashboard section with three primary measurements and on-demand interface/port/IP detail. The receiver form has a concise status and device-specific setup hint; no log count is presented as byte volume.

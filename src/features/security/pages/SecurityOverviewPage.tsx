@@ -1,16 +1,12 @@
-import { useMemo, type CSSProperties, type ReactNode } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
   Activity,
-  BookOpenCheck,
-  Boxes,
   ChevronLeft,
   CircleGauge,
   Crosshair,
   FileSearch2,
-  LifeBuoy,
-  LockKeyhole,
   Radar,
   RefreshCw,
   ShieldAlert,
@@ -23,6 +19,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { useSecurityOperations } from "../hooks/useSecurityOperations";
 import type { SecurityFinding } from "@/lib/platform";
 import { securityDisplayText } from "../securityPresentation";
+import { SecurityActionJourney } from "../components/SecurityActionJourney";
 
 const severityWeight: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
@@ -32,11 +29,6 @@ function findingPriority(finding: SecurityFinding) {
 
 function severityClass(severity: string) {
   return ["critical", "high", "medium", "low"].includes(severity) ? severity : "unknown";
-}
-
-function FrameworkCard({ icon, title, code, description, metric, state, to }: { icon: ReactNode; title: string; code: string; description: string; metric: string; state: "operational" | "partial" | "unmeasured"; to?: string }) {
-  const body = <><header><span>{icon}</span><div><small>{code}</small><h3>{title}</h3></div><i className={`security-framework-state security-framework-state--${state}`} /></header><p>{description}</p><footer><strong>{metric}</strong>{to ? <ChevronLeft size={16} /> : null}</footer></>;
-  return to ? <Link className={`security-framework-card security-framework-card--${state}`} to={to}>{body}</Link> : <article className={`security-framework-card security-framework-card--${state}`}>{body}</article>;
 }
 
 export default function SecurityOverviewPage() {
@@ -64,15 +56,6 @@ export default function SecurityOverviewPage() {
 
   if (loading) return <LoadingState />;
   if (error && !lastUpdatedAt) return <ErrorState message={error} onRetry={refresh} />;
-
-  const framework = [
-    { key: "govern", icon: <BookOpenCheck size={21} />, code: "GV", metric: t("security.framework.govern.metric"), state: "operational" as const, to: "/actions" },
-    { key: "identify", icon: <Boxes size={21} />, code: "ID", metric: t("security.framework.identify.metric", { count: assets.length.toLocaleString(locale) }), state: assets.length ? "operational" as const : "partial" as const, to: "/assets" },
-    { key: "protect", icon: <LockKeyhole size={21} />, code: "PR", metric: t("security.framework.protect.metric"), state: "operational" as const, to: "/actions" },
-    { key: "detect", icon: <Radar size={21} />, code: "DE", metric: t("security.framework.detect.metric", { enabled: stats.enabledRules.toLocaleString(locale), total: rules.length.toLocaleString(locale) }), state: monitorReady ? "operational" as const : "partial" as const, to: "/security/rules" },
-    { key: "respond", icon: <Siren size={21} />, code: "RS", metric: t("security.framework.respond.metric", { count: stats.openIncidents.length.toLocaleString(locale) }), state: "operational" as const, to: "/security/findings" },
-    { key: "recover", icon: <LifeBuoy size={21} />, code: "RC", metric: t("security.framework.recover.metric"), state: "unmeasured" as const },
-  ];
 
   return (
     <section className="page-stack security-operations-page">
@@ -115,11 +98,7 @@ export default function SecurityOverviewPage() {
         <article className="security-metric-card security-metric-card--amber"><span><Siren size={20} /></span><div><small>{t("security.metrics.openIncidents")}</small><strong>{stats.openIncidents.length.toLocaleString(locale)}</strong><p>{t("security.metrics.openIncidentsHelp")}</p></div></article>
       </div>
 
-      <section className="security-framework-section">
-        <header><div><span>{t("security.framework.eyebrow")}</span><h2>{t("security.framework.title")}</h2><p>{t("security.framework.description")}</p></div><div className="security-framework-legend"><span className="is-operational"><i />{t("security.framework.operational")}</span><span className="is-partial"><i />{t("security.framework.partial")}</span><span className="is-unmeasured"><i />{t("security.framework.unmeasured")}</span></div></header>
-        <div className="security-framework-grid">{framework.map((item) => <FrameworkCard key={item.key} icon={item.icon} title={t(`security.framework.${item.key}.title`)} code={item.code} description={t(`security.framework.${item.key}.description`)} metric={item.metric} state={item.state} to={item.to} />)}</div>
-        <footer><ShieldAlert size={15} />{t("security.framework.disclaimer")}</footer>
-      </section>
+      <SecurityActionJourney />
 
       <div className="security-work-grid">
         <section className="security-priority-panel">
