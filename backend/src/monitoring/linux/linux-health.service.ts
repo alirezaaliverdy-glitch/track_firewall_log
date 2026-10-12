@@ -83,14 +83,11 @@ export function metricsFromOverview(overview: ReturnType<typeof parseLinuxServer
   metrics.push({ metricKey: "ports.listening_count", value: overview.listeningPorts.length, unit: "count" });
   metrics.push({ metricKey: "firewall.enabled", value: overview.services.some((service) => ["ufw", "firewalld"].includes(service.name) && service.state === "active") ? 1 : 0, unit: "boolean" });
   metrics.push({ metricKey: "processes.count", value: overview.topProcesses.length, unit: "count" });
-  const primaryInterface = overview.network.interfaces.find((item) =>
-    item.ips.length > 0 && /^(?:en|eth|bond|wlan|wl)/i.test(item.name) && item.rxBytes !== undefined && item.txBytes !== undefined
-  ) ?? overview.network.interfaces.find((item) => item.ips.length > 0 && item.rxBytes !== undefined && item.txBytes !== undefined);
-  if (primaryInterface) {
-    const labels = { interface: primaryInterface.name };
-    metrics.push({ metricKey: "network.rx_bytes", value: primaryInterface.rxBytes!, unit: "bytes", labels });
-    metrics.push({ metricKey: "network.tx_bytes", value: primaryInterface.txBytes!, unit: "bytes", labels });
-    if (primaryInterface.errors !== undefined) metrics.push({ metricKey: "network.errors", value: primaryInterface.errors, unit: "count", labels });
+  for (const iface of overview.network.interfaces.slice(0, 20)) {
+    const labels = { interface: iface.name };
+    if (iface.rxBytes !== undefined) metrics.push({ metricKey: "network.rx_bytes", value: iface.rxBytes, unit: "bytes", labels });
+    if (iface.txBytes !== undefined) metrics.push({ metricKey: "network.tx_bytes", value: iface.txBytes, unit: "bytes", labels });
+    if (iface.errors !== undefined) metrics.push({ metricKey: "network.errors", value: iface.errors, unit: "count", labels });
   }
   return metrics;
 }

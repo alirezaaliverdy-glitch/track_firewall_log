@@ -21,10 +21,6 @@ import {
   type SecurityMonitoringStatus,
 } from "@/lib/platform";
 import {
-  getSecurityEventsSummary,
-  type EventsSummary,
-} from "@/lib/securityEvents";
-import {
   Activity,
   ArrowUpLeft,
   BellRing,
@@ -32,7 +28,6 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
-  Network,
   Server,
   ShieldAlert,
   ShieldCheck,
@@ -47,21 +42,9 @@ import "./DashboardCommandCenter.css";
 
 import { FleetHealthPanel } from "./FleetHealthPanel";
 import { DashboardActionComposer } from "./DashboardActionComposer";
+import { DeviceTrafficPanel } from "./DeviceTrafficPanel";
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
 type AttentionItem = { id: string; deviceKey: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string; observedAt: string | null; priority: number };
-
-const EMPTY_EVENT_SUMMARY: EventsSummary = {
-  totalEvents: 0,
-  storedRows: 0,
-  latestEventAt: null,
-  window: { from: null, to: null },
-  countBySeverity: [],
-  countByAction: [],
-  topSourceIps: [],
-  topDestinationPorts: [],
-  topSources: [],
-  topDevices: [],
-};
 
 const OPEN_FINDING_STATUSES = new Set(["open", "new", "investigating", "acknowledged"]);
 
@@ -156,41 +139,6 @@ function vendorName(asset: PlatformAsset) {
   return asset.vendor?.name || asset.platform?.name || asset.device?.type || "Unknown";
 }
 
-const PORT_SERVICES: Record<string, string> = {
-  "20": "FTP data",
-  "21": "FTP",
-  "22": "SSH",
-  "25": "SMTP",
-  "53": "DNS",
-  "67": "DHCP",
-  "68": "DHCP",
-  "80": "HTTP",
-  "110": "POP3",
-  "123": "NTP",
-  "143": "IMAP",
-  "161": "SNMP",
-  "389": "LDAP",
-  "443": "HTTPS",
-  "445": "SMB",
-  "514": "Syslog",
-  "636": "LDAPS",
-  "993": "IMAPS",
-  "995": "POP3S",
-  "1433": "MSSQL",
-  "1521": "Oracle",
-  "3306": "MySQL",
-  "3389": "RDP",
-  "5432": "PostgreSQL",
-  "6379": "Redis",
-  "8080": "HTTP Alt",
-  "8443": "HTTPS Alt",
-  "22022": "SSH Alt",
-};
-
-function portService(port: string, isFa: boolean) {
-  return PORT_SERVICES[port] ?? copy(isFa, "سرویس سفارشی", "Custom service");
-}
-
 function buildFindingTrend(findings: SecurityFinding[], isFa: boolean) {
   const now = Date.now();
   const bucketMs = 4 * 60 * 60 * 1000;
@@ -225,7 +173,6 @@ export default function DashboardPage() {
   const [linux, setLinux] = useState<LinuxSummary | null>(null);
   const [activity, setActivity] = useState<OperationalDashboardActivity | null>(null);
   const [monitoring, setMonitoring] = useState<SecurityMonitoringStatus | null>(null);
-  const [eventSummary, setEventSummary] = useState<EventsSummary>(EMPTY_EVENT_SUMMARY);
   const [activityError, setActivityError] = useState(false);
   const [, setLinuxError] = useState(false);
 
@@ -235,13 +182,11 @@ export default function DashboardPage() {
   }, []);
 
   const loadOperationalData = useCallback(async () => {
-    const from = new Date(Date.now() - 86_400_000).toISOString();
-    const [activityResult, monitoringResult, summaryResult] = await Promise.allSettled([
-      getOperationalDashboardActivity(), getSecurityMonitoringStatus(), getSecurityEventsSummary({ from }),
+    const [activityResult, monitoringResult] = await Promise.allSettled([
+      getOperationalDashboardActivity(), getSecurityMonitoringStatus(),
     ]);
     if (activityResult.status === "fulfilled") { setActivity(activityResult.value); setActivityError(false); } else setActivityError(true);
     if (monitoringResult.status === "fulfilled") setMonitoring(monitoringResult.value);
-    if (summaryResult.status === "fulfilled") setEventSummary(summaryResult.value);
   }, []);
 
   useEffect(() => {
@@ -402,8 +347,6 @@ export default function DashboardPage() {
   ];
   const dailyHealthy = dailyChecks.every((item) => item.ok) && criticalFindings === 0;
 
-  const maxPortCount = Math.max(1, ...eventSummary.topDestinationPorts.map((item) => item.count));
-  const observedPortEvents = eventSummary.topDestinationPorts.reduce((sum, item) => sum + item.count, 0);
 
   if ((assets.loading || findings.loading) && !activity) return <LoadingState label={copy(isFa, "در حال آماده‌سازی مرکز فرمان...", "Preparing command center...")} />;
   if (assets.error) return <ErrorState title={copy(isFa, "داشبورد در دسترس نیست", "Dashboard unavailable")} message={copy(isFa, "دریافت اطلاعات تجهیزات ناموفق بود.", "Could not load equipment data.")} onRetry={assets.refresh} />;
@@ -460,19 +403,7 @@ export default function DashboardPage() {
         </article>
 
         <div className="command-side-stack">
-          <article className="command-panel top-traffic-panel">
-            <header className="command-panel-heading"><div><span className="command-panel__icon"><Network /></span><div><h2>{copy(isFa, "پورت‌های پرترافیک واقعی", "Live high-traffic ports")}</h2><p>{copy(isFa, "بر پایه رخدادهای جمع‌آوری‌شده در ۲۴ ساعت اخیر", "Based on collected events from the last 24 hours")}</p></div></div><Link to="/monitoring">{copy(isFa, "رخدادها", "Events")}<ArrowUpLeft size={14} /></Link></header>
-            {eventSummary.topDestinationPorts.length ? <ul>{eventSummary.topDestinationPorts.slice(0, 5).map((item, index) => {
-              const share = observedPortEvents ? Math.round((item.count / observedPortEvents) * 100) : 0;
-              return <li key={item.value}>
-                <span className="top-traffic-panel__rank">{number(index + 1, language)}</span>
-                <span className="top-traffic-panel__identity"><b dir="ltr">:{item.value}</b><small>{portService(item.value, isFa)}</small></span>
-                <span className="top-traffic-panel__meter"><i><b style={{ width: `${Math.max(5, (item.count / maxPortCount) * 100)}%` }} /></i><small>{number(share, language)}%</small></span>
-                <strong>{number(item.count, language)}<small>{copy(isFa, "رخداد", "events")}</small></strong>
-              </li>;
-            })}</ul> : <div className="command-empty command-empty--compact"><Activity /><p>{copy(isFa, "در ۲۴ ساعت اخیر رخداد دارای پورت ثبت نشده است.", "No port-bearing event was recorded in the last 24 hours.")}</p></div>}
-            <footer><span><i />{copy(isFa, "داده واقعی Collector", "Live collector data")}</span><span>{copy(isFa, "آخرین رخداد", "Latest")}: <b>{relativeDate(eventSummary.latestEventAt, language, "—")}</b></span><span>{copy(isFa, "کل رخدادها", "Total")}: <b>{number(eventSummary.totalEvents, language)}</b></span></footer>
-          </article>
+          <DeviceTrafficPanel isFa={isFa} />
 
           <article className="command-panel latest-findings-panel">
             <header className="command-panel-heading"><div><span className="command-panel__icon"><ShieldAlert /></span><div><h2>{copy(isFa, "آخرین یافته‌ها", "Latest findings")}</h2><p>{copy(isFa, "نیازمند بررسی امنیتی", "Awaiting security review")}</p></div></div><Link to="/security/findings">{copy(isFa, "مشاهده همه", "View all")}<ArrowUpLeft size={14} /></Link></header>

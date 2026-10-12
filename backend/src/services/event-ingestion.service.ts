@@ -25,6 +25,8 @@ export type NormalizedCollectedEvent = {
   ruleName?: string;
   interfaceIn?: string;
   interfaceOut?: string;
+  bytesSent?: number;
+  bytesReceived?: number;
   message: string;
   rawSnippet: string;
   evidenceJson: Record<string, unknown>;
@@ -89,6 +91,12 @@ function parseFortiGateFields(raw: string) {
 function validPort(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : undefined;
+}
+
+function validBytes(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function fortiSeverity(level: string | undefined): NormalizedCollectedEvent["severity"] {
@@ -181,6 +189,8 @@ function normalizeFortiGateLine(deviceId: string, line: CollectedLogLine): Norma
     ruleName: fields.attack ?? fields.logdesc ?? fields.policyname,
     interfaceIn: fields.srcintf,
     interfaceOut: fields.dstintf,
+    bytesSent: validBytes(fields.sentbyte),
+    bytesReceived: validBytes(fields.rcvdbyte),
     message: fields.msg ?? fields.logdesc ?? raw,
     rawSnippet: snippet(raw),
     evidenceJson: {
@@ -363,7 +373,7 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
     if (existing) {
       const storedNormalized = existing.normalizedJson && typeof existing.normalizedJson === "object" && !Array.isArray(existing.normalizedJson) ? existing.normalizedJson as Record<string, unknown> : {};
       const storedEvidence = storedNormalized.evidenceJson && typeof storedNormalized.evidenceJson === "object" && !Array.isArray(storedNormalized.evidenceJson) ? storedNormalized.evidenceJson as Record<string, unknown> : {};
-      const requiresFortiUpgrade = event.vendor === "fortigate" && (storedEvidence.parser !== "fortios-kv-v1" || existing.eventType !== event.eventType || existing.action !== event.action);
+      const requiresFortiUpgrade = event.vendor === "fortigate" && (storedEvidence.parser !== "fortios-kv-v1" || existing.eventType !== event.eventType || existing.action !== event.action || (event.bytesSent !== undefined && event.bytesReceived !== undefined && (storedNormalized.bytesSent === undefined || storedNormalized.bytesReceived === undefined)));
       if (requiresFortiUpgrade) {
         await prisma.securityEvent.update({
           where: { id: existing.id },

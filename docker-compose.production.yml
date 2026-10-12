@@ -43,6 +43,7 @@ services:
       NODE_ENV: production
       APP_PROFILE: production
       PORT: 4000
+      NETFLOW_BIND_IP: ${NETFLOW_BIND_IP:-127.0.0.1}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in production environment}
       CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in production environment}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
@@ -89,6 +90,8 @@ services:
       AUTH_SESSION_TTL_HOURS: ${AUTH_SESSION_TTL_HOURS:-12}
     expose:
       - "4000"
+    ports:
+      - "${NETFLOW_BIND_IP:-127.0.0.1}:2055:2055/udp"
     volumes:
       - firewall_production_uploads:/app/storage/uploads
     labels:

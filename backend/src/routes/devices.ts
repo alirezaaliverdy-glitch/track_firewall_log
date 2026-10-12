@@ -10,8 +10,37 @@ import {
 } from "../services/device.service.js";
 import { getDeviceVendorCapabilities } from "../vendors/capability-discovery.service.js";
 import { configureEsxiSecondaryChannel, configureSnmpv3Channel } from "../services/device-connection-channel.service.js";
+import { prisma } from "../db/prisma.js";
+import type { Prisma } from "@prisma/client";
+import { netflowDeviceStatus, netflowExporterSettings, netflowReceiverStatus, refreshNetflowExporters, validExporterIp } from "../services/netflow-v5.service.js";
 
 export const deviceRoutes: FastifyPluginAsync = async (app) => {
+  app.get<{ Params: { id: string } }>("/api/devices/:id/netflow", async (request, reply) => {
+    const device = await getDeviceById(request.params.id, request.authUser?.scopeOwnerId);
+    if (!device) return reply.code(404).send({ error: "Device not found" });
+    const latest = await prisma.metricSample.findFirst({ where: { deviceId: device.id, source: "netflow-v5", metricKey: "flow.bytes" }, orderBy: { timestamp: "desc" }, select: { timestamp: true } });
+    const receiver = netflowReceiverStatus();
+    return { ...netflowExporterSettings(device.capabilities), lastSeenAt: latest?.timestamp ?? null, receiver: { listening: receiver.listening, port: receiver.port, hostBind: receiver.hostBind, lastError: receiver.lastError }, packets: netflowDeviceStatus(device.id) };
+  });
+
+  app.put<{ Params: { id: string }; Body: { enabled?: unknown; exporterIp?: unknown } }>("/api/devices/:id/netflow", async (request, reply) => {
+    if (request.authUser?.role !== "admin") return reply.code(403).send({ error: "ADMIN_REQUIRED" });
+    const ownerId = request.authUser.scopeOwnerId ?? request.authUser.id;
+    const device = await getDeviceById(request.params.id, ownerId);
+    if (!device) return reply.code(404).send({ error: "Device not found" });
+    const enabled = request.body?.enabled === true;
+    const exporterIp = request.body?.exporterIp;
+    if (typeof request.body?.enabled !== "boolean" || !validExporterIp(exporterIp)) return reply.code(400).send({ error: "VALID_IPV4_EXPORTER_REQUIRED" });
+    const competitors = await prisma.device.findMany({ where: { id: { not: device.id }, deletedAt: null, company: { deletedAt: null } }, select: { capabilities: true } });
+    if (enabled && competitors.some((candidate) => { const config = netflowExporterSettings(candidate.capabilities); return config.enabled && config.exporterIp === exporterIp; })) return reply.code(409).send({ error: "EXPORTER_IP_ALREADY_ASSIGNED" });
+    const capabilities = device.capabilities && typeof device.capabilities === "object" && !Array.isArray(device.capabilities) ? device.capabilities as Record<string, unknown> : {};
+    await prisma.$transaction(async (tx) => {
+      await tx.device.update({ where: { id: device.id }, data: { capabilities: { ...capabilities, netflowV5: { enabled, exporterIp } } as Prisma.InputJsonValue } });
+      await tx.auditLog.create({ data: { deviceId: device.id, action: "device.netflow_configured", targetType: "device", targetId: device.id, dryRun: false, approvalStatus: "not_required", metadata: { enabled, exporterIp, actorId: request.authUser!.id } } });
+    });
+    await refreshNetflowExporters();
+    return { enabled, exporterIp, receiver: netflowReceiverStatus() };
+  });
   app.get<{ Querystring: { companyId?: string } }>("/api/devices", async (request, reply) => {
     try {
       return {

@@ -1,5 +1,12 @@
 # CODEX_HANDOFF.md
 
+Latest task (2026-10-12): per-device traffic and NetFlow v5 receiver.
+
+- Replaced the misleading cross-device “real high-traffic ports” event chart with a per-device dashboard panel. It ranks fresh interface throughput from device counters/Cisco five-minute averages and separates measured IP/port/interface bytes from log event counts. Linux polling now stores counters for up to 20 interfaces.
+- Added a per-device, admin-configured NetFlow v5 UDP/2055 receiver. It accepts only registered exporter source IPs, rejects unsupported/malformed versions, deduplicates packets, bounds ingestion, batches minute rollups in `MetricSample`, prunes only NetFlow rollups after seven days, and keeps flow telemetry out of attack detection. Docker publishes UDP on loopback by default; remote export requires an explicit host bind and exporter-only firewall access.
+- FortiGate collector normalization now preserves explicit `sentbyte`/`rcvdbyte` values. The dashboard prefers NetFlow when present, otherwise allowed byte-bearing flow logs; it does not add both sources or substitute event counts for bytes. Sampled/lost data is labeled as incomplete. See `docs/NETFLOW_V5_SETUP.md`.
+- Backend/frontend production-style builds passed. Thirteen focused tests passed (interface rates, malformed/sampled NetFlow parsing, FortiGate normalization). Both aggregation queries passed PostgreSQL `EXPLAIN` and an owned-device read-only runtime query completed for five local devices. Development/production Compose validated; local API/web rebuilt healthy. Dashboard/API health return 200, unauthenticated traffic endpoint 401, and UDP/2055 is listening inside the API but host-bound only to 127.0.0.1. UTF-8 and locale checks passed. No local exporter was configured, so no actual per-IP/port volume is reported yet. No push or live vendor configuration was performed.
+
 ## 2026-10-12 - Evidence correlation and decision/action card
 
 - Finding detail now presents a compact Persian-first decision card: why the finding matters, matching/retrievable log coverage, related devices, later successful logins, trusted/application-owned source cautions, and one clear next step. The card refreshes while visible and has a mobile layout and an explicit error/retry state. Dashboard attention items now open this decision instead of attempting an unsupported plan directly.

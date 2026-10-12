@@ -5,6 +5,7 @@ import { startFleetHealthMonitor, stopFleetHealthMonitor } from "./services/flee
 import { startSecurityMonitor, stopSecurityMonitor } from "./services/security-monitor.service.js";
 import { startScheduledTaskWorker, stopScheduledTaskWorker } from "./services/scheduled-task-worker.service.js";
 import { startDeviceConnectivitySensor, stopDeviceConnectivitySensor } from "./services/device-connectivity-sensor.service.js";
+import { startNetflowV5Collector, stopNetflowV5Collector } from "./services/netflow-v5.service.js";
 
 let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -15,6 +16,7 @@ async function shutdown(signal: NodeJS.Signals) {
     await stopFleetHealthMonitor();
     await stopDeviceConnectivitySensor();
     await stopScheduledTaskWorker();
+    await stopNetflowV5Collector();
     await app?.close();
     await shutdownDatabase();
     process.exit(0);
@@ -34,6 +36,7 @@ try {
   startFleetHealthMonitor();
   startDeviceConnectivitySensor(app.log);
   await startScheduledTaskWorker(app.log);
+  await startNetflowV5Collector(app.log).catch((error) => app?.log.warn({ code: "NETFLOW_RECEIVER_START_FAILED", reason: error instanceof Error ? error.name : "unknown" }, "NetFlow receiver unavailable"));
 } catch (error) {
   const message = error instanceof Error ? error.message : "Backend startup failed.";
   console.error(message);

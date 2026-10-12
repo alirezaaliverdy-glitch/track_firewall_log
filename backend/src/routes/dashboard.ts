@@ -1,8 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { getOperationalDashboardActivity } from "../services/dashboard-activity.service.js";
 import { listFleetHealth } from "../services/fleet-health.service.js";
+import { listDeviceTrafficOverview } from "../services/device-traffic-overview.service.js";
 
 export async function dashboardRoutes(app: FastifyInstance) {
+  app.get("/api/dashboard/traffic", async (request, reply) => {
+    if (!request.authUser) return reply.code(401).send({ error: "AUTH_REQUIRED" });
+    return listDeviceTrafficOverview(request.authUser.scopeOwnerId ?? request.authUser.id);
+  });
   app.get<{Querystring:{page?:string}}>("/api/dashboard/device-health", async (request,reply) => {
     if (!request.authUser) return reply.code(401).send({error:"AUTH_REQUIRED"});
     const page = Number(request.query.page ?? 0);

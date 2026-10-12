@@ -1,3 +1,9 @@
+## 2026-10-12 - Per-device measured traffic
+
+- Dashboard traffic is now device-specific. Interface Mbps is computed from fresh counters; IP/port bytes come from configured NetFlow v5 or allowed logs with explicit byte fields. Log counts remain visibly separate.
+- NetFlow v5 receiver and per-device configuration are implemented with a loopback-only Docker host bind by default. Remote devices need exporter v5/UDP2055 pointed at the server's direct IP and a restricted host bind. Setup: `docs/NETFLOW_V5_SETUP.md`.
+- API/web builds, 13 focused backend tests, PostgreSQL query validation, development/production Compose validation, UTF-8/localization tests and local route/container health checks passed. The local receiver is listening on UDP/2055, published only on loopback. Five scoped local devices currently have no flow-volume source; exporter configuration remains an operator step. No server push or vendor action occurred.
+
 ## 2026-10-12 - Evidence correlation and decision card
 
 - Finding detail now has a Persian-first, responsive evidence decision card with concise supporting facts, raw-log access and a single review action only when warranted. Dashboard attention items open that decision instead of directly trying unsupported plans. The card updates while visible and reports/retries API failures.

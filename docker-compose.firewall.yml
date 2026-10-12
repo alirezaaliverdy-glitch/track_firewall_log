@@ -62,6 +62,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       APP_PROFILE: ${APP_PROFILE:-lab}
       PORT: 4000
+      NETFLOW_BIND_IP: ${NETFLOW_BIND_IP:-127.0.0.1}
       # Keep the container database address isolated from a developer .env that points at localhost.
       # Production operators can still override the internal DSN explicitly with DOCKER_DATABASE_URL.
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://firewall_app@firewall-db:5432/firewall_log_analyzer}
@@ -111,6 +112,8 @@ services:
       AUTH_MAX_ACTIVE_SESSIONS: ${AUTH_MAX_ACTIVE_SESSIONS:-10}
     expose:
       - "4000"
+    ports:
+      - "${NETFLOW_BIND_IP:-127.0.0.1}:2055:2055/udp"
     volumes:
       - firewall_uploads:/app/storage/uploads
       - firewall_bootstrap:/app/storage/bootstrap

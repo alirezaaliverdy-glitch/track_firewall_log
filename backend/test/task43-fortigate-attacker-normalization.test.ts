@@ -55,6 +55,19 @@ test("FortiOS plain denies remain medium telemetry until the burst threshold is 
   assert.equal(eventMatchesVendorRule("fortigate.denied-source-burst", event as never), true);
 });
 
+test("FortiOS allowed flow preserves actual directional byte counters", () => {
+  const event = normalizeCollectedLine("forti-4", {
+    sourceType: "fortigate_log",
+    command: "execute log display",
+    raw: 'type="traffic" subtype="forward" action="accept" srcip=192.0.2.10 dstip=198.51.100.5 dstport=443 srcintf="lan" dstintf="wan1" sentbyte=2048 rcvdbyte=4096'
+  }, "fortigate");
+  assert.equal(event.action, "accept");
+  assert.equal(event.bytesSent, 2048);
+  assert.equal(event.bytesReceived, 4096);
+  assert.equal(event.interfaceIn, "lan");
+  assert.equal(event.interfaceOut, "wan1");
+});
+
 test("FortiOS threat families are normalized without losing the firewall outcome", () => {
   const samples = [
     {

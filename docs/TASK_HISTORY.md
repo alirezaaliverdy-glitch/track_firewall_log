@@ -1,3 +1,9 @@
+## 2026-10-12 - Device traffic visibility and NetFlow intake
+
+- Implemented a per-device traffic explorer in the dashboard, including separately labeled measured interface rates, IP/port/interface byte volume and log event counts.
+- Added opt-in NetFlow v5 packet ingestion and per-device admin settings, with exact exporter-IP matching, batching, sampling disclosure, seven-day rollup retention and no automatic security finding creation. Preserved the existing execution pipeline.
+- Verified 13 focused backend tests, read-only aggregation against the local schema and an owned-device workspace, API/web production builds, both Compose configurations, UTF-8/i18n, local container health and UDP/2055 bind. Local dashboard/API readiness are 200; traffic API correctly denies anonymous requests. No exporter configuration, production push or vendor change.
+
 ## 2026-10-12 - Evidence correlation and decision/action card
 
 - Added a workspace-scoped finding decision endpoint and a responsive Persian-first decision card with evidence coverage, correlated context, a clear investigation/review split and raw-log navigation. Dashboard finding items now route through that card.
