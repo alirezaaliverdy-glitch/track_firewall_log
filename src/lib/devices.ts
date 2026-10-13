@@ -15,6 +15,7 @@ export type DeviceStatus = "unknown" | "online" | "offline" | "error";
 
 export type Device = {
   id: string;
+  vpnConnectionId?: string | null;
   companyId: string | null;
   company?: { id: string; name: string; code: string } | null;
   name: string;
@@ -48,6 +49,7 @@ export type Device = {
 };
 
 export type DeviceInput = {
+  vpnConnectionId?: string | null;
   companyId?: string;
   name: string;
   vendor: string;
@@ -233,6 +235,7 @@ export function normalizeDevice(value: unknown): Device {
   const source = normalizeObject(value);
   return {
     id: String(source.id ?? ""),
+    vpnConnectionId: typeof source.vpnConnectionId === "string" ? source.vpnConnectionId : null,
     companyId: typeof source.companyId === "string" ? source.companyId : null,
     company: source.company ? normalizeObject(source.company) as Device["company"] : null,
     name: String(source.name ?? "Unnamed device"),

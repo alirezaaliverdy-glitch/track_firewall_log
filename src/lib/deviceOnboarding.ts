@@ -1,6 +1,7 @@
 import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type OnboardingDraft = {
+  vpnConnectionId?: string;
   companyId: string;
   vendor: "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
   platform: string;

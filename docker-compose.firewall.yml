@@ -118,6 +118,7 @@ services:
       - firewall_uploads:/app/storage/uploads
       - firewall_bootstrap:/app/storage/bootstrap
       - firewall_telemetry:/app/storage/telemetry
+      - firewall_vpn_control:/run/firewall-vpn
     labels:
       org.opencontainers.image.revision: ${DEPLOY_VERSION:-local-dev}
       org.opencontainers.image.environment: ${APP_PROFILE:-lab}
@@ -128,6 +129,29 @@ services:
       retries: 5
       start_period: 20s
     restart: unless-stopped
+
+  firewall-vpn:
+    image: ${BACKEND_IMAGE:-firewall-log-analyzer-api:local}
+    container_name: firewall-vpn
+    user: "0:0"
+    entrypoint: ["node", "dist/vpn/vpn-agent.js"]
+    network_mode: "service:firewall-api"
+    depends_on:
+      firewall-api:
+        condition: service_healthy
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/ppp:/dev/ppp"]
+    volumes:
+      - firewall_vpn_control:/run/firewall-vpn
+    tmpfs:
+      - /run/vpn-state:mode=0700
+    healthcheck:
+      test: ["CMD", "node", "dist/vpn/vpn-health.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    stop_grace_period: 20s
 
   firewall-db:
     image: postgres:16-alpine
@@ -154,3 +178,4 @@ volumes:
   firewall_uploads:
   firewall_bootstrap:
   firewall_telemetry:
+  firewall_vpn_control:

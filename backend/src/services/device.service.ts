@@ -11,6 +11,7 @@ import { syncDeviceRecordToAsset } from "../assets/asset-intelligence.service.js
 import { prisma } from "../db/prisma.js";
 import { recordAndTestDeviceConnectionChannels, syncDefaultDeviceConnectionChannels } from "./device-connection-channel.service.js";
 import { recordVendorMetricSamples } from "./vendor-metric-samples.service.js";
+import { assertVpnTarget } from "../vpn/vpn.service.js";
 
 const DEVICE_TYPES = new Set<string>(Object.values(DeviceType));
 const DEVICE_PROTOCOLS = new Set<string>(Object.values(DeviceProtocol));
@@ -59,6 +60,7 @@ const SENSITIVE_INPUT_KEYS = new Set([
 ]);
 
 type DeviceInput = {
+  vpnConnectionId?: unknown;
   companyId?: unknown;
   name?: unknown;
   vendor?: unknown;
@@ -191,6 +193,7 @@ async function assertOwnedCompany(companyId: string | null, ownerId?: string) {
 function toDeviceResponse(device: NonNullable<Awaited<ReturnType<typeof getDeviceById>>>) {
   return {
     id: device.id,
+    vpnConnectionId: device.vpnConnectionId,
     companyId: device.companyId,
     company: device.company,
     name: device.name,
@@ -263,11 +266,14 @@ export async function listDevices(ownerId?: string, companyId?: string) {
       company: { select: { id: true, name: true, code: true } }
     }
   });
-  return devices.filter((device) => !isInventoryArchived(device.capabilities)).map(toDeviceResponse);
+  const visible = devices.filter((device) => !isInventoryArchived(device.capabilities));
+  const bindings = await prisma.vpnDeviceBinding.findMany({ where: { deviceId: { in: visible.map(device => device.id) } }, select: { deviceId: true, vpnConnectionId: true } });
+  const byDevice = new Map(bindings.map(binding => [binding.deviceId, binding.vpnConnectionId]));
+  return visible.map(device => toDeviceResponse({ ...device, vpnConnectionId: byDevice.get(device.id) ?? null }));
 }
 
 export async function getDeviceById(id: string, ownerId?: string) {
-  return prisma.device.findFirst({
+  const device = await prisma.device.findFirst({
     where: { id, deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) },
     include: {
       statusChecks: {
@@ -280,11 +286,15 @@ export async function getDeviceById(id: string, ownerId?: string) {
       company: { select: { id: true, name: true, code: true } }
     }
   });
+  if (!device) return null;
+  const binding = await prisma.vpnDeviceBinding.findUnique({ where: { deviceId: device.id }, select: { vpnConnectionId: true } });
+  return { ...device, vpnConnectionId: binding?.vpnConnectionId ?? null };
 }
 
 export async function createDevice(rawInput: Record<string, unknown>, ownerId?: string) {
   assertNoPlaintextSecrets(rawInput);
   const input = normalizeCreateInput(rawInput);
+  const vpnConnectionId = await assertVpnTarget(rawInput.vpnConnectionId, input.host, ownerId);
   const { credentialId, companyId: requestedCompanyId, ...deviceInput } = input;
   let companyId = requestedCompanyId;
   if (ownerId && !companyId) {
@@ -340,6 +350,7 @@ export async function createDevice(rawInput: Record<string, unknown>, ownerId?: 
     });
     await syncDeviceRecordToAsset(tx, created);
     await syncDefaultDeviceConnectionChannels(tx, created);
+    if (vpnConnectionId) await tx.vpnDeviceBinding.create({ data: { deviceId: created.id, vpnConnectionId } });
     return created;
   });
 
@@ -350,7 +361,7 @@ export async function createDevice(rawInput: Record<string, unknown>, ownerId?: 
     metadata: { name: device.name, host: device.host, protocol: device.protocol }
   });
 
-  return toDeviceResponse(device);
+  return toDeviceResponse({ ...device, vpnConnectionId });
 }
 
 export async function updateDevice(id: string, rawInput: Record<string, unknown>, ownerId?: string) {
@@ -358,6 +369,10 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
   const input = normalizePatchInput(rawInput);
   const current = await getDeviceById(id, ownerId);
   if (!current) throw new Error("Record to update not found");
+  let vpnConnectionId = current.vpnConnectionId;
+  if (rawInput.vpnConnectionId !== undefined || rawInput.host !== undefined && current.vpnConnectionId) {
+    vpnConnectionId = await assertVpnTarget(rawInput.vpnConnectionId === undefined ? current.vpnConnectionId : rawInput.vpnConnectionId, rawInput.host === undefined ? current.host : String(rawInput.host), ownerId);
+  }
   const companyId = rawInput.companyId === undefined ? current.companyId : asOptionalId(rawInput.companyId, "companyId");
   await assertOwnedCompany(companyId, ownerId);
   if (rawInput.companyId !== undefined) input.company = companyId ? { connect: { id: companyId } } : { disconnect: true };
@@ -374,6 +389,8 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
     });
     await syncDeviceRecordToAsset(tx, updated);
     await syncDefaultDeviceConnectionChannels(tx, updated);
+    if (vpnConnectionId) await tx.vpnDeviceBinding.upsert({ where: { deviceId: id }, update: { vpnConnectionId }, create: { deviceId: id, vpnConnectionId } });
+    else await tx.vpnDeviceBinding.deleteMany({ where: { deviceId: id } });
     return updated;
   });
 
@@ -384,7 +401,7 @@ export async function updateDevice(id: string, rawInput: Record<string, unknown>
     metadata: { fields: Object.keys(rawInput) }
   });
 
-  return toDeviceResponse(device);
+  return toDeviceResponse({ ...device, vpnConnectionId: (await prisma.vpnDeviceBinding.findUnique({ where: { deviceId: id } }))?.vpnConnectionId ?? null });
 }
 
 export async function deleteDevice(id: string, ownerId?: string) {
@@ -427,6 +444,7 @@ export async function deleteDevice(id: string, ownerId?: string) {
         where: { deviceId: id, status: { notIn: ["completed", "cancelled"] } },
         data: { status: "cancelled", step: "removed", expiresAt: removedAt }
       });
+      await tx.vpnDeviceBinding.deleteMany({ where: { deviceId: id } });
 
       await tx.auditLog.create({
         data: {
@@ -478,6 +496,8 @@ function tcpCheck(host: string, port: number, timeoutMs = 2500) {
 export async function testDeviceConnection(id: string, ownerId?: string) {
   const device = await prisma.device.findFirst({ where: { id, deletedAt: null, ...(ownerId ? { company: { ownerId, deletedAt: null } } : {}) } });
   if (!device) return null;
+  const binding = await prisma.vpnDeviceBinding.findUnique({ where: { deviceId: id } });
+  if (binding) await assertVpnTarget(binding.vpnConnectionId, device.host, ownerId, true);
 
   const connector = selectDeviceConnector(device);
   if (connector) {

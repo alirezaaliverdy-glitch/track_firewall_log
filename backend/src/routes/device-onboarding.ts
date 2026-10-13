@@ -18,8 +18,10 @@ import {
   OnboardingCommitNotReadyError
 } from "../services/device-onboarding.service.js";
 import { CiscoConnectorError } from "../connectors/cisco/ios-xe/cisco-iosxe.ssh.connector.js";
+import { VpnError } from "../vpn/vpn-validation.js";
 
 function statusCode(error: unknown) {
+  if (error instanceof VpnError) return error.statusCode;
   if (error instanceof CiscoConnectorError) return error.statusCode;
   const message = error instanceof Error ? error.message : "Onboarding failed.";
   return /not found|expired/i.test(message) ? 404

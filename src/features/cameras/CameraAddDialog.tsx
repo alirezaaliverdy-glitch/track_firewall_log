@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import { Check, LoaderCircle, Radar, Server, Video } from "lucide-react";
 import { cameraErrorMessage, createCamera, discoverCameras, type CameraCandidate, type CameraDevice, type CameraDiscovery, type CameraInput } from "@/lib/cameras";
 import { CameraDialog } from "./CameraDialog";
+import { VpnAccessField } from "@/features/vpn/VpnAccessField";
 
-const defaultInput: CameraInput = { host: "", name: "", location: "", kind: "camera", connectionMode: "onvif", onvifPort: 80, onvifPath: "/onvif/device_service", username: "", password: "", rtspUrl: "" };
+const defaultInput: CameraInput = { host: "", name: "", location: "", kind: "camera", connectionMode: "onvif", onvifPort: 80, onvifPath: "/onvif/device_service", username: "", password: "", rtspUrl: "", vpnConnectionId: "" };
 export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onClose: () => void; onSaved: (devices: CameraDevice[]) => void }) {
   const [tab, setTab] = useState<"discover" | "manual">("discover"), [cidr, setCidr] = useState("192.168.18.0/24");
   const [input, setInput] = useState(defaultInput), [result, setResult] = useState<CameraDiscovery | null>(null);
@@ -16,7 +17,7 @@ export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onC
   const available = result?.candidates.filter((candidate) => !candidate.registered) ?? [];
   const scan = async () => {
     setScanning(true); setError(""); setMessage(""); setResult(null); setSelected([]);
-    try { setResult(await discoverCameras(cidr, ports.split(",").map((port) => Number(port.trim())))); }
+    try { setResult(await discoverCameras(cidr, ports.split(",").map((port) => Number(port.trim())), input.vpnConnectionId)); }
     catch (failure) { setError(cameraErrorMessage(failure, isFa)); }
     finally { setScanning(false); }
   };
@@ -51,6 +52,7 @@ export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onC
       <button type="button" role="tab" aria-selected={tab === "manual"} disabled={saving || scanning} onClick={() => setTab("manual")}><Video size={17} />{copy("افزودن دستی", "Manual setup")}</button>
     </div>
     <form onSubmit={(event) => void save(event)} className="camera-form">
+      <VpnAccessField value={input.vpnConnectionId ?? ""} onChange={id => { change("vpnConnectionId", id); setResult(null); setSelected([]); }} host={tab === "manual" ? input.host : undefined} isFa={isFa} />
       {tab === "discover" ? <>
         <div className="camera-discover-row"><label>{copy("شبکه", "Network")}<input dir="ltr" value={cidr} onChange={(event) => setCidr(event.target.value)} disabled={scanning || saving} placeholder="192.168.18.0/24" /></label><button type="button" className="camera-button camera-button--primary" disabled={scanning || saving} onClick={() => void scan()}>{scanning ? <LoaderCircle className="camera-spin" size={18} /> : <Radar size={18} />}{copy(scanning ? "در حال جست‌وجو" : "جست‌وجو", scanning ? "Searching" : "Search")}</button></div>
         <p className="camera-hint">{copy("جست‌وجو از سرور برنامه انجام می‌شود؛ سرور باید به شبکهٔ دوربین‌ها دسترسی داشته باشد.", "Discovery runs from the app server, which needs a route to the camera network.")}</p>

@@ -1,3 +1,10 @@
+## 2026-10-13 - Application VPN and asset access routes
+
+- Network Lab > VPN supports encrypted named WireGuard and L2TP/IPsec PSK profiles, administrator confirmation, audited helper invocation and actual connection state. Private IPv4 split routes preserve default routing and DNS; single-peer file import clears public/default ranges and retains MTU. Thirty-two profiles per workspace/four simultaneous tunnels are supported; only one L2TP, with non-overlapping destinations and distinct tunnel addresses.
+- Device registration/edit and camera discovery/manual/edit expose Direct network or a named VPN. Selection persists in VpnDeviceBinding/CameraDevice; owner/range/runtime route checks prevent unrelated VPN assignment and camera access through an inactive/wrong tunnel. Profile changes cannot orphan bound destinations, and connection routes cannot divert differently-bound assets.
+- Seventeen focused VPN/camera/onboarding tests passed; actual simultaneous two-tunnel WireGuard/TCP/default-route/DNS verification passed. Eight desktop/mobile captures and supplied-file import/MTU checks passed. Local API/web/helper are rebuilt healthy; additive migrations applied. Production/root Compose plus optional PPP override validate without requiring PPP just to start WireGuard. Migration preflight avoids legacy Device ownership changes.
+- Operational limits: the actual supplied profile receives no handshake from Docker despite being accepted (the operator reports Windows WireGuard works); its UDP path/server response remains unresolved, so NVR access is not verified. L2TP PPP drivers are inactive on this Docker Desktop host and its end-to-end test is skipped. Server kernel/egress setup and remote LAN permissions remain operator responsibilities. No production push/deployment. Setup: `docs/VPN_SETUP.md`.
+
 ## 2026-10-13 - Camera and NVR workspace
 
 - Assets > Cameras exposes workspace-scoped inventory, private `/24`-maximum ONVIF discovery, manual ONVIF/RTSP setup, device identity and source-grouped NVR channels. The supplied LAN defaults to `192.168.18.0/24`; recorder setup can use `192.168.18.50` without guessing a manufacturer stream path or password.

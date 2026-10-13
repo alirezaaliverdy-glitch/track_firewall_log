@@ -9,6 +9,7 @@
 - `backend/src/product-state/`: versioned feature-state, navigation, vendor, and integration contract.
 - `backend/src/assets/`: asset intelligence, imports, seeded security detection, and finding handoff.
 - `backend/src/cameras/`, `routes/cameras.ts`: ONVIF discovery/identity/channels, encrypted camera inventory, server-side RTSP preview/snapshots and controlled camera ActionPlans. Frontend: `src/features/cameras/`, `src/lib/cameras.ts`; setup/limits: `docs/CAMERA_SETUP.md`.
+- `backend/src/vpn/`, `routes/vpn.ts`: encrypted application VPN profiles, authenticated/audited connection control and a separate Unix-socket WireGuard/L2TP helper limited to private split routes. `src/features/vpn/` provides Network Lab VPN and shared camera/device access selection. `VpnDeviceBinding` avoids modifying legacy Device ownership; production PPP is enabled via an optional Compose file. See `docs/VPN_SETUP.md` for verified capabilities and host limits.
 - `backend/src/services/`: lifecycle, AI, event, device, credential, assessment, and policy services.
 - `backend/src/commands/`: Persian catalog contract and execution-template registry.
 - `backend/src/connectors/`: planners plus Linux, MikroTik, FortiGate, and Cisco IOS-XE read-only connector foundations.

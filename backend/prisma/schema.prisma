@@ -23,14 +23,45 @@ model AppUser {
   companies     Company[]
   onboardingSessions DeviceOnboardingSession[]
   cameraDevices CameraDevice[]
+  vpnConnections VpnConnection[]
 
   @@index([workspaceOwnerId])
+}
+
+model VpnConnection {
+  id              String   @id @default(cuid())
+  ownerId         String
+  owner           AppUser  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name            String
+  protocol        String
+  endpoint        String
+  endpointPort    Int
+  routesJson      Json
+  configEncrypted String
+  lastErrorCode   String?
+  lastOperationAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deviceBindings  VpnDeviceBinding[]
+  cameras         CameraDevice[]
+
+  @@index([ownerId, createdAt])
+}
+
+model VpnDeviceBinding {
+  deviceId        String @id
+  vpnConnectionId String
+  vpnConnection   VpnConnection @relation(fields: [vpnConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([vpnConnectionId])
 }
 
 model CameraDevice {
   id                  String   @id @default(cuid())
   ownerId             String
   owner               AppUser  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  vpnConnectionId     String?
+  vpnConnection       VpnConnection? @relation(fields: [vpnConnectionId], references: [id], onDelete: SetNull)
   name                String
   location            String   @default("")
   host                String
@@ -51,6 +82,7 @@ model CameraDevice {
 
   @@unique([ownerId, host, onvifPort])
   @@index([ownerId, createdAt])
+  @@index([vpnConnectionId])
 }
 
 model CameraActionPlan {

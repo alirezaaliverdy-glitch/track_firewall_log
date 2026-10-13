@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Check, Crosshair, LoaderCircle, RefreshCw, RotateCw, Save, Trash2 } from "lucide-react";
 import { cameraErrorMessage, cameraJson, executeCameraAction, previewCameraAction, refreshCamera, removeCamera, updateCamera, type CameraDevice, type CameraHistory, type CameraPreview, type CameraResult } from "@/lib/cameras";
+import { VpnAccessField } from "@/features/vpn/VpnAccessField";
 import { CameraDialog } from "./CameraDialog";
 
 export function CameraDetailDialog({ camera, isFa, role, canOperate, onClose, onChanged, onRemoved }: { camera: CameraDevice; isFa: boolean; role: string; canOperate: boolean; onClose: () => void; onChanged: (camera: CameraDevice) => void; onRemoved: (id: string) => void }) {
   const [name, setName] = useState(camera.name), [location, setLocation] = useState(camera.location), [username, setUsername] = useState(""), [password, setPassword] = useState("");
+  const [vpnConnectionId, setVpnConnectionId] = useState(camera.vpnConnectionId ?? "");
   const [port, setPort] = useState(camera.onvifPort), [path, setPath] = useState(camera.onvifPath), [rtsp, setRtsp] = useState("");
   const [https, setHttps] = useState(camera.onvifHttps);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
@@ -37,6 +39,7 @@ export function CameraDetailDialog({ camera, isFa, role, canOperate, onClose, on
   return <CameraDialog title={camera.name} wide onClose={() => { if (!busy) onClose(); }}>
     <div className="camera-detail">
       <div className="camera-detail__identity"><span dir="ltr">{camera.host}:{camera.onvifPort}</span><span>{camera.kind === "nvr" ? "NVR" : copy("دوربین", "Camera")} · {camera.connectionMode.toUpperCase()}</span><button className="camera-button" type="button" disabled={busy || !canManage} onClick={() => void run(async () => { const data = await refreshCamera(camera.id); onChanged(data.camera); if (data.camera.lastErrorCode) setError(cameraErrorMessage(new Error(data.camera.lastErrorCode), isFa)); else setNotice(copy("اتصال بررسی شد", "Connection checked")); })}><RefreshCw size={16} />{copy("بررسی اتصال", "Check connection")}</button></div>
+      {canManage ? <div className="camera-vpn-route"><VpnAccessField value={vpnConnectionId} onChange={setVpnConnectionId} host={camera.host} isFa={isFa} /><button className="camera-button" type="button" disabled={busy || vpnConnectionId === (camera.vpnConnectionId ?? "")} onClick={() => void run(async () => { const updated = await updateCamera(camera.id, { vpnConnectionId }); onChanged(updated.camera); setNotice(copy("مسیر ذخیره شد؛ اتصال را بررسی کن.", "Route saved. Check the connection.")); })}>{copy("ذخیره مسیر", "Save route")}</button></div> : null}
       {camera.lastErrorCode ? <p className="camera-alert">{cameraErrorMessage(new Error(camera.lastErrorCode), isFa)}</p> : null}
       {camera.infoJson ? <dl className="camera-info">{[["Manufacturer", copy("سازنده", "Manufacturer")], ["Model", copy("مدل", "Model")], ["FirmwareVersion", copy("نسخه", "Firmware")], ["SerialNumber", copy("سریال", "Serial")]].map(([key, label]) => <div key={key}><dt>{label}</dt><dd dir="ltr">{camera.infoJson?.[key] || "—"}</dd></div>)}</dl> : null}
       <details className="camera-disclosure" open={!camera.profiles.length}><summary>{copy("کانال‌ها و کیفیت‌ها", "Channels and quality")}{camera.profiles.length ? ` · ${camera.profiles.length}` : ""}</summary>

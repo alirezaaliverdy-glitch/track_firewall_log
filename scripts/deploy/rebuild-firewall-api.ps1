@@ -54,6 +54,16 @@ $currentImage = Read-ContainerImage $ContainerName
 if (-not $currentImage) { throw "Could not resolve the running image for $ContainerName." }
 Write-Host "Current $Service image: $currentImage ($health)"
 
+# A VPN helper shares this API's container namespace, not the host namespace.
+# Rebind it whenever API recreation changes the namespace. Never keep a helper
+# attached to the superseded API container.
+$services = @(& docker compose -f $ComposeFile config --services)
+Assert-LastExitCode "Compose service inventory"
+if ($services -contains "firewall-vpn") {
+    & docker compose -f $ComposeFile up -d --no-deps --force-recreate firewall-vpn
+    Assert-LastExitCode "VPN helper namespace rebind"
+}
+
 if ($previousImage -and $previousImage -ne $currentImage) {
     $consumers = @(& docker ps -aq --filter "ancestor=$previousImage") | Where-Object { $_ -and $_.Trim() }
     Assert-LastExitCode "Docker image consumer check"

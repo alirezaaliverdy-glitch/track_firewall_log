@@ -1,17 +1,18 @@
-import { Activity, CheckCircle2, History, LoaderCircle, RadioTower, Server, Trash2, Unplug, Wifi } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Activity, CheckCircle2, History, LoaderCircle, RadioTower, Server, Trash2, Unplug, Wifi, LockKeyhole } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { listDevices, type Device } from "@/lib/devices";
 import { clearNetworkProbes as clearNetworkProbeHistory, listNetworkProbes, runNetworkProbe, type NetworkProbe } from "@/lib/diagnostics";
 import { NetworkInventoryScanner } from "./NetworkInventoryScanner";
 import "./NetworkLabPage.css";
+const VpnPanel = lazy(() => import("@/features/vpn/VpnPage"));
 
 const labels: Record<NetworkProbe["status"], string> = { reachable: "در دسترس", unreachable: "بدون پاسخ", open: "پورت باز", closed: "پورت بسته", timeout: "مهلت تمام شد", error: "خطای اجرا" };
 const tone = (item: NetworkProbe) => ["reachable", "open"].includes(item.status) ? "success" : ["unreachable", "closed"].includes(item.status) ? "danger" : "warning";
 const number = (input: number | null, suffix = "") => input === null ? "—" : `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 }).format(input)}${suffix}`;
 
 export default function NetworkLabPage() {
-  const [labTab, setLabTab] = useState<"probe" | "scanner">("scanner");
+  const [labTab, setLabTab] = useState<"probe" | "scanner" | "vpn">("scanner");
   const [devices, setDevices] = useState<Device[]>([]);
   const [history, setHistory] = useState<NetworkProbe[]>([]);
   const [kind, setKind] = useState<"icmp" | "tcp">("icmp");
@@ -63,9 +64,10 @@ export default function NetworkLabPage() {
     <nav className="network-lab__primary-tabs" aria-label="بخش‌های آزمایشگاه شبکه">
       <button type="button" className={labTab === "probe" ? "active" : ""} onClick={() => setLabTab("probe")}><Activity/>تست اتصال</button>
       <button type="button" className={labTab === "scanner" ? "active" : ""} onClick={() => setLabTab("scanner")}><RadioTower/>اسکن شبکه</button>
+      <button type="button" className={labTab === "vpn" ? "active" : ""} onClick={() => setLabTab("vpn")}><LockKeyhole/>اتصال VPN</button>
     </nav>
 
-    {labTab === "scanner" ? <NetworkInventoryScanner devices={devices} /> : <>
+    {labTab === "vpn" ? <Suspense fallback={<p role="status">در حال دریافت…</p>}><VpnPanel embedded /></Suspense> : labTab === "scanner" ? <NetworkInventoryScanner devices={devices} /> : <>
 
     <div className="network-lab__grid">
       <section className="network-lab__card network-lab__form">

@@ -1,0 +1,4 @@
+# Include only on a Linux Docker host already provisioned with PPP/L2TP support.
+services:
+  firewall-vpn:
+    devices: ["/dev/ppp:/dev/ppp"]

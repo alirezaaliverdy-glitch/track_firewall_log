@@ -11,6 +11,7 @@ export const APPLICATION_SECTIONS = [
 export type ApplicationSection = (typeof APPLICATION_SECTIONS)[number];
 
 const SECTION_PATHS: Array<{ section: ApplicationSection; patterns: RegExp[] }> = [
+  { section: "assets", patterns: [/^\/api\/vpn(?:\/|$)/] },
   { section: "actions", patterns: [/^\/api\/cameras\/[^/]+\/actions(?:\/|$)/] },
   { section: "assets", patterns: [/^\/api\/cameras(?:\/|$)/] },
   { section: "attackers", patterns: [/^\/api\/security\/attackers(?:\/|$)/] },

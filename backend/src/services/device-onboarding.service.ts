@@ -11,6 +11,7 @@ import { resolveCredentialById } from "./credential.service.js";
 import { esxiSshFingerprint } from "../connectors/esxi-ssh.transport.js";
 import { normalizeSophosFingerprint } from "../connectors/sophos-api.connector.js";
 import { getConnectionProfile, type ConnectionMethodKey } from "../vendors/connection-method.registry.js";
+import { assertVpnTarget } from "../vpn/vpn.service.js";
 
 type OnboardingVendor = "linux" | "cisco" | "fortigate" | "mikrotik" | "sophos" | "esxi";
 export class OnboardingCredentialInvalidError extends Error {}
@@ -64,6 +65,7 @@ type SessionStatus =
   | "cancelled";
 
 type Draft = {
+  vpnConnectionId?: string;
   companyId: string;
   vendor: OnboardingVendor;
   platform: string;
@@ -298,6 +300,7 @@ export async function createOnboardingSession(input: Record<string, unknown> = {
       connectionMethod: method,
       name: String(input.name ?? existing?.name ?? ""),
       host: normalizeManagementAddress(String(input.host ?? existing?.host ?? "")),
+      vpnConnectionId: String(input.vpnConnectionId ?? existing?.vpnConnectionId ?? ""),
       managementPort: Number(input.managementPort ?? existing?.managementPort ?? defaultPort(method, vendor)),
       credentialId: String(input.credentialId ?? existing?.credentialId ?? ""),
       esxiCaCertificate: String(input.esxiCaCertificate ?? record(existing?.capabilities).esxiCaCertificate ?? ""),
@@ -340,6 +343,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     connectionMethod: nextMethod,
     name: String(input.name ?? session.draft.name).trim(),
     host: normalizeManagementAddress(String(input.host ?? session.draft.host).trim()),
+    vpnConnectionId: String(input.vpnConnectionId ?? session.draft.vpnConnectionId ?? ""),
     managementPort: Number(input.managementPort ?? (nextMethod === session.draft.connectionMethod ? session.draft.managementPort : defaultPort(nextMethod, nextVendor))),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
@@ -353,6 +357,7 @@ export async function answerOnboardingSession(id: string, input: Record<string, 
     environment: String(input.environment ?? session.draft.environment) as Draft["environment"]
   };
   await assertOnboardingCompany(session.draft.companyId, ownerId);
+  await assertVpnTarget(session.draft.vpnConnectionId, session.draft.host, ownerId);
   try {
     requireConnectionDraft(session);
   } catch (error) {
@@ -374,6 +379,7 @@ export async function testOnboardingConnection(id: string, ownerId?: string) {
   const session = await activeSession(id, ownerId);
   try {
     requireConnectionDraft(session);
+    await assertVpnTarget(session.draft.vpnConnectionId, session.draft.host, ownerId, true);
     try {
       const credential = await resolveCredentialById(session.draft.credentialId);
       if (!credential) throw new Error("missing");
@@ -756,6 +762,7 @@ function validateUnverifiedDraft(session: OnboardingSession, input: Record<strin
   if (!(["lab", "staging", "production"] as string[]).includes(environment)) throw new Error("Environment must be lab, staging, or production.");
   return {
     companyId: String(input.companyId ?? session.draft.companyId).trim(), vendor, platform, name, host, managementPort, environment, connectionMethod,
+    vpnConnectionId: String(input.vpnConnectionId ?? session.draft.vpnConnectionId ?? ""),
     credentialId: String(input.credentialId ?? session.draft.credentialId).trim(),
     esxiCaCertificate: String(input.esxiCaCertificate ?? session.draft.esxiCaCertificate ?? "").trim(),
     sophosCaCertificate: String(input.sophosCaCertificate ?? session.draft.sophosCaCertificate ?? "").trim(),
@@ -775,6 +782,7 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
   session.draft = draft;
   requireConnectionDraft(session);
   await assertOnboardingCompany(draft.companyId, ownerId);
+  await assertVpnTarget(draft.vpnConnectionId, draft.host, ownerId);
   const normalizedVendor = draft.vendor.toLowerCase();
 
   touch(session, "saving", "save");
@@ -821,6 +829,8 @@ export async function registerUnverifiedOnboardingSession(id: string, input: Rec
       const device = target.deviceId
         ? await tx.device.update({ where: { id: target.deviceId }, data })
         : await tx.device.create({ data });
+      if (draft.vpnConnectionId) await tx.vpnDeviceBinding.upsert({ where: { deviceId: device.id }, update: { vpnConnectionId: draft.vpnConnectionId }, create: { deviceId: device.id, vpnConnectionId: draft.vpnConnectionId } });
+      else await tx.vpnDeviceBinding.deleteMany({ where: { deviceId: device.id } });
       await syncConnectionChannels(tx, device.id, draft, false);
       const { asset } = await syncDeviceRecordToAsset(tx, device);
       let siteId: string | undefined;
@@ -888,6 +898,7 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
   touch(session, "saving", "save");
   const draft = session.draft;
   await assertOnboardingCompany(draft.companyId, ownerId);
+  await assertVpnTarget(draft.vpnConnectionId, draft.host, ownerId);
 
   const capabilities: Record<string, unknown> = {
     ...(draft.esxiCaCertificate ? { esxiCaCertificate: draft.esxiCaCertificate } : {}),
@@ -926,6 +937,8 @@ export async function commitOnboardingSession(id: string, ownerId?: string) {
       const device = target.deviceId
         ? await tx.device.update({ where: { id: target.deviceId }, data })
         : await tx.device.create({ data });
+      if (draft.vpnConnectionId) await tx.vpnDeviceBinding.upsert({ where: { deviceId: device.id }, update: { vpnConnectionId: draft.vpnConnectionId }, create: { deviceId: device.id, vpnConnectionId: draft.vpnConnectionId } });
+      else await tx.vpnDeviceBinding.deleteMany({ where: { deviceId: device.id } });
       await syncConnectionChannels(tx, device.id, draft, true);
       const { asset } = await syncDeviceRecordToAsset(tx, device);
       let siteId: string | undefined;

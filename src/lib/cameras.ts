@@ -2,18 +2,25 @@ import { apiRequest, apiUrl } from "./apiTransport";
 
 export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; streamAvailable: boolean; snapshotAvailable: boolean };
 export type CameraDevice = {
-  id: string; name: string; location: string; host: string; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp";
+  id: string; name: string; location: string; host: string; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp";
   onvifPort: number; onvifPath: string; onvifHttps: boolean; status: "verified" | "error" | "unverified"; lastSeenAt: string | null; lastErrorCode: string | null;
   infoJson: Record<string, string> | null; profiles: CameraProfile[]; credentialsConfigured: boolean; createdAt: string;
 };
 export type CameraCandidate = { host: string; onvifPort: number; onvifPath: string; onvifHttps: boolean; name: string; evidence: "onvif" | "rtsp"; requiresCredentials: boolean; registered: boolean };
 export type CameraDiscovery = { cidr: string; candidates: CameraCandidate[]; scannedAddresses: number; partial: boolean };
-export type CameraInput = { host: string; name: string; location: string; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp"; onvifPort: number; onvifPath: string; onvifHttps?: boolean; username?: string; password?: string; rtspUrl?: string };
+export type CameraInput = { host: string; name: string; location: string; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp"; onvifPort: number; onvifPath: string; onvifHttps?: boolean; username?: string; password?: string; rtspUrl?: string; vpnConnectionId?: string };
 export type CameraPreview = { id: string; status: string; expiresAt: string; preview: { titleFa: string; titleEn: string; cameraName: string; host: string; effectFa: string; effectEn: string; risk: string; connectorInvoked: false } };
 export type CameraResult = { status: string; connectorInvoked: boolean; accepted?: boolean; code?: string; requiresReconnect?: boolean };
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  VPN_NOT_FOUND: ["این VPN در فضای کاری شما پیدا نشد.", "This VPN was not found in your workspace."],
+  VPN_TARGET_OUTSIDE_ROUTES: ["IP دوربین در بازهٔ VPN انتخاب‌شده نیست.", "The camera IP is outside the selected VPN ranges."],
+  VPN_CONNECT_FIRST: ["ابتدا VPN این دوربین را وصل کن، سپس دوباره تلاش کن.", "Connect this camera's VPN and try again."],
+  VPN_AGENT_UNAVAILABLE: ["سرویس VPN آماده نیست؛ اتصال را بررسی کن.", "The VPN service is unavailable."],
+  VPN_TARGET_USES_TUNNEL: ["این IP اکنون از VPN عبور می‌کند؛ VPN مربوط را انتخاب کن.", "This IP currently uses a VPN; select that connection."],
+  VPN_ROUTE_MISMATCH: ["مسیر این IP متعلق به VPN دیگری است.", "This IP routes through another VPN."],
+  VPN_ROUTE_NOT_ACTIVE: ["مسیر VPN این دوربین هنوز فعال نیست.", "The camera VPN route is not active."],
   CAMERA_PRIVATE_IP_REQUIRED: ["IP خصوصی دوربین یا NVR را وارد کن.", "Enter a private IPv4 address."],
   CAMERA_RANGE_INVALID: ["بازه باید خصوصی و حداکثر ۲۵۶ آدرس باشد؛ مثل 192.168.18.0/24.", "Use a private range with at most 256 addresses, such as 192.168.18.0/24."],
   CAMERA_URL_INVALID: ["آدرس تصویر باید بدون نام کاربری و رمز، روی IP همین دستگاه باشد.", "Use a stream URL on this device's IP, without embedded credentials."],
@@ -54,7 +61,7 @@ export const createCamera = (input: CameraInput) => cameraJson<{ camera: CameraD
 export const updateCamera = (id: string, input: Partial<CameraInput>) => cameraJson<{ camera: CameraDevice }>(`/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 export const removeCamera = (id: string) => cameraJson(`/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const refreshCamera = (id: string) => cameraJson<{ camera: CameraDevice }>(`/${encodeURIComponent(id)}/refresh`, { method: "POST" });
-export const discoverCameras = (cidr: string, ports?: number[]) => cameraJson<CameraDiscovery>("/discover", { method: "POST", body: JSON.stringify({ cidr, ports }) });
+export const discoverCameras = (cidr: string, ports?: number[], vpnConnectionId?: string) => cameraJson<CameraDiscovery>("/discover", { method: "POST", body: JSON.stringify({ cidr, ports, vpnConnectionId }) });
 export const previewCameraAction = (id: string, operation: string, parameters?: Record<string, string>) => cameraJson<CameraPreview>(`/${encodeURIComponent(id)}/actions/preview`, { method: "POST", body: JSON.stringify({ operation, ...parameters }) });
 export const executeCameraAction = (id: string, planId: string) => cameraJson<CameraResult>(`/${encodeURIComponent(id)}/actions/${encodeURIComponent(planId)}/execute`, { method: "POST", body: JSON.stringify({ intent: "execute", confirmed: true }) });
 export const cameraImageUrl = (id: string, profile: string, mode: "live" | "snapshot") => apiUrl(`/cameras/${encodeURIComponent(id)}/${mode}?profile=${encodeURIComponent(profile)}`);

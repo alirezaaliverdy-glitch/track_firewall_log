@@ -27,6 +27,7 @@ import {
 } from "@/lib/deviceOnboarding";
 import "./DeviceOnboardingPage.css";
 import { EsxiSshFingerprintField } from "./EsxiSshFingerprintField";
+import { VpnAccessField } from "@/features/vpn/VpnAccessField";
 
 const platforms: Record<OnboardingDraft["vendor"], string> = {
   linux: "linux",
@@ -70,6 +71,8 @@ function mappedError(failure: unknown, fallbackKey: string, t: TFunction, isFa =
   if (failure instanceof OnboardingApiError) {
     const code = failure.code ?? "";
     const message = failure.message.toLowerCase();
+    const vpnCode = code.startsWith("VPN_") ? code : failure.message.match(/VPN_[A-Z_]+/)?.[0];
+    if (vpnCode) return { message: isFa ? ({ VPN_CONNECT_FIRST: "ابتدا VPN انتخاب‌شده را وصل کن، سپس اتصال تجهیز را تست کن.", VPN_TARGET_OUTSIDE_ROUTES: "IP تجهیز در بازهٔ این VPN نیست.", VPN_TARGET_USES_TUNNEL: "این IP از VPN عبور می‌کند؛ اتصال مربوط را انتخاب کن.", VPN_NOT_FOUND: "VPN انتخاب‌شده در این فضای کاری پیدا نشد.", VPN_ROUTE_MISMATCH: "مسیر این IP متعلق به VPN دیگری است.", VPN_ROUTE_NOT_ACTIVE: "مسیر VPN هنوز فعال نیست.", VPN_AGENT_UNAVAILABLE: "سرویس VPN آماده نیست." } as Record<string, string>)[vpnCode] ?? "مسیر VPN را بررسی کن." : "Check the selected VPN and its destination ranges.", diagnostic: vpnCode };
     if (code === "ONBOARDING_COMMIT_NOT_READY") return {
       message: isFa ? "مراحل تأیید دستگاه کامل نیست. به «اتصال و تست» برگردید و تست را دوباره انجام دهید." : "Verification is incomplete. Return to Connection and test and run the test again.",
       diagnostic: `${code}: ${failure.message}`
@@ -425,6 +428,7 @@ export default function DeviceOnboardingPage({ params }: RouteComponentProps) {
               <label className="onboarding-field onboarding-field--wide"><span>شرکت مالک دستگاه<b>{t("onboarding.required")}</b></span><select value={activeForm.companyId} onChange={(event) => { change("companyId", event.target.value); localStorage.setItem(ACTIVE_COMPANY_STORAGE_KEY, event.target.value); }}><option value="">انتخاب شرکت</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name} — {company.code}</option>)}</select><small>این دستگاه و همه اطلاعات جمع‌آوری‌شده فقط در دارایی‌های همین شرکت نمایش داده می‌شود.</small></label>
               <label className="onboarding-field"><span>{t("onboarding.fields.name")}<b>{t("onboarding.required")}</b></span><input ref={nameInput} value={activeForm.name} onChange={(event) => change("name", event.target.value)} placeholder={t("onboarding.placeholders.name")} aria-invalid={invalidField === "name"} /><small>{t("onboarding.help.name")}</small></label>
               <label className="onboarding-field"><span>{t("onboarding.fields.management")}<b>{t("onboarding.required")}</b></span><input ref={hostInput} value={activeForm.host} onChange={(event) => change("host", event.target.value)} dir="ltr" placeholder={t("onboarding.placeholders.host")} aria-invalid={invalidField === "host"} /><small>{activeForm.vendor === "sophos" ? (isFa ? "آدرس مدیریتی Sophos Firewall؛ دسترسی API باید برای IP سرور برنامه مجاز باشد." : "Sophos management address; API access must allow the application server IP.") : t("onboarding.help.management")}</small></label>
+              <div className="onboarding-field onboarding-field--wide"><VpnAccessField value={activeForm.vpnConnectionId ?? ""} onChange={id => change("vpnConnectionId", id)} host={activeForm.host} isFa={isFa} /></div>
               <label className="onboarding-field onboarding-field--port"><span>{t("onboarding.fields.port")}<b>{t("onboarding.required")}</b></span><input type="number" min="1" max="65535" value={activeForm.managementPort} onChange={(event) => change("managementPort", Number(event.target.value))} aria-invalid={invalidField === "port"} dir="ltr" /><small>{t("onboarding.help.port")}</small></label>
               <div className="onboarding-field onboarding-platform-preview"><span>{t("onboarding.fields.platform")}</span><div><Sparkles size={16} /><strong dir="ltr">{activeForm.platform || platforms[activeForm.vendor]}</strong></div><small>{t("onboarding.platform.auto")}</small></div>
             </div>
