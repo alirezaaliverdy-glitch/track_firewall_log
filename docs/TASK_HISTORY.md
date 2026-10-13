@@ -1,3 +1,11 @@
+## 2026-10-13 - Complete camera discovery, viewing and controlled management
+
+- Added camera/NVR inventory and persisted camera ActionPlans with an additive transactional migration. Built bounded ONVIF WS-Discovery/unicast, WS-Security and HTTP Digest, Media/Media2 channel/profile inspection and manual RTSP fallback; device-returned URLs stay pinned to the registered private IP.
+- Added a compact Persian-first camera page, bulk/manual registration, NVR channel selection, up to four open views, snapshots/download/fullscreen, connection settings and native modal dismissal. Server-side FFmpeg decoding is authenticated, capacity/time bounded, stops on disconnect and never logs media credentials.
+- Registered preset/reboot previews and one-use execution with role/scope/freshness policy, real SOAP acknowledgment and audit. Preserved existing vendor controls and protected lab behavior.
+- Passed API/frontend builds, seven isolated protocol/policy/API tests, real synthetic RTSP/snapshot decoding, and six desktop/mobile browser captures. Rebuilt local API/web healthy; fixed a legacy local migration permission using only AppUser(id) REFERENCES, made migration atomic and added actual API-role production preflight. Removed only camera QA containers/network. No live camera scan/device write, push or production deployment. Setup/limitations are recorded in `docs/CAMERA_SETUP.md`.
+- Snapshot generation, UTF-8, locale parity and Persian primary-copy validation passed. The memory-heading validator remains a pre-existing failure: handoff has 18 headings both before and after this task versus seven expected; existing headings were preserved.
+
 ## 2026-10-12 - Remove misplaced Security Overview action panel
 
 - Removed the Action Center journey from the Security Overview render tree at the user's request. No ActionPlan, PolicyGuard, connector, or audit behavior changed.

@@ -22,8 +22,54 @@ model AppUser {
   scheduledTasks ScheduledTask[]
   companies     Company[]
   onboardingSessions DeviceOnboardingSession[]
+  cameraDevices CameraDevice[]
 
   @@index([workspaceOwnerId])
+}
+
+model CameraDevice {
+  id                  String   @id @default(cuid())
+  ownerId             String
+  owner               AppUser  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name                String
+  location            String   @default("")
+  host                String
+  kind                String   @default("camera")
+  connectionMode      String   @default("onvif")
+  onvifPort           Int      @default(80)
+  onvifHttps          Boolean  @default(false)
+  onvifPath           String   @default("/onvif/device_service")
+  connectionEncrypted String?
+  infoJson            Json?
+  profilesJson        Json?
+  status              String   @default("unverified")
+  lastSeenAt          DateTime?
+  lastErrorCode        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  actionPlans         CameraActionPlan[]
+
+  @@unique([ownerId, host, onvifPort])
+  @@index([ownerId, createdAt])
+}
+
+model CameraActionPlan {
+  id                  String   @id @default(cuid())
+  cameraId            String
+  camera              CameraDevice @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+  ownerId             String
+  requestedBy         String
+  operation           String
+  parametersJson      Json
+  previewJson         Json
+  status              String   @default("preview_ready")
+  resultJson          Json?
+  cameraRevision      String
+  expiresAt           DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([ownerId, cameraId, createdAt])
 }
 
 model Company {

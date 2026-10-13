@@ -18,6 +18,7 @@ const AssetListPage = lazy(() => import("@/features/assets/pages/AssetListPage")
 const AssetDetailPage = lazy(() => import("@/features/assets/pages/AssetDetailPage"));
 const AssetSyncPage = lazy(() => import("@/features/assets/pages/AssetSyncPage"));
 const PortTopologyPage = lazy(() => import("@/features/assets/pages/PortTopologyPage"));
+const CamerasPage = lazy(() => import("@/features/cameras/CamerasPage"));
 const SecurityOverviewPage = lazy(() => import("@/features/security/pages/SecurityOverviewPage"));
 const FindingsPage = lazy(() => import("@/features/security/pages/FindingsPage"));
 const VendorUsersPage = lazy(() => import("@/features/security/pages/VendorUsersPage"));
@@ -48,6 +49,7 @@ export const appRoutes: AppRoute[] = [
   { path: "/dashboard", featureKey: "dashboard.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "dashboard", component: DashboardPage },
   { path: "/assets", featureKey: "assets.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage },
   { path: "/assets/devices", featureKey: "assets.devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage },
+  { path: "/assets/cameras", featureKey: "assets.cameras", labelFa: "دوربین‌ها", labelEn: "Cameras", group: "assets", component: CamerasPage },
   { path: "/assets/devices/new", featureKey: "assets.device_onboarding_new", labelFa: "ثبت دستگاه", labelEn: "Register device", group: "assets", component: DeviceOnboardingPage },
   { path: "/assets/onboarding", featureKey: "assets.device_onboarding", labelFa: "راه‌اندازی دستگاه", labelEn: "Device onboarding", group: "assets", component: DeviceOnboardingPage },
   { path: "/assets/vendors/:vendorKey/devices/new", featureKey: "assets.vendor_device_onboarding", labelFa: "ثبت دستگاه وندور", labelEn: "Register vendor device", group: "assets", component: DeviceOnboardingPage },

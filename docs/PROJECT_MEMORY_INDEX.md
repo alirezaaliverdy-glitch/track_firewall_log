@@ -21,6 +21,8 @@ This sequence should onboard a new model in under two minutes. Read `docs/CODEBA
 
 ## Stable vs. Live
 
+Camera/NVR operation and migration guide: `docs/CAMERA_SETUP.md`.
+
 - Keep `AGENTS.md` short and stable; change it only for durable project rules.
 - Never rename, remove, or reorder the six headings in `CODEX_HANDOFF.md`.
 - `CURRENT_STATUS.md`, `CODEX_HANDOFF.md`, and generated `PROJECT_SNAPSHOT.md` are live state.

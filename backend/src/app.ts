@@ -49,6 +49,7 @@ import { stopSecurityMonitor } from "./services/security-monitor.service.js";
 import { stopScheduledTaskWorker } from "./services/scheduled-task-worker.service.js";
 import { stopDeviceConnectivitySensor } from "./services/device-connectivity-sensor.service.js";
 import { NATIVE_APP_ORIGINS } from "./security/session-transport.js";
+import { cameraRoutes } from "./routes/cameras.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
   validateCommandCatalog(COMMAND_CATALOG);
@@ -127,6 +128,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(analysisRoutes);
   await app.register(aiRoutes);
   await app.register(deviceRoutes);
+  await app.register(cameraRoutes);
   await app.register(deviceOnboardingRoutes);
   await app.register(deviceWorkspaceRoutes);
   await app.register(diagnosticRoutes);

@@ -93,6 +93,25 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261009090000_managed
     exit 2
   }
 fi
+if git cat-file -e "$target_sha:backend/prisma/migrations/20261012150000_camera_workspace/migration.sql" 2>/dev/null; then
+  # The API role can differ from POSTGRES_USER on a legacy database. Read only
+  # its username, never echo the DATABASE_URL or provider credentials.
+  camera_migration_role=$(compose exec -T firewall-api node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).username))') || {
+    echo "Cannot determine the API migration role; leaving the running deployment unchanged" >&2
+    exit 2
+  }
+  case "$camera_migration_role" in
+    ''|*[!a-zA-Z0-9_]*) echo "Unsupported API role name for migration preflight; leaving the running deployment unchanged" >&2; exit 2 ;;
+  esac
+  camera_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261012150000_camera_workspace' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES')) THEN 'ready' ELSE 'camera_migration_permission_missing' END\"") || {
+    echo "Cannot verify camera migration permissions; leaving the running deployment unchanged" >&2
+    exit 2
+  }
+  [ "$camera_migration_access" = ready ] || {
+    echo "Camera migration needs schema CREATE and AppUser(id) REFERENCES for the migration role. Apply scripts/deploy/prepare-camera-migration.sql as the table owner if REFERENCES is missing; leaving the running deployment unchanged" >&2
+    exit 2
+  }
+fi
 git merge --ff-only "$target_sha"
 
 compose config --quiet

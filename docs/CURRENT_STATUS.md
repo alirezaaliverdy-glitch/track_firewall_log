@@ -1,3 +1,11 @@
+## 2026-10-13 - Camera and NVR workspace
+
+- Assets > Cameras exposes workspace-scoped inventory, private `/24`-maximum ONVIF discovery, manual ONVIF/RTSP setup, device identity and source-grouped NVR channels. The supplied LAN defaults to `192.168.18.0/24`; recorder setup can use `192.168.18.50` without guessing a manufacturer stream path or password.
+- Clean responsive cards, search/type filters, native dialogs, channel/quality selection, fullscreen and image download are implemented. Live views use authenticated server-side RTSP/TCP decoding to MJPEG, four fps/960px maximum, at most four workspace/eight global decoders; background tabs pause. Credentials/media URLs stay encrypted server-side.
+- Available ONVIF presets and administrator reboot use persisted camera ActionPlans, registered handlers, preview, one explicit confirmation, camera policy and audit. Real connector acknowledgment is displayed as accepted, not verified completion. Existing Linux/MikroTik lab policy is unchanged.
+- API/frontend builds, seven focused tests on a fresh isolated migration, a real synthetic RTSP decoder test and six desktop/mobile browser captures passed. Local services were rebuilt healthy and camera migration applied; temporary QA containers/network were removed. Production Compose validates and the deploy script checks legacy migration-role privileges before replacement. No push or real camera/device operation.
+- Coverage is partial: compatible ONVIF/manual RTSP only, private IPv4, up to 32 returned profiles; no proprietary discovery, recording/replay/audio, firmware/factory-reset or PTZ joystick. A LAN/VPN route and device ONVIF account remain operator setup. See `docs/CAMERA_SETUP.md`.
+
 ## 2026-10-12 - Remove misplaced action panel from Security Overview
 
 - The Action Center journey panel is no longer rendered on `/security`. Action Center review, confirmation, execution, and audit behavior remain unchanged.

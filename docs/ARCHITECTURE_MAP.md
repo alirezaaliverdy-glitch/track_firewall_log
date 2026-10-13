@@ -22,6 +22,8 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 
 ## Backend Map
 
+Camera workspace: `routes/cameras.ts` authenticates workspace-scoped inventory, discovery, media and controls; `cameras/camera-network.ts` bounds private IPv4 and pins device-returned URLs; `camera-onvif.ts` handles SOAP discovery/identity/profiles/presets; `camera-media.ts` performs bounded server-only FFmpeg decoding. Camera connection secrets/media URLs use the existing encryption service. `camera.service.ts` persists `CameraDevice`/`CameraActionPlan` and sanitized audit; `camera-policy.ts` requires a fresh registered preview and one explicit confirmation before real ONVIF preset/reboot invocation. It does not change the existing vendor ActionPlan/PolicyGuard path. Frontend `src/features/cameras/` renders inventory, source-grouped NVR channels and authenticated fetch-based views. See `CAMERA_SETUP.md` for operational limits and legacy migration prerequisites.
+
 | Area | Purpose | Main path | Route/API | Status |
 |---|---|---|---|---|
 | Product state | Versioned feature, navigation, vendor, and integration truth with fail-closed validation | `backend/src/product-state/`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented |

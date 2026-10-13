@@ -8,6 +8,7 @@
 - `backend/src/routes/`: authenticated HTTP surface registered by `backend/src/app.ts`.
 - `backend/src/product-state/`: versioned feature-state, navigation, vendor, and integration contract.
 - `backend/src/assets/`: asset intelligence, imports, seeded security detection, and finding handoff.
+- `backend/src/cameras/`, `routes/cameras.ts`: ONVIF discovery/identity/channels, encrypted camera inventory, server-side RTSP preview/snapshots and controlled camera ActionPlans. Frontend: `src/features/cameras/`, `src/lib/cameras.ts`; setup/limits: `docs/CAMERA_SETUP.md`.
 - `backend/src/services/`: lifecycle, AI, event, device, credential, assessment, and policy services.
 - `backend/src/commands/`: Persian catalog contract and execution-template registry.
 - `backend/src/connectors/`: planners plus Linux, MikroTik, FortiGate, and Cisco IOS-XE read-only connector foundations.

@@ -7,6 +7,13 @@ export type RoutePermissionPolicy = {
 };
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
+  { method: "POST", path: "/api/cameras", permission: "devices.manage" },
+  { method: "POST", path: "/api/cameras/discover", permission: "devices.manage" },
+  { method: "PATCH", path: "/api/cameras/:id", permission: "devices.manage" },
+  { method: "DELETE", path: "/api/cameras/:id", permission: "devices.manage" },
+  { method: "POST", path: "/api/cameras/:id/refresh", permission: "devices.manage" },
+  { method: "POST", path: "/api/cameras/:id/actions/preview", permission: "actions.propose" },
+  { method: "POST", path: "/api/cameras/:id/actions/:planId/execute", permission: "actions.execute.write" },
   { method: "POST", path: "/api/backups/vault", permission: "uploads.create" },
   { method: "DELETE", path: "/api/backups/vault/:id", permission: "users.manage" },
   { method: "POST", path: "/api/backups/restores/preview", permission: "actions.propose" },
