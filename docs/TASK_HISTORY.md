@@ -1,3 +1,8 @@
+## 2026-10-14 - EOSNET login redesign
+
+- Rebuilt the login UI from the supplied portrait reference using the supplied raster logo, a generated background reduced to 18 KB WebP, existing Persian typeface and matching library icons. Removed the old framing/extra copy and added quiet entrance/hover/logo motion with reduced-motion support.
+- Retained real auth/session behavior and added a duplicate-pending-submit guard. Verified form validation, password reveal, keyboard navigation, English/RTL, error/loading/notices and successful protected-route handoff with intercepted API fixtures; frontend build and local deployment passed, plus locale/encoding/env-security and production Compose checks. No actual login attempt, credential, database or vendor configuration was used for UI QA.
+
 ## 2026-10-13 - Split-route application VPN, file import and asset binding
 
 - Built encrypted WireGuard/L2TP-IPsec profiles, explicit administrator confirmation, real helper state/target testing and sanitized audit. The explicitly approved root/NET_ADMIN helper uses only the API namespace and private Unix socket, never host networking/Docker socket. Exact private routes, unreachable fallback, endpoint/local-network/overlap guards and default-route verification preserve normal application routing and DNS.

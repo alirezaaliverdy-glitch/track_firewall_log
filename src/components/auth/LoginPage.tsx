@@ -1,54 +1,13 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Eye, EyeOff, ShieldCheck, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { AuthApiError } from "@/lib/auth";
 import { isNativeAndroidApp } from "@/mobile/nativeServerConfig";
 import i18n from "@/i18n";
-import AnimatedShield from "./AnimatedShield";
-import CyberBackground from "./CyberBackground";
-import "./NativeLoginStability.css";
+import logoSource from "@/assets/branding/eosnet-logo-source.jpg";
 import "@/mobile/PwaMobile.css";
-
-type LoginIconName = "eye" | "eyeOff" | "lock" | "shield" | "user";
-
-function LoginIcon({ name }: { name: LoginIconName }) {
-  return (
-    <svg className="login-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      {name === "eye" ? (
-        <>
-          <path d="M2.1 12s3.4-6.5 9.9-6.5 9.9 6.5 9.9 6.5-3.4 6.5-9.9 6.5S2.1 12 2.1 12Z" />
-          <circle cx="12" cy="12" r="3" />
-        </>
-      ) : null}
-      {name === "eyeOff" ? (
-        <>
-          <path d="M9.9 5.8A10.2 10.2 0 0 1 12 5.5c6.5 0 9.9 6.5 9.9 6.5a17.8 17.8 0 0 1-2.8 3.7" />
-          <path d="M14.1 14.1A3 3 0 0 1 9.9 9.9" />
-          <path d="M3 3l18 18" />
-          <path d="M6.6 6.6C3.7 8.6 2.1 12 2.1 12s3.4 6.5 9.9 6.5c1.4 0 2.7-.3 3.8-.8" />
-        </>
-      ) : null}
-      {name === "lock" ? (
-        <>
-          <rect x="5" y="10" width="14" height="10" rx="2" />
-          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-        </>
-      ) : null}
-      {name === "shield" ? (
-        <>
-          <path d="M12 3 19 6v5c0 4.7-3 8.1-7 10-4-1.9-7-5.3-7-10V6l7-3Z" />
-          <path d="m9 12 2 2 4-4" />
-        </>
-      ) : null}
-      {name === "user" ? (
-        <>
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21a8 8 0 0 1 16 0" />
-        </>
-      ) : null}
-    </svg>
-  );
-}
+import "./EosnetLogin.css";
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -58,6 +17,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [error, setError] = useState("");
   const [notice] = useState(() => {
     const value = window.sessionStorage.getItem("auth.notice");
@@ -81,69 +41,66 @@ export default function LoginPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (submittingRef.current) return;
     setError("");
     if (!username.trim() || password.length < 6) {
       setError(t("auth.login.errors.invalid"));
       return;
     }
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await login(username.trim(), password);
     } catch (cause) {
       setError(errorCopy(cause));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
   return (
-    <main className={`login-scene ${isNativeAndroid ? "login-scene--native" : ""}`} dir={isFa ? "rtl" : "ltr"}>
-      <CyberBackground />
+    <main className={`eos-login${isNativeAndroid ? " eos-login--native" : ""}`} dir={isFa ? "rtl" : "ltr"}>
+      <div className="eos-login__background" aria-hidden="true" />
+      <nav className="eos-login__language" dir="ltr" aria-label={t("auth.login.languageLabel")}>
+        <button type="button" lang="en" aria-pressed={!isFa} onClick={() => void i18n.changeLanguage("en")}>EN</button>
+        <button type="button" lang="fa" aria-pressed={isFa} onClick={() => void i18n.changeLanguage("fa")}>فارسی</button>
+      </nav>
 
-      <section className="login-card" aria-labelledby="login-title">
-        <AnimatedShield />
+      <section className="eos-login__content" aria-labelledby="login-title">
+        <header className="eos-login__header">
+          <div className="eos-login__brand">
+            <img src={logoSource} alt="EOSNET · eosnet.ir" width="844" height="1500" fetchPriority="high" />
+          </div>
+          <div className="eos-login__status">
+            <span className="eos-login__status-dot" aria-hidden="true" />
+            <span>{t("auth.login.status")}</span>
+            <ShieldCheck aria-hidden="true" />
+          </div>
+          <h1 id="login-title">{t("auth.login.title")}</h1>
+        </header>
 
-        <nav className="login-language" aria-label={t("auth.login.languageLabel")}>
-          <button type="button" aria-pressed={isFa} onClick={() => void i18n.changeLanguage("fa")}>فارسی</button>
-          <button type="button" aria-pressed={!isFa} onClick={() => void i18n.changeLanguage("en")}>EN</button>
-        </nav>
-
-        <div className="login-status"><span />{t("auth.login.status")}</div>
-        <h1 id="login-title">{t("auth.login.title")} <strong>{t("auth.login.product")}</strong></h1>
-        <p>{t("auth.login.description")}</p>
-
-        <form onSubmit={submit} noValidate aria-busy={submitting}>
-          <label>
-            {t("auth.login.username")}
-            <div className="login-field">
-              <LoginIcon name="user" />
-              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={128} autoFocus={!isNativeAndroid} placeholder={t("auth.login.usernamePlaceholder")} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
-            </div>
-          </label>
-          <label>
-            {t("auth.login.password")}
-            <div className="login-field">
-              <LoginIcon name="lock" />
-              <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLock(false)} autoComplete="current-password" minLength={6} maxLength={128} placeholder={t("auth.login.passwordPlaceholder")} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
-              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? t("auth.login.hidePassword") : t("auth.login.showPassword")} aria-pressed={showPassword}>
-                <LoginIcon name={showPassword ? "eyeOff" : "eye"} />
-              </button>
-            </div>
-          </label>
-          {capsLock && <div className="login-caps" role="status">{t("auth.login.capsLock")}</div>}
-          {notice === "password_changed" && <div className="login-notice" role="status">{t("auth.login.passwordChanged")}</div>}
-          {error && <div id="login-error" className="login-error" role="alert">{error}</div>}
-          <button className="login-submit" disabled={submitting} type="submit">
-            {submitting ? <span className="login-spinner" /> : <LoginIcon name="shield" />}
+        <form className="eos-login__form" onSubmit={submit} noValidate aria-busy={submitting}>
+          <div className="eos-login__field eos-login__field--username">
+            <label className="eos-login__sr-only" htmlFor="login-username">{t("auth.login.username")}</label>
+            <span className="eos-login__user-icon"><UserRound aria-hidden="true" /></span>
+            <input id="login-username" name="username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={128} readOnly={submitting} placeholder={t("auth.login.usernamePlaceholder")} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : undefined} />
+          </div>
+          <div className="eos-login__field eos-login__field--password">
+            <label className="eos-login__sr-only" htmlFor="login-password">{t("auth.login.password")}</label>
+            <input id="login-password" name="password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={updateCapsLock} onKeyUp={updateCapsLock} onBlur={() => setCapsLock(false)} autoComplete="current-password" minLength={6} maxLength={128} readOnly={submitting} placeholder={t("auth.login.passwordPlaceholder")} aria-invalid={Boolean(error)} aria-describedby={error ? "login-error" : capsLock ? "login-caps" : undefined} />
+            <button className="eos-login__password-toggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? t("auth.login.hidePassword") : t("auth.login.showPassword")} aria-pressed={showPassword}>
+              {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+            </button>
+          </div>
+          {capsLock && <div id="login-caps" className="eos-login__message" role="status">{t("auth.login.capsLock")}</div>}
+          {notice === "password_changed" && <div className="eos-login__message" role="status">{t("auth.login.passwordChanged")}</div>}
+          {error && <div id="login-error" className="eos-login__message eos-login__message--error" role="alert">{error}</div>}
+          <button className="eos-login__submit" disabled={submitting} type="submit">
+            {submitting ? <span className="eos-login__spinner" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
             {submitting ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
-
-        <aside className="login-security-note" aria-label={t("auth.login.securityTitle")}>
-          <LoginIcon name="lock" />
-          <span><strong>{t("auth.login.securityTitle")}</strong><small>{t("auth.login.securityDescription")}</small></span>
-        </aside>
-        <footer><span />{t("auth.login.footer")}<span /></footer>
       </section>
     </main>
   );

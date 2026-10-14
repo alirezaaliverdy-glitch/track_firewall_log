@@ -1,3 +1,8 @@
+## 2026-10-14 - EOSNET login redesign
+
+- Login now follows the supplied EOSNET reference with the original brand lockup, compact language selection, clean form and blue/cyan primary action. Responsive layouts, mild motion/reduced-motion, accessible labels/focus, password reveal, pending-submit protection and existing authentication handoff are implemented.
+- Frontend build and scoped local deployment passed. Browser QA covers desktop/tablet/mobile/landscape, English/RTL, keyboard-height/zoom reflow and mocked authentication states; no runtime errors or horizontal overflow. Locale parity, Persian copy, UTF-8, frontend environment security tests and production Compose validation passed. Production release verification is tracked separately below; no real test credentials were submitted.
+
 ## 2026-10-13 - Application VPN and asset access routes
 
 - Network Lab > VPN supports encrypted named WireGuard and L2TP/IPsec PSK profiles, administrator confirmation, audited helper invocation and actual connection state. Private IPv4 split routes preserve default routing and DNS; single-peer file import clears public/default ranges and retains MTU. Thirty-two profiles per workspace/four simultaneous tunnels are supported; only one L2TP, with non-overlapping destinations and distinct tunnel addresses.

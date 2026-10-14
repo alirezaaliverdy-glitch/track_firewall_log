@@ -145,7 +145,7 @@
   "auth.logout": "خروج",
   "auth.login.languageLabel": "زبان صفحه ورود",
   "auth.login.status": "سامانه امن و فعال",
-  "auth.login.title": "ورود امن به",
+  "auth.login.title": "ورود امن به سامانه",
   "auth.login.product": "سامانه تحلیل و فرمان امنیت",
   "auth.login.description": "دسترسی کنترل‌شده به تحلیل فایروال، پایش امنیت و اجرای عملیات شبکه",
   "auth.login.username": "نام کاربری",
