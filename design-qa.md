@@ -7,6 +7,8 @@
 - P0/P1/P2: none in tested surfaces. P3: original JPEG silhouette has a tiny dark fringe visible on a deliberately lighter test background, not a rectangular background; background/line icons/font rasterization remain reference derivatives.
 - Result: passed. Temporary screenshots remain outside the repository.
 
+- Public-site acceptance: the same 23-capture suite passes against `https://eosnet.ir/assets/cameras` after the manual 0f9dd83 release, including alpha corners, alternate-background cutout, actual delivered camera UI and EOSNET sidebar, normal/reduced motion, error/loading/success fixture states. Production PWA worker is bypassed only in the isolated test browser; application worker/auth behavior is unchanged. Original/public-render brand details were inspected together and the sidebar detail separately. No real camera/vendor operation or real user credential is used.
+
 ---
 
 # Design QA — EOSNET Login

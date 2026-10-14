@@ -1,5 +1,7 @@
 ## 2026-10-14 - Transparent EOSNET branding
 
+- Final production acceptance: CI 38558971104 completed SUCCESS at main 0f9dd83. After automatic replacement, checkout/marker match, all five services healthy, three camera/VPN migrations applied, internal certificate-verified readiness and public dashboard/camera/VPN HTTP 200; anonymous camera/VPN APIs return 401. Twenty-three public browser captures pass with worker bypass in the fixture runner; local rerun passes too. This QA/docs follow-up is local-only; the existing memory-heading validator mismatch remains unchanged.
+
 - Production follow-up: manual branding update built/deployed healthy, but legacy HTTPS checks against 127.0.0.1 failed Caddy TLS name selection. Replaced both release/verifier probes with certificate-verified local-gateway HTTPS using eosnet.ir SNI/Host. Twelve regressions and the real production probe pass; final corrected release/marker/CI verification is pending.
 
 - Preserved the original supplied logo pixels/geometry instead of an AI-redrawn variant, removed its rectangular background and shared transparent lockup/symbol assets between login and sidebar. Three original ray strips move gently; reduced-motion disables animation. Sidebar reads EOSNET with its previous orbiting dots retained.

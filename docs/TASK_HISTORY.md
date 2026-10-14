@@ -1,5 +1,7 @@
 ## 2026-10-14 - Preserve original EOSNET logo and update sidebar brand
 
+- Corrected release 0f9dd83 and CI 38558971104 completed SUCCESS. Post-automatic-deploy acceptance passed exact SHA/marker, all five services, three camera/VPN migrations, internal verified TLS/readiness, public UI HTTP 200 and anonymous camera/VPN API 401. Public visual/auth-fixture QA passes 23 captures; HTTPS PWA worker bypass was added to the test runner to keep requests inside its interceptor. Local rerun also passes. QA/docs acceptance follow-up remains local-only, with the unrelated pre-existing memory-heading validation failure recorded.
+
 - Manual production deployment exposed the remaining acceptance failure: HTTPS loopback-IP probing omitted the public TLS name. Real public readiness and hostname-aware internal HTTPS returned 200. Added one shared bounded, certificate-verified gateway probe for release/acceptance plus three regressions (12 deployment tests total); no application data, TLS configuration or vendor execution was changed.
 
 - User selected deterministic pixel transparency after generated variants altered the brand. Added reproducible canvas extraction and original transparent lockup/symbol PNGs; removed login crop/blend hacks and the black rectangle.

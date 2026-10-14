@@ -5,6 +5,9 @@ import puppeteer from "puppeteer-core";
 
 const browser = await puppeteer.launch({ executablePath: "/usr/bin/chromium-browser", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
 const page = await browser.newPage();
+// HTTPS enables the production PWA worker. Bypass it so every synthetic API
+// request remains in this page's interceptor rather than a worker-owned fetch.
+await page.setBypassServiceWorker(true);
 const errors = [];
 let loginRequests = 0, loginResponse = "invalid_credentials", signedIn = false;
 const user = { id: "qa-only", username: "qa-only", displayName: "QA", role: "admin", allowedSections: ["assets"] };
@@ -99,6 +102,8 @@ try {
   assert.equal(loginRequests, 0, "Invalid local form must not call API");
   await page.type("#login-username", " qa-only ");
   await page.type("#login-password", "qa-fixture-only");
+  assert.equal(await page.$eval("#login-username", element => element.value.trim()), "qa-only");
+  assert.equal(await page.$eval("#login-password", element => element.value.length), 15);
   await page.click(".eos-login__password-toggle");
   assert.equal(await page.$eval("#login-password", element => element.type), "text");
   assert.equal(await page.$eval(".eos-login__password-toggle", element => element.getAttribute("aria-pressed")), "true");
