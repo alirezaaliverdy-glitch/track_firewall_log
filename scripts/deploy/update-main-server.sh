@@ -160,13 +160,8 @@ trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 compose build firewall-web firewall-api
 compose up -d --no-build --remove-orphans --wait --wait-timeout 300
 
-if ! compose exec -T gateway wget --no-check-certificate -qO- https://127.0.0.1/firewall-api/health/ready </dev/null | grep -q '"ready":true'; then
-  echo "Deployment health check failed: API/database readiness is not healthy" >&2
-  compose ps
-  exit 1
-fi
-if ! compose exec -T gateway wget --no-check-certificate -q --spider https://127.0.0.1/firewall/dashboard </dev/null; then
-  echo "Deployment health check failed: dashboard did not return successfully" >&2
+if ! compose exec -T firewall-api node < scripts/deploy/probe-production-gateway.cjs; then
+  echo "Deployment health check failed: gateway TLS/API/dashboard is not healthy" >&2
   compose ps
   exit 1
 fi

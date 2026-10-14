@@ -1,5 +1,7 @@
 ## 2026-10-14 - Preserve original EOSNET logo and update sidebar brand
 
+- Manual production deployment exposed the remaining acceptance failure: HTTPS loopback-IP probing omitted the public TLS name. Real public readiness and hostname-aware internal HTTPS returned 200. Added one shared bounded, certificate-verified gateway probe for release/acceptance plus three regressions (12 deployment tests total); no application data, TLS configuration or vendor execution was changed.
+
 - User selected deterministic pixel transparency after generated variants altered the brand. Added reproducible canvas extraction and original transparent lockup/symbol PNGs; removed login crop/blend hacks and the black rectangle.
 - Shared raster branding animates three original ray strips very gently, respects reduced motion, and replaces sidebar shield/name with EOSNET while retaining orbiting dots. Local frontend build/deployment and 23 browser captures pass without page errors or overflow; fixture authentication does not submit real credentials.
 - Production SSH recovered after the operator authorized manual update. Existing five services are healthy; latest exact SHA/marker/migration/public checks are completed as release follow-up, not assumed from local success.

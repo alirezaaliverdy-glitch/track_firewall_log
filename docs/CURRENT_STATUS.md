@@ -1,5 +1,7 @@
 ## 2026-10-14 - Transparent EOSNET branding
 
+- Production follow-up: manual branding update built/deployed healthy, but legacy HTTPS checks against 127.0.0.1 failed Caddy TLS name selection. Replaced both release/verifier probes with certificate-verified local-gateway HTTPS using eosnet.ir SNI/Host. Twelve regressions and the real production probe pass; final corrected release/marker/CI verification is pending.
+
 - Preserved the original supplied logo pixels/geometry instead of an AI-redrawn variant, removed its rectangular background and shared transparent lockup/symbol assets between login and sidebar. Three original ray strips move gently; reduced-motion disables animation. Sidebar reads EOSNET with its previous orbiting dots retained.
 - Frontend build and local scoped deployment passed. Twenty-three fixture-only browser captures cover alpha transparency, alternate background, mobile/desktop, normal/reduced motion, auth states and camera-page handoff without page errors/overflow. No auth, camera, VPN, policy or connector behavior changed.
 - Authorized production SSH access has recovered. Five server services are healthy at a068064, but the older deploy marker requires exact-release verification. Manual update/public acceptance is underway; prior outage records below describe earlier observations.
