@@ -84,7 +84,7 @@ compose() {
 # as firewall_app. Check before replacing a healthy API container: Prisma cannot
 # ALTER a table owned by another role, and a failed startup would cause outage.
 if git cat-file -e "$target_sha:backend/prisma/migrations/20261009090000_managed_user_workspace_scope/migration.sql" 2>/dev/null; then
-  migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261009090000_managed_user_workspace_scope' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR EXISTS (SELECT 1 FROM pg_tables t JOIN pg_roles r ON r.rolname = current_user WHERE t.schemaname = 'public' AND t.tablename = 'AppUser' AND (t.tableowner = current_user OR r.rolsuper)) THEN 'ready' ELSE 'owner_mismatch' END\"") || {
+  migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261009090000_managed_user_workspace_scope' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR EXISTS (SELECT 1 FROM pg_tables t JOIN pg_roles r ON r.rolname = current_user WHERE t.schemaname = 'public' AND t.tablename = 'AppUser' AND (t.tableowner = current_user OR r.rolsuper)) THEN 'ready' ELSE 'owner_mismatch' END\"" </dev/null) || {
     echo "Cannot verify AppUser migration ownership; leaving the running deployment unchanged" >&2
     exit 2
   }
@@ -103,7 +103,7 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261012150000_camera_
   case "$camera_migration_role" in
     ''|*[!a-zA-Z0-9_]*) echo "Unsupported API role name for migration preflight; leaving the running deployment unchanged" >&2; exit 2 ;;
   esac
-  camera_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261012150000_camera_workspace' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES')) THEN 'ready' ELSE 'camera_migration_permission_missing' END\"") || {
+  camera_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261012150000_camera_workspace' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES')) THEN 'ready' ELSE 'camera_migration_permission_missing' END\"" </dev/null) || {
     echo "Cannot verify camera migration permissions; leaving the running deployment unchanged" >&2
     exit 2
   }
@@ -113,12 +113,12 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261012150000_camera_
   }
 fi
 if git cat-file -e "$target_sha:backend/prisma/migrations/20261013160000_split_vpn/migration.sql" 2>/dev/null; then
-  vpn_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261013160000_split_vpn' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES')) THEN 'ready' ELSE 'missing' END\"") || exit 2
+  vpn_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261013160000_split_vpn' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES')) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
   [ "$vpn_migration_access" = ready ] || { echo "VPN migration needs schema CREATE and AppUser(id) REFERENCES; leaving the running deployment unchanged" >&2; exit 2; }
   [ -c /dev/ppp ] || echo "PPP device is absent; WireGuard remains available. Enable the L2TP Compose override after host setup."
 fi
 if git cat-file -e "$target_sha:backend/prisma/migrations/20261013170000_vpn_asset_binding/migration.sql" 2>/dev/null; then
-  vpn_asset_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261013170000_vpn_asset_binding' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'CameraDevice' AND pg_get_userbyid(c.relowner) <> '$camera_migration_role') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'VpnConnection' AND NOT has_table_privilege('$camera_migration_role', c.oid, 'REFERENCES'))) THEN 'ready' ELSE 'missing' END\"") || exit 2
+  vpn_asset_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261013170000_vpn_asset_binding' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'CameraDevice' AND pg_get_userbyid(c.relowner) <> '$camera_migration_role') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'VpnConnection' AND NOT has_table_privilege('$camera_migration_role', c.oid, 'REFERENCES'))) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
   [ "$vpn_asset_migration_access" = ready ] || { echo "VPN asset migration needs CameraDevice ownership, schema CREATE and VpnConnection REFERENCES; leaving the running deployment unchanged" >&2; exit 2; }
 fi
 git merge --ff-only "$target_sha"
@@ -132,7 +132,7 @@ compose config --format json | jq -e --arg source "$(pwd -P)/Caddyfile.productio
   echo "Gateway is not using the server-local Caddyfile" >&2
   exit 2
 }
-compose run --rm --no-deps gateway caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+compose run --rm --no-deps --interactive=false gateway caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null
 
 image_for_service() {
   container_id=$(compose ps -q "$1")
@@ -160,12 +160,12 @@ trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 compose build firewall-web firewall-api
 compose up -d --no-build --remove-orphans --wait --wait-timeout 300
 
-if ! compose exec -T gateway wget --no-check-certificate -qO- https://127.0.0.1/firewall-api/health/ready | grep -q '"ready":true'; then
+if ! compose exec -T gateway wget --no-check-certificate -qO- https://127.0.0.1/firewall-api/health/ready </dev/null | grep -q '"ready":true'; then
   echo "Deployment health check failed: API/database readiness is not healthy" >&2
   compose ps
   exit 1
 fi
-if ! compose exec -T gateway wget --no-check-certificate -q --spider https://127.0.0.1/firewall/dashboard; then
+if ! compose exec -T gateway wget --no-check-certificate -q --spider https://127.0.0.1/firewall/dashboard </dev/null; then
   echo "Deployment health check failed: dashboard did not return successfully" >&2
   compose ps
   exit 1

@@ -1,5 +1,6 @@
 ## 2026-10-14 - Repair file-backed production migration preflight
 
+- Resolved the second concrete deployment failure in run 38525438289: interactive Caddy validation consumed the SSH-delivered shell script after successful preflight. Detached stdin for non-input operations and added a continuation regression; no live database/vendor data change was made by the failed run.
 - Diagnosed failed production job 115306591319 in CI run 38400408579: camera preflight read an absent DATABASE_URL from docker exec although the running API received it through its entrypoint. Added role resolution for both explicit URL and file-backed POSTGRES_USER, with sanitized errors, and regression coverage.
 - Verified server roles/schema/reference permissions read-only; retained existing migrations, secrets, server overrides and data. Added SHA/marker/five-service/migration/readiness acceptance tooling, aligned documented disk floor with the existing 6 GiB guard and expanded deployment timeout to 45 minutes. Publication/production acceptance is not yet claimed at this commit.
 
