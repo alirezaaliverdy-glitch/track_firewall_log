@@ -94,9 +94,9 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261009090000_managed
   }
 fi
 if git cat-file -e "$target_sha:backend/prisma/migrations/20261012150000_camera_workspace/migration.sql" 2>/dev/null; then
-  # The API role can differ from POSTGRES_USER on a legacy database. Read only
-  # its username, never echo the DATABASE_URL or provider credentials.
-  camera_migration_role=$(compose exec -T firewall-api node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).username))') || {
+  # docker exec does not inherit exports made by docker-entrypoint.sh. Resolve
+  # the same URL-or-POSTGRES_USER role without reading the password files.
+  camera_migration_role=$(git show "$target_sha:scripts/deploy/read-api-migration-role.mjs" | compose exec -T firewall-api node) || {
     echo "Cannot determine the API migration role; leaving the running deployment unchanged" >&2
     exit 2
   }

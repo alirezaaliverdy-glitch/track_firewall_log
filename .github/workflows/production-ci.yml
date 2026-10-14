@@ -146,6 +146,8 @@ jobs:
           docker compose -f docker-compose.production.yml config
           docker compose -f docker-compose.firewall.yml config
           sh -n scripts/deploy/update-main-server.sh
+          sh -n scripts/deploy/verify-main-server.sh
+          node --test scripts/deploy/test-migration-role.mjs
           sh -n scripts/deploy/prune-production-images.sh
           sh scripts/deploy/test-prune-production-images.sh
 
@@ -154,7 +156,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [frontend, backend, compose]
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     environment: production
     concurrency:
       group: production-server-deploy

@@ -1,3 +1,8 @@
+## 2026-10-14 - Production release preflight correction
+
+- The camera/VPN main release passed builds/tests but failed before installation: fresh docker exec lacked the DATABASE_URL constructed by the API entrypoint, causing migration-role detection to throw Invalid URL. A role-only helper now matches explicit-URL and file-backed POSTGRES_USER setup without reading secrets.
+- Four regression tests and shell syntax checks pass. Read-only server checks found the expected firewall_app role, schema CREATE/AppUser(id) REFERENCES permissions, old running services and no camera/VPN migrations. Added a read-only SHA/marker/service/migration/readiness verifier and allowed 45 minutes for media/VPN image builds. Push and final production acceptance remain pending at this record.
+
 ## 2026-10-14 - EOSNET login redesign
 
 - Login now follows the supplied EOSNET reference with the original brand lockup, compact language selection, clean form and blue/cyan primary action. Responsive layouts, mild motion/reduced-motion, accessible labels/focus, password reveal, pending-submit protection and existing authentication handoff are implemented.

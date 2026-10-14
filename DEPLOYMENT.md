@@ -74,7 +74,11 @@ The SSH user must own or be authorized to update the checkout, fetch the public 
 
 The initial backend image build can take more than ten minutes while Alpine installs Chromium. CI keeps the SSH connection alive and emits a periodic progress line during the build; the production job permits up to 45 minutes. Do not interpret a fast-forwarded checkout alone as a successful release: the deploy marker and health checks are written only after the containers are healthy.
 
-The server must have at least 2 GiB free before a release begins; the deploy script refuses to start below that floor to protect the live database and gateway from a full root filesystem. A first build can temporarily need more than 3 GiB because the old and new Chromium-enabled API images coexist. Increase the server filesystem if this headroom cannot be maintained. Only disposable build/package caches were cleared during the 2026-10-06 recovery; runtime volumes and certificate files were preserved.
+The server must have at least 6 GiB free before a release begins. If necessary, the deploy script trims reclaimable BuildKit cache to a 2 GB budget and checks the floor again before building. Old and new Chromium/media/VPN-enabled API images can coexist during replacement. Increase the server filesystem if this headroom cannot be maintained; runtime volumes and certificate files must be preserved.
+
+Migration preflight resolves the API's database role from an explicit `DATABASE_URL` or the same `POSTGRES_USER` default used by its entrypoint. A fresh `docker exec` process does not inherit the entrypoint's generated URL; do not interpret that absent variable as a missing database connection. No password file is read by the role preflight.
+
+After deployment, run `sh scripts/deploy/verify-main-server.sh <full-commit-sha>` from the production checkout. It checks the checkout/deploy marker, all five long-running services, applied camera/VPN migrations, API readiness and dashboard reachability without printing credentials or application data.
 
 ## Advanced CI deployment
 

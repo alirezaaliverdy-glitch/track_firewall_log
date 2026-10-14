@@ -1,3 +1,8 @@
+## 2026-10-14 - Repair file-backed production migration preflight
+
+- Diagnosed failed production job 115306591319 in CI run 38400408579: camera preflight read an absent DATABASE_URL from docker exec although the running API received it through its entrypoint. Added role resolution for both explicit URL and file-backed POSTGRES_USER, with sanitized errors, and regression coverage.
+- Verified server roles/schema/reference permissions read-only; retained existing migrations, secrets, server overrides and data. Added SHA/marker/five-service/migration/readiness acceptance tooling, aligned documented disk floor with the existing 6 GiB guard and expanded deployment timeout to 45 minutes. Publication/production acceptance is not yet claimed at this commit.
+
 ## 2026-10-14 - EOSNET login redesign
 
 - Rebuilt the login UI from the supplied portrait reference using the supplied raster logo, a generated background reduced to 18 KB WebP, existing Persian typeface and matching library icons. Removed the old framing/extra copy and added quiet entrance/hover/logo motion with reduced-motion support.

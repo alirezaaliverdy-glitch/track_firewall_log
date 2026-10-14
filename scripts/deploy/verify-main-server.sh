@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+# Read-only release acceptance. Run from the production checkout after deployment.
+set -eu
+expected_sha=${1:?Expected deployed commit is required}
+case "$expected_sha" in *[!0-9a-f]*|'') exit 2 ;; esac
+[ "${#expected_sha}" -eq 40 ] || exit 2
+compose() { docker compose --project-name firewall-soar -f docker-compose.yml -f docker-compose.override.yml "$@"; }
+[ "$(git rev-parse HEAD)" = "$expected_sha" ]
+[ "$(cat .deploy/current-main-sha)" = "$expected_sha" ]
+git diff --quiet && git diff --cached --quiet
+printf 'checkout_and_deploy_marker=%s\n' "$expected_sha"
+for service in firewall-api firewall-web firewall-db gateway firewall-vpn; do
+  container=$(compose ps -q "$service")
+  [ -n "$container" ]
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
+  [ "$health" = healthy ]
+  printf '%s=%s\n' "$service" "$health"
+done
+migrations=$(compose exec -T firewall-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public._prisma_migrations WHERE migration_name IN ('"'"'20261012150000_camera_workspace'"'"', '"'"'20261013160000_split_vpn'"'"', '"'"'20261013170000_vpn_asset_binding'"'"') AND finished_at IS NOT NULL AND rolled_back_at IS NULL"')
+[ "$migrations" = 3 ]
+printf 'camera_and_vpn_migrations=3_applied\n'
+compose exec -T gateway wget --no-check-certificate -qO- https://127.0.0.1/firewall-api/health/ready | grep -q '"ready":true'
+compose exec -T gateway wget --no-check-certificate -q --spider https://127.0.0.1/dashboard
+printf 'api_ready=true dashboard=reachable\n'
