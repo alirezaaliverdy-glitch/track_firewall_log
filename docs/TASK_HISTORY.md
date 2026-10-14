@@ -1,3 +1,9 @@
+## 2026-10-14 - Preserve original EOSNET logo and update sidebar brand
+
+- User selected deterministic pixel transparency after generated variants altered the brand. Added reproducible canvas extraction and original transparent lockup/symbol PNGs; removed login crop/blend hacks and the black rectangle.
+- Shared raster branding animates three original ray strips very gently, respects reduced motion, and replaces sidebar shield/name with EOSNET while retaining orbiting dots. Local frontend build/deployment and 23 browser captures pass without page errors or overflow; fixture authentication does not submit real credentials.
+- Production SSH recovered after the operator authorized manual update. Existing five services are healthy; latest exact SHA/marker/migration/public checks are completed as release follow-up, not assumed from local success.
+
 ## 2026-10-14 - Repair file-backed production migration preflight
 
 - Published login and release fixes through a068064. Validated nine deploy/build tests, a real local API rebuild with all camera/VPN tools, five healthy local services, readiness and 20 mocked-auth UI captures. CI run 38528898514 installed packages successfully but lost SSH during image export (exit 255, 07:43:59 UTC); production installation/marker/migrations cannot yet be claimed complete. Operator reports public-site access; environment-specific SSH/HTTPS access is unavailable. Required follow-up is management-path recovery and normal release acceptance, not an indirect retry. Retained the corrected camera-heading QA selector locally.

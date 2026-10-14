@@ -1,3 +1,9 @@
+## 2026-10-14 - Transparent EOSNET branding
+
+- Preserved the original supplied logo pixels/geometry instead of an AI-redrawn variant, removed its rectangular background and shared transparent lockup/symbol assets between login and sidebar. Three original ray strips move gently; reduced-motion disables animation. Sidebar reads EOSNET with its previous orbiting dots retained.
+- Frontend build and local scoped deployment passed. Twenty-three fixture-only browser captures cover alpha transparency, alternate background, mobile/desktop, normal/reduced motion, auth states and camera-page handoff without page errors/overflow. No auth, camera, VPN, policy or connector behavior changed.
+- Authorized production SSH access has recovered. Five server services are healthy at a068064, but the older deploy marker requires exact-release verification. Manual update/public acceptance is underway; prior outage records below describe earlier observations.
+
 ## 2026-10-14 - Production release preflight correction
 
 - Published through main a068064. Nine deploy/build regressions and real local runtime-image/tool/readiness checks passed; login/camera handoff QA passed with 20 captures. CI run 38528898514 passed all check jobs and package installation, then lost production SSH during image export and ended with exit 255. The operator can open the public site, but this environment's SSH/HTTPS probes time out. New production SHA/marker, camera/VPN migrations and five-service acceptance remain unverified; restore a working authorized management path before resuming deployment. Direct rerun rejected by auto-review was not performed.

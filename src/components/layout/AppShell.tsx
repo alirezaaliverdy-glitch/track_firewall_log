@@ -1,4 +1,4 @@
-import { Bot, Boxes, ChevronDown, Crosshair, Eye, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, ShieldCheck, WifiOff, Wrench, X } from "lucide-react";
+import { Bot, Boxes, ChevronDown, Crosshair, Eye, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, WifiOff, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -8,6 +8,7 @@ import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { getMobilePreference, setMobilePreference } from "@/lib/mobileStorage";
 import { clearNativeServerUrl, isNativeAndroidApp } from "@/mobile/nativeServerConfig";
 import { clearNativeSessionToken } from "@/mobile/nativeSession";
+import EosnetLogo from "@/components/branding/EosnetLogo";
 import "./AppShellNavigation.css";
 import "./AppShellTopbar.css";
 // Load the final mobile overrides after the desktop navigation skin. The navigation
@@ -172,9 +173,9 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
       <aside id="platform-primary-navigation" className={`platform-sidebar ${collapsed && !mobileNavOpen ? "is-collapsed" : ""} ${mobileNavOpen ? "is-mobile-open" : ""}`} aria-label={t("shell.primaryNavigation")}>
         <span className="platform-sidebar__aurora" aria-hidden="true" />
         <div className="platform-sidebar__controls">
-          <Link to="/dashboard" className="platform-sidebar__brand" aria-label={isFa ? "مرکز فرمان فایروال" : "Firewall SOAR home"}>
-            <span className="platform-sidebar__brand-mark"><ShieldCheck aria-hidden="true" /><i /><i /></span>
-            <span className="platform-sidebar__brand-copy"><strong>Firewall SOAR</strong><small>{isFa ? "مرکز فرمان امنیت" : "Security command"}</small></span>
+          <Link to="/dashboard" className="platform-sidebar__brand" aria-label={isFa ? "داشبورد EOSNET" : "EOSNET dashboard"}>
+            <span className="platform-sidebar__brand-mark"><EosnetLogo variant="symbol" decorative /><i aria-hidden="true" /><i aria-hidden="true" /></span>
+            <span className="platform-sidebar__brand-copy"><strong dir="ltr">EOSNET</strong><small>{isFa ? "مرکز فرمان امنیت" : "Security command"}</small></span>
           </Link>
           <button type="button" className="platform-sidebar__toggle" onClick={toggleSidebar} aria-label={t("shell.toggleNavigation")} aria-expanded={!collapsed} title={isFa ? (collapsed ? "بازکردن منو" : "جمع‌کردن منو") : (collapsed ? "Expand navigation" : "Collapse navigation")}>
             <SidebarToggleIcon className="h-4 w-4" aria-hidden="true" />

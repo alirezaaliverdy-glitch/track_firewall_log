@@ -1,0 +1,34 @@
+.eos-brand {
+  --beam-left: 75%;
+  --beam-top: 34%;
+  --beam-row-2: 44%;
+  --beam-row-3: 54%;
+  --beam-bottom: 64%;
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 266 / 220;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.eos-brand--lockup {
+  --beam-left: 73.305%;
+  --beam-top: 26.714%;
+  --beam-row-2: 34.571%;
+  --beam-row-3: 42.429%;
+  --beam-bottom: 50.286%;
+  aspect-ratio: 354 / 280;
+}
+.eos-brand img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.eos-brand__base { clip-path: polygon(0 0, 100% 0, 100% var(--beam-top), var(--beam-left) var(--beam-top), var(--beam-left) var(--beam-bottom), 100% var(--beam-bottom), 100% 100%, 0 100%); }
+.eos-brand__beam { position: absolute; inset: 0; animation: eos-brand-flow 8s ease-in-out infinite; }
+.eos-brand__beam--1 { clip-path: polygon(var(--beam-left) var(--beam-top), 100% var(--beam-top), 100% var(--beam-row-2), var(--beam-left) var(--beam-row-2)); animation-delay: -2s; }
+.eos-brand__beam--2 { clip-path: polygon(var(--beam-left) var(--beam-row-2), 100% var(--beam-row-2), 100% var(--beam-row-3), var(--beam-left) var(--beam-row-3)); animation-duration: 10s; animation-delay: -5s; }
+.eos-brand__beam--3 { clip-path: polygon(var(--beam-left) var(--beam-row-3), 100% var(--beam-row-3), 100% var(--beam-bottom), var(--beam-left) var(--beam-bottom)); animation-duration: 9s; animation-delay: -7s; }
+@keyframes eos-brand-flow {
+  0%, 100% { transform: translateX(0); opacity: .92; filter: brightness(1); }
+  50% { transform: translateX(.4%); opacity: 1; filter: brightness(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eos-brand .eos-brand__beam { animation: none !important; transform: none; opacity: 1; filter: none; }
+}

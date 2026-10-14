@@ -60,22 +60,7 @@
 .eos-login__content { width: min(100%, 440px); margin-block: auto; }
 .eos-login__header { display: flex; flex-direction: column; align-items: center; animation: eos-login-enter .65s ease-out both; }
 .eos-login__brand {
-  position: relative;
-  width: 204px;
-  aspect-ratio: 338 / 264;
-  overflow: hidden;
-  mix-blend-mode: lighten;
-  animation: eos-login-float 7s ease-in-out 1s infinite;
-}
-/* Display the supplied brand lockup unchanged; no approximation of the logo. */
-.eos-login__brand img {
-  position: absolute;
-  width: 249.704142%;
-  max-width: none;
-  height: auto;
-  left: -74.556213%;
-  top: -79.924242%;
-  filter: contrast(1.2);
+  width: 214px;
 }
 .eos-login__status {
   display: flex;
@@ -161,7 +146,6 @@
 .eos-login__message--error { border-color: #fb8c9c; background: #2c172b99; color: #ffbac8; }
 .eos-login__sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @keyframes eos-login-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes eos-login-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 @keyframes eos-login-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 640px) {
@@ -170,7 +154,7 @@
   .eos-login__language { top: max(40px, 6.333svh, calc(env(safe-area-inset-top) + 20px)); left: max(24px, 6.75vw, env(safe-area-inset-left)); width: 108px; padding: 3px; }
   .eos-login__language button { min-height: 28px; padding-inline: 9px; font-size: 12px; }
   .eos-login__language button::after { inset-block: -8px; }
-  .eos-login__brand { width: min(40.05vw, 169px); }
+  .eos-login__brand { width: min(42vw, 178px); }
   .eos-login__status { margin-top: 25px; min-height: 29px; padding: 4px 9px; font-size: 11px; gap: 8px; }
   .eos-login__header h1 { margin-top: 15px; font-size: clamp(21px, 5.925vw, 25px); line-height: 1.65; }
   .eos-login__form { margin-top: 71px; gap: 25px; }
@@ -181,7 +165,6 @@
   .eos-login__password-toggle { height: 38px; }
   .eos-login__submit { min-height: 54px; margin-top: -4px; border-radius: 13px; font-size: 17px; }
   .eos-login--native { overflow-anchor: none; overscroll-behavior-y: contain; }
-  .eos-login--native .eos-login__brand { animation: none; }
   .eos-login--native input { scroll-margin-block: 88px; }
 }
 @media (max-height: 650px) and (max-width: 640px) {

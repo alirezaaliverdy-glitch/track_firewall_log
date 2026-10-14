@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AuthApiError } from "@/lib/auth";
 import { isNativeAndroidApp } from "@/mobile/nativeServerConfig";
 import i18n from "@/i18n";
-import logoSource from "@/assets/branding/eosnet-logo-source.jpg";
+import EosnetLogo from "@/components/branding/EosnetLogo";
 import "@/mobile/PwaMobile.css";
 import "./EosnetLogin.css";
 
@@ -69,9 +69,7 @@ export default function LoginPage() {
 
       <section className="eos-login__content" aria-labelledby="login-title">
         <header className="eos-login__header">
-          <div className="eos-login__brand">
-            <img src={logoSource} alt="EOSNET · eosnet.ir" width="844" height="1500" fetchPriority="high" />
-          </div>
+          <EosnetLogo className="eos-login__brand" />
           <div className="eos-login__status">
             <span className="eos-login__status-dot" aria-hidden="true" />
             <span>{t("auth.login.status")}</span>

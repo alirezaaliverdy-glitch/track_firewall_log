@@ -9,8 +9,9 @@
 .platform-sidebar__brand { display: flex; min-width: 0; align-items: center; gap: 10px; color: #e8f9ff; }
 .platform-sidebar__brand-mark { position: relative; display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; border: 1px solid rgba(103, 232, 249, .32); border-radius: 14px; color: #8aeeff; background: linear-gradient(145deg, rgba(6, 182, 212, .18), rgba(124, 58, 237, .14)); box-shadow: inset 0 0 18px rgba(34, 211, 238, .06), 0 7px 23px rgba(8, 145, 178, .11); }
 .platform-sidebar__brand-mark svg { width: 21px; height: 21px; }
-.platform-sidebar__brand-mark i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #67e8f9; box-shadow: 0 0 9px currentColor; animation: sidebar-orbit 5s linear infinite; }
-.platform-sidebar__brand-mark i:last-child { width: 4px; height: 4px; color: #c084fc; background: #c084fc; animation-duration: 7s; animation-direction: reverse; }
+.platform-sidebar__brand-mark .eos-brand { width: 32px; }
+.platform-sidebar__brand-mark i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #67e8f9; box-shadow: 0 0 9px currentColor; animation: sidebar-orbit 8s linear infinite; }
+.platform-sidebar__brand-mark i:last-child { width: 4px; height: 4px; color: #c084fc; background: #c084fc; animation-duration: 10s; animation-direction: reverse; }
 .platform-sidebar__brand-copy, .platform-sidebar__profile-copy { display: grid; min-width: 0; gap: 2px; transition: opacity .15s ease, transform .22s ease; }
 .platform-sidebar__brand-copy strong { font-size: .78rem; letter-spacing: .03em; white-space: nowrap; }
 .platform-sidebar__brand-copy small { color: #5e7c91; font-size: .6rem; font-weight: 700; }

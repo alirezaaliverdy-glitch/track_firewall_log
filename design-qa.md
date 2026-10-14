@@ -1,3 +1,14 @@
+# Design QA — Transparent EOSNET branding
+
+- Date: 2026-10-14. Source: original user-supplied logo; explicit user choice is pixel-preserving transparency, not redraw.
+- Local isolated Chromium run: 23 screenshots; zero page errors/overflow. Login desktop/tablet/mobile, English/RTL, loading/error/success, camera handoff and sidebar were checked. No real authentication or vendor operations.
+- Visually inspected original/rendered lockup, mobile login, blue-background cutout and desktop/sidebar detail. PNG corner alpha is zero; no background rectangle remains. Shared raster layers animate only the original ray strips; original ring/wordmark stay static. Existing sidebar orbit dots remain.
+- Reduced-motion and normal animation assertions pass. Frontend production build and scoped local web deployment are healthy. Public release verification is tracked separately.
+- P0/P1/P2: none in tested surfaces. P3: original JPEG silhouette has a tiny dark fringe visible on a deliberately lighter test background, not a rectangular background; background/line icons/font rasterization remain reference derivatives.
+- Result: passed. Temporary screenshots remain outside the repository.
+
+---
+
 # Design QA — EOSNET Login
 
 - Date: 2026-10-14

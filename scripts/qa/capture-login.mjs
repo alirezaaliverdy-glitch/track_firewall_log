@@ -49,10 +49,19 @@ try {
   await page.goto(process.env.LOGIN_QA_URL || "http://host.docker.internal/firewall/assets/cameras", { waitUntil: "networkidle0" });
   await page.waitForSelector(".eos-login__submit");
   assert.equal(await page.evaluate(() => document.activeElement.tagName), "BODY", "Must not open a mobile keyboard automatically");
-  assert.equal(await page.$eval(".eos-login__brand", element => getComputedStyle(element).animationName), "none");
+  assert.equal(await page.$eval(".eos-login__brand .eos-brand__beam", element => getComputedStyle(element).animationName), "none");
   assert.equal(await page.$eval(".eos-login__submit", element => getComputedStyle(element).fontWeight), "800");
   assert.equal(await page.$eval("#login-password", element => getComputedStyle(element).fontSize), "16px");
   await capture("login-reference-mobile");
+  const transparentCorners = await page.$eval(".eos-brand__base", image => {
+    const canvas = document.createElement("canvas"); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d"); context.drawImage(image, 0, 0);
+    return [[0,0],[canvas.width-1,0],[0,canvas.height-1],[canvas.width-1,canvas.height-1]].map(([x,y]) => context.getImageData(x,y,1,1).data[3]);
+  });
+  assert.deepEqual(transparentCorners, [0,0,0,0], "Logo corners must be genuinely transparent");
+  await page.evaluate(() => { document.querySelector(".eos-login").style.background = "#163247"; document.querySelector(".eos-login__background").style.display = "none"; });
+  await capture("login-transparent-on-blue");
+  await page.evaluate(() => { document.querySelector(".eos-login").style.background = ""; document.querySelector(".eos-login__background").style.display = ""; });
   const clips = { brand: { x: 100, y: 100, width: 222, height: 246 }, form: { x: 32, y: 410, width: 358, height: 215 } };
   for (const [name, clip] of Object.entries(clips)) {
     await page.screenshot({ path: `/out/login-${name}-detail.png`, clip }); screenshots++;
@@ -79,7 +88,7 @@ try {
   await page.click('.eos-login__language button[lang="fa"]');
   await page.waitForFunction(() => document.documentElement.lang === "fa");
   await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
-  assert.equal(await page.$eval(".eos-login__brand", element => getComputedStyle(element).animationName), "eos-login-float");
+  assert.equal(await page.$eval(".eos-login__brand .eos-brand__beam", element => getComputedStyle(element).animationName), "eos-brand-flow");
   await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   // Half the desktop CSS viewport models the responsive reflow at 200% browser zoom.
   await page.setViewport({ width: 720, height: 450 });
@@ -133,6 +142,15 @@ try {
   await page.waitForFunction(() => !document.querySelector(".eos-login"));
   assert.equal(signedIn, true, "Successful login must hand off to the existing protected route");
   await page.waitForSelector(".cameras-page__heading");
+  assert.equal(await page.$eval(".platform-sidebar__brand-copy strong", element => element.textContent), "EOSNET");
+  assert.equal((await page.$$(".platform-sidebar__brand-mark svg")).length, 0);
+  assert.equal((await page.$$(".platform-sidebar__brand-mark .eos-brand img")).length, 4);
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.screenshot({ path: "/out/eosnet-sidebar-desktop.png", fullPage: true }); screenshots++;
+  await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+  assert.equal(await page.$eval(".platform-sidebar__brand-mark .eos-brand__beam", element => getComputedStyle(element).animationName), "eos-brand-flow");
+  assert.equal(await page.$eval(".platform-sidebar__brand-mark i", element => getComputedStyle(element).animationName), "sidebar-orbit");
+  await page.screenshot({ path: "/out/eosnet-sidebar-brand-detail.png", clip: await page.$eval(".platform-sidebar__controls", element => { const { x,y,width,height } = element.getBoundingClientRect(); return { x,y,width,height }; }) }); screenshots++;
   await page.screenshot({ path: "/out/login-camera-handoff.png", fullPage: true });
   screenshots++;
   assert.deepEqual(errors, []);
