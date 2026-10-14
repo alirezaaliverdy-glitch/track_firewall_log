@@ -46,7 +46,7 @@ async function capture(name) {
 try {
   await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
   await page.setViewport({ width: 422, height: 750, deviceScaleFactor: 2 });
-  await page.goto("http://host.docker.internal/firewall/assets/cameras", { waitUntil: "networkidle0" });
+  await page.goto(process.env.LOGIN_QA_URL || "http://host.docker.internal/firewall/assets/cameras", { waitUntil: "networkidle0" });
   await page.waitForSelector(".eos-login__submit");
   assert.equal(await page.evaluate(() => document.activeElement.tagName), "BODY", "Must not open a mobile keyboard automatically");
   assert.equal(await page.$eval(".eos-login__brand", element => getComputedStyle(element).animationName), "none");
@@ -132,6 +132,9 @@ try {
   await page.click(".eos-login__submit");
   await page.waitForFunction(() => !document.querySelector(".eos-login"));
   assert.equal(signedIn, true, "Successful login must hand off to the existing protected route");
+  await page.waitForSelector(".camera-heading");
+  await page.screenshot({ path: "/out/login-camera-handoff.png", fullPage: true });
+  screenshots++;
   assert.deepEqual(errors, []);
   process.stdout.write(JSON.stringify({ ok: true, screenshots, runtimeErrors: 0, overflow: false, authResponses: "mocked only", authHandoff: true, duplicateSubmitGuard: true, reducedMotion: true }));
 } finally { await browser.close(); }

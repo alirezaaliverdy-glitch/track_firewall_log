@@ -11,7 +11,9 @@ RUN pnpm build
 
 FROM node:22-alpine
 WORKDIR /app
-RUN apk add --no-cache iputils nmap chromium fontconfig ffmpeg wireguard-tools iproute2 strongswan xl2tpd ppp iptables procps \
+COPY docker-install-tools.sh /usr/local/bin/firewall-install-tools
+RUN sed -i 's/\r$//' /usr/local/bin/firewall-install-tools \
+  && sh /usr/local/bin/firewall-install-tools \
   && corepack enable
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
