@@ -4,6 +4,7 @@
 - Source: user-supplied `3.jpeg`, 844 × 1500 portrait; brand lockup is displayed from the supplied image, not approximated in SVG/CSS.
 - Implementation: `src/components/auth/LoginPage.tsx`, `EosnetLogin.css`; existing protected routes show this login when signed out.
 - Browser: isolated Chromium through the existing API image; auth requests are intercepted with fixtures. Captures are temporary under `eosnet-login-qa`, not committed.
+- Final local run: 20 captures including camera-page handoff, zero page errors and no horizontal overflow. Public-server visual acceptance remains pending because this environment lost connectivity during deployment; local fidelity acceptance is not a production rollout claim.
 - Reference viewport: 422 × 750 at DPR 2; resilience: 1440 × 900, 768 × 1024, 390 × 844, 320 × 568, 844 × 390, 720 × 450 zoom reflow and 390 × 420 keyboard-height layout.
 
 ## Comparison and iteration

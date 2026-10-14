@@ -132,7 +132,7 @@ try {
   await page.click(".eos-login__submit");
   await page.waitForFunction(() => !document.querySelector(".eos-login"));
   assert.equal(signedIn, true, "Successful login must hand off to the existing protected route");
-  await page.waitForSelector(".camera-heading");
+  await page.waitForSelector(".cameras-page__heading");
   await page.screenshot({ path: "/out/login-camera-handoff.png", fullPage: true });
   screenshots++;
   assert.deepEqual(errors, []);
