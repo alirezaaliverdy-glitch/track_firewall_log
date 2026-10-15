@@ -5,7 +5,7 @@
 - Verified actor differs from effective root account, corrected interpretation is visible, source action opens its exact preview, partial verification history does not blank review, imported default routes are absent, and no connector/VPN execution occurs. Zero runtime errors and no horizontal/dialog overflow.
 - Source problem screenshots were inspected alongside the rendered desktop/mobile analysis. Additional event detail stays collapsed until requested. Native file selection and the paste alternative both work; credentials stay out of screenshots and output.
 - P0/P1/P2: none in tested states. Limit: browser fixtures verify UI flow; actual device configuration and real VPN-server connectivity are not inferred from them. Optional external-provider analysis is not enabled pending authorization.
-- Result: local passed; production visual acceptance is recorded after rollout. Captures are temporary outside the repository.
+- Result: local and public release 165e661 passed. Public Chromium QA produced five captures, zero runtime errors/overflow, one reanalysis, one exact prepared plan and one synthetic VPN save; native chooser/paste passed, default route absent and executions zero. Desktop/mobile analysis, mobile action review and mobile import captures were visually inspected. All API evidence/actions/VPN saves use intercepted fixtures, not real account/device operations. Captures are temporary outside the repository.
 
 ---
 
