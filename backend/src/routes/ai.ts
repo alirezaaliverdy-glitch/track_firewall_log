@@ -3,12 +3,36 @@ import { buildSecurityOrchestratorContext } from "../ai/context/security-orchest
 import { chatWithAssistant, clearAiChatSessionMessages, getAiChatSession, listAiChatSessions } from "../services/ai-chat.service.js";
 import { completeAiActionRequest, getAiActionIntent, listAiActionIntents, updateAiActionIntent } from "../services/ai-intent.service.js";
 import { AiProviderFailedError, getAiProviderStatus } from "../services/ai-provider.service.js";
+import { runAiProvider, type AiProviderInput } from "../services/ai-provider.service.js";
+import { publicAiRuntimeSettings, saveAiRuntimeSettings } from "../services/ai-runtime-settings.service.js";
+import { prisma } from "../db/prisma.js";
 
 export const aiRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/api/ai/provider/config", async (request, reply) => {
+    if (request.authUser?.role !== "admin") return reply.code(403).send({ error: "ADMIN_REQUIRED" });
+    try { return publicAiRuntimeSettings(); } catch { return reply.code(503).send({ error: "AI_SETTINGS_UNAVAILABLE" }); }
+  });
+  app.put<{ Body: Record<string, unknown> }>("/api/ai/provider/config", async (request, reply) => {
+    if (request.authUser?.role !== "admin") return reply.code(403).send({ error: "ADMIN_REQUIRED" });
+    try {
+      const result = await saveAiRuntimeSettings(request.body ?? {});
+      await prisma.auditLog.create({ data: { actor: request.authUser.username, action: "ai.provider.configuration_updated", targetType: "ai_provider", targetId: "openrouter", dryRun: false, approvalStatus: "not_required", metadata: { enabled: result.enabled, model: result.model, keyConfigured: result.keyConfigured, externalDataConsent: request.body.externalDataConsent === true } } });
+      return result;
+    } catch { return reply.code(400).send({ error: "AI_SETTINGS_INVALID", message: "تنظیمات یا کلید معتبر نیست؛ مجوز ارسال داده را هم بررسی کنید." }); }
+  });
+  app.post("/api/ai/provider/test", async (request, reply) => {
+    if (request.authUser?.role !== "admin") return reply.code(403).send({ error: "ADMIN_REQUIRED" });
+    try {
+      const result = await runAiProvider({ message: "This is a synthetic connectivity test. Reply briefly with OK. Do not propose an action.", mode: "chat", requireLiveResponse: true,
+        context: { events: { recentCount: 0 }, evidencePack: { availableActionHints: [], recentHighCriticalEvents: [] }, availableCatalogActions: [], targetScopedCatalogActions: [], targetDeviceContext: null } as unknown as AiProviderInput["context"] });
+      return { ok: result.provider !== "mock" && Boolean(result.assistantMessage.trim()), liveVerified: result.provider !== "mock", model: result.model };
+    } catch (error) { return reply.code(error instanceof AiProviderFailedError ? error.statusCode : 502).send({ ok: false, liveVerified: false, error: "AI_CONNECTION_FAILED", upstreamStatus: error instanceof AiProviderFailedError ? error.statusCode : 0 }); }
+  });
   app.post<{ Body: { sessionId?: string; message?: string; deviceId?: string; selectedDeviceId?: string; selectedVendor?: string; selectedConnectorType?: string; selectedDeviceName?: string; intentModeOverride?: "Chat" | "Action" | string } }>("/api/ai/chat", async (request, reply) => {
     try {
       return await chatWithAssistant({
         userId: request.authUser?.id ?? null,
+        ownerId: request.authUser?.scopeOwnerId,
         sessionId: request.body?.sessionId,
         message: request.body?.message ?? "",
         deviceId: request.body?.selectedDeviceId ?? request.body?.deviceId,
@@ -56,7 +80,7 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.get("/api/ai/context/security-summary", async () => buildSecurityOrchestratorContext());
+  app.get("/api/ai/context/security-summary", async request => buildSecurityOrchestratorContext({ ownerId: request.authUser?.scopeOwnerId }));
 
   app.get("/api/ai/provider/status", async () => getAiProviderStatus());
 

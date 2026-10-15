@@ -7,10 +7,10 @@ import { searchCatalog } from "../../commands/catalog/index.js";
 import { prisma } from "../../db/prisma.js";
 import { buildAssistantTargetContextFromRecord } from "./assistant-target-context.js";
 
-export async function buildAssistantTargetContext(selectedDeviceId?: string | null) {
+export async function buildAssistantTargetContext(selectedDeviceId?: string | null, ownerId?: string) {
   if (!selectedDeviceId) return null;
-  const device = await prisma.device.findUnique({
-    where: { id: selectedDeviceId },
+  const device = await prisma.device.findFirst({
+    where: { id: selectedDeviceId, ...(ownerId ? { company: { ownerId, deletedAt: null }, deletedAt: null } : {}) },
     select: {
       id: true,
       name: true,
@@ -44,11 +44,11 @@ function broadCatalogActions() {
   }));
 }
 
-export async function buildSecurityOrchestratorContext(input: { recentMinutes?: number; selectedDeviceId?: string; vendor?: string } = {}) {
+export async function buildSecurityOrchestratorContext(input: { recentMinutes?: number; selectedDeviceId?: string; vendor?: string; ownerId?: string } = {}) {
   const [security, evidencePack, targetDeviceContext] = await Promise.all([
-    buildLegacySecurityContext(input),
+    buildLegacySecurityContext({ recentMinutes: input.recentMinutes, deviceId: input.selectedDeviceId, ownerId: input.ownerId }),
     buildEvidencePack(input),
-    buildAssistantTargetContext(input.selectedDeviceId),
+    buildAssistantTargetContext(input.selectedDeviceId, input.ownerId),
   ]);
   const availableCatalogActions = targetDeviceContext
     ? targetDeviceContext.supportedActions.map((action) => ({

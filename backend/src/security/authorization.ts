@@ -7,6 +7,8 @@ export type RoutePermissionPolicy = {
 };
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
+  { method: "PUT", path: "/api/ai/provider/config", permission: "security.policy.manage" },
+  { method: "POST", path: "/api/ai/provider/test", permission: "security.policy.manage" },
   { method: "POST", path: "/api/vpn", permission: "security.policy.manage" },
   { method: "PATCH", path: "/api/vpn/:id", permission: "security.policy.manage" },
   { method: "DELETE", path: "/api/vpn/:id", permission: "security.policy.manage" },

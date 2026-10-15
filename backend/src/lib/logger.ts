@@ -5,7 +5,7 @@ import { sensitiveLogPaths } from "../security/redaction.js";
 export const loggerConfig: FastifyServerOptions["logger"] = {
   level: process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug"),
   redact: {
-    paths: [...sensitiveLogPaths, "req.body.appPassword"],
+    paths: [...sensitiveLogPaths, "req.body.appPassword", "req.body.apiKey", "body.apiKey", "apiKey", "keyEncrypted"],
     censor: "[REDACTED]"
   }
 };

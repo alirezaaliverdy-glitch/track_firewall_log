@@ -1,3 +1,12 @@
+# Design QA — Compact evidence, mobile cameras and provider settings
+
+- Date: 2026-10-15. Finding review now has one concise summary, an IP/source table and one preview action; previous technical content is collapsed. Groups share target/rule-title/source/port and a 15-minute window; evidence limitations remain explicit.
+- Updated finding/VPN runner passes seven captures including compact desktop/mobile first views and exact action handoff. Camera runner passes seven captures, with touch emulation, visible synthetic JPEG media and repeated authenticated frame polling. Provider-settings runner passes two captures, empty password field after save, explicit data-consent gating and a fixture live-test result.
+- Sixteen captures total; no runtime errors or horizontal/dialog overflow. Finding desktop/mobile and provider mobile screenshots inspected. API fixtures are intercepted and production PWA worker bypassed only in the QA browser. No real login, API key, device write or actual OpenRouter response is used in browser tests.
+- Separate backend tests cover real synthetic RTSP decoding, shared decoder capacity, encryption, workspace and action/session boundaries. Production/public acceptance follows rollout. Original chat-exposed key was not stored or activated.
+
+---
+
 # Design QA — Finding analysis and WireGuard import
 
 - Date: 2026-10-15. Implemented an analysis-first finding detail using the existing product styles; replaced repeated summary/severity panels with compact status/context when structural analysis is available.

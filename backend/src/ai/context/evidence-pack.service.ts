@@ -98,16 +98,18 @@ export function composeEvidencePack(source: EvidencePackSource, limits = default
   return clean(pack, limits) as typeof pack;
 }
 
-export async function buildEvidencePack(input: { selectedDeviceId?: string; vendor?: string } = {}) {
+export async function buildEvidencePack(input: { selectedDeviceId?: string; vendor?: string; ownerId?: string } = {}) {
   const limits = defaultEvidencePackLimits();
-  const deviceWhere = input.selectedDeviceId ? { id: input.selectedDeviceId } : input.vendor ? { vendor: { contains: input.vendor, mode: "insensitive" as const } } : {};
+  const scope = input.ownerId ? { company: { ownerId: input.ownerId, deletedAt: null }, deletedAt: null } : {};
+  const deviceWhere = { ...scope, ...(input.selectedDeviceId ? { id: input.selectedDeviceId } : input.vendor ? { vendor: { contains: input.vendor, mode: "insensitive" as const } } : {}) };
+  const evidenceWhere = { ...(input.ownerId ? { device: scope } : {}), ...(input.selectedDeviceId ? { deviceId: input.selectedDeviceId } : {}) };
   const [devices, snapshots, events, incidents, findings, actionPlans] = await Promise.all([
     prisma.device.findMany({ where: deviceWhere, orderBy: { updatedAt: "desc" }, take: 25, select: { id: true, name: true, vendor: true, type: true, status: true, managementPort: true, protocol: true, capabilities: true } }),
-    prisma.deviceSnapshot.findMany({ where: input.selectedDeviceId ? { deviceId: input.selectedDeviceId } : {}, orderBy: { collectedAt: "desc" }, take: 25, select: { deviceId: true, vendor: true, snapshotType: true, dataJson: true, collectedAt: true } }),
-    prisma.securityEvent.findMany({ where: { severity: { in: ["high", "critical"] }, ...(input.selectedDeviceId ? { deviceId: input.selectedDeviceId } : {}) }, orderBy: { receivedAt: "desc" }, take: limits.events + 1, select: { id: true, deviceId: true, eventType: true, severity: true, srcIp: true, dstIp: true, dstPort: true, action: true, receivedAt: true } }),
-    prisma.incident.findMany({ where: input.selectedDeviceId ? { deviceId: input.selectedDeviceId } : {}, orderBy: { lastSeenAt: "desc" }, take: limits.incidents + 1, select: { id: true, deviceId: true, title: true, severity: true, status: true, eventCount: true, summaryJson: true, firstSeenAt: true, lastSeenAt: true } }),
-    prisma.finding.findMany({ where: input.selectedDeviceId ? { deviceId: input.selectedDeviceId } : {}, orderBy: { lastSeen: "desc" }, take: limits.findings + 1, select: { id: true, deviceId: true, vendor: true, title: true, severity: true, category: true, summary: true, evidenceJson: true, recommendedActions: true, confidence: true, status: true, lastSeen: true, count: true, mitreTags: true } }),
-    prisma.actionPlan.findMany({ where: input.selectedDeviceId ? { deviceId: input.selectedDeviceId } : {}, orderBy: { updatedAt: "desc" }, take: limits.actionPlans + 1, select: { id: true, deviceId: true, actionType: true, status: true, riskLevel: true, parametersJson: true, createdAt: true, updatedAt: true } })
+    prisma.deviceSnapshot.findMany({ where: evidenceWhere, orderBy: { collectedAt: "desc" }, take: 25, select: { deviceId: true, vendor: true, snapshotType: true, dataJson: true, collectedAt: true } }),
+    prisma.securityEvent.findMany({ where: { severity: { in: ["high", "critical"] }, ...evidenceWhere }, orderBy: { receivedAt: "desc" }, take: limits.events + 1, select: { id: true, deviceId: true, eventType: true, severity: true, srcIp: true, dstIp: true, dstPort: true, action: true, receivedAt: true } }),
+    prisma.incident.findMany({ where: evidenceWhere, orderBy: { lastSeenAt: "desc" }, take: limits.incidents + 1, select: { id: true, deviceId: true, title: true, severity: true, status: true, eventCount: true, summaryJson: true, firstSeenAt: true, lastSeenAt: true } }),
+    prisma.finding.findMany({ where: evidenceWhere, orderBy: { lastSeen: "desc" }, take: limits.findings + 1, select: { id: true, deviceId: true, vendor: true, title: true, severity: true, category: true, summary: true, evidenceJson: true, recommendedActions: true, confidence: true, status: true, lastSeen: true, count: true, mitreTags: true } }),
+    prisma.actionPlan.findMany({ where: evidenceWhere, orderBy: { updatedAt: "desc" }, take: limits.actionPlans + 1, select: { id: true, deviceId: true, actionType: true, status: true, riskLevel: true, parametersJson: true, createdAt: true, updatedAt: true } })
   ]);
   return composeEvidencePack({ selectedDevice: devices[0], devices, snapshots, events, incidents, findings, actionPlans }, limits);
 }

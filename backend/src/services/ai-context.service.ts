@@ -16,10 +16,10 @@ async function safeContextQuery<T>(query: Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-export async function buildSecurityContext(input: { recentMinutes?: number; deviceId?: string } = {}) {
+export async function buildSecurityContext(input: { recentMinutes?: number; deviceId?: string; ownerId?: string } = {}) {
   const recentMinutes = Math.max(5, Math.min(input.recentMinutes ?? 60, 1440));
   const since = sinceMinutes(recentMinutes);
-  const deviceWhere = input.deviceId ? { deviceId: input.deviceId } : {};
+  const deviceWhere = { ...(input.deviceId ? { deviceId: input.deviceId } : {}), ...(input.ownerId ? { device: { company: { ownerId: input.ownerId, deletedAt: null }, deletedAt: null } } : {}) };
   const incidentWhere = {
     ...deviceWhere,
     lastSeenAt: { gte: since },
@@ -86,7 +86,7 @@ export async function buildSecurityContext(input: { recentMinutes?: number; devi
       select: { id: true, name: true, ruleType: true, severity: true, enabled: true, updatedAt: true }
     }), []),
     safeContextQuery(prisma.device.findMany({
-      where: input.deviceId ? { id: input.deviceId } : undefined,
+      where: { ...(input.deviceId ? { id: input.deviceId } : {}), ...(input.ownerId ? { company: { ownerId: input.ownerId, deletedAt: null }, deletedAt: null } : {}) },
       orderBy: { updatedAt: "desc" },
       take: 25,
       select: {

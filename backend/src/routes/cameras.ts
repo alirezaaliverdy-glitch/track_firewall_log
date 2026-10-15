@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { CameraError } from "../cameras/camera-network.js";
 import { cameraActionHistory, cameraOwner, createCamera, deleteCamera, executeCameraAction, getCameraPresets, listCameras, previewCameraAction, refreshCamera, runCameraDiscovery, selectedCameraProfile, updateCamera, type CameraActor } from "../cameras/camera.service.js";
-import { cameraSnapshot, startCameraMedia, stopCameraStreams } from "../cameras/camera-media.js";
+import { cameraFrame, cameraSnapshot, startCameraMedia, stopCameraStreams } from "../cameras/camera-media.js";
 
 function actor(request: FastifyRequest): CameraActor {
   if (!request.authUser) throw new CameraError("AUTH_REQUIRED", 401);
@@ -14,6 +14,14 @@ function failure(reply: FastifyReply, error: unknown) {
 
 export const cameraRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onClose", async () => { stopCameraStreams(); });
+  app.get<{ Params: { id: string }; Querystring: { profile?: string } }>("/api/cameras/:id/frame", async (request, reply) => {
+    try {
+      const user = actor(request), { camera, profile, connection } = await selectedCameraProfile(request.params.id, request.query.profile, user);
+      if (!profile.streamAvailable) throw new CameraError("CAMERA_STREAM_UNAVAILABLE", 422);
+      const frame = await cameraFrame({ ownerId: cameraOwner(user), cameraId: camera.id, host: camera.host, profile: profile.token, connection });
+      return reply.header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff").type("image/jpeg").send(frame);
+    } catch (error) { return failure(reply, error); }
+  });
   app.get("/api/cameras", async (request, reply) => {
     try { return { cameras: await listCameras(actor(request)) }; } catch (error) { return failure(reply, error); }
   });

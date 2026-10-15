@@ -3,6 +3,7 @@ import tls from "node:tls";
 import { env } from "../../config/env.js";
 import type { AiProviderInput, StructuredAiResponse } from "../ai-provider.service.js";
 import { buildSecurityOrchestratorSystemPrompt } from "../../ai/prompts/security-orchestrator-system-prompt.js";
+import { getAiRuntimeSettings } from "../ai-runtime-settings.service.js";
 
 export class AiProviderRequestError extends Error {
   statusCode: number;
@@ -155,14 +156,15 @@ export function retryAfterMilliseconds(value: string | null, now = Date.now()) {
   return Number.isFinite(date) ? Math.max(0, Math.min(date - now, 5000)) : 0;
 }
 
-export async function runOpenAiCompatibleProvider(input: AiProviderInput, model = env.openaiModel): Promise<StructuredAiResponse> {
-  if (!env.openaiApiKey) {
+export async function runOpenAiCompatibleProvider(input: AiProviderInput, model = getAiRuntimeSettings().model): Promise<StructuredAiResponse> {
+  const settings = getAiRuntimeSettings();
+  if (!settings.apiKey) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.aiTimeoutMs);
-  const url = `${env.openaiBaseUrl.replace(/\/$/, "")}/chat/completions`;
+  const url = `${settings.baseUrl.replace(/\/$/, "")}/chat/completions`;
 
   try {
     const promptContext = {
@@ -200,7 +202,7 @@ export async function runOpenAiCompatibleProvider(input: AiProviderInput, model 
         "Content-Type": "application/json",
         Accept: "application/json",
         "Content-Length": String(Buffer.byteLength(requestBody)),
-        Authorization: `Bearer ${env.openaiApiKey}`,
+        Authorization: `Bearer ${settings.apiKey}`,
         "HTTP-Referer": "http://localhost/firewall/",
         "X-Title": "Firewall Log Analyzer"
       },

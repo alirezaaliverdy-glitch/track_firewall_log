@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { startCameraMedia, cameraSnapshot, stopCameraStreams } from "../dist/cameras/camera-media.js";
+import { startCameraMedia, cameraSnapshot, cameraFrame, stopCameraStreams } from "../dist/cameras/camera-media.js";
 
 test("FFmpeg decodes a real synthetic RTSP stream, produces a JPEG snapshot and releases live-view capacity", async () => {
   const url = process.env.CAMERA_RTSP_FIXTURE_URL;
@@ -10,6 +10,14 @@ test("FFmpeg decodes a real synthetic RTSP stream, produces a JPEG snapshot and 
   try {
     const image = await cameraSnapshot(input);
     assert.equal(image[0], 0xff); assert.equal(image[1], 0xd8); assert.ok(image.length > 1000);
+    const frames = await Promise.all([cameraFrame(input), cameraFrame(input), cameraFrame(input)]);
+    for (const frame of frames) { assert.equal(frame[0], 0xff); assert.equal(frame[1], 0xd8); assert.ok(frame.length > 1000); }
+    // One shared decoder leaves capacity for three unrelated views.
+    const remaining = [];
+    for (let i = 0; i < 3; i++) remaining.push(await startCameraMedia({ ...input, cameraId: `shared-frame-${i}` }));
+    await assert.rejects(startCameraMedia({ ...input, cameraId: "capacity-check" }), error => error.code === "CAMERA_VIEW_LIMIT");
+    stopCameraStreams();
+    await new Promise(resolve => setTimeout(resolve, 100));
     const jobs = [];
     for (let i = 0; i < 4; i++) jobs.push(await startCameraMedia({ ...input, cameraId: `fixture-${i}` }));
     await assert.rejects(startCameraMedia(input), (error) => error.code === "CAMERA_VIEW_LIMIT");

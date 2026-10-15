@@ -219,6 +219,13 @@ export type FindingDecision = {
   signals: Array<{ key: string; level: "observed" | "caution"; fa: string; en: string }>;
 };
 
+export type FindingCampaign = {
+  findingId: string; device: { id: string; name: string; host: string }; windowMinutes: number; start: string; end: string;
+  sources: Array<{ ip: string; events: number; accounts: string[]; firstSeen: string; lastSeen: string; findingIds: string[] }>;
+  sourceCount: number; observedEvents: number; partial: boolean;
+  findings: Array<{ id: string; srcIp: string | null; status: string; count: number }>;
+};
+
 export type AttackerEvidenceEvent = {
   id: string;
   timestamp: string;

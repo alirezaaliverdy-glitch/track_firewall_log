@@ -3,6 +3,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { useAssets } from "@/features/assets/hooks/useAssets";
 import { useFindings } from "@/features/security/hooks/useFindings";
 import { securityDisplayText } from "@/features/security/securityPresentation";
+import { groupFindings } from "@/features/security/findingGroups";
 import {
   getOperationalDashboardActivity,
   type DashboardActionItem,
@@ -229,12 +230,17 @@ export default function DashboardPage() {
     return rank[stateTone(a.healthState)] - rank[stateTone(b.healthState)];
   }).slice(0, 6), [assets.assets]);
 
-  const latestFindings = useMemo(() => [...openFindings].sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime()).slice(0, 5), [openFindings]);
+  const latestFindings = useMemo(() => groupFindings([...openFindings].sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())).slice(0, 5).map(group => group.finding), [openFindings]);
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
     const linuxIds = new Set<string>();
     const actionableFindings = openFindings.filter((finding) => ["critical", "high"].includes(finding.severity));
+    const findingGroups = groupFindings(actionableFindings);
+    const findingReason = (finding: SecurityFinding) => {
+      const group = findingGroups.find(row => row.members.some(member => member.id === finding.id));
+      return `${securityDisplayText(finding.title, language)}${group?.ips.length ? ` · ${group.ips.slice(0, 3).join("، ")}` : ""}${group && group.members.length > 1 ? ` · ${number(group.members.length, language)} ${copy(isFa, "یافتهٔ مرتبط", "related findings")}` : ""}`;
+    };
     const latestFindingForDevice = (deviceId: string | undefined) => deviceId
       ? [...actionableFindings]
         .filter((finding) => finding.device?.id === deviceId)
@@ -258,7 +264,7 @@ export default function DashboardPage() {
         deviceKey: device.id,
         title: device.name,
         reason: finding
-          ? `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`
+          ? findingReason(finding)
           : device.diagnosis ? `${isFa ? device.diagnosis.titleFa : device.diagnosis.titleEn}: ${isFa ? device.diagnosis.causeFa : device.diagnosis.causeEn}` : linuxAttentionReason(device, isFa),
         detail: `${stateLabel(state, isFa)} · ${shortDate(device.diagnosis?.observedAt ?? device.latestHealth?.collectedAt, language, copy(isFa, "بدون داده سلامت", "No health data"))}`,
         route: review.route,
@@ -279,7 +285,7 @@ export default function DashboardPage() {
         deviceKey: asset.device?.id ?? `asset:${asset.id}`,
         title: asset.name,
         reason: finding
-          ? `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`
+          ? findingReason(finding)
           : state === "offline"
           ? copy(isFa, "آخرین بررسی اتصال ناموفق بوده است؛ اتصال مدیریت و اعتبارنامه را آزمایش کنید.", "The latest connection check failed; test the management channel and credential.")
           : state === "error"
@@ -311,14 +317,14 @@ export default function DashboardPage() {
         priority: 1,
       });
     }
-    for (const finding of actionableFindings) {
+    for (const { finding, ips, members } of findingGroups) {
       const deviceId = finding.device?.id ?? finding.deviceId;
       items.push({
         id: `finding-${finding.id}`,
         deviceKey: deviceId || `finding:${finding.id}`,
         title: finding.device?.name ?? finding.asset?.name ?? copy(isFa, "تجهیز نامشخص", "Unknown device"),
-        reason: `${securityDisplayText(finding.title, language)}: ${securityDisplayText(finding.summary, language)}`,
-        detail: `${finding.vendor || copy(isFa, "وندور نامشخص", "Unknown vendor")} · ${shortDate(finding.lastSeen, language, "—")}`,
+        reason: `${securityDisplayText(finding.title, language)}${ips.length ? ` · ${ips.slice(0, 3).join("، ")}` : ""}`,
+        detail: `${members.length > 1 ? `${number(members.length, language)} ${copy(isFa, "یافتهٔ مرتبط · ", "related findings · ")}` : ""}${shortDate(finding.lastSeen, language, "—")}`,
         route: `/security/findings/${finding.id}`,
         tone: finding.severity === "critical" ? "danger" : "warning",
         actionFa: "تصمیم و اقدام",

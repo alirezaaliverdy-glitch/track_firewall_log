@@ -3,6 +3,8 @@ import { authenticatedCameraHttp, cameraUrl, CameraError } from "./camera-networ
 import type { CameraConnection } from "./camera-onvif.js";
 
 const active = new Map<string, { ownerId: string; cameraId: string; child: ChildProcessWithoutNullStreams; stop: () => void }>();
+type FrameSession = { cameraId: string; latest: Buffer | null; lastRequest: number; stopped: boolean; stop: () => void; waiters: Set<(frame: Buffer | null) => void> };
+const frameSessions = new Map<string, Promise<FrameSession>>();
 let sequence = 0;
 
 function rtspInput(host: string, profile: string, connection: CameraConnection) {
@@ -77,5 +79,52 @@ export async function cameraSnapshot(input: Parameters<typeof startCameraMedia>[
 }
 
 export function stopCameraStreams(cameraId?: string) {
+  for (const [key, pending] of frameSessions) void pending.then(session => { if (!cameraId || session.cameraId === cameraId) { session.stop(); frameSessions.delete(key); } }).catch(() => undefined);
   for (const job of active.values()) if (!cameraId || job.cameraId === cameraId) job.stop();
+}
+
+/** Bounded JPEG requests for Safari/native transports that cannot consume an
+ * endless multipart fetch. Requests reuse one decoder, not one process/frame. */
+export async function cameraFrame(input: Parameters<typeof startCameraMedia>[0]) {
+  const key = JSON.stringify([input.ownerId, input.cameraId, input.profile]);
+  let pending = frameSessions.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const job = await startCameraMedia(input);
+      const session: FrameSession = { cameraId: input.cameraId, latest: null, lastRequest: Date.now(), stopped: false, stop: () => undefined, waiters: new Set() };
+      const idle = setInterval(() => { if (Date.now() - session.lastRequest > 12_000) session.stop(); }, 3000); idle.unref();
+      session.stop = () => { if (session.stopped) return; session.stopped = true; clearInterval(idle); job.stop(); if (frameSessions.get(key) === pending) frameSessions.delete(key); for (const resolve of session.waiters) resolve(null); session.waiters.clear(); };
+      void (async () => {
+        let buffer = Buffer.alloc(0);
+        try {
+          for await (const chunk of job.stream) {
+            buffer = Buffer.concat([buffer, Buffer.from(chunk)]);
+            if (buffer.length > 3 * 1024 * 1024) throw new CameraError("CAMERA_VIDEO_FAILED", 502);
+            for (;;) {
+              const start = buffer.indexOf(Buffer.from([0xff, 0xd8]));
+              const end = start < 0 ? -1 : buffer.indexOf(Buffer.from([0xff, 0xd9]), start + 2);
+              if (start < 0 || end < 0) break;
+              session.latest = Buffer.from(buffer.subarray(start, end + 2)); buffer = buffer.subarray(end + 2);
+              for (const resolve of session.waiters) resolve(session.latest);
+              session.waiters.clear();
+            }
+          }
+        } catch { /* Never expose decoder arguments or camera credentials. */ }
+        finally { session.stop(); }
+      })();
+      return session;
+    })();
+    frameSessions.set(key, pending);
+    void pending.catch(() => { if (frameSessions.get(key) === pending) frameSessions.delete(key); });
+  }
+  const session = await pending;
+  session.lastRequest = Date.now();
+  if (session.stopped) throw new CameraError("CAMERA_VIDEO_FAILED", 502);
+  if (session.latest) return session.latest;
+  const frame = await new Promise<Buffer | null>(resolve => {
+    const done = (value: Buffer | null) => { clearTimeout(timeout); session.waiters.delete(done); resolve(value); };
+    const timeout = setTimeout(() => done(null), 12_000); timeout.unref(); session.waiters.add(done);
+  });
+  if (!frame) throw new CameraError("CAMERA_VIDEO_TIMEOUT", 504);
+  return frame;
 }

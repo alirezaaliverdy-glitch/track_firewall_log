@@ -28,7 +28,7 @@ COPY --from=build /app/dist ./dist
 RUN mkdir -p src/config && cp dist/config/database-url.js src/config/database-url.js
 RUN sed -i 's/\r$//' /usr/local/bin/firewall-entrypoint \
   && chmod 0755 /usr/local/bin/firewall-entrypoint \
-  && mkdir -p /app/storage/uploads /app/storage/bootstrap /app/storage/telemetry \
+  && mkdir -p /app/storage/uploads /app/storage/bootstrap /app/storage/telemetry /app/storage/settings \
   && chown -R node:node /app/storage
 USER node
 EXPOSE 4000

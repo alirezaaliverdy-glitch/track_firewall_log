@@ -51,6 +51,7 @@ const ROUTE_POLICIES: RateLimitPolicy[] = [
   { id: "upload", limit: 10, windowMs: 60 * 60_000 }
   ,{ id: "camera_discovery", limit: 5, windowMs: 60_000 }
   ,{ id: "camera_read", limit: 120, windowMs: 60_000 }
+  ,{ id: "camera_frame", limit: 600, windowMs: 60_000 }
 ];
 
 function normalizePart(value: unknown) {
@@ -86,6 +87,7 @@ function bodyValue(request: FastifyRequest, keys: string[]) {
 }
 
 function policyForRequest(pathname: string) {
+  if (/^\/api\/cameras\/[^/]+\/frame$/.test(pathname)) return ROUTE_POLICIES[7];
   if (pathname === "/api/cameras/discover") return ROUTE_POLICIES[5];
   if (/^\/api\/cameras\/[^/]+\/actions\/[^/]+\/execute$/.test(pathname)) return ROUTE_POLICIES[2];
   if (/^\/api\/cameras(?:\/|$)/.test(pathname)) return ROUTE_POLICIES[6];

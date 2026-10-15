@@ -28,6 +28,7 @@ page.on("request", request => {
   if (path === "/product-state/navigation") return void respond({ navigation: [{ key: "security", iconKey: "security", titleFa: "امنیت", titleEn: "Security", route: "/security", items: [] }, { key: "actions", iconKey: "actions", titleFa: "اقدامات", titleEn: "Actions", route: "/actions", items: [] }] });
   if (path === `/security/findings/${finding.id}`) return void respond(finding);
   if (path.endsWith("/decision")) return void respond(decision);
+  if (path.endsWith("/campaign")) return void respond({ findingId: finding.id, device, windowMinutes: 15, start: now, end: new Date(Date.now() + 900000).toISOString(), sources: ["203.0.113.8", "203.0.113.9", "2001:db8::8"].map((ip, index) => ({ ip, events: 12 - index, accounts: ["operator1"], firstSeen: now, lastSeen: now, findingIds: [finding.id] })), sourceCount: 3, observedEvents: 33, partial: false, findings: [{ id: finding.id, status: "active", count: 33, srcIp: "203.0.113.8" }] });
   if (path.endsWith("/analysis")) { reanalyses++; finding.status = "false_positive"; decision.mode = "closed"; return void respond(decision); }
   if (path.endsWith("/action-plan")) { plans++; return void respond({ findingId: finding.id, actionPlan: plan }); }
   if (path.includes("execute") || path.endsWith("/connect")) { executions++; return void request.abort(); }
@@ -52,13 +53,18 @@ writeFileSync(fixtureFile, conf);
 try {
   await page.setViewport({ width: 1440, height: 1000 });
   await page.goto(`${base}/security/findings/${finding.id}`, { waitUntil: "networkidle0" });
-  await page.waitForSelector(".finding-analysis");
+  await page.waitForSelector(".finding-review__table article");
+  assert.equal(await page.$$eval(".finding-review__table article", rows => rows.length), 3);
+  assert.equal(await page.$eval(".finding-review__details", element => element.open), false);
+  await capture("finding-summary-desktop");
+  await page.setViewport({ width: 390, height: 844 }); await capture("finding-summary-mobile");
+  await page.click(".finding-review__details>summary");
   assert.match(await page.$eval(".finding-analysis .finding-analysis__accounts", element => element.textContent), /operator1/);
   await page.click(".finding-analysis__evidence summary"); await capture("finding-analysis-desktop");
   await page.setViewport({ width: 390, height: 844 }); await capture("finding-analysis-mobile");
-  await page.click(".finding-analysis>header button"); await page.waitForFunction(() => document.querySelector(".finding-decision--closed"));
+  await page.click(".finding-review__heading>button"); await page.waitForFunction(() => document.querySelector(".finding-decision--closed"));
   assert.equal(reanalyses, 1);
-  await page.click(".finding-decision__action");
+  await page.click(".finding-review__actions>button");
   await page.waitForFunction(() => location.pathname.endsWith("/actions/fixture-plan"));
   await page.waitForSelector(".operator-handoff"); assert.equal(plans, 1); assert.equal(executions, 0);
   await capture("finding-action-review-mobile");

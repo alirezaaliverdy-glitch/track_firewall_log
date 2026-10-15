@@ -1,3 +1,10 @@
+## 2026-10-15 - Compact finding campaigns, mobile camera frames and secure OpenRouter settings
+
+- Finding first view now prioritizes target, observed IPs, counts and a 15-minute UTC interval; technical analysis/raw evidence stays collapsed. A scoped read model groups exact retained evidence across matching findings on one target/rule-title/source/port, preserves original findings and per-finding response eligibility, excludes duplicate/application-owned/sudo events and never infers coordination from time alone. List/dashboard grouping exposes related IPs.
+- Touch-browser video uses authenticated bounded JPEG requests sharing a decoder, with capacity/idle guards; desktop multipart failure falls back to the same path. Real synthetic RTSP/JPEG/shared-capacity test and mobile synthetic live-image browser test pass.
+- Admin Settings > OpenRouter accepts a fresh key, encrypts it, requires external-data consent and offers a synthetic-only real-response test. Keys are not returned/logged; dedicated persistent settings volumes work across manifests. No chat-exposed key was activated. Revoke it and enter a replacement through the UI. Existing upstream 403/network/account restrictions remain unresolved; no actual external AI success is claimed.
+- Workspace scoping now reaches all assistant evidence/context and finding/evidence reads. Local scoped web/API builds/deployments, 21 focused tests, 25 assistant regressions, three isolated integration checks, one real media test and 16 synthetic desktop/mobile captures passed. Catalog: 248 valid; UTF-8 passed. No new schema migration, real device write or raw AI execution. Authorized production publication acceptance is pending final verification.
+
 ## 2026-10-15 - OpenRouter live verification and requested publication
 
 - Local synthetic provider and real assistant API-route tests return HTTP 403; no successful live response or analysis is claimed. Production provider is mock and has no key. Official Windows host proxy was started, but its path did not resolve the upstream refusal. Await the operator's choice of a separate server key versus authorized local-key reuse; no key was transferred or shown.

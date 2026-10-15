@@ -14,6 +14,7 @@ import { useFinding } from "../hooks/useFinding";
 import { securityDisplayText } from "../securityPresentation";
 import { categoryLabel, findingVendor, sourceLabel, vendorLabel } from "../vendorSecurityPresentation";
 import { findingRemediation } from "../findingRemediation";
+import { FindingReview } from "../components/FindingReview";
 
 function evidenceRows(value: unknown): Array<[string, string]> {
   if (!value || typeof value !== "object") return value == null ? [] : [["value", String(value)]];
@@ -110,7 +111,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
   const confidence = decision?.evidenceScore ?? Math.round((finding.confidence ?? 0) * 100);
   const remediation = findingRemediation(finding, language);
 
-  return (
+  return <FindingReview finding={finding} decision={decision} onAction={createPlan} onRefresh={() => void analyze()} busy={analyzing || creatingPlan} isFa={language.startsWith("fa")}>
     <section className="page-stack security-finding-detail">
       <PageHeader title={localizedTitle} eyebrow={t("security.detail.eyebrow")} description={decision?.analysis ? undefined : localizedSummary} actions={<div className="security-detail-actions"><button type="button" className="secondary-button" onClick={setInvestigating}>{t("security.detail.startInvestigation")}</button></div>} />
       {decision?.analysis ? <div className="finding-analysis__accounts"><span>{vendorLabel(vendor)}</span><span>{t(`security.findingStatus.${finding.status}`, { defaultValue: finding.status })}</span>{decision.analysis.verdict !== "contradicted" ? <span className={`security-severity security-severity--${finding.severity}`}>{t(`security.severity.${finding.severity}`, { defaultValue: finding.severity })}</span> : null}<span>{language.startsWith("fa") ? "رویداد ثبت‌شده" : "Recorded events"}<b>{finding.count.toLocaleString(locale)}</b></span></div> : null}
@@ -159,5 +160,5 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
 
       {message ? <p className="security-detail-message" role="status">{message}</p> : null}
     </section>
-  );
+  </FindingReview>;
 }

@@ -304,6 +304,7 @@ function nonActionNextStep(classification: AssistantIntentClassification) {
 
 export async function chatWithAssistant(input: {
   userId: string | null;
+  ownerId?: string;
   sessionId?: string;
   message: string;
   deviceId?: string;
@@ -326,9 +327,10 @@ export async function chatWithAssistant(input: {
   });
 
   const [earlySelectedDevice, context] = await Promise.all([
-    input.deviceId ? prisma.device.findUnique({ where: { id: input.deviceId } }) : Promise.resolve(null),
-    buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId }),
+    input.deviceId ? prisma.device.findFirst({ where: { id: input.deviceId, ...(input.ownerId ? { company: { ownerId: input.ownerId, deletedAt: null }, deletedAt: null } : {}) } }) : Promise.resolve(null),
+    buildSecurityOrchestratorContext({ selectedDeviceId: input.deviceId, ownerId: input.ownerId }),
   ]);
+  if (input.deviceId && !earlySelectedDevice) throw new Error("Selected device not found in this workspace");
   const classification = classifyAssistantIntent({ message, hasSelectedDevice: Boolean(earlySelectedDevice?.id), intentModeOverride: input.intentModeOverride });
   const intentDecision = decideAssistantIntent({
     message,
@@ -546,7 +548,7 @@ export async function chatWithAssistant(input: {
     : undefined;
   const debug = intentDebug({ intent: actionIntent, structuredIntent: effectiveStructuredIntent });
   const selectedDeviceId = input.deviceId;
-  const selectedDevice = earlySelectedDevice ?? (selectedDeviceId ? await prisma.device.findUnique({ where: { id: selectedDeviceId } }) : null);
+  const selectedDevice = earlySelectedDevice ?? (selectedDeviceId ? await prisma.device.findFirst({ where: { id: selectedDeviceId, ...(input.ownerId ? { company: { ownerId: input.ownerId, deletedAt: null }, deletedAt: null } : {}) } }) : null);
   const resolution = resolveAiTemplate({
     userText: planningMessage,
     selectedDevice,

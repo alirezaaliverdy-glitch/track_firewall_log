@@ -76,6 +76,7 @@ services:
       - "4000"
     volumes:
       - firewall_staging_uploads:/app/storage/uploads
+      - firewall_staging_ai_settings:/app/storage/settings
     labels:
       org.opencontainers.image.revision: ${DEPLOY_VERSION:-local-dev}
       org.opencontainers.image.environment: staging
@@ -106,3 +107,4 @@ services:
 volumes:
   firewall_staging_db_data:
   firewall_staging_uploads:
+  firewall_staging_ai_settings:

@@ -6,6 +6,7 @@ import { runMockAiProvider } from "./providers/mock-ai.provider.js";
 import { AiProviderRequestError, runOpenAiCompatibleProvider } from "./providers/openai-compatible.provider.js";
 import { runOpenAiProvider } from "./providers/openai.provider.js";
 import { normalizeIntentType, normalizeVendor } from "./ai-normalization.js";
+import { getAiRuntimeSettings } from "./ai-runtime-settings.service.js";
 
 export type AiProviderName = "mock" | "openai" | "openai_compatible";
 
@@ -76,7 +77,8 @@ const INTENT_TYPES = new Set(Object.values(AiIntentType));
 const RISK_LEVELS = new Set(Object.values(AiRiskLevel));
 
 function providerName(): AiProviderName {
-  return env.aiProvider === "openai" || env.aiProvider === "openai_compatible" ? env.aiProvider : "mock";
+  const name = getAiRuntimeSettings().provider;
+  return name === "openai" || name === "openai_compatible" ? name : "mock";
 }
 
 function safeNumber(value: unknown, fallback: number) {
@@ -156,12 +158,13 @@ async function deterministicProviderFallback(input: AiProviderInput, keyConfigur
 }
 
 export function getAiProviderStatus(lastError?: string, liveVerified = false) {
+  const settings = getAiRuntimeSettings();
   const provider = providerName();
   return {
     provider,
-    model: provider === "mock" ? "mock-deterministic" : env.openaiModel,
-    fallbackModels: provider === "mock" ? [] : env.openaiFallbackModels,
-    keyConfigured: Boolean(env.openaiApiKey),
+    model: provider === "mock" ? "mock-deterministic" : settings.model,
+    fallbackModels: provider === "mock" ? [] : settings.fallbackModels,
+    keyConfigured: Boolean(settings.apiKey),
     liveVerified,
     baseUrlConfigured: Boolean(env.openaiBaseUrl),
     timeoutMs: env.aiTimeoutMs,
@@ -183,8 +186,9 @@ export function getAiProviderStatus(lastError?: string, liveVerified = false) {
 }
 
 export async function runAiProvider(input: AiProviderInput): Promise<AiProviderResult> {
+  const settings = getAiRuntimeSettings();
   const provider = providerName();
-  const keyConfigured = Boolean(env.openaiApiKey);
+  const keyConfigured = Boolean(settings.apiKey);
   const requireLiveResponse = input.requireLiveResponse === true;
 
   if (provider === "mock") {
@@ -218,7 +222,7 @@ export async function runAiProvider(input: AiProviderInput): Promise<AiProviderR
     return deterministicProviderFallback(input, false, "OPENAI_API_KEY is not configured; deterministic fallback is active.");
   }
 
-  const models = uniqueModels([env.openaiModel, ...env.openaiFallbackModels]);
+  const models = uniqueModels([settings.model, ...settings.fallbackModels]);
   const errors: string[] = [];
   let lastStatusCode = 502;
 
@@ -233,7 +237,7 @@ export async function runAiProvider(input: AiProviderInput): Promise<AiProviderR
         provider,
         model,
         keyConfigured,
-        fallbackUsed: model !== env.openaiModel
+        fallbackUsed: model !== settings.model
       };
     } catch (error) {
       lastStatusCode = errorStatusCode(error);

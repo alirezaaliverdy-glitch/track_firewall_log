@@ -1,3 +1,10 @@
+## 2026-10-15 - Implement compact evidence campaigns, mobile camera frames and OpenRouter settings
+
+- Implemented a compact source-first finding review with target/time/counts and collapsed technical detail; exact-reference, target/workspace/rule-title/port/time-scoped grouping preserves individual findings and action safety. Multiple sources in one interval are displayed together, without claiming a coordinated attack. List/dashboard grouping exposes IPs.
+- Added authenticated JPEG frame polling for touch browsers and streaming fallback, sharing existing limited FFmpeg decoders with idle cleanup. Real RTSP fixture decode/JPEG/capacity regression passed; updated browser test verifies repeated mobile frame requests and visible synthetic media.
+- Added admin-only encrypted OpenRouter settings, explicit external-data consent, fixed destination and synthetic live-response test; logger excludes keys and all manifests persist settings in a dedicated node-owned volume. The chat-exposed key was not used; replacement/rotation is required. Fixed assistant context and finding reads to enforce workspace scope. No schema change or execution-policy change.
+- Passed local web/API builds/redeployments, 21 focused tests, 25 assistant regressions, three isolated integration checks, real media test, 16 synthetic desktop/mobile captures and 248 catalog validation. Production push/acceptance is tracked after final validation, not assumed. Actual OpenRouter previously returned 403; mocked transport tests are not a real-provider success claim.
+
 ## 2026-10-15 - Verify OpenRouter and prepare requested push
 
 - Checked live provider configuration without exposing secrets: local key exists/openai_compatible; server remains mock/no key. Synthetic direct/proxied provider calls and the actual assistant API handler on a disposable empty database report 403, not a valid model analysis. No real evidence exported, device action, server setting change or key transfer.

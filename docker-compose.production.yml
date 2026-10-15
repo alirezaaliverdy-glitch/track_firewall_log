@@ -94,6 +94,7 @@ services:
       - "${NETFLOW_BIND_IP:-127.0.0.1}:2055:2055/udp"
     volumes:
       - firewall_production_uploads:/app/storage/uploads
+      - firewall_production_ai_settings:/app/storage/settings
       - firewall_production_vpn_control:/run/firewall-vpn
     labels:
       org.opencontainers.image.revision: ${DEPLOY_VERSION:-local-dev}
@@ -145,4 +146,5 @@ services:
 volumes:
   firewall_production_db_data:
   firewall_production_uploads:
+  firewall_production_ai_settings:
   firewall_production_vpn_control:

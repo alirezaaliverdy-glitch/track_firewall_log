@@ -10,21 +10,23 @@ export function useCameraImage(id: string, profile: string, playing: boolean, mo
     if (!playing || !profile) { setState("idle"); setSrc(""); return; }
     let disposed = false, objectUrl = "", controller: AbortController | undefined, timer: ReturnType<typeof setTimeout> | undefined;
     let generation = 0;
+    let boundedFrames = Boolean(window.matchMedia?.("(pointer: coarse)").matches);
     const image = (bytes: Uint8Array) => {
       if (disposed) return;
       const next = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "image/jpeg" }));
-      const previous = objectUrl; objectUrl = next; setSrc(next); if (previous) URL.revokeObjectURL(previous);
+      const previous = objectUrl; objectUrl = next; setSrc(next); if (previous) setTimeout(() => URL.revokeObjectURL(previous), 1000);
       setState(mode === "snapshot" ? "snapshot" : "live");
     };
     const start = async () => {
       if (disposed) return;
       if (document.hidden) { setState("paused"); return; }
       const activeGeneration = ++generation;
-      const activeController = new AbortController(); controller = activeController; setState("loading"); setError("");
+      const activeController = new AbortController(); controller = activeController; setState(current => boundedFrames && current === "live" ? current : "loading"); setError("");
       try {
-        const response = await cameraImageResponse(id, profile, mode, activeController.signal);
+        const response = await cameraImageResponse(id, profile, mode === "live" && boundedFrames ? "frame" : mode, activeController.signal);
         if (disposed || activeGeneration !== generation) return;
         if (mode === "snapshot") { image(new Uint8Array(await response.arrayBuffer())); return; }
+        if (boundedFrames) { image(new Uint8Array(await response.arrayBuffer())); if (!disposed && activeGeneration === generation) timer = setTimeout(() => void start(), 500); return; }
         if (!response.body) throw new Error("CAMERA_VIDEO_FAILED");
         const reader = response.body.getReader();
         let buffer = new Uint8Array(0);
@@ -48,6 +50,7 @@ export function useCameraImage(id: string, profile: string, playing: boolean, mo
         if (!disposed && activeGeneration === generation && !document.hidden) timer = setTimeout(() => void start(), 1000);
       } catch (failure) {
         if (disposed || activeGeneration !== generation || activeController.signal.aborted) return;
+        if (mode === "live" && !boundedFrames) { boundedFrames = true; timer = setTimeout(() => void start(), 300); return; }
         setState("error"); setError(failure instanceof Error ? failure.message : "CAMERA_VIDEO_FAILED");
       }
     };

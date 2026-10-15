@@ -118,6 +118,7 @@ services:
       - firewall_uploads:/app/storage/uploads
       - firewall_bootstrap:/app/storage/bootstrap
       - firewall_telemetry:/app/storage/telemetry
+      - firewall_ai_settings:/app/storage/settings
       - firewall_vpn_control:/run/firewall-vpn
     labels:
       org.opencontainers.image.revision: ${DEPLOY_VERSION:-local-dev}
@@ -178,4 +179,5 @@ volumes:
   firewall_uploads:
   firewall_bootstrap:
   firewall_telemetry:
+  firewall_ai_settings:
   firewall_vpn_control:

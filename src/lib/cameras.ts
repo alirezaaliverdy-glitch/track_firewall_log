@@ -64,13 +64,13 @@ export const refreshCamera = (id: string) => cameraJson<{ camera: CameraDevice }
 export const discoverCameras = (cidr: string, ports?: number[], vpnConnectionId?: string) => cameraJson<CameraDiscovery>("/discover", { method: "POST", body: JSON.stringify({ cidr, ports, vpnConnectionId }) });
 export const previewCameraAction = (id: string, operation: string, parameters?: Record<string, string>) => cameraJson<CameraPreview>(`/${encodeURIComponent(id)}/actions/preview`, { method: "POST", body: JSON.stringify({ operation, ...parameters }) });
 export const executeCameraAction = (id: string, planId: string) => cameraJson<CameraResult>(`/${encodeURIComponent(id)}/actions/${encodeURIComponent(planId)}/execute`, { method: "POST", body: JSON.stringify({ intent: "execute", confirmed: true }) });
-export const cameraImageUrl = (id: string, profile: string, mode: "live" | "snapshot") => apiUrl(`/cameras/${encodeURIComponent(id)}/${mode}?profile=${encodeURIComponent(profile)}`);
+export const cameraImageUrl = (id: string, profile: string, mode: "live" | "snapshot" | "frame") => apiUrl(`/cameras/${encodeURIComponent(id)}/${mode}?profile=${encodeURIComponent(profile)}`);
 
-export async function cameraImageResponse(id: string, profile: string, mode: "live" | "snapshot", signal?: AbortSignal) {
+export async function cameraImageResponse(id: string, profile: string, mode: "live" | "snapshot" | "frame", signal?: AbortSignal) {
   const response = await fetch(cameraImageUrl(id, profile, mode), { credentials: "include", signal, cache: "no-store" });
   if (!response.ok) {
     const data = await response.json().catch(() => null);
-    throw new Error(data?.error?.code ?? "CAMERA_VIDEO_FAILED");
+    throw new Error(data?.error?.code ?? (response.status === 401 ? "AUTH_REQUIRED" : response.status === 403 ? "CAMERA_CONTROL_FORBIDDEN" : "CAMERA_VIDEO_FAILED"));
   }
   return response;
 }

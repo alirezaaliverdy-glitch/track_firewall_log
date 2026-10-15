@@ -13,6 +13,7 @@ import { mockWazuhAssets, mockWazuhEvents, mockWazuhHealth } from "../integratio
 import { applyAssetImport, previewAssetImport } from "../assets/asset-intelligence.service.js";
 import { getFindingEvidence, listPublicVendorTelemetryProfiles } from "../services/finding-evidence.service.js";
 import { getFindingDecision } from "../services/finding-decision.service.js";
+import { getFindingCampaign } from "../services/finding-campaign.service.js";
 import { repairMisclassifiedRootFindings } from "../services/finding-analysis.service.js";
 import { getAttackerDetails, listAttackers } from "../services/attacker-intelligence.service.js";
   import { getAttackerGeoStatus, refreshAttackerGeoDatabase } from "../services/attacker-geoip.service.js";
@@ -100,11 +101,13 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get<{ Params: { id: string } }>("/api/security/findings/:id", async (request, reply) => {
-    const finding = await prisma.finding.findUnique({ where: { id: request.params.id }, include: { asset: true, device: true } });
+    const finding = await prisma.finding.findFirst({ where: { id: request.params.id, ...(request.authUser?.scopeOwnerId ? { device: { company: { ownerId: request.authUser.scopeOwnerId, deletedAt: null }, deletedAt: null } } : {}) }, include: { asset: true, device: true } });
     return finding ? finding : reply.code(404).send({ error: "Finding not found" });
   });
 
   app.get<{ Params: { id: string } }>("/api/security/findings/:id/evidence", async (request, reply) => {
+    const allowed = await prisma.finding.findFirst({ where: { id: request.params.id, ...(request.authUser?.scopeOwnerId ? { device: { company: { ownerId: request.authUser.scopeOwnerId, deletedAt: null }, deletedAt: null } } : {}) }, select: { id: true } });
+    if (!allowed) return reply.code(404).send({ error: "Finding not found" });
     const evidence = await getFindingEvidence(request.params.id);
     return evidence ?? reply.code(404).send({ error: "Finding not found" });
   });
@@ -112,6 +115,11 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { id: string } }>("/api/security/findings/:id/decision", async (request, reply) => {
     const decision = await getFindingDecision(request.params.id, request.authUser?.scopeOwnerId);
     return decision ?? reply.code(404).send({ error: "Finding not found" });
+  });
+
+  app.get<{ Params: { id: string } }>("/api/security/findings/:id/campaign", async (request, reply) => {
+    const campaign = await getFindingCampaign(request.params.id, request.authUser?.scopeOwnerId);
+    return campaign ?? reply.code(404).send({ error: "Finding not found" });
   });
 
   app.post<{ Params: { id: string } }>("/api/security/findings/:id/analysis", async (request, reply) => {
