@@ -1,3 +1,11 @@
+## 2026-10-15 - Finding interpretation, actionable previews and WireGuard import
+
+- Linux parsing now distinguishes invoking account/effective user/hostname/SSH login and excludes quoted sudo command arguments from login/threat rules. Complete contradictory legacy root-login findings receive an audited false-positive correction; incomplete evidence is retained for investigation.
+- Responsive finding analysis shows per-event interpretation, actor/run-as, evidence coverage and snapshot freshness. Both action entry points open a registered, preview-ready response or an explicitly labeled diagnostic on the exact device; recent unchanged previews are reused. Partial verification data cannot blank Action Center review.
+- WireGuard has a visible file picker, bounded compatible reader, BOM/CRLF/comment support, paste fallback and edit import. Only explicit private networks are saved; file default routes/DNS remain excluded and connection still requires confirmation.
+- Backend/frontend builds and local scoped deployments, 27 focused tests, five fixture-only browser captures, locale/UTF-8 and 248 catalog validation passed. Production acceptance is pending publication; no new schema migration or vendor mutation.
+- Optional external AI analysis was rejected by automatic approval review because sending security evidence to OpenRouter lacked destination-specific authorization. It was not added or invoked; local evidence analysis is implemented.
+
 ## 2026-10-14 - Transparent EOSNET branding
 
 - Final production acceptance: CI 38558971104 completed SUCCESS at main 0f9dd83. After automatic replacement, checkout/marker match, all five services healthy, three camera/VPN migrations applied, internal certificate-verified readiness and public dashboard/camera/VPN HTTP 200; anonymous camera/VPN APIs return 401. Twenty-three public browser captures pass with worker bypass in the fixture runner; local rerun passes too. This QA/docs follow-up is local-only; the existing memory-heading validator mismatch remains unchanged.

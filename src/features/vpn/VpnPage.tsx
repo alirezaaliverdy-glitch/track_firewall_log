@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Cable, Check, ChevronDown, LoaderCircle, LockKeyhole, Network, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Upload, Wifi } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { CameraDialog } from "@/features/cameras/CameraDialog";
-import { importWireguard, vpnError, vpnRequest, type VpnInput, type VpnList, type VpnProfile } from "@/lib/vpn";
+import { importWireguard, readWireguardFile, vpnError, vpnRequest, type VpnInput, type VpnList, type VpnProfile } from "@/lib/vpn";
 import "@/features/cameras/CamerasPage.css";
 import "./VpnPage.css";
 
@@ -12,6 +12,7 @@ const stateLabels: Record<string, string> = { connected: "متصل", disconnecte
 function VpnForm({ profile, onClose, onSaved }: { profile?: VpnProfile; onClose: () => void; onSaved: () => void }) {
   const [input, setInput] = useState<VpnInput>(profile ? { ...blank, name: profile.name, protocol: profile.protocol, endpoint: profile.endpoint, endpointPort: profile.endpointPort, routes: profile.routesJson, address: undefined, publicKey: undefined, username: undefined } : blank);
   const [routes, setRoutes] = useState(input.routes.join("\n")), [busy, setBusy] = useState(false), [error, setError] = useState(""), [imported, setImported] = useState(false);
+  const [configText, setConfigText] = useState(""), [reading, setReading] = useState(false);
   const change = (key: keyof VpnInput, value: string | number) => setInput(current => ({ ...current, [key]: value }));
   const save = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
@@ -21,15 +22,21 @@ function VpnForm({ profile, onClose, onSaved }: { profile?: VpnProfile; onClose:
       await vpnRequest(profile ? `/${profile.id}` : "", profile ? "PATCH" : "POST", payload); onSaved(); onClose();
     } catch (failure) { setError(vpnError(failure)); } finally { setBusy(false); }
   };
+  const applyConfig = (text: string, name = "") => {
+    const config = importWireguard(text);
+    setInput(current => ({ ...current, ...config, name: current.name || name.replace(/\.(conf|txt)$/i, "").slice(0, 100) }));
+    setRoutes((config.routes ?? []).join("\n")); setImported(true); setConfigText(""); setError("");
+  };
   const readConfig = async (file?: File) => {
-    if (!file) return; setError("");
-    try { const config = importWireguard(await file.text()); setInput(current => ({ ...current, ...config, name: current.name || file.name.replace(/\.(conf|txt)$/i, "").slice(0, 100) })); setRoutes((config.routes ?? []).join("\n")); setImported(true); }
+    if (!file) return; setError(""); setReading(true);
+    try { applyConfig(await readWireguardFile(file), file.name); }
     catch (failure) { setError(vpnError(failure)); }
+    finally { setReading(false); }
   };
   return <CameraDialog title={profile ? "تنظیمات اتصال" : "افزودن اتصال VPN"} onClose={() => { if (!busy) onClose(); }} wide>
     <form className="vpn-form" onSubmit={event => void save(event)}>
       <div className="vpn-protocols" role="group" aria-label="نوع VPN">{(["wireguard", "l2tp"] as const).map(protocol => <button type="button" disabled={Boolean(profile) || busy} aria-pressed={input.protocol === protocol} key={protocol} onClick={() => setInput(current => ({ ...current, protocol }))}><span><ShieldCheck size={20} />{protocol === "wireguard" ? "WireGuard" : "L2TP / IPsec"}</span><small>{protocol === "wireguard" ? "کلید اختصاصی" : "نام کاربری، رمز و PSK"}</small>{input.protocol === protocol && <Check size={17} />}</button>)}</div>
-      {!profile && input.protocol === "wireguard" ? <label className="vpn-import"><Upload size={17} />ورود فایل WireGuard<input type="file" accept=".conf,.txt" onChange={event => { void readConfig(event.target.files?.[0]); event.target.value = ""; }} /></label> : null}
+      {input.protocol === "wireguard" ? <div className="vpn-import-options"><label className="vpn-import"><span><Upload size={17} />{reading ? "در حال خواندن فایل…" : "ورود فایل WireGuard"}</span><input aria-label="فایل تنظیمات WireGuard" type="file" disabled={reading || busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void readConfig(file); }} /></label><details><summary>جای‌گذاری متن تنظیمات</summary><textarea aria-label="متن تنظیمات WireGuard" dir="ltr" spellCheck={false} autoComplete="off" value={configText} onChange={event => setConfigText(event.target.value)} placeholder="[Interface]" rows={5} maxLength={16384} /><button type="button" className="camera-button" disabled={!configText.trim() || busy} onClick={() => { try { applyConfig(configText); } catch (failure) { setError(vpnError(failure)); } }}>خواندن تنظیمات</button></details></div> : null}
       {imported ? <p className="vpn-note">کلیدها وارد شد؛ فقط بازه‌های زیر استفاده می‌شوند. DNS و مسیر عمومی فایل اعمال نمی‌شوند.</p> : null}
       {imported && !routes.trim() ? <p className="camera-alert" role="status">بازهٔ خصوصی دستگاه‌ها را وارد کن؛ فایل فقط مسیر عمومی داشت و آن مسیر وارد برنامه نمی‌شود.</p> : null}
       <div className="vpn-form-grid"><label>نام اتصال<input required maxLength={100} value={input.name} onChange={event => change("name", event.target.value)} placeholder="مثلاً دوربین‌های دفتر" /></label><label>سرور VPN<input required dir="ltr" value={input.endpoint} onChange={event => change("endpoint", event.target.value)} placeholder="vpn.example.com" autoComplete="off" /></label></div>
@@ -42,7 +49,7 @@ function VpnForm({ profile, onClose, onSaved }: { profile?: VpnProfile; onClose:
       <label className="vpn-routes-field"><span><Network size={17} />شبکه‌های پشت VPN</span><textarea required dir="ltr" value={routes} onChange={event => setRoutes(event.target.value)} rows={3} placeholder="192.168.18.0/24" /><small>هر خط یک بازه؛ فقط همین مقصدها از VPN عبور می‌کنند.</small></label>
       {input.protocol === "wireguard" ? <details className="vpn-advanced"><summary>اندازهٔ بسته‌ها <ChevronDown size={15} /></summary><label>MTU<input type="number" dir="ltr" min={1280} max={1420} value={input.mtu ?? ""} placeholder={profile ? "خالی = بدون تغییر" : "1420"} onChange={event => setInput(current => ({ ...current, mtu: event.target.value ? Number(event.target.value) : undefined }))} /></label></details> : null}
       {error && <p className="camera-alert" role="alert">{error}</p>}
-      <footer className="camera-dialog__actions"><button type="button" className="camera-button" disabled={busy} onClick={onClose}>انصراف</button><button type="submit" className="camera-button camera-button--primary" disabled={busy}>{busy ? <LoaderCircle size={17} className="camera-spin" /> : <Check size={17} />}ذخیره اتصال</button></footer>
+      <footer className="camera-dialog__actions"><button type="button" className="camera-button" disabled={busy} onClick={onClose}>انصراف</button><button type="submit" className="camera-button camera-button--primary" disabled={busy || reading}>{busy ? <LoaderCircle size={17} className="camera-spin" /> : <Check size={17} />}ذخیره اتصال</button></footer>
     </form>
   </CameraDialog>;
 }

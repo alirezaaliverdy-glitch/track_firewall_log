@@ -8,6 +8,7 @@ import type { LinuxLiveLogEvent, LinuxTelemetrySeverity } from "./linux-telemetr
 import { processVendorTelemetry, type NormalizedFinding } from "../vendor-finding-engine.js";
 import { boundedTelemetryStore, type StoredTelemetryEvent } from "../bounded-telemetry-store.js";
 import { scheduleSecurityDetection } from "../../services/security-detection-dispatcher.service.js";
+import { parseLinuxSecurityLog } from "../../security/linux-log-semantics.js";
 
 const MAX_BUFFER = 500;
 const MAX_RUNTIME_MS = 30 * 60 * 1000;
@@ -34,6 +35,8 @@ function categoryFor(tags: string[]) {
 export function parseLinuxLiveLogLine(source: LinuxStreamSource, line: string, context?: { repeated?: number }): Omit<LinuxLiveLogEvent, "streamId" | "deviceId"> {
   const raw = redactLinuxTelemetry(line).slice(0, 4000);
   const lower = raw.toLowerCase();
+  const meaning = parseLinuxSecurityLog(raw);
+  if (meaning.kind === "sudo_command") return { source, timestamp: new Date().toISOString(), raw, parsed: { username: meaning.actor, effectiveUser: meaning.effectiveUser, command: meaning.command }, severity: "info", tags: [source, "sudo_command"], suspicious: false, summary: `Privileged command by ${meaning.actor ?? "unknown"} as ${meaning.effectiveUser ?? "unknown"}` };
   const sourceIp = ip(raw);
   let summary = `${source} log event`;
   const tags: string[] = [source];
@@ -53,7 +56,7 @@ export function parseLinuxLiveLogLine(source: LinuxStreamSource, line: string, c
   else if (source === "docker" && /error|failed|fatal/.test(lower)) { summary = "Docker daemon error"; tags.push("docker_error"); suspicious = true; }
   if ((context?.repeated ?? 0) >= 10) { suspicious = true; tags.push("repeated"); summary = `${summary} (${context?.repeated} recent)`; }
   const affectedUser = username(raw); const affectedPort = port(raw);
-  if (/for root|invalid user root|accepted password for root/i.test(lower)) { tags.push("root_login"); suspicious = true; }
+  if (["ssh_success", "ssh_failure"].includes(meaning.kind) && meaning.actor === "root") { tags.push("root_login"); suspicious = true; }
   return { source, timestamp: new Date().toISOString(), raw, parsed: { ...(sourceIp ? { sourceIp } : {}), ...(affectedUser ? { username: affectedUser } : {}), ...(affectedPort ? { port: affectedPort } : {}), repeated: context?.repeated ?? 0 }, severity: suspicious && (context?.repeated ?? 0) >= 20 ? "high" : severityFor(raw), tags, suspicious, summary };
 }
 

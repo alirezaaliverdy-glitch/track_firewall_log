@@ -396,7 +396,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     finally { setHistoryBusy(false); }
   }
 
-  const latestFailure = verification?.history.find((attempt) => !attempt.connected && Boolean(attempt.error));
+  const latestFailure = verification?.history?.find((attempt) => !attempt.connected && Boolean(attempt.error));
   const currentFailure = verification?.connected ? null : verification?.error;
   const connectionTone = verification?.connected ? "connected" : currentFailure ? "failed" : "unknown";
   const pages = Math.max(1, Math.ceil(total / 10));

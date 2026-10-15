@@ -1,3 +1,12 @@
+## 2026-10-15 - Correct sudo/root interpretation and complete finding-to-action/VPN import
+
+- Replaced whole-line SSH inference with shared producer/message semantics across ingestion, rule matching, account attribution, streams and telemetry. A sudo grep containing authentication phrases remains a command by its real actor. Actual root SSH success, other-user login, IPv6, sudo failures and sensitive commands remain distinguishable.
+- Added deterministic evidence analysis and a compact first-view panel with event interpretation, actor/effective account, exact coverage and observed configuration freshness. Added workspace-scoped reanalysis with audited correction only when every retained root-login reference contradicts the claim; evidence is not removed.
+- Unified both finding-action APIs on registered, preview-ready containment or diagnostic actions, added recent-preview reuse and repaired the generic UI handoff and partial connection-history render failure. Preserved PolicyGuard, confirmation, connector/result verification, audit and lab execution settings.
+- Reworked WireGuard import for native file selection, compatible bounded reads, BOM/CRLF/comments, paste fallback and existing-profile import. Default/public routes and DNS stay excluded; imported data is not saved/connected until explicit user action.
+- Passed local builds/deployments, 27 focused tests on an isolated database, five desktop/mobile browser captures, locale/encoding and 248 catalog validation. No schema change, live vendor write or real VPN connection was performed in tests. Production publication/acceptance follows.
+- Automatic approval review declined an optional external AI evidence-transmission addition; no such code or provider request was applied. Destination-specific approval for redacted summaries to OpenRouter remains required; local analysis is available.
+
 ## 2026-10-14 - Preserve original EOSNET logo and update sidebar brand
 
 - Corrected release 0f9dd83 and CI 38558971104 completed SUCCESS. Post-automatic-deploy acceptance passed exact SHA/marker, all five services, three camera/VPN migrations, internal verified TLS/readiness, public UI HTTP 200 and anonymous camera/VPN API 401. Public visual/auth-fixture QA passes 23 captures; HTTPS PWA worker bypass was added to the test runner to keep requests inside its interceptor. Local rerun also passes. QA/docs acceptance follow-up remains local-only, with the unrelated pre-existing memory-heading validation failure recorded.

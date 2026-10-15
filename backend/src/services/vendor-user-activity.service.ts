@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { redactText } from "../security/redaction.js";
 import { isApplicationOwnedSecurityEvent } from "../security/collector-auth-provenance.js";
+import { parseLinuxSecurityLog } from "../security/linux-log-semantics.js";
 
 type AccountEvent = {
   id: string;
@@ -39,10 +40,12 @@ function safeUsername(value: string | null | undefined) {
 }
 
 function rawText(event: Pick<AccountEvent, "rawSnippet" | "rawMessage">) {
-  return event.rawSnippet ?? event.rawMessage ?? "";
+  return event.rawMessage ?? event.rawSnippet ?? "";
 }
 
 export function accountNameFromEvent(event: Pick<AccountEvent, "username" | "rawSnippet" | "rawMessage">) {
+  const meaning = parseLinuxSecurityLog(rawText(event));
+  if (meaning.actor) return safeUsername(meaning.actor);
   const explicit = safeUsername(event.username);
   if (explicit) return explicit;
   const raw = rawText(event);
@@ -71,6 +74,15 @@ export function classifyAccountEvent(event: Pick<AccountEvent, "action" | "event
   const raw = rawText(event);
   const action = (event.action ?? "").toLowerCase();
   const eventType = event.eventType.toLowerCase();
+  const meaning = parseLinuxSecurityLog(raw);
+  if (meaning.kind === "sudo_command") {
+    const structure = (meaning.command ?? "").replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, "''");
+    const high = /(?:^|[;&|]\s*)(?:\/(?:usr\/)?s?bin\/)?(?:userdel|visudo|passwd|reboot|poweroff|shutdown|iptables|nft|ufw|rm\b|(?:ba|da)?sh\s+-c|systemctl\s+(?:stop|disable)|chmod\s+777)\b/i.test(structure);
+    return { kind: "privileged", risk: high ? "high" : "review" };
+  }
+  if (meaning.kind === "sudo_failure" || meaning.kind === "ssh_failure") return { kind: "failed_login", risk: "review" };
+  if (meaning.kind === "ssh_success") return { kind: "login", risk: "normal" };
+  if (meaning.kind === "session") return { kind: /closed/i.test(raw) ? "logout" : "activity", risk: "normal" };
   if (/auth_failed|auth_failure|login_failed|login_failure|sudo_failed|vpn_auth_failed/.test(`${action} ${eventType}`) || /(?:login|authentication|password).*?(?:failed|failure|denied|invalid)/i.test(raw)) {
     return { kind: "failed_login", risk: "review" };
   }

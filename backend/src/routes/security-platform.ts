@@ -13,6 +13,7 @@ import { mockWazuhAssets, mockWazuhEvents, mockWazuhHealth } from "../integratio
 import { applyAssetImport, previewAssetImport } from "../assets/asset-intelligence.service.js";
 import { getFindingEvidence, listPublicVendorTelemetryProfiles } from "../services/finding-evidence.service.js";
 import { getFindingDecision } from "../services/finding-decision.service.js";
+import { repairMisclassifiedRootFindings } from "../services/finding-analysis.service.js";
 import { getAttackerDetails, listAttackers } from "../services/attacker-intelligence.service.js";
   import { getAttackerGeoStatus, refreshAttackerGeoDatabase } from "../services/attacker-geoip.service.js";
 import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityEmailAlertSettings, sendSecurityEmailTest, sendSecurityVendorEmailTests, updateSecurityEmailAlertSettings } from "../services/security-alert-email.service.js";
@@ -113,6 +114,15 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
     return decision ?? reply.code(404).send({ error: "Finding not found" });
   });
 
+  app.post<{ Params: { id: string } }>("/api/security/findings/:id/analysis", async (request, reply) => {
+    const decision = await getFindingDecision(request.params.id, request.authUser?.scopeOwnerId);
+    if (!decision) return reply.code(404).send({ error: "Finding not found" });
+    const finding = await prisma.finding.findUnique({ where: { id: request.params.id }, select: { deviceId: true } });
+    if (!finding) return reply.code(404).send({ error: "Finding not found" });
+    await repairMisclassifiedRootFindings(finding.deviceId);
+    return getFindingDecision(request.params.id, request.authUser?.scopeOwnerId);
+  });
+
   app.patch<{ Params: { id: string }; Body: { status?: string; resolutionConfirmed?: boolean } }>("/api/security/findings/:id/status", async (request, reply) => {
     const allowed = new Set(["active", "acknowledged", "resolved", "false_positive", "accepted_risk", "suppressed", "investigating"]);
     if (!request.body?.status || !allowed.has(request.body.status)) return reply.code(400).send({ error: "Invalid finding status" });
@@ -137,7 +147,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string } }>("/api/security/findings/:id/action-plan", async (request, reply) => {
-    const result = await createFindingActionPlan(request.params.id);
+    const result = await createFindingActionPlan(request.params.id, request.authUser?.scopeOwnerId);
     return result ? reply.code(201).send(result) : reply.code(404).send({ error: "Finding not found" });
   });
 

@@ -1,4 +1,5 @@
 import type { SecurityEvent } from "@prisma/client";
+import { isLinuxRemoteRootLogin, parseLinuxSecurityLog } from "./linux-log-semantics.js";
 
 type Severity = "low" | "medium" | "high" | "critical";
 type RuleType = "port_scan" | "ssh_bruteforce" | "sensitive_port_exposure" | "deny_drop_spike" | "suspicious_outbound";
@@ -127,6 +128,11 @@ export function normalizeDetectionVendor(value: unknown) {
 export function eventMatchesVendorRule(ruleKey: string, event: SecurityEvent) {
   const definition = VENDOR_DETECTION_RULES.find((item) => item.key === ruleKey);
   if (!definition || normalizeDetectionVendor(event.vendor) !== definition.vendor) return false;
+  const raw = event.rawMessage ?? event.rawSnippet ?? "";
+  if (ruleKey === "linux.root-remote-login") return isLinuxRemoteRootLogin(raw);
+  // Command arguments can contain every detection keyword. They are data, not
+  // authentication/firewall/audit events emitted by those services.
+  if (definition.vendor === "linux" && parseLinuxSecurityLog(raw).program === "sudo") return false;
   const payload = [event.eventType, event.action, event.severity, event.ruleName, event.rawMessage, event.rawSnippet].filter(Boolean).join(" ");
   return definition.pattern.test(payload);
 }

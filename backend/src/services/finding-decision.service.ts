@@ -3,6 +3,9 @@ import { findingSupportsIpResponse } from "../assets/finding-remediation-policy.
 import { isApplicationOwnedSecurityEvent } from "../security/collector-auth-provenance.js";
 import { getFindingEvidence } from "./finding-evidence.service.js";
 import { buildTrustedSourceMatcher } from "./trusted-source-ip.service.js";
+import { analyzeFindingEvidence } from "./finding-analysis.service.js";
+import { parseLinuxSecurityLog } from "../security/linux-log-semantics.js";
+import { searchCatalog } from "../commands/catalog/index.js";
 
 export type DecisionEvidence = {
   category: string;
@@ -79,17 +82,20 @@ export async function getFindingDecision(id: string, ownerId?: string) {
     select: { id: true, tags: true }
   }) : [];
   const applicationOwnedIds = new Set(referencedSecurityEvents.filter(isApplicationOwnedSecurityEvent).map((event) => event.id));
+  const analysis = analyzeFindingEvidence(finding, (evidence?.events ?? []).map(event => ({ ...event, tags: applicationOwnedIds.has(event.id) ? { applicationOwned: true } : {} })), evidence?.integrity ?? { referenceCount: 0, resolvedReferenceCount: 0 });
   const supportingReferenceCount = evidence?.events.filter((event) => {
     if (!finding.srcIp || event.srcIp !== finding.srcIp || applicationOwnedIds.has(event.id)) return false;
+    const meaning = parseLinuxSecurityLog(event.rawMessage);
+    if (finding.vendor === "linux" && meaning.program === "sudo") return false;
     const marker = `${event.action ?? ""} ${event.eventType ?? ""}`.toLowerCase();
-    return !/auth_success|accepted|allowed|ordinary_connection/.test(marker);
+    return /auth_failed|auth_failure|login_failure|vpn_auth_failed|web_probe|port_scan|network_scan|threat_detected|firewall_denied|port_blocked|intrusion|ips_/i.test(marker);
   }).length ?? 0;
   const [related, loginEvents, trusted] = await Promise.all([
     finding.srcIp ? prisma.finding.findMany({ where: { srcIp: finding.srcIp, lastSeen: { gte: new Date(finding.lastSeen.getTime() - 24 * 60 * 60_000) }, status: { notIn: ["resolved", "closed", "false_positive", "accepted_risk", "suppressed"] }, ...(ownerId ? { device: { company: { ownerId, deletedAt: null }, deletedAt: null } } : {}) }, select: { deviceId: true }, take: 100 }) : Promise.resolve([]),
     finding.srcIp ? prisma.securityEvent.findMany({ where: { deviceId: finding.deviceId, srcIp: finding.srcIp, OR: [{ action: "auth_success" }, { eventType: "auth_success" }], timestamp: { gte: finding.lastSeen, lte: new Date() } }, select: { action: true, tags: true }, take: 100 }) : Promise.resolve([]),
     finding.srcIp ? buildTrustedSourceMatcher([finding.srcIp]) : Promise.resolve(() => false),
   ]);
-  return correlateFindingEvidence({
+  const decision = correlateFindingEvidence({
     category: finding.category,
     status: finding.status,
     srcIp: finding.srcIp,
@@ -105,4 +111,16 @@ export async function getFindingDecision(id: string, ownerId?: string) {
     authSuccessCount: loginEvents.filter((event) => !isApplicationOwnedSecurityEvent(event)).length,
     trustedSource: trusted(finding.srcIp, finding.vendor),
   });
+  const snapshot = await prisma.deviceSnapshot.findFirst({ where: { deviceId: finding.deviceId }, orderBy: { collectedAt: "desc" }, select: { snapshotType: true, collectedAt: true, dataJson: true } });
+  const snapshotData = snapshot?.dataJson && typeof snapshot.dataJson === "object" ? snapshot.dataJson as Record<string, unknown> : {};
+  const ssh = snapshotData.ssh && typeof snapshotData.ssh === "object" ? snapshotData.ssh as Record<string, unknown> : {};
+  const snapshotFresh = Boolean(snapshot && Date.now() - snapshot.collectedAt.getTime() <= 30 * 60_000);
+  const diagnostic = searchCatalog({ vendor: finding.vendor, executable: true, readOnly: true }).filter(item => !item.requiredParams.length).sort((a, b) => Number(b.category === "daily-check") - Number(a.category === "daily-check"))[0];
+  return {
+    ...decision,
+    ...(analysis.verdict === "contradicted" ? { mode: decision.mode === "closed" ? "closed" : "investigate", evidenceScore: 0, evidenceLabelFa: "تفسیر اولیه نادرست است", evidenceLabelEn: "Initial interpretation contradicted", explanationFa: analysis.summaryFa, explanationEn: analysis.summaryEn } : {}),
+    analysis,
+    deviceContext: { observedAt: snapshot?.collectedAt.toISOString() ?? null, fresh: snapshotFresh, snapshotType: snapshot?.snapshotType ?? null, permitRootLogin: typeof ssh.permitRootLogin === "string" ? ssh.permitRootLogin : null },
+    suggestedAction: decision.mode === "review_action" && analysis.verdict !== "contradicted" ? { kind: "containment", labelFa: "بررسی و تأیید محدودسازی مبدأ", labelEn: "Review source restriction" } : diagnostic ? { kind: "diagnostic", labelFa: "بررسی وضعیت فعلی تجهیز", labelEn: "Check current device state", catalogId: diagnostic.id } : null,
+  };
 }

@@ -1,3 +1,14 @@
+# Design QA — Finding analysis and WireGuard import
+
+- Date: 2026-10-15. Implemented an analysis-first finding detail using the existing product styles; replaced repeated summary/severity panels with compact status/context when structural analysis is available.
+- Synthetic browser suite: `scripts/qa/capture-finding-analysis.mjs`; 1440px desktop and 390px mobile. Five captures cover interpreted sudo evidence, reanalysis, exact Action Center review, native WireGuard picker, paste fallback and private-route save. All API calls are intercepted with synthetic data and the production PWA worker is bypassed in the test browser.
+- Verified actor differs from effective root account, corrected interpretation is visible, source action opens its exact preview, partial verification history does not blank review, imported default routes are absent, and no connector/VPN execution occurs. Zero runtime errors and no horizontal/dialog overflow.
+- Source problem screenshots were inspected alongside the rendered desktop/mobile analysis. Additional event detail stays collapsed until requested. Native file selection and the paste alternative both work; credentials stay out of screenshots and output.
+- P0/P1/P2: none in tested states. Limit: browser fixtures verify UI flow; actual device configuration and real VPN-server connectivity are not inferred from them. Optional external-provider analysis is not enabled pending authorization.
+- Result: local passed; production visual acceptance is recorded after rollout. Captures are temporary outside the repository.
+
+---
+
 # Design QA — Transparent EOSNET branding
 
 - Date: 2026-10-14. Source: original user-supplied logo; explicit user choice is pixel-preserving transparency, not redraw.

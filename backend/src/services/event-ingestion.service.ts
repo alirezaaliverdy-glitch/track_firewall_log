@@ -7,6 +7,7 @@ import { invalidateVendorUserActivityCache } from "./vendor-user-activity.servic
 import type { CollectedLogLine, CollectorRunResult } from "../collectors/types.js";
 import { isApplicationOwnedSecurityEvent, matchesCollectorSession } from "../security/collector-auth-provenance.js";
 import { knownApplicationCommands, matchesApplicationCommand, matchesFixedCollectorRead } from "../security/application-command-provenance.js";
+import { linuxEventAction, parseLinuxSecurityLog } from "../security/linux-log-semantics.js";
 
 export type NormalizedCollectedEvent = {
   deviceId: string;
@@ -219,6 +220,10 @@ function userFromAuth(line: string) {
     line.match(/for\s+([^\s]+)\s+from/i)?.[1];
 }
 
+function meaningfulLinuxUpgrade(event: NormalizedCollectedEvent, storedEvidence: Record<string, unknown>) {
+  return event.vendor === "linux" && storedEvidence.parser !== "collector-normalizer-v3";
+}
+
 function dedupe(input: {
   deviceId: string;
   sourceType: string;
@@ -245,13 +250,21 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine,
   let action = "unknown";
   let severity: NormalizedCollectedEvent["severity"] = "low";
   let srcIp = ip(raw);
-  const username = userFromAuth(raw);
+  const meaning = /linux|ubuntu|debian|rhel|centos|rocky|alma/i.test(vendor) ? parseLinuxSecurityLog(raw) : null;
+  let username = userFromAuth(raw);
   let srcPort: number | undefined;
   let dstPort: number | undefined;
   let eventDestination: string | undefined;
   let protocol: string | undefined;
 
-  if (/timeout, client not responding|disconnected from|session (?:opened|closed)/i.test(raw)) {
+  if (meaning && meaning.kind !== "other") {
+    action = linuxEventAction(meaning);
+    username = meaning.actor;
+    srcIp = meaning.sourceIp;
+    srcPort = meaning.sourcePort;
+    protocol = meaning.kind.startsWith("ssh_") ? "ssh" : undefined;
+    severity = meaning.kind === "ssh_failure" ? (meaning.actor === "root" ? "high" : "medium") : meaning.kind === "sudo_failure" ? "medium" : "low";
+  } else if (/timeout, client not responding|disconnected from|session (?:opened|closed)/i.test(raw)) {
     action = "session_lifecycle";
     severity = "low";
   } else if (/(?:\.env|\.git\/config|wp-login\.php|\/etc\/passwd|\.\.\/|cmd\.php|shell\.php|phpmyadmin)/i.test(raw)) {
@@ -320,7 +333,8 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine,
     evidenceJson: {
       command: line.command,
       hostname: line.hostname,
-      parser: "collector-normalizer-v2"
+      parser: "collector-normalizer-v3",
+      ...(meaning ? { interpretation: meaning } : {})
     },
     dedupeKey: ""
   };
@@ -374,19 +388,20 @@ export async function ingestCollectorRun(result: CollectorRunResult) {
       const storedNormalized = existing.normalizedJson && typeof existing.normalizedJson === "object" && !Array.isArray(existing.normalizedJson) ? existing.normalizedJson as Record<string, unknown> : {};
       const storedEvidence = storedNormalized.evidenceJson && typeof storedNormalized.evidenceJson === "object" && !Array.isArray(storedNormalized.evidenceJson) ? storedNormalized.evidenceJson as Record<string, unknown> : {};
       const requiresFortiUpgrade = event.vendor === "fortigate" && (storedEvidence.parser !== "fortios-kv-v1" || existing.eventType !== event.eventType || existing.action !== event.action || (event.bytesSent !== undefined && event.bytesReceived !== undefined && (storedNormalized.bytesSent === undefined || storedNormalized.bytesReceived === undefined)));
-      if (requiresFortiUpgrade) {
+      const requiresLinuxUpgrade = Boolean(meaningfulLinuxUpgrade(event, storedEvidence));
+      if (requiresFortiUpgrade || requiresLinuxUpgrade) {
         await prisma.securityEvent.update({
           where: { id: existing.id },
           data: {
             eventType: event.eventType,
             action: event.action,
             severity: event.severity,
-            srcIp: event.srcIp,
-            srcPort: event.srcPort,
+            srcIp: event.srcIp ?? null,
+            srcPort: event.srcPort ?? null,
             dstIp: event.dstIp,
             dstPort: event.dstPort,
             protocol: event.protocol,
-            username: event.username,
+            username: event.username ?? null,
             ruleName: event.ruleName,
             interfaceIn: event.interfaceIn,
             interfaceOut: event.interfaceOut,

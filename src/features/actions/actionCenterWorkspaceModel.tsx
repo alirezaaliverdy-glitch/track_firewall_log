@@ -39,6 +39,7 @@ export function terminalLifecycle(value: ActionLifecycle) {
 }
 
 const NON_OPERATOR_PARAMETER_FIELDS = new Set([
+  "findingId", "findingEvidenceAt", "responseKind", "responseSourceIp", "assetId", "title", "recommendedIntent",
   "metadata", "actionType", "deviceId", "vendor", "protocol", "executionSupport", "missingFields", "clarificationQuestions",
   "source", "implementationState", "supportState", "supportReasonKey", "executable", "connectorType", "executionTemplateRef", "normalizedParams", "requiredParamsSatisfied",
   "requiresExplicitReview", "expectedImpact", "suggestedPrechecks", "suggestedVerification", "suggestedRollback",

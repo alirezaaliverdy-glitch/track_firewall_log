@@ -4,6 +4,7 @@ import { DeviceEnvironment, DeviceProtocol, DeviceStatus, DeviceType } from "@pr
 import { buildApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { createCredential } from "../src/services/credential.service.js";
+import { createFindingActionPlan } from "../src/assets/asset-intelligence.service.js";
 
 test("a repeated-login finding opens as a preview-ready IP block without invoking the connector", async () => {
   const runId = `finding-preview-${Date.now()}`;
@@ -91,10 +92,39 @@ test("a repeated-login finding opens as a preview-ready IP block without invokin
     assert.equal(decisionResponse.json().supportingReferenceCount, 0);
     assert.equal(decisionResponse.json().applicationOwnedReferenceCount, 2);
     const reviewResponse = await app.inject({ method: "POST", url: `/api/security/findings/${finding.id}/action-plan` });
-    assert.equal(reviewResponse.statusCode, 409);
-    assert.equal(reviewResponse.json().code, "ACTION_NOT_IN_CATALOG");
+    assert.equal(reviewResponse.statusCode, 201);
+    assert.equal(reviewResponse.json().actionPlan.actionType, "linux_daily_check");
+    assert.equal(reviewResponse.json().actionPlan.status, "dry_run_ready");
+    assert.equal(reviewResponse.json().actionPlan.parametersJson.responseKind, "diagnostic");
+    assert.notEqual(reviewResponse.json().actionPlan.resultJson?.connectorInvoked, true);
+    const telemetryResponse = await app.inject({ method: "POST", url: `/api/findings/${finding.id}/action-plan` });
+    assert.equal(telemetryResponse.statusCode, 201);
+    assert.equal(telemetryResponse.json().actionPlan.status, "dry_run_ready");
+    assert.equal(telemetryResponse.json().actionPlan.actionType, "linux_daily_check");
+    assert.equal(telemetryResponse.json().actionPlan.id, reviewResponse.json().actionPlan.id);
+    assert.equal(await createFindingActionPlan(finding.id, "different-workspace-fixture"), null);
+
+    const sudoEvent = await prisma.securityEvent.create({ data: {
+      deviceId, timestamp: new Date(), vendor: "linux", sourceType: "linux_auth", eventType: "linux_log", action: "auth_success", username: "root",
+      rawMessage: "Oct 13 12:18:32 fixture-host sudo: operator1 : TTY=pts/1 ; PWD=/home/operator1 ; USER=root ; COMMAND=/usr/bin/grep 'Accepted password.*root' /var/log/auth.log",
+      normalizedJson: {}, dedupeKey: `${runId}-sudo`,
+    } });
+    const rootFinding = await prisma.finding.create({ data: {
+      deviceId, vendor: "linux", title: "Linux: remote root login", category: "privileged-access", severity: "critical", status: "active", confidence: 0.82, summary: "Legacy false root login",
+      evidenceJson: [], rawRefsJson: [sudoEvent.id], source: "seeded_detection_rule", firstSeen: new Date(), lastSeen: new Date(), count: 1, mitreTags: [], recommendedActions: [], fingerprint: `${runId}:linux.root-remote-login`,
+    } });
+    const analysisResponse = await app.inject({ method: "POST", url: `/api/security/findings/${rootFinding.id}/analysis`, payload: {} });
+    assert.equal(analysisResponse.statusCode, 200);
+    assert.equal(analysisResponse.json().analysis.verdict, "contradicted");
+    assert.equal(analysisResponse.json().analysis.events[0].actor, "operator1");
+    assert.equal(analysisResponse.json().analysis.events[0].effectiveUser, "root");
+    assert.equal(analysisResponse.json().evidenceScore, 0);
+    assert.equal((await prisma.finding.findUniqueOrThrow({ where: { id: rootFinding.id } })).status, "false_positive");
+    assert.equal((await prisma.securityEvent.findUniqueOrThrow({ where: { id: sudoEvent.id } })).action, "sudo_command");
+    assert.equal(await prisma.auditLog.count({ where: { action: "security.finding.classification_corrected", targetId: rootFinding.id } }), 1);
   } finally {
     if (deviceId) {
+      await prisma.auditLog.deleteMany({ where: { deviceId } });
       await prisma.actionPlan.deleteMany({ where: { deviceId } });
       await prisma.securityEvent.deleteMany({ where: { deviceId } });
       await prisma.finding.deleteMany({ where: { deviceId } });

@@ -9,6 +9,8 @@ import { invalidateVendorUserActivityCache } from "../services/vendor-user-activ
 import { assessDeviceHealth } from "../services/device-health-assessment.js";
 import { findingSupportsIpResponse } from "./finding-remediation-policy.js";
 import { getFindingDecision } from "../services/finding-decision.service.js";
+import { repairMisclassifiedRootFindings } from "../services/finding-analysis.service.js";
+import { COMMAND_CATALOG_VERSION, searchCatalog } from "../commands/catalog/index.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 
 const MAX_IMPORT_ASSETS = 100;
@@ -599,6 +601,7 @@ export async function createSecurityEvent(input: SecurityEventInput) {
 
 async function executeSecurityDetection(input: { deviceId?: string; assetId?: string } = {}) {
   await ensureSeededSecurityRules();
+  await repairMisclassifiedRootFindings(input.deviceId);
   const rules = await prisma.detectionRule.findMany({ where: { enabled: true } });
   const longestWindowMinutes = rules.reduce((longest, rule) => {
     const threshold = rule.thresholdJson && typeof rule.thresholdJson === "object" ? rule.thresholdJson as Record<string, unknown> : {};
@@ -775,8 +778,8 @@ export async function listSecurityFindings(filters: { vendor?: string; deviceId?
   };
 }
 
-export async function createFindingActionPlan(id: string) {
-  const finding = await prisma.finding.findUnique({ where: { id }, include: { asset: true, device: true } });
+export async function createFindingActionPlan(id: string, ownerId?: string) {
+  const finding = await prisma.finding.findFirst({ where: { id, ...(ownerId ? { device: { company: { ownerId, deletedAt: null }, deletedAt: null } } : {}) }, include: { asset: true, device: true } });
   if (!finding) return null;
   const actions = Array.isArray(finding.recommendedActions) ? finding.recommendedActions as Array<Record<string, unknown>> : [];
   const vendor = normalizeDetectionVendor(finding.vendor || finding.device.vendor);
@@ -785,15 +788,16 @@ export async function createFindingActionPlan(id: string) {
     orderBy: [{ timestamp: "desc" }, { receivedAt: "desc" }],
     select: { interfaceIn: true, interfaceOut: true, dstIp: true, dstPort: true, protocol: true }
   }) : null;
-  const decision = await getFindingDecision(id);
+  const decision = await getFindingDecision(id, ownerId);
   const sourceIp = decision?.mode === "review_action" && findingSupportsIpResponse(finding) ? finding.srcIp ?? undefined : undefined;
+  const diagnostic = !sourceIp ? searchCatalog({ vendor, executable: true, readOnly: true }).filter(item => !item.requiredParams.length).sort((a, b) => Number(b.category === "daily-check") - Number(a.category === "daily-check"))[0] : undefined;
   const responseAction = vendor === "linux" && sourceIp
     ? ActionType.linux_block_ip
     : vendor === "mikrotik" && sourceIp
       ? ActionType.mikrotik_block_ip
       : vendor === "fortigate" && sourceIp
         ? ActionType.fortigate_create_deny_policy
-        : ActionType.custom_vendor_action;
+        : (diagnostic?.actionType as ActionType | undefined) ?? ActionType.custom_vendor_action;
   const responseParameters: Record<string, unknown> = responseAction === ActionType.linux_block_ip
     ? { srcIp: sourceIp, ipAddress: sourceIp, durationMinutes: 60 }
     : responseAction === ActionType.mikrotik_block_ip
@@ -810,23 +814,30 @@ export async function createFindingActionPlan(id: string) {
             name: `fla-block-${String(sourceIp).replace(/[^A-Za-z0-9]/g, "-")}`.slice(0, 35),
             comment: `Threat response for finding ${finding.id}`
           }
-        : {};
+        : diagnostic ? { ...diagnostic.defaultParams, metadata: { source: "command_catalog", catalogCommandId: diagnostic.id, catalogVersion: COMMAND_CATALOG_VERSION, catalogTitleFa: diagnostic.titleFa, vendor, actionType: diagnostic.actionType, executionTemplateRef: diagnostic.executionTemplateRef, connectorType: diagnostic.connectorType, implementationState: "implemented", executionSupport: "connector", supportState: diagnostic.supportState, executable: true, normalizedParams: diagnostic.defaultParams, requiredParamsSatisfied: true, previewGenerated: false, executed: false, connectorInvoked: false } } : {};
+  const existingPreview = await prisma.actionPlan.findFirst({
+    where: { deviceId: finding.deviceId, actionType: responseAction, status: "dry_run_ready", createdAt: { gte: new Date(Date.now() - 5 * 60_000) }, AND: [{ parametersJson: { path: ["findingId"], equals: finding.id } }, { parametersJson: { path: ["findingEvidenceAt"], equals: finding.lastSeen.toISOString() } }] },
+    orderBy: { createdAt: "desc" }, include: { device: true, asset: true },
+  });
+  if (existingPreview) return { findingId: finding.id, actionPlan: existingPreview };
   const plan = await proposeActionPlan({
     source: ActionPlanSource.detection,
     requestedBy: `finding:${finding.id}`,
     deviceId: finding.deviceId,
     actionType: responseAction,
-    riskLevel: responseAction === ActionType.fortigate_create_deny_policy ? AiRiskLevel.high : finding.severity as AiRiskLevel,
+    riskLevel: diagnostic ? AiRiskLevel.low : responseAction === ActionType.fortigate_create_deny_policy ? AiRiskLevel.high : finding.severity as AiRiskLevel,
     parametersJson: {
       ...responseParameters,
       findingId: finding.id,
+      findingEvidenceAt: finding.lastSeen.toISOString(),
       assetId: finding.assetId,
       assetContext: finding.asset ? { id: finding.asset.id, name: finding.asset.name, managementIp: finding.asset.managementIp, siteId: finding.asset.siteId } : null,
       vendor,
-      title: finding.title,
+      title: diagnostic ? diagnostic.titleFa : finding.title,
+      responseKind: diagnostic ? "diagnostic" : "containment",
       evidence: finding.evidenceJson,
       recommendedIntent: String(actions[0]?.intent ?? "generic_security_action"),
-      executionSupport: responseAction === ActionType.custom_vendor_action ? "manual_or_not_implemented" : "connector",
+      executionSupport: diagnostic || responseAction !== ActionType.custom_vendor_action ? "connector" : "manual_or_not_implemented",
       responseSourceIp: sourceIp,
       observedTarget: latestEvent,
       requiresExplicitReview: true

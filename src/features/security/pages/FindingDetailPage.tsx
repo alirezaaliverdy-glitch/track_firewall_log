@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Database, FileCode2, Fingerprint, Network, Server, ShieldCheck, Tags } from "lucide-react";
@@ -6,8 +6,9 @@ import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { createFindingActionPlan, getFindingDecision, getFindingEvidence, updateFindingStatus, type FindingDecision, type FindingEvidence } from "@/lib/platform";
+import { createFindingActionPlan, getFindingDecision, getFindingEvidence, refreshFindingAnalysis, updateFindingStatus, type FindingDecision, type FindingEvidence } from "@/lib/platform";
 import { FindingDecisionCard } from "../components/FindingDecisionCard";
+import { FindingAnalysis } from "../components/FindingAnalysis";
 import { publishActionPlanCreated, reviewInActionCenter } from "@/lib/actionPlanHandoff";
 import { useFinding } from "../hooks/useFinding";
 import { securityDisplayText } from "../securityPresentation";
@@ -31,6 +32,8 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
   const [creatingPlan, setCreatingPlan] = useState(false);
   const [decision, setDecision] = useState<FindingDecision | null>(null);
   const [decisionError, setDecisionError] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const planPending = useRef(false);
   const language = i18n.resolvedLanguage ?? i18n.language;
   const locale = language.startsWith("fa") ? "fa-IR" : "en-US";
 
@@ -38,6 +41,8 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
     if (!params.findingId) return;
     let cancelled = false;
     setDecision(null);
+    setEvidence(null);
+    setMessage("");
     setDecisionError(false);
     const load = () => { if (document.visibilityState === "visible") void getFindingDecision(params.findingId!).then((result) => { if (!cancelled) { setDecision(result); setDecisionError(false); } }).catch(() => { if (!cancelled) setDecisionError(true); }); };
     load();
@@ -55,7 +60,8 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
       .finally(() => setEvidenceLoading(false));
   };
   const createPlan = () => {
-    if (!finding || creatingPlan) return;
+    if (!finding || planPending.current) return;
+    planPending.current = true;
     setCreatingPlan(true);
     setMessage(t("security.detail.planCreating"));
     createFindingActionPlan(finding.id)
@@ -65,7 +71,14 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
         reviewInActionCenter(result.actionPlan.id);
       })
       .catch((reason: unknown) => setMessage(reason instanceof Error ? reason.message : t("security.detail.planError")))
-      .finally(() => setCreatingPlan(false));
+      .finally(() => { planPending.current = false; setCreatingPlan(false); });
+  };
+  const analyze = async () => {
+    if (!finding || analyzing) return;
+    setAnalyzing(true); setMessage("");
+    try { setDecision(await refreshFindingAnalysis(finding.id)); refresh(); }
+    catch { setMessage(language.startsWith("fa") ? "تحلیل انجام نشد؛ دوباره تلاش کنید." : "Analysis failed. Please try again."); }
+    finally { setAnalyzing(false); }
   };
   const setInvestigating = () => {
     if (!finding) return;
@@ -80,37 +93,40 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
       .catch((reason: unknown) => setMessage(reason instanceof Error ? reason.message : t("security.detail.statusError")));
   };
   const technicalContext = useMemo(() => finding ? [
-    finding.actor ? [t("security.detail.actor"), finding.actor] : null,
+    decision?.analysis?.actors.length ? [t("security.detail.actor"), decision.analysis.actors.join(", ")] : finding.actor ? [t("security.detail.actor"), finding.actor] : null,
     finding.srcIp ? [t("security.detail.sourceIp"), finding.srcIp] : null,
     finding.dstIp ? [t("security.detail.destinationIp"), `${finding.dstIp}${finding.dstPort ? `:${finding.dstPort}` : ""}`] : null,
     finding.affectedObject ? [t("security.detail.affectedObject"), finding.affectedObject] : null
-  ].filter(Boolean) as Array<[string, string]> : [], [finding, t]);
+  ].filter(Boolean) as Array<[string, string]> : [], [finding, decision, t]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (!finding) return <ErrorState title={t("security.detail.notFound")} />;
-  const localizedTitle = securityDisplayText(finding.title, language);
-  const localizedSummary = securityDisplayText(finding.summary, language);
+  const localizedTitle = decision?.analysis?.verdict === "contradicted" ? (language.startsWith("fa") ? decision.analysis.titleFa : decision.analysis.titleEn) : securityDisplayText(finding.title, language);
+  const localizedSummary = decision?.analysis?.verdict === "contradicted" ? (language.startsWith("fa") ? decision.analysis.summaryFa : decision.analysis.summaryEn) : securityDisplayText(finding.summary, language);
   const vendor = findingVendor(finding);
   const assetName = finding.asset?.name ?? finding.device?.name ?? t("security.queue.unknownAsset");
   const address = finding.asset?.managementIp ?? finding.device?.host ?? "—";
-  const confidence = Math.round((finding.confidence ?? 0) * 100);
+  const confidence = decision?.evidenceScore ?? Math.round((finding.confidence ?? 0) * 100);
   const remediation = findingRemediation(finding, language);
 
   return (
     <section className="page-stack security-finding-detail">
-      <PageHeader title={localizedTitle} eyebrow={t("security.detail.eyebrow")} description={localizedSummary} actions={<div className="security-detail-actions"><button type="button" className="secondary-button" onClick={setInvestigating}>{t("security.detail.startInvestigation")}</button></div>} />
-      <section className={`security-finding-hero security-finding-hero--${finding.severity}`}>
+      <PageHeader title={localizedTitle} eyebrow={t("security.detail.eyebrow")} description={decision?.analysis ? undefined : localizedSummary} actions={<div className="security-detail-actions"><button type="button" className="secondary-button" onClick={setInvestigating}>{t("security.detail.startInvestigation")}</button></div>} />
+      {decision?.analysis ? <div className="finding-analysis__accounts"><span>{vendorLabel(vendor)}</span><span>{t(`security.findingStatus.${finding.status}`, { defaultValue: finding.status })}</span>{decision.analysis.verdict !== "contradicted" ? <span className={`security-severity security-severity--${finding.severity}`}>{t(`security.severity.${finding.severity}`, { defaultValue: finding.severity })}</span> : null}<span>{language.startsWith("fa") ? "رویداد ثبت‌شده" : "Recorded events"}<b>{finding.count.toLocaleString(locale)}</b></span></div> : null}
+      {!decision?.analysis ? <section className={`security-finding-hero security-finding-hero--${finding.severity}`}>
         <div className="security-finding-hero__identity"><span><ShieldCheck size={29} /></span><div><small>{t("security.detail.vendorDetection")}</small><strong>{vendorLabel(vendor)}</strong><p>{categoryLabel(finding.category, language)} · {sourceLabel(finding.source, language)}</p></div></div>
         <dl>
           <div><dt>{t("security.detail.severity")}</dt><dd className={`security-severity security-severity--${finding.severity}`}>{t(`security.severity.${finding.severity}`, { defaultValue: finding.severity })}</dd></div>
           <div><dt>{t("security.detail.status")}</dt><dd>{t(`security.findingStatus.${finding.status}`, { defaultValue: finding.status })}</dd></div>
-          <div><dt>{t("security.detail.confidence")}</dt><dd>{confidence.toLocaleString(locale)}٪</dd></div>
+          <div><dt>{language.startsWith("fa") ? "قدرت شواهد" : "Evidence strength"}</dt><dd>{confidence.toLocaleString(locale)}٪</dd></div>
           <div><dt>{t("security.detail.matches")}</dt><dd>{finding.count.toLocaleString(locale)}</dd></div>
         </dl>
-      </section>
+      </section> : null}
 
-      <div className="security-finding-context-grid">
+      {decision?.analysis ? <FindingAnalysis decision={decision} isFa={language.startsWith("fa")} busy={analyzing} onRefresh={() => void analyze()} /> : null}
+
+      <div className={decision?.analysis ? "finding-detail-context" : "security-finding-context-grid"}>
         <article><span><Server size={19} /></span><div><small>{t("security.detail.asset")}</small><strong>{assetName}</strong><b dir="ltr">{address}</b></div></article>
         <article><span><Clock3 size={19} /></span><div><small>{t("security.detail.firstSeen")}</small><strong>{new Date(finding.firstSeen).toLocaleString(locale)}</strong><b>{t("security.detail.lastSeen")}: {new Date(finding.lastSeen).toLocaleString(locale)}</b></div></article>
         <article><span><Fingerprint size={19} /></span><div><small>{t("security.detail.detectionSource")}</small><strong>{sourceLabel(finding.source, language)}</strong><b>{categoryLabel(finding.category, language)}</b></div></article>
@@ -118,12 +134,12 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
 
       {decision ? <FindingDecisionCard decision={decision} isFa={language.startsWith("fa")} busy={creatingPlan} onAction={createPlan} onEvidence={() => { loadEvidence(); document.querySelector(".security-evidence-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} /> : decisionError ? <div className="security-evidence-notice is-error" role="alert"><AlertTriangle size={18} /><p>{language.startsWith("fa") ? "بررسی شواهد در دسترس نیست. دوباره تلاش کنید." : "The evidence decision is unavailable. Please try again."}</p><button type="button" onClick={() => { setDecisionError(false); void getFindingDecision(finding.id).then(setDecision).catch(() => setDecisionError(true)); }}>{t("security.detail.retry")}</button></div> : <div className="finding-decision finding-decision--loading" role="status">{language.startsWith("fa") ? "در حال بررسی شواهد…" : "Checking evidence…"}</div>}
 
-      <div className="security-finding-analysis-grid">
+      {!decision?.analysis ? <div className="security-finding-analysis-grid">
         <section className="security-detail-panel"><header><span><AlertTriangle size={19} /></span><div><small>{t("security.detail.analysisEyebrow")}</small><h2>{t("security.detail.whatHappened")}</h2></div></header><p>{localizedSummary}</p><div className="security-detail-facts">{technicalContext.length ? technicalContext.map(([label, value]) => <span key={label}><small>{label}</small><b dir={label.includes("IP") ? "ltr" : undefined}>{value}</b></span>) : <p>{t("security.detail.noTechnicalContext")}</p>}</div></section>
         <section className="security-detail-panel"><header><span><Tags size={19} /></span><div><small>{t("security.detail.classificationEyebrow")}</small><h2>{t("security.detail.classification")}</h2></div></header><div className="security-classification-tags"><span>{vendorLabel(vendor)}</span><span>{categoryLabel(finding.category, language)}</span>{finding.mitreTags?.map((tag) => <span key={tag} dir="ltr">MITRE {tag}</span>)}</div><p>{t("security.detail.classificationHelp")}</p></section>
-      </div>
+      </div> : null}
 
-      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><p>{remediation.problem}</p><ol>{remediation.steps.map((step) => <li key={step}>{step}</li>)}</ol><p><strong>{language.startsWith("fa") ? "چطور از رفع واقعی مطمئن شویم؟ " : "How to verify the actual fix? "}</strong>{remediation.verification}</p><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button><Link to="/actions">{t("dashboard.actions.actionCenter")}</Link><button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
+      <section className="security-resolution-guide"><h2>{t("security.detail.resolutionGuide")}</h2><p>{decision?.analysis?.verdict === "contradicted" ? (language.startsWith("fa") ? decision.analysis.summaryFa : decision.analysis.summaryEn) : remediation.problem}</p>{decision?.analysis?.verdict !== "contradicted" ? <ol>{remediation.steps.map((step) => <li key={step}>{step}</li>)}</ol> : null}<p><strong>{language.startsWith("fa") ? "چطور از رفع واقعی مطمئن شویم؟ " : "How to verify the actual fix? "}</strong>{remediation.verification}</p><div><button type="button" className="secondary-button" onClick={loadEvidence} disabled={evidenceLoading}>{t("security.detail.showLogs")}</button>{decision?.suggestedAction ? <button type="button" className="secondary-button" onClick={createPlan} disabled={creatingPlan}>{creatingPlan ? t("security.detail.planCreating") : language.startsWith("fa") ? decision.suggestedAction.labelFa : decision.suggestedAction.labelEn}</button> : <Link to={`/assets/devices/${encodeURIComponent(finding.deviceId)}`}>{language.startsWith("fa") ? "بررسی تجهیز" : "Review device"}</Link>}<button type="button" className="secondary-button" disabled={!evidence || finding.status === "resolved"} onClick={markResolved}>{t("security.detail.markResolved")}</button></div><p>{t("security.detail.planSafety")}</p></section>
 
       <section className="security-evidence-workspace">
         <header><div><span>{t("security.detail.evidenceEyebrow")}</span><h2>{t("security.detail.realLogs")}</h2><p>{t("security.detail.realLogsDescription")}</p></div>{!evidence ? <button type="button" onClick={loadEvidence} disabled={evidenceLoading}><Database size={17} />{evidenceLoading ? t("security.detail.loadingLogs") : t("security.detail.showLogs")}</button> : <span className={`security-evidence-availability security-evidence-availability--${evidence.availability}`}><i />{t(`security.detail.availability.${evidence.availability}`)}</span>}</header>
@@ -141,7 +157,7 @@ export default function FindingDetailPage({ params }: RouteComponentProps) {
         </> : <div className="security-evidence-placeholder"><Database size={32} /><strong>{t("security.detail.evidenceReady")}</strong><p>{t("security.detail.evidenceReadyDescription")}</p></div>}
       </section>
 
-      {message ? <p className="security-detail-message">{message}</p> : null}
+      {message ? <p className="security-detail-message" role="status">{message}</p> : null}
     </section>
   );
 }

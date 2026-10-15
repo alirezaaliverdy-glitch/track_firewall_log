@@ -193,6 +193,14 @@ export type FindingEvidence = {
 };
 
 export type FindingDecision = {
+  analysis?: {
+    version: string; verdict: "contradicted" | "supported" | "inconclusive"; rootClaim: boolean; complete: boolean;
+    titleFa: string; titleEn: string; summaryFa: string; summaryEn: string; actors: string[];
+    supportCount: number; contradictedCount: number; limitationsFa: string[]; limitationsEn: string[];
+    events: Array<{ id: string; timestamp: string; kind: string; actor: string | null; effectiveUser: string | null; hostname: string | null; sourceIp: string | null; applicationOwned: boolean; supportsFinding: boolean; contradictsFinding: boolean; explanationFa: string; explanationEn: string }>;
+  };
+  deviceContext?: { observedAt: string | null; fresh: boolean; snapshotType: string | null; permitRootLogin: string | null };
+  suggestedAction?: { kind: "diagnostic" | "containment"; labelFa: string; labelEn: string; catalogId?: string } | null;
   mode: "closed" | "review_action" | "investigate";
   evidenceScore: number;
   evidenceLabelFa: string;
@@ -370,6 +378,7 @@ export const listSecurityFindings = (filters: { vendor?: string; deviceId?: stri
 export const listVendorFindingProfiles = () => request<{ profiles: VendorFindingProfile[] }>("/security/vendor-profiles");
 export const getFindingEvidence = (id: string) => request<FindingEvidence>(`/security/findings/${id}/evidence`);
 export const getFindingDecision = (id: string) => request<FindingDecision>(`/security/findings/${id}/decision`);
+export const refreshFindingAnalysis = (id: string) => request<FindingDecision>(`/security/findings/${id}/analysis`, { method: "POST", body: "{}" });
 export const listDetectionRules = () => request<{ rules: DetectionRule[] }>("/security/rules");
 export const setDetectionRuleEnabled = (id: string, enabled: boolean) => request<DetectionRule>(`/security/rules/${id}/${enabled ? "enable" : "disable"}`, { method: "POST" });
 export const runSecurityDetections = () => request<{ rulesEvaluated: number; eventsEvaluated: number; findingsCreated: number; findingsUpdated: number }>("/security/detections/run", { method: "POST", body: JSON.stringify({}) });

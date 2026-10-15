@@ -3,6 +3,7 @@ import { Prisma, type Device } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { getVendorTelemetryProfile, type FindingCategory, type TelemetryVendor, type VendorFindingRule } from "./vendor-telemetry-profiles.js";
 import { notifySecurityFinding } from "../services/security-alert-email.service.js";
+import { parseLinuxSecurityLog } from "../security/linux-log-semantics.js";
 
 export type NormalizedFinding = { id: string; deviceId: string; vendor: TelemetryVendor; title: string; severity: "low" | "medium" | "high" | "critical"; category: FindingCategory; status: "active" | "acknowledged" | "resolved" | "suppressed"; confidence: number; summary: string; evidence: string[]; source: string; rawRefs: string[]; firstSeen: string; lastSeen: string; count: number; mitreTags: string[]; affectedObject?: string; actor?: string; srcIp?: string; dstIp?: string; dstPort?: number; recommendedActions: Array<{ intent: string; label: string }>; suppressionReason?: string; fingerprint: string };
 export type RawTelemetryEvent = { id?: string; timestamp?: string | Date; source?: string; raw?: string; message?: string; summary?: string; eventType?: string; action?: string; severity?: string; srcIp?: string; dstIp?: string; dstPort?: number; actor?: string; username?: string; affectedObject?: string; [key: string]: unknown };
@@ -25,6 +26,7 @@ export function evaluateVendorTelemetry(input: { device: Pick<Device, "id" | "ve
   const profile = getVendorTelemetryProfile(input.device.vendor, input.device.type); if (!profile) return { vendor: null, findings: [] as NormalizedFinding[], suppressed: [] as Array<{ reason: string; event: RawTelemetryEvent }> };
   const now = input.now ?? new Date(); const findings: NormalizedFinding[] = []; const suppressed: Array<{ reason: string; event: RawTelemetryEvent }> = [];
   for (const event of input.events ?? []) {
+    if (profile.vendorId === "linux" && parseLinuxSecurityLog(String(event.raw ?? event.message ?? "")).kind === "sudo_command") continue;
     const raw = text(event); const suppression = profile.suppressionRules.find(x => x.pattern.test(raw)); if (suppression) { suppressed.push({ reason: suppression.reason, event }); continue; }
     for (const rule of profile.findingRules.filter(x => x.eventPattern?.test(raw))) {
       const key = stableFingerprint(input.device.id, profile.vendorId, rule.id, event); const cutoff = now.getTime() - (rule.windowMinutes ?? 5) * 60_000; const timestamps = (windows.get(key) ?? []).filter(x => x >= cutoff); timestamps.push(now.getTime()); windows.set(key, timestamps); if (timestamps.length < (rule.threshold ?? 1)) continue;

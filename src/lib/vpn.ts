@@ -9,6 +9,9 @@ export async function vpnRequest<T>(path = "", method = "GET", data?: unknown): 
   if (!response.ok) throw new Error(result?.error?.code ?? "VPN_REQUEST_FAILED"); return result;
 }
 const errors: Record<string, string> = {
+  VPN_CONFIG_INVALID: "فایل تنظیمات معتبر WireGuard را انتخاب کن؛ باید یک Interface و یک Peer داشته باشد.",
+  VPN_FILE_READ_FAILED: "فایل خوانده نشد؛ دوباره انتخاب کن یا متن تنظیمات را جای‌گذاری کن.",
+  VPN_FILE_TOO_LARGE: "حجم فایل تنظیمات باید کمتر از ۱۶ کیلوبایت باشد.",
   VPN_MTU_INVALID: "MTU باید بین ۱۲۸۰ و ۱۴۲۰ باشد.",
   VPN_ASSETS_BOUND: "این VPN به تجهیز یا دوربین ثبت‌شده وصل است؛ اول مسیر آن‌ها را تغییر بده.",
   VPN_BOUND_TARGET_OUTSIDE_ROUTES: "بازهٔ تازه، IP برخی تجهیزات یا دوربین‌های این VPN را پوشش نمی‌دهد.",
@@ -42,10 +45,11 @@ const errors: Record<string, string> = {
 };
 export const vpnError = (error: unknown) => errors[error instanceof Error ? error.message : ""] ?? "عملیات انجام نشد؛ اتصال و تنظیمات را بررسی کن.";
 export function importWireguard(text: string): Partial<VpnInput> {
-  if (text.length > 16384) throw new Error("VPN_KEY_INVALID");
+  if (text.length > 16384) throw new Error("VPN_FILE_TOO_LARGE");
+  text = text.replace(/^\uFEFF/, "");
   const values: Record<string, string> = {}; let section = "", peers = 0;
   for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim(); if (!line || line.startsWith("#")) continue;
+    const line = raw.replace(/\s*[#;].*$/, "").trim(); if (!line) continue;
     if (line.startsWith("[")) { section = line.toLowerCase(); if (!["[interface]", "[peer]"].includes(section)) throw new Error("VPN_KEY_INVALID"); if (section === "[peer]" && ++peers > 1) throw new Error("VPN_KEY_INVALID"); continue; }
     const split = line.indexOf("="); if (split < 1) throw new Error("VPN_KEY_INVALID");
     const key = line.slice(0, split).trim().toLowerCase(), value = line.slice(split + 1).trim();
@@ -58,4 +62,16 @@ export function importWireguard(text: string): Partial<VpnInput> {
   const address = (values["[interface].address"] ?? "").split(",").map(value => value.trim()).find(value => /^\d+\.\d+\.\d+\.\d+\/\d+$/.test(value)) ?? "";
   const routes = (values["[peer].allowedips"] ?? "").split(",").map(v => v.trim()).filter(v => /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(v));
   return { protocol: "wireguard", endpoint: match[1], endpointPort: Number(match[2]), address, privateKey: values["[interface].privatekey"], publicKey: values["[peer].publickey"], presharedKey: values["[peer].presharedkey"] ?? "", mtu: Number(values["[interface].mtu"] ?? 1420), routes };
+}
+
+export async function readWireguardFile(file: File) {
+  if (file.size > 16384) throw new Error("VPN_FILE_TOO_LARGE");
+  // FileReader also works on browsers/WebViews without Blob.text(). File data
+  // stays in this form until the operator explicitly saves the connection.
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("VPN_FILE_READ_FAILED"));
+    reader.onerror = reader.onabort = () => reject(new Error("VPN_FILE_READ_FAILED"));
+    reader.readAsText(file);
+  });
 }
