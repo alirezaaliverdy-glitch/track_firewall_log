@@ -1,3 +1,9 @@
+## 2026-10-15 - OpenRouter live verification and requested publication
+
+- Local synthetic provider and real assistant API-route tests return HTTP 403; no successful live response or analysis is claimed. Production provider is mock and has no key. Official Windows host proxy was started, but its path did not resolve the upstream refusal. Await the operator's choice of a separate server key versus authorized local-key reuse; no key was transferred or shown.
+- Diagnostic success now requires a nonempty live response, never deterministic fallback. Added an opt-in empty-database API/history probe with synthetic evidence only, no response-content output and cleanup scoped to its unique synthetic owner. Seven assistant regressions pass. Changes are tooling/tests/docs only; execution policy and service runtime are unchanged.
+- Git fetch/remote read succeeds; publication was pending one local documentation commit plus uncommitted diagnostic changes. User now explicitly requests push. CI/production acceptance is tracked after that push, not assumed.
+
 ## 2026-10-15 - Finding interpretation, actionable previews and WireGuard import
 
 - Production acceptance completed: main 165e661, CI 38716876492 SUCCESS, exact server checkout/marker, five healthy services, three camera/VPN migrations and verified-TLS readiness/dashboard. Public UI routes return 200 and unauthenticated camera/VPN APIs 401. Aggregate-only checks confirm the two legacy root-login findings were corrected with two audit records and no active root-login finding remains. The public five-capture fixture suite passes native/paste import, private-route saving, analysis and exact preview handoff with no errors/overflow/execution. Real remote VPN connectivity is not inferred from import QA. This follow-up records acceptance locally without another production release.

@@ -1,3 +1,9 @@
+## 2026-10-15 - Verify OpenRouter and prepare requested push
+
+- Checked live provider configuration without exposing secrets: local key exists/openai_compatible; server remains mock/no key. Synthetic direct/proxied provider calls and the actual assistant API handler on a disposable empty database report 403, not a valid model analysis. No real evidence exported, device action, server setting change or key transfer.
+- Fixed misleading diagnostic success on deterministic fallback, required chat/live response, removed upstream error-text output and added isolated API/analysis/history assertions with unique-owner cleanup. Seven regressions pass. Runtime behavior is unchanged; no runtime rebuild is needed for these tooling/tests/docs-only changes.
+- User requested push. Remote reads/fetch work and no divergence was found; one acceptance commit plus the uncommitted diagnostic changes awaited publication. Final push/CI/server acceptance is recorded after execution.
+
 ## 2026-10-15 - Correct sudo/root interpretation and complete finding-to-action/VPN import
 
 - Release acceptance: pushed main 165e661 and CI 38716876492 completed SUCCESS. Server checkout/deploy marker match, all five services healthy, three camera/VPN migrations applied and verified-TLS gateway/API/dashboard checks pass. Public pages return 200; anonymous camera/VPN APIs 401. Read-only aggregate counts changed from two active root-login findings/zero correction audits to zero/two. Public fixture browser QA passes all five captures with native file selection, paste, private-route save and exact action review; zero executions, errors or overflow. Desktop/mobile captures inspected. Documentation-only acceptance follow-up remains local.

@@ -8,6 +8,8 @@ if (process.argv.includes("--application-provider")) {
   try {
     const providerInput = {
       message: "سلام، فقط کوتاه پاسخ بده.",
+      mode: "chat",
+      requireLiveResponse: true,
       context: {
         events: { recentCount: 0 },
         incidents: { countByStatus: [], countBySeverity: [] },
@@ -20,6 +22,12 @@ if (process.argv.includes("--application-provider")) {
     const result = requestedModel
       ? await (await import("/app/dist/services/providers/openai-compatible.provider.js")).runOpenAiCompatibleProvider(providerInput, requestedModel)
       : await (await import("/app/dist/services/ai-provider.service.js")).runAiProvider(providerInput);
+    if (result?.provider === "mock" || result?.model === "deterministic-offline-fallback") {
+      throw Object.assign(new Error("A live provider response is required"), { statusCode: 503 });
+    }
+    if (typeof result?.assistantMessage !== "string" || !result.assistantMessage.trim()) {
+      throw Object.assign(new Error("A nonempty provider response is required"), { statusCode: 502 });
+    }
     console.log(JSON.stringify({
       ok: true,
       status: 200,
@@ -33,8 +41,7 @@ if (process.argv.includes("--application-provider")) {
       ok: false,
       status: Number(error?.statusCode) || 0,
       model,
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      errorMessage: error instanceof Error ? error.message.slice(0, 180) : "Provider request failed"
+      errorName: error instanceof Error ? error.name : "UnknownError"
     }));
     process.exitCode = 5;
   }
@@ -69,8 +76,7 @@ if (!key) {
       status: response.status,
       model,
       hasChoice: Array.isArray(payload.choices) && payload.choices.length > 0,
-      errorCode: payload?.error?.code ?? null,
-      errorMessage: typeof payload?.error?.message === "string" ? payload.error.message.slice(0, 180) : null
+      errorCode: typeof payload?.error?.code === "number" ? payload.error.code : null
     }));
     if (!response.ok) process.exitCode = 3;
   } catch (error) {
@@ -78,8 +84,7 @@ if (!key) {
       ok: false,
       status: 0,
       model,
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      errorMessage: error instanceof Error ? error.message.slice(0, 180) : "Provider request failed"
+      errorName: error instanceof Error ? error.name : "UnknownError"
     }));
     process.exitCode = 4;
   }

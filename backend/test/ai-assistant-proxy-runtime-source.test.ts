@@ -25,8 +25,27 @@ test("OpenRouter proxy remains target-restricted and diagnostics never print cre
   assert.match(proxy, /hasValidAuthorization/);
   assert.match(diagnostic, /--application-provider/);
   assert.match(diagnostic, /hasAssistantMessage/);
+  assert.match(diagnostic, /mode: "chat"/);
+  assert.match(diagnostic, /requireLiveResponse: true/);
+  assert.match(diagnostic, /result\?\.provider === "mock"/);
+  assert.doesNotMatch(diagnostic, /errorMessage:|error\.message\.slice|payload\.error\.message/);
   const consoleLines = diagnostic.split("\n").filter((line) => line.includes("console.log")).join("\n");
   assert.doesNotMatch(consoleLines, /OPENAI_API_KEY|Authorization|Bearer|\$\{key\}/);
+});
+
+test("live assistant probe requires an empty isolated database and emits no response content", () => {
+  const probe = read("scripts/qa/probe-assistant-openrouter.mjs");
+  assert.match(probe, /QA_LIVE_OPENROUTER, "synthetic-only"/);
+  assert.match(probe, /eosnet-assistant-qa-/);
+  assert.match(probe, /\/eosnet_assistant_qa/);
+  assert.match(probe, /await table\.count\(\), 0/);
+  assert.match(probe, /app\.register\(aiRoutes\)/);
+  assert.match(probe, /firstBody\.providerStatus\.liveVerified, true/);
+  assert.match(probe, /prisma\.actionPlan\.count\(\), 0/);
+  assert.match(probe, /prisma\.aiActionIntent\.count\(\), 0/);
+  assert.match(probe, /assert\.match\(secondBody\.assistantMessage, \/operator1/i);
+  assert.match(probe, /deleteMany\(\{ where: \{ userId: probeOwner \} \}\)/);
+  assert.doesNotMatch(probe.split("\n").filter(line => line.includes("console.log")).join("\n"), /assistantMessage|firstBody|secondBody|API_KEY/);
 });
 
 test("OpenAI-compatible defaults are internally consistent with the OpenRouter model", () => {
