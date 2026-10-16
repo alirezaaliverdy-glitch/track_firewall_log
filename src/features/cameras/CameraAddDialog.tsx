@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Check, LoaderCircle, Radar, Server, Video } from "lucide-react";
 import { cameraErrorMessage, createCamera, discoverCameras, type CameraCandidate, type CameraDevice, type CameraDiscovery, type CameraInput } from "@/lib/cameras";
 import { CameraDialog } from "./CameraDialog";
@@ -12,6 +12,14 @@ export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onC
   const [error, setError] = useState(""), [message, setMessage] = useState(""), [progress, setProgress] = useState("");
   const [ports, setPorts] = useState("80,8000,8080,8899,2020");
   const copy = (fa: string, en: string) => isFa ? fa : en;
+  const tabsId = useId();
+  const selectTab = (next: "discover" | "manual") => { setTab(next); setError(""); setMessage(""); };
+  const tabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (saving || scanning || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? "discover" : event.key === "End" ? "manual" : tab === "discover" ? "manual" : "discover";
+    selectTab(next); document.getElementById(`${tabsId}-${next}`)?.focus();
+  };
   const change = <K extends keyof CameraInput>(key: K, value: CameraInput[K]) => setInput((current) => ({ ...current, [key]: value }));
   const key = (candidate: CameraCandidate) => `${candidate.host}:${candidate.onvifPort}`;
   const available = result?.candidates.filter((candidate) => !candidate.registered) ?? [];
@@ -48,10 +56,10 @@ export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onC
   };
   return <CameraDialog title={copy("افزودن دوربین و NVR", "Add camera or NVR")} onClose={() => { if (!saving && !scanning) onClose(); }} wide>
     <div className="camera-tabs" role="tablist" aria-label={copy("روش افزودن", "Setup method")}>
-      <button type="button" role="tab" aria-selected={tab === "discover"} disabled={saving || scanning} onClick={() => setTab("discover")}><Radar size={17} />{copy("کشف شبکه", "Discover network")}</button>
-      <button type="button" role="tab" aria-selected={tab === "manual"} disabled={saving || scanning} onClick={() => setTab("manual")}><Video size={17} />{copy("افزودن دستی", "Manual setup")}</button>
+      <button type="button" role="tab" id={`${tabsId}-discover`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "discover" ? 0 : -1} onKeyDown={tabKey} aria-selected={tab === "discover"} disabled={saving || scanning} onClick={() => selectTab("discover")}><Radar size={17} />{copy("کشف شبکه", "Discover network")}</button>
+      <button type="button" role="tab" id={`${tabsId}-manual`} aria-controls={`${tabsId}-panel`} tabIndex={tab === "manual" ? 0 : -1} onKeyDown={tabKey} aria-selected={tab === "manual"} disabled={saving || scanning} onClick={() => selectTab("manual")}><Video size={17} />{copy("افزودن دستی", "Manual setup")}</button>
     </div>
-    <form onSubmit={(event) => void save(event)} className="camera-form">
+    <form onSubmit={(event) => void save(event)} className="camera-form" role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${tab}`}>
       <VpnAccessField value={input.vpnConnectionId ?? ""} onChange={id => { change("vpnConnectionId", id); setResult(null); setSelected([]); }} host={tab === "manual" ? input.host : undefined} isFa={isFa} />
       {tab === "discover" ? <>
         <div className="camera-discover-row"><label>{copy("شبکه", "Network")}<input dir="ltr" value={cidr} onChange={(event) => setCidr(event.target.value)} disabled={scanning || saving} placeholder="192.168.18.0/24" /></label><button type="button" className="camera-button camera-button--primary" disabled={scanning || saving} onClick={() => void scan()}>{scanning ? <LoaderCircle className="camera-spin" size={18} /> : <Radar size={18} />}{copy(scanning ? "در حال جست‌وجو" : "جست‌وجو", scanning ? "Searching" : "Search")}</button></div>
