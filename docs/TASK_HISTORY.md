@@ -1,7 +1,8 @@
 ## 2026-10-17 - Prevent fixed-count deployment test regressions
 
 - User authorized correction, push and production acceptance. Replaced stale numeric probe assertion with required-migration coverage, per-probe detached-stdin validation and real streamed-shell simulation; added future-probe, unsafe-extra, guard-removal and missing-required-check regressions.
-- Split CI deployment-safety tests into a named step and added exact post-install server revision/migration/health verification before success summary. Application runtime and controlled execution unchanged. Local Compose/shell/safety validation passes; publication acceptance follows push.
+- Split CI deployment-safety tests into a named step and added exact post-install server revision/migration/health verification before success summary. Application runtime and controlled execution unchanged. Sixteen local safety tests and all CI Compose/shell/cleanup checks pass.
+- Pushed `aae1c50`; CI `39044677178` frontend/backend/Compose succeeded. Installation then correctly refused the 3.6 GiB-free server (6 GiB minimum), despite bounded cache cleanup. Read-only disk inspection finds a 40 GiB disk fully allocated to its partitions. Checkout/deploy marker remain `934391d`, five healthy services, dashboard/readiness HTTP 200 and admin API 401. No unsafe space-guard bypass or deletion of user data, volumes, logs or system packages. Release acceptance remains incomplete pending disk capacity/explicit cleanup authority. Documentation follow-up is local only.
 
 ## 2026-10-17 - Diagnose pushed changes missing from production
 

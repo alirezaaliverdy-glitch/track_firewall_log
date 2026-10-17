@@ -1,7 +1,8 @@
-## 2026-10-17 - Durable deployment test fix (release in progress)
+## 2026-10-17 - Durable deployment test fix published; production blocked by disk
 
 - Removed fixed probe count; each database probe is checked and exercised through a stdin-consuming shell stub. Required migration preflights cannot disappear; safe future checks pass without count edits and missing guards fail.
-- CI separates deployment-safety testing and now verifies actual server SHA/deploy marker, migrations, five service health checks and public gateway readiness before reporting release success. All five Compose manifests and deployment shell tests pass locally. No application/PolicyGuard/lab behavior change. Push/release verification authorized and in progress.
+- CI separates deployment-safety testing and now verifies actual server SHA/deploy marker, migrations, five service health checks and public gateway readiness before reporting release success. Sixteen safety tests, all five Compose manifests and deployment shell tests pass locally. No application/PolicyGuard/lab behavior change.
+- Published fix `aae1c50`; CI `39044677178` passed all build/preflight gates, but installation stopped before changing the checkout/services because only 3.6 GiB is free (6 GiB minimum). Existing bounded cache cleanup did not resolve it. Disk is 40 GiB with no unused expansion identified. Production stays at `934391d`, all five services healthy; dashboard/readiness 200, anonymous admin API 401. No data/log/system-package deletion or disk-guard bypass. Need disk expansion or specifically authorized cleanup before a deployment retry; do not claim production updated.
 
 ## 2026-10-17 - Pushed release blocked by stale deployment test
 
