@@ -6,6 +6,7 @@
 - Deployment cleanup removes only positively labelled unused application images and private, unused BuildKit cache. Private-cache target: 512 MB; best-effort free-space target: 8 GB. Shared/in-use image layers, containers, volumes and business data are not reclaimed to satisfy a target.
 - `scripts/deploy/maintain-production-storage.sh` defaults to `--check`. Explicit `--apply` uses the same cleanup helper, preserves both current application images, and takes the same lock as deployment. It skips an active deployment, fails closed if app containers are missing, and reports critical space below 6 GiB without deleting databases/uploads/evidence.
 - The systemd timer runs hourly with randomized delay as the existing deployment user. It performs no recurring Snap removal, system-package cleanup, log deletion or global Docker prune.
+- Main-branch workflows are serialized rather than cancelled by a newer push, so an in-flight SSH install/cleanup cannot be interrupted by publication of the next commit. Superseded PR/development validation can still be cancelled.
 
 ## Production timer
 

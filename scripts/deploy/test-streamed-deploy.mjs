@@ -75,4 +75,5 @@ test("production CI verifies the deployed revision and health after installation
   assert.ok(install >= 0 && verification > install, "CI must verify the exact pushed revision after deployment");
   assert.ok(workflow.indexOf("Verified production commit:", verification) > verification);
   assert.match(workflow, /needs: \[frontend, backend, compose\]/, "Deployment must retain all build/preflight gates");
+  assert.ok(workflow.includes("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}"), "New main pushes must not cancel an active production install");
 });
