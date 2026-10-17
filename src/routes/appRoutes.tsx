@@ -13,6 +13,7 @@ export type AppRoute = {
 };
 
 const DashboardPage = lazy(() => import("@/features/dashboard/pages/DashboardPage"));
+const CommunityPage = lazy(() => import("@/features/community/CommunityPage"));
 const AssetsOverviewPage = lazy(() => import("@/features/assets/pages/AssetsOverviewPage"));
 const AssetListPage = lazy(() => import("@/features/assets/pages/AssetListPage"));
 const AssetDetailPage = lazy(() => import("@/features/assets/pages/AssetDetailPage"));
@@ -46,6 +47,7 @@ const LocalMobileRuntimePage = lazy(() => import("@/features/mobile-local/pages/
 const planned = (title: string, description?: string): ComponentType<RouteComponentProps> => () => <PlannedState title={title} description={description} />;
 
 export const appRoutes: AppRoute[] = [
+  { path: "/community", featureKey: "community", labelFa: "گفت‌وگو و پشتیبانی", labelEn: "Community & support", group: "community", component: CommunityPage },
   { path: "/tools/vpn", featureKey: "tools.vpn", labelFa: "اتصال VPN", labelEn: "VPN connections", group: "tools", component: VpnPage },
   { path: "/backups", featureKey: "backups.devices", labelFa: "بک‌آپ", labelEn: "Backups", group: "backups", component: BackupsPage },
   { path: "/dashboard", featureKey: "dashboard.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "dashboard", component: DashboardPage },

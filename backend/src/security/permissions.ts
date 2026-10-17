@@ -1,6 +1,8 @@
 export type Role = "admin" | "operator" | "viewer";
 
 export type Permission =
+  | "community.participate"
+  | "community.moderate"
   | "assistant.chat"
   | "devices.read"
   | "devices.manage"
@@ -19,6 +21,8 @@ export type Permission =
   | "auth.session.manage";
 
 export const ALL_PERMISSIONS: readonly Permission[] = [
+  "community.participate",
+  "community.moderate",
   "assistant.chat",
   "devices.read",
   "devices.manage",
@@ -39,12 +43,14 @@ export const ALL_PERMISSIONS: readonly Permission[] = [
 
 export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
   viewer: new Set<Permission>([
+    "community.participate",
     "devices.read",
     "actions.read",
     "audit.read",
     "auth.session.manage"
   ]),
   operator: new Set<Permission>([
+    "community.participate",
     "assistant.chat",
     "devices.read",
     "devices.manage",

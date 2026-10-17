@@ -51,6 +51,7 @@ import { stopDeviceConnectivitySensor } from "./services/device-connectivity-sen
 import { NATIVE_APP_ORIGINS } from "./security/session-transport.js";
 import { cameraRoutes } from "./routes/cameras.js";
 import { vpnRoutes } from "./routes/vpn.js";
+import { communityRoutes } from "./routes/community.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
   validateCommandCatalog(COMMAND_CATALOG);
@@ -131,6 +132,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(deviceRoutes);
   await app.register(cameraRoutes);
   await app.register(vpnRoutes);
+  await app.register(communityRoutes);
   await app.register(deviceOnboardingRoutes);
   await app.register(deviceWorkspaceRoutes);
   await app.register(diagnosticRoutes);

@@ -10,6 +10,7 @@ import { clearNativeServerUrl, isNativeAndroidApp } from "@/mobile/nativeServerC
 import { clearNativeSessionToken } from "@/mobile/nativeSession";
 import EosnetLogo from "@/components/branding/EosnetLogo";
 import { useAppearance } from "@/lib/appearance";
+import { MessagesSquare } from "lucide-react";
 import "./AppShellNavigation.css";
 import "./AppShellTopbar.css";
 // Load the final mobile overrides after the desktop navigation skin. The navigation
@@ -17,6 +18,7 @@ import "./AppShellTopbar.css";
 import "./MobileShell.css";
 
 const navigationIcons = {
+  community: MessagesSquare,
   backups: Server,
   tools: Gauge,
   reports: FileBarChart2,
@@ -47,6 +49,7 @@ const fallbackNavigation: ProductNavigationGroup[] = [
   { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", route: "/attackers", mobilePrimary: false, items: [] },
   { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", route: "/backups", mobilePrimary: false, items: [] },
   { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", route: "/settings", mobilePrimary: false, items: [] },
+  { key: "community", titleFa: "گفت‌وگو و پشتیبانی", titleEn: "Community & support", iconKey: "community", route: "/community", mobilePrimary: false, items: [] },
 ];
 
 function deferAfterFirstPaint(callback: () => void) {
@@ -79,7 +82,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
   const direction = isFa ? "rtl" : "ltr";
   const activeGroup = currentGroup;
   const localNavigation = useMemo(() => fallbackNavigation.filter((group) => (
-    group.key === "settings" || user?.role === "admin" || (user?.allowedSections ?? []).includes(group.key)
+    ["settings", "community"].includes(group.key) || user?.role === "admin" || (user?.allowedSections ?? []).includes(group.key)
   )), [user?.allowedSections, user?.role]);
   const visibleNavigation = navigation.length ? navigation : localNavigation;
   const connectionHealthy = online && navigation.length > 0 && !navigationError;
@@ -254,7 +257,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
           </div>
         ) : null}
         <main className="platform-content">
-          {user?.role === "viewer" ? <p className="platform-readonly-notice" role="status"><Eye aria-hidden="true" />{isFa ? "حالت فقط‌مشاهده: همهٔ بخش‌ها قابل دیدن‌اند؛ تغییر داده و اجرای عملیات مجاز نیست." : "Read-only mode: you can view every section, but cannot change data or run operations."}</p> : null}
+          {user?.role === "viewer" && currentGroup !== "community" ? <p className="platform-readonly-notice" role="status"><Eye aria-hidden="true" />{isFa ? "حالت فقط‌مشاهده: همهٔ بخش‌ها قابل دیدن‌اند؛ تغییر داده و اجرای عملیات مجاز نیست." : "Read-only mode: you can view every section, but cannot change data or run operations."}</p> : null}
           {children}
         </main>
       </div>

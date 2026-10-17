@@ -121,6 +121,11 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261013170000_vpn_ass
   vpn_asset_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261013170000_vpn_asset_binding' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'CameraDevice' AND pg_get_userbyid(c.relowner) <> '$camera_migration_role') AND NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'VpnConnection' AND NOT has_table_privilege('$camera_migration_role', c.oid, 'REFERENCES'))) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
   [ "$vpn_asset_migration_access" = ready ] || { echo "VPN asset migration needs CameraDevice ownership, schema CREATE and VpnConnection REFERENCES; leaving the running deployment unchanged" >&2; exit 2; }
 fi
+if git cat-file -e "$target_sha:backend/prisma/migrations/20261017120000_community/migration.sql" 2>/dev/null; then
+  community_migration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261017120000_community' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES')) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
+  [ "$community_migration_access" = ready ] || { echo "Community migration needs schema CREATE and AppUser(id) REFERENCES; leaving the running deployment unchanged" >&2; exit 2; }
+fi
+
 git merge --ff-only "$target_sha"
 
 compose config --quiet

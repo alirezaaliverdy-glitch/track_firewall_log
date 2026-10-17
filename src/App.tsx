@@ -68,7 +68,7 @@ function FeatureRoute({ route }: { route: AppRoute }) {
   const params = useParams();
   const Page = route.component;
   const section = route.group === "tools" ? "actions" : ["reports", "backups"].includes(route.group) ? "assets" : route.group;
-  if (user?.role !== "admin" && section !== "settings" && !(user?.allowedSections ?? []).includes(section)) {
+  if (user?.role !== "admin" && !["settings", "community"].includes(section) && !(user?.allowedSections ?? []).includes(section)) {
     return <Navigate to={firstAllowedRoute(user?.allowedSections)} replace />;
   }
   return (

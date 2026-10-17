@@ -5,6 +5,7 @@ const base=process.env.QA_BASE_URL||'http://host.docker.internal/firewall';
 const errors=[];let writes=0, role='admin', captures=0;
 const now=new Date().toISOString();
 const health=['Linux-01','Router-01','Linux-02'].map((name,i)=>({id:`d${i}`,name,vendor:i===1?'mikrotik':'linux',host:`192.0.2.${10+i}`,connection:'online',checkedAt:now,collecting:false,score:90-i*8,rows:['cpu.usage_percent','memory.usage_percent',...(i===1?[]:['disk.usage_percent'])].map((metricKey,j)=>({metricKey,value:[24,61,92][j]-i*6,unit:'percent',measuredAt:now,fresh:true}))}));
+health[2].connection='offline';
 const camera={id:'c1',name:'دوربین ورودی',host:'192.0.2.40',kind:'camera',location:'ورودی ساختمان',profiles:[{token:'main',sourceToken:'source',name:'Main',width:1280,height:720,encoding:'H264',streamAvailable:true}],status:'verified',lastSeenAt:now,credentialsConfigured:true,connectionMode:'onvif',infoJson:{Manufacturer:'Synthetic',Model:'Fixture'}};
 async function setup(page){
   await page.setBypassServiceWorker(true);page.on('pageerror',e=>errors.push(e.message));await page.setRequestInterception(true);
@@ -68,7 +69,10 @@ try{
   await page.waitForFunction(()=>document.documentElement.dataset.theme==='light');await peer.close();
   await page.goto(`${base}/dashboard`,{waitUntil:'networkidle0'});await page.waitForSelector('.fleet-device');
   await capture(page,'appearance-light-dashboard');
-  assert.equal(await page.$eval('.fleet-device',el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)');
+  assert.ok(await page.$eval('.fleet-device',el=>getComputedStyle(el).backgroundImage.includes('gradient')));
+  assert.ok(await page.$eval('.fleet-summary-dial',el=>getComputedStyle(el).backgroundImage.includes('conic-gradient')),'light health gauge is visible');
+  assert.notEqual(await page.$eval('.fleet-summary-dial',el=>getComputedStyle(el,'::before').display),'none','gauge center is rendered');
+  assert.equal(await page.$eval('.fleet-device:last-child .fleet-summary-dial',el=>el.style.getPropertyValue('--fleet-health-angle')),'0deg','offline score is not fabricated');
   await page.goto(`${base}/assets/cameras`,{waitUntil:'networkidle0'});await page.waitForSelector('.camera-device-card');
   await capture(page,'appearance-light-cameras');
   await checkTextContrast(page,'.camera-device-card__kind,.camera-status,.camera-device-card__ip');
@@ -85,7 +89,7 @@ try{
   await page.evaluate(()=>localStorage.setItem('firewall-log-analyzer.locale','en'));
   await page.reload({waitUntil:'networkidle0'});await page.waitForSelector('.appearance-settings');
   assert.equal(await page.$eval('#appearance-title',el=>el.textContent),'Appearance');
-  await page.setViewport({width:1440,height:1000});await capture(page,'appearance-english-settings');
+  await page.setViewport({width:1440,height:1000});await page.waitForSelector('.appearance-option--dark');await capture(page,'appearance-english-settings');
   await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException('Storage denied','SecurityError');};});
   await page.click('.appearance-option--dark');
   assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');

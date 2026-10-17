@@ -1,3 +1,9 @@
+## 2026-10-17 - Dashboard graphs and community/support (local only)
+
+- Restored light-mode health gauges, kept offline/missing sensors unknown, added semantic score colors and refined pearl/mint/lavender surfaces.
+- Added authenticated `/community`: workspace topic-based chat and private support tickets, persistent replies, search/status/priority, unread position, admin close/reopen, bounded history, retries and mobile list/conversation navigation. Viewers participate through narrow community permissions; device operations remain protected. Text only, visible-page polling; no cross-customer public forum, direct messaging, email or attachments.
+- Additive migration and production permission preflight/verifier are in place; migration passes with a non-superuser/non-AppUser-owner role and is applied locally. Isolated API tests, 11 existing auth/security/navigation regressions, six boot/environment tests, locale/Persian/UTF-8 and production Compose/shell checks pass. Final 24 synthetic visual captures pass without runtime errors/overflow, including mobile/320px composer-above-navigation assertions. Screenshots reviewed; final API/web scoped builds/deployments pass. Temporary test resources removed. No push or production deployment.
+
 ## 2026-10-17 - Optional light appearance (local only)
 
 - Settings > Appearance exposes Light/Dark visual choices to all roles. The saved browser preference applies before render, persists across reloads and synchronizes tabs; blocked storage remains usable with honest feedback. Dark is still the default.

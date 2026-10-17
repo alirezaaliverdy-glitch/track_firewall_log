@@ -9,6 +9,7 @@ function feature(input: Omit<ProductFeature, "lastVerifiedAt">): ProductFeature 
 }
 
 export const PRODUCT_FEATURES: ProductFeature[] = [
+  feature({ key: "community", titleFa: "گفت‌وگو و پشتیبانی", titleEn: "Community & support", route: "/community", groupKey: "community", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "backups.devices", titleFa: "بک‌آپ", titleEn: "Backups", route: "/backups", groupKey: "backups", order: 1, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Encrypted live configuration exports for Cisco, RouterOS, FortiGate, pfSense and Linux; unsupported vendors remain explicit. Not full disk backups." }),
   feature({ key: "dashboard.overview", titleFa: "داشبورد", titleEn: "Dashboard", route: "/dashboard", groupKey: "dashboard", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
 
@@ -54,6 +55,7 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
   feature({ key: "actions.history", titleFa: "تاریخچه اجرا", titleEn: "Execution history", route: "/actions/history", groupKey: "actions", order: 30, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "The route currently reuses the complete Action Center without a dedicated history filter." }),
   feature({ key: "actions.scheduled", titleFa: "زمان‌بندی عملیات", titleEn: "Scheduled tasks", route: "/actions/scheduled", groupKey: "actions", order: 31, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "actions.configure", titleFa: "تنظیم ActionPlan", titleEn: "Configure ActionPlan", route: "/actions/:actionId/configure", groupKey: "actions", order: 35, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "actions.script_editor", titleFa: "ویرایش حرفه‌ای اسکریپت", titleEn: "Advanced script editor", route: "/actions/:actionId/script-editor", groupKey: "actions", order: 36, state: "partial", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Existing per-action script editor and controlled preview endpoints; opened from an eligible action, not a global navigation destination." }),
   feature({ key: "actions.detail", titleFa: "جزئیات Action", titleEn: "Action detail", route: "/actions/:actionId", groupKey: "actions", order: 40, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "actions.guided", titleFa: "اقدام راهنما", titleEn: "Guided actions", route: "/actions/guided", groupKey: "actions", order: 50, state: "planned", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: false, tested: false }),
 
@@ -92,7 +94,8 @@ const NAVIGATION_GROUPS = [
   { key: "assistant", titleFa: "دستیار هوشمند", titleEn: "Assistant", iconKey: "assistant", mobilePrimary: false },
   { key: "attackers", titleFa: "مهاجمان", titleEn: "Attackers", iconKey: "attackers", mobilePrimary: false },
   { key: "backups", titleFa: "بک‌آپ", titleEn: "Backups", iconKey: "backups", mobilePrimary: false },
-  { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", mobilePrimary: false }
+  { key: "settings", titleFa: "تنظیمات", titleEn: "Settings", iconKey: "settings", mobilePrimary: false },
+  { key: "community", titleFa: "گفت‌وگو و پشتیبانی", titleEn: "Community & support", iconKey: "community", mobilePrimary: false }
 ] as const;
 
 const FORBIDDEN_NAVIGATION_STATES = new Set<ProductFeatureState>(["planned", "unsupported", "disabled", "not_configured", "unverified"]);
@@ -118,7 +121,7 @@ export function validateProductState(features: ProductFeature[] = PRODUCT_FEATUR
 
 export function getProductNavigation(allowedGroups?: readonly string[]): ProductNavigationGroup[] {
   validateProductState();
-  const allowed = allowedGroups ? new Set([...allowedGroups, ...(allowedGroups.includes("assets") ? ["reports", "backups"] : []), "settings"]) : null;
+  const allowed = allowedGroups ? new Set([...allowedGroups, ...(allowedGroups.includes("assets") ? ["reports", "backups"] : []), "settings", "community"]) : null;
   return NAVIGATION_GROUPS.flatMap((group) => {
     if (allowed && !allowed.has(group.key === "tools" ? "actions" : group.key)) return [];
     const features = PRODUCT_FEATURES.filter((item) => item.groupKey === group.key && item.navigationVisible).sort((a, b) => a.order - b.order);

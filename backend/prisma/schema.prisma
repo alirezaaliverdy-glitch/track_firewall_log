@@ -24,8 +24,53 @@ model AppUser {
   onboardingSessions DeviceOnboardingSession[]
   cameraDevices CameraDevice[]
   vpnConnections VpnConnection[]
+  communityThreads CommunityThread[]
+  communityMessages CommunityMessage[]
+  communityReads CommunityRead[]
 
   @@index([workspaceOwnerId])
+}
+
+model CommunityThread {
+  id            String @id @default(cuid())
+  workspaceId   String
+  creatorId     String
+  creator       AppUser @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  clientKey     String
+  kind          String
+  title         String
+  status        String @default("open")
+  priority      String @default("normal")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  messages      CommunityMessage[]
+  reads         CommunityRead[]
+  @@unique([creatorId, clientKey])
+  @@index([workspaceId, kind, updatedAt])
+  @@index([workspaceId, creatorId, kind])
+}
+
+model CommunityMessage {
+  id        String @id @default(cuid())
+  sequence  Int @unique @default(autoincrement())
+  threadId  String
+  thread    CommunityThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    AppUser @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  clientKey String
+  body      String
+  createdAt DateTime @default(now())
+  @@unique([threadId, authorId, clientKey])
+  @@index([threadId, sequence])
+}
+
+model CommunityRead {
+  threadId     String
+  thread       CommunityThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId       String
+  user         AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSequence Int @default(0)
+  @@id([threadId, userId])
 }
 
 model VpnConnection {

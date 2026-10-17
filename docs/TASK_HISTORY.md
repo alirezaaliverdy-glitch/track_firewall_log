@@ -1,3 +1,9 @@
+## 2026-10-17 - Restore dashboard gauges and add community/support
+
+- Diagnosed light CSS explicitly removing the resource dial; restored its chart and center with readable tracks and score colors, keeping absent/offline metrics unknown. Refined light surfaces and sensor-card layout.
+- Implemented workspace discussions and private creator/admin support tickets at `/community`, persistent text replies, subject search, ticket priority, status handling, unread cursors and bounded history. Native dialogs, draft-retaining retries with client IDs, touch-aware composer and dark/light layouts. Added narrow viewer participation, scoped routes, CSRF/native auth, throttles, plaintext rendering and creation/status audit; existing controlled execution rules unchanged.
+- Added compatible PostgreSQL tables and production migration checks. Real isolated API and non-owner migration tests pass. Fixed a pre-existing script-editor product-registry omission found by parity validation. Eleven existing auth/security/navigation and six boot/environment checks pass; final 11 appearance and 13 community synthetic captures pass without errors/overflow. Screenshot inspection found and corrected mobile composer overlap; final mobile and 320px acceptance verifies the composer stays above navigation. Final API/web builds and scoped local deployments pass, local migration applied; synthetic test resources removed. No push or production mutation.
+
 ## 2026-10-17 - Add reference-inspired light theme and settings selector
 
 - Implemented all-role Settings > Appearance with native keyboard-accessible Light/Dark preview choices, browser persistence, cross-tab sync, first-paint bootstrap and a versioned offline shell asset. Dark remains the initial default; saving failures are disclosed without preventing switching.

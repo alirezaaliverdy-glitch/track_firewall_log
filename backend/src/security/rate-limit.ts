@@ -86,7 +86,8 @@ function bodyValue(request: FastifyRequest, keys: string[]) {
   return keys.map((key) => body[key]).find((value) => value !== undefined);
 }
 
-function policyForRequest(pathname: string) {
+function policyForRequest(pathname: string, method?: string) {
+  if (/^\/api\/community(?:\/|$)/.test(pathname)) return { id: method === "GET" ? "community_read" : "community_write", limit: method === "GET" ? 180 : 45, windowMs: 60_000 };
   if (/^\/api\/cameras\/[^/]+\/frame$/.test(pathname)) return ROUTE_POLICIES[7];
   if (pathname === "/api/cameras/discover") return ROUTE_POLICIES[5];
   if (/^\/api\/cameras\/[^/]+\/actions\/[^/]+\/execute$/.test(pathname)) return ROUTE_POLICIES[2];
@@ -100,7 +101,7 @@ function policyForRequest(pathname: string) {
 }
 
 export function consumeRouteRateLimit(request: FastifyRequest, pathname: string): RateLimitResult | null {
-  const policy = policyForRequest(pathname);
+  const policy = policyForRequest(pathname, request.method);
   if (!policy) return null;
 
   const user = request.authUser?.id ?? request.authUser?.username ?? request.ip;

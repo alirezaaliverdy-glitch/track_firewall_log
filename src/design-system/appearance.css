@@ -133,17 +133,20 @@ html[data-theme="light"] .camera-device-card--nvr { --tile-accent:#7150af; }
 html[data-theme="light"] .camera-device-card.has-error { --tile-accent:#956008; }
 html[data-theme="light"] .platform-nav-group__label>svg { color:#637a93; }
 html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label>svg { color:#7859ca; }
-html[data-theme="light"] .fleet-summary-visual { grid-template-columns:1fr;gap:18px; }
-html[data-theme="light"] .fleet-summary-dial { width:100%;aspect-ratio:auto;background:none; }
-html[data-theme="light"] .fleet-summary-dial::before { display:none; }
-html[data-theme="light"] .fleet-summary-dial>div { display:flex;width:100%;align-items:center;gap:8px;justify-content:space-between; }
-html[data-theme="light"] .fleet-summary-dial strong { font-size:18px; }
-html[data-theme="light"] .fleet-summary-dial em { display:none; }
+/* Keep the actual gauge in both appearances, including the unknown-data track. */
+html[data-theme="light"] .fleet-summary-dial { background:conic-gradient(var(--health-color) 0 var(--fleet-health-angle),#e6ecf3 var(--fleet-health-angle) 360deg); }
+html[data-theme="light"] .fleet-summary-dial::before { background:#fbfcff; }
 html[data-theme="light"] .fleet-summary-resources>div { gap:8px; }
 html[data-theme="light"] .fleet-summary-resources dt svg { color:var(--app-accent); }
 html[data-theme="light"] .fleet-summary-resources>div:nth-child(2) dt svg { color:#7150af; }
 html[data-theme="light"] .fleet-summary-resources>div:nth-child(3) dt svg { color:#956008; }
-@media(min-width:1250px){html[data-theme="light"] .fleet-health-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+html[data-theme="light"] .fleet-health { background:#f8faff!important; }
+html[data-theme="light"] .fleet-health-grid { align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr)); }
+html[data-theme="light"] .fleet-device { background:linear-gradient(145deg,#fff,#fbfcff);box-shadow:0 5px 20px #30477208; }
+html[data-theme="light"] .fleet-device>footer a { padding-block:8px; }
+html[data-theme="light"] .platform-topbar { background:rgba(250,252,255,.96); }
+html[data-theme="light"] .platform-sidebar { background:linear-gradient(180deg,#fafaff,#f3f6fb); }
+html[data-theme="light"] .command-panel { border-color:#e0e6f0;background:linear-gradient(135deg,#fff,#fafbff); }
 /* Login and public marketing retain their original art direction. */
 html[data-theme="light"] :is(.eos-login,.landing) { --theme-surface:initial;--theme-text:initial;--theme-muted:initial;--theme-border:initial;--theme-accent:initial;--theme-success:initial;--theme-warning:initial;--theme-danger:initial;--theme-blue:initial;--theme-violet:initial; }
 html[data-theme="light"] .eos-login input { color:#e5edf7;color-scheme:dark; }

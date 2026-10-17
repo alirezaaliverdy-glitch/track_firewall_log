@@ -58,7 +58,7 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       ];
       const coverage=rows.filter(item=>current(item.row)).length;
       const score=coverage&&connected&&Number.isFinite(device.score)?device.score:null;
-      const color=score===null?"#52687a":"#fbbf24";
+      const color=score===null?"#72849a":score>=80?"#18a899":score>=50?"#e5a328":"#e25c79";
       return <article className="fleet-device fleet-summary" key={device.id}>
         <header><div><h3>{device.name}</h3><span dir="ltr">{device.vendor} · {device.host}</span></div><span className={`fleet-status is-${state}`}><i/>{state==="online"?t("آنلاین","Online"):state==="offline"?t("آفلاین","Offline"):t("نامشخص","Unknown")}</span></header>
         <div className="fleet-summary-visual">

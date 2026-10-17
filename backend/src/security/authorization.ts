@@ -7,6 +7,10 @@ export type RoutePermissionPolicy = {
 };
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
+  { method: "POST", path: "/api/community/threads", permission: "community.participate" },
+  { method: "POST", path: "/api/community/threads/:id/messages", permission: "community.participate" },
+  { method: "POST", path: "/api/community/threads/:id/read", permission: "community.participate" },
+  { method: "PATCH", path: "/api/community/threads/:id", permission: "community.moderate" },
   { method: "PUT", path: "/api/ai/provider/config", permission: "security.policy.manage" },
   { method: "POST", path: "/api/ai/provider/test", permission: "security.policy.manage" },
   { method: "POST", path: "/api/vpn", permission: "security.policy.manage" },
