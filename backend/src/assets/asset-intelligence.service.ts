@@ -801,7 +801,7 @@ export async function createFindingActionPlan(id: string, ownerId?: string) {
   const responseParameters: Record<string, unknown> = responseAction === ActionType.linux_block_ip
     ? { srcIp: sourceIp, ipAddress: sourceIp, durationMinutes: 60 }
     : responseAction === ActionType.mikrotik_block_ip
-      ? { sourceIp, address: sourceIp, timeout: "1h", listName: "firewall-log-analyzer-blocked", comment: `finding:${finding.id}` }
+      ? { sourceIp, address: sourceIp, timeout: "1h", listName: "firewall-log-analyzer-blocked", comment: `finding:${finding.id}`, requireDropRule: true }
       : responseAction === ActionType.fortigate_create_deny_policy
         ? {
             sourceIp,

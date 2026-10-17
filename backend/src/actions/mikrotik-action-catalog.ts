@@ -296,6 +296,20 @@ export function validateMikroTikAction(plan: Pick<ActionPlan, "actionType" | "ri
       warnings.push("This action is idempotent. If the entry already exists, timeout/comment will be updated instead of adding a duplicate.");
       warnings.push("Blocking requires an existing firewall rule that uses this list.");
       rollbackJson = { type: "remove_or_restore_address_list_entry", listName, address };
+      if (parameters.requireDropRule === true) {
+        normalized.requireDropRule = true;
+        // Read-only prerequisite: do not create, enable or reorder any firewall
+        // rule. A first active input rule with additional matchers is insufficient.
+        const safeKeys = [".id", "chain", "action", "src-address-list", "disabled", "dynamic", "invalid", "bytes", "packets", "comment", "log", "log-prefix"];
+        const unexpectedKey = safeKeys.map(key => `($key != ${quote(key)})`).join(" && ");
+        commandSpecs.push(commandSpec({ template: "verify an existing unconditional first input drop rule for this source list",
+          command: `:local rules [/ip firewall filter print as-value where chain="input" disabled=no]; :if ([:len $rules] = 0) do={:error "EOSNET_DROP_RULE_MISSING"}; :local rule [:pick $rules 0]; :local valid true; :if ((($rule->"action") != "drop") || (($rule->"src-address-list") != ${quote(listName)})) do={:set valid false}; :foreach key,value in=$rule do={:if ((${unexpectedKey}) && ([:len [:tostr $value]] > 0)) do={:set valid false}}; :if ($valid) do={:put "EOSNET_DROP_RULE_VERIFIED"} else={:error "EOSNET_DROP_RULE_NOT_EFFECTIVE"}`,
+          write: false, target: { chain: "input", listName }, warnings: [], rollbackSteps: [] }),
+          commandSpec({ template: "read back enabled source entry after restriction",
+            command: `:local entries [/ip firewall address-list find where list=${quote(listName)} address=${quote(address ?? "")} disabled=no]; :if ([:len $entries] > 0) do={:put "EOSNET_SOURCE_ENTRY_VERIFIED"} else={:error "EOSNET_SOURCE_ENTRY_NOT_VERIFIED"}`,
+            write: false, target: { listName, address }, warnings: [], rollbackSteps: [] }));
+        warnings.push("Containment requires an existing first active input drop rule referencing this list without extra matchers. Firewall rules will not be changed automatically.");
+      }
     } else if (plan.actionType === ActionType.mikrotik_update_address_list_entry) {
       commandSpecs.push(commandSpec({
         template: "/ip firewall address-list set [find list=<listName> address=<address>] timeout=<timeout> comment=<comment>",

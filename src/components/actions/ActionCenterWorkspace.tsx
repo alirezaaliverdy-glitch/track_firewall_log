@@ -326,7 +326,7 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
     setReviewOpen(true);
   }
 
-  async function executeSelected() {
+  async function executeSelected(approval: Record<string, unknown> = {}) {
     if (!selected?.controls.canConfirm && !selected?.controls.canExecute) return;
     const permission = actionExecutionPermission(user, selected.riskLevel, isFa);
     if (!permission.allowed) {
@@ -345,14 +345,14 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
         await correctActionFields(actionPlanId, changedFields);
         await quickExecuteAction(actionPlanId, { intent: "preview", reason: "Preview refreshed after parameter edits in Action Center review" });
       }
-      await quickExecuteAction(actionPlanId, { intent: "execute", reason: "Explicitly confirmed and executed from operator Action Center review" });
-      await pollActionUntilTerminal(actionPlanId);
+      await quickExecuteAction(actionPlanId, { ...approval, intent: "execute", reason: typeof approval.reason === "string" ? approval.reason : "Explicitly confirmed and executed from operator Action Center review" });
+      const completed = await pollActionUntilTerminal(actionPlanId);
       await Promise.all([loadDetail(actionPlanId), loadHistory()]);
-      navigate(`/actions/${encodeURIComponent(actionPlanId)}/result`);
+      if (terminalLifecycle(completed.lifecycleState)) navigate(`/actions/${encodeURIComponent(actionPlanId)}/result`);
+      else setError(isFa ? "عملیات هنوز به نتیجه نرسیده است؛ وضعیت اجرا همین‌جا به‌روز می‌شود." : "Execution has not completed yet; follow its status here.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Execution failed.");
       await loadDetail(actionPlanId).catch(() => undefined);
-      navigate(`/actions/${encodeURIComponent(actionPlanId)}/result`);
     } finally { setActionBusy(false); }
   }
 
@@ -446,7 +446,8 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
           if (initialActionPlanId) navigate("/actions");
         }}
       /></section>}
-      {selected && reviewOpen && <ExecutionReviewDialog item={selected} actionName={selectedActionName} parameters={reviewParameters} permission={selectedExecutionPermission} busy={actionBusy} isFa={isFa} onParameterChange={(key, value) => setReviewParameters((current) => ({ ...current, [key]: value }))} onCancel={() => setReviewOpen(false)} onConfirm={() => void executeSelected()} />}
+      {selected && reviewOpen && <ExecutionReviewDialog item={selected} actionName={selectedActionName} parameters={reviewParameters} permission={selectedExecutionPermission} busy={actionBusy} isFa={isFa} onParameterChange={(key, value) => setReviewParameters((current) => ({ ...current, [key]: value }))} onCancel={() => setReviewOpen(false)} onConfirm={(approval) => void executeSelected(approval)} />}
+      {error && <div className="state-panel state-panel--error" role="alert">{error}</div>}
       {!selected && <div className="operations-compose-grid">
       <section className={`operator-connection operator-connection--${connectionTone}`} aria-label={copy.connection}>
         <header>
@@ -495,7 +496,6 @@ export function ActionCenterWorkspace({ initialActionPlanId, onCreate }: { initi
           {allFields.map((field: CatalogParam) => <label key={field.key}>{isFa ? field.labelFa : humanize(field.key)}{selectedAction.requiredParams.some((required) => required.key === field.key) && <small>{copy.required}</small>}{field.key === "acknowledgeDisruption" ? <span className="operator-acknowledgement"><input type="checkbox" checked={parameters[field.key] === "true"} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.checked ? "true" : "" }))} />{isFa ? "اثر احتمالی بر ترافیک را بررسی کردم" : "I reviewed the possible traffic impact"}</span> : field.type === "boolean" ? <select value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))}><option value="">{copy.choose}</option><option value="true">{isFa ? "بله" : "Yes"}</option><option value="false">{isFa ? "خیر" : "No"}</option></select> : <input type={field.type === "number" ? "number" : "text"} placeholder={field.placeholderFa} value={parameters[field.key] ?? ""} onChange={(event) => setParameters((current) => ({ ...current, [field.key]: event.target.value }))} />}{field.helpFa && <span className="operator-field-help">{isFa ? field.helpFa : humanize(field.key)}</span>}</label>)}
         </section>}
 
-        {error && <div className="state-panel state-panel--error" role="alert">{error}</div>}
         <footer><p>{isFa ? "مرحله بعد: بازبینی فرمان‌ها و تأیید صریح شما" : "Next: inspect generated commands and explicitly confirm"}</p><button className="primary-button operator-execute" type="button" disabled={!selectedDevice || !credentialId || !selectedAction || !requiredComplete || actionBusy} onClick={() => void runOperatorAction()}>{actionBusy ? copy.running : copy.generatePreview}</button></footer>
       </section>
       </div>}

@@ -165,12 +165,15 @@ function normalizedEvidenceText(event: SecurityEvent) {
 export function deduplicateDetectionEvents(definition: VendorDetectionRuleDefinition, events: SecurityEvent[]) {
   const exact = new Map<string, SecurityEvent>();
   for (const event of events) {
-    const key = [event.deviceId, event.srcIp, event.username, event.eventType, normalizedEvidenceText(event)].join("|");
+    const key = [event.deviceId, event.srcIp, event.username, event.eventType,
+      ...(definition.vendor === "mikrotik" ? [detectionEventTime(event)] : []), normalizedEvidenceText(event)].join("|");
     const previous = exact.get(key);
     if (!previous || detectionEventTime(event) > detectionEventTime(previous)) exact.set(key, event);
   }
   const uniqueEvents = [...exact.values()].sort((left, right) => detectionEventTime(left) - detectionEventTime(right));
-  if (definition.logicalEventFamily !== "authentication_failure") return uniqueEvents;
+  // RouterOS emits one account log per attempt, not the PAM + sshd pair used
+  // by Linux. Merging an eight-second burst would hide real brute-force attacks.
+  if (definition.logicalEventFamily !== "authentication_failure" || definition.vendor === "mikrotik") return uniqueEvents;
 
   const logical: SecurityEvent[] = [];
   const latestAttempt = new Map<string, number>();

@@ -2,6 +2,7 @@ import { ActionPlanStatus, Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { proposeActionPlan, rejectActionPlan } from "./action-plan.service.js";
 import { copyActionPlanSecrets } from "./action-plan-secret.service.js";
+import { approvalRequirements } from "../actions/action-plan/action-plan.shared.js";
 
 const TERMINAL = new Set<ActionPlanStatus>([ActionPlanStatus.succeeded, ActionPlanStatus.failed, ActionPlanStatus.rejected, ActionPlanStatus.rolled_back]);
 const PREVIEWABLE = new Set<ActionPlanStatus>([ActionPlanStatus.proposed, ActionPlanStatus.validation_failed, ActionPlanStatus.awaiting_approval]);
@@ -202,6 +203,7 @@ function project(plan: CenterPlan) {
     validationJson: sanitize(plan.validationJson),
     commandPreview: sanitize(plan.dryRunJson),
     approval: sanitize(plan.approvalJson),
+    approvalRequirements: approvalRequirements(plan.riskLevel),
     connectorResult: sanitize(plan.resultJson),
     rollback: sanitize(plan.rollbackJson),
     evidence: {

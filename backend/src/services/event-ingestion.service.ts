@@ -8,6 +8,7 @@ import type { CollectedLogLine, CollectorRunResult } from "../collectors/types.j
 import { isApplicationOwnedSecurityEvent, matchesCollectorSession } from "../security/collector-auth-provenance.js";
 import { knownApplicationCommands, matchesApplicationCommand, matchesFixedCollectorRead } from "../security/application-command-provenance.js";
 import { linuxEventAction, parseLinuxSecurityLog } from "../security/linux-log-semantics.js";
+import { parseMikroTikSecurityLog } from "../security/mikrotik-log-semantics.js";
 
 export type NormalizedCollectedEvent = {
   deviceId: string;
@@ -249,15 +250,19 @@ export function normalizeCollectedLine(deviceId: string, line: CollectedLogLine,
   const lower = raw.toLowerCase();
   let action = "unknown";
   let severity: NormalizedCollectedEvent["severity"] = "low";
-  let srcIp = ip(raw);
+  const router = /mikrotik|routeros/i.test(vendor) ? parseMikroTikSecurityLog(raw) : null;
+  let srcIp = router ? router.srcIp : ip(raw);
   const meaning = /linux|ubuntu|debian|rhel|centos|rocky|alma/i.test(vendor) ? parseLinuxSecurityLog(raw) : null;
-  let username = userFromAuth(raw);
+  let username = router ? router.username : userFromAuth(raw);
   let srcPort: number | undefined;
   let dstPort: number | undefined;
-  let eventDestination: string | undefined;
-  let protocol: string | undefined;
+  let eventDestination: string | undefined = router?.dstIp;
+  let protocol: string | undefined = router?.protocol;
 
-  if (meaning && meaning.kind !== "other") {
+  if (router && router.action !== "unknown") {
+    action = router.action;
+    severity = action === "auth_failed" ? "high" : "low";
+  } else if (meaning && meaning.kind !== "other") {
     action = linuxEventAction(meaning);
     username = meaning.actor;
     srcIp = meaning.sourceIp;

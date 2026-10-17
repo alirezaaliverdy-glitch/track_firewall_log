@@ -614,8 +614,15 @@ export async function quickExecuteActionPlan(id: string, input: Record<string, u
     }
   }
 
+  // The HTTP route binds approvedBy to the authenticated actor. Resolve its role
+  // from the active account; never forward a client-claimed approvedByRole.
+  const approvingActor = typeof input.approvedBy === "string" ? input.approvedBy.trim() : "";
+  const approvingUser = approvingActor ? await prisma.appUser.findFirst({
+    where: { isActive: true, id: approvingActor }, select: { role: true }
+  }) : null;
   plan = await approveActionPlan(id, {
     approvedBy: typeof input.approvedBy === "string" ? input.approvedBy : "quick-execute",
+    approvedByRole: approvingUser?.role,
     reason: typeof input.reason === "string" && input.reason.trim() ? input.reason.trim() : "Execute from Action Center",
     approvalConfirmation: input.approvalConfirmation,
     breakGlass: input.breakGlass

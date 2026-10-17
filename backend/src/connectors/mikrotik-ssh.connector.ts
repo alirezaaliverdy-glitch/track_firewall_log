@@ -703,6 +703,18 @@ export const mikrotikSshConnector: DeviceConnector = {
       });
 
       if (addressListPlan && idempotentAddressList) {
+        const requireDropRule = validation.normalizedParameters.requireDropRule === true;
+        const containmentEvidence: Array<{ template: string; stdout: string; exitCode: number | null }> = [];
+        if (requireDropRule) {
+          const prerequisite = validation.commandSpecs[3];
+          const proof = await exec(client, prerequisite.command, env.sshCommandTimeoutMs, allowedCommands);
+          commands.push({ template: prerequisite.template, ...proof });
+          if (proof.exitCode !== 0 || proof.stdout.trim() !== "EOSNET_DROP_RULE_VERIFIED") {
+            throw new MikroTikConnectorError("MIKROTIK_DROP_RULE_REQUIRED", "برای این فهرست، قانون Drop مؤثرِ ورودی تأیید نشد. قبل از مسدودسازی، قانون فایروال را بررسی کنید؛ قانون‌ها خودکار تغییر نکردند.", 409);
+          }
+          containmentEvidence.push({ template: prerequisite.template, stdout: proof.stdout, exitCode: proof.exitCode });
+          await audit?.("containment_rule_verified", "Existing first input drop rule verified without modifying firewall rules.", { listName: addressListPlan.listName });
+        }
         const checkResult = await exec(client, addressListPlan.check, env.sshCommandTimeoutMs, allowedCommands);
         commands.push({
           template: "check exact address-list entry by list/address",
@@ -759,6 +771,15 @@ export const mikrotikSshConnector: DeviceConnector = {
         if (writeResult.exitCode !== 0) {
           throw new MikroTikConnectorError("MIKROTIK_COMMAND_FAILED", writeResult.stderr || writeResult.stdout || "RouterOS address-list upsert failed.", 502);
         }
+        if (requireDropRule) {
+          for (const spec of [validation.commandSpecs[3], validation.commandSpecs[4]]) {
+            const proof = await exec(client, spec.command, env.sshCommandTimeoutMs, allowedCommands);
+            commands.push({ template: spec.template, ...proof });
+            const expected = spec === validation.commandSpecs[3] ? "EOSNET_DROP_RULE_VERIFIED" : "EOSNET_SOURCE_ENTRY_VERIFIED";
+            if (proof.exitCode !== 0 || proof.stdout.trim() !== expected) throw new MikroTikConnectorError("MIKROTIK_CONTAINMENT_NOT_VERIFIED", "محدودسازی مبدأ روی روتر راستی‌آزمایی نشد؛ نتیجه موفق ثبت نمی‌شود.", 502);
+            containmentEvidence.push({ template: spec.template, stdout: proof.stdout, exitCode: proof.exitCode });
+          }
+        }
         await audit?.("rollback_available", "Rollback metadata is available for this MikroTik action.", validation.rollbackJson);
         return {
           executed: true,
@@ -769,7 +790,7 @@ export const mikrotikSshConnector: DeviceConnector = {
             ...warnings,
             recoveredDuplicate || exists ? "Existing entry found; timeout/comment updated." : "Address-list entry added."
           ],
-          rollbackJson: validation.rollbackJson
+          rollbackJson: { ...validation.rollbackJson, ...(requireDropRule ? { verification: { ok: true, summary: "Existing input drop rule and enabled source entry verified.", evidenceCount: containmentEvidence.length, evidence: containmentEvidence } } : {}) }
         };
       }
 

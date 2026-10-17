@@ -1,3 +1,10 @@
+## 2026-10-17 - Managed admins and verified incident response (local only)
+
+- Fixed newly created/promoted admin visibility and audit-proven legacy creator management while preserving unrelated-admin privacy and independent admin asset scope.
+- Diagnosed production preview-only high-risk requests through sanitized read-only metadata. Added backend-derived safe-mode confirmation fields and authenticated-ID-only approver-role lookup. Protected quick-controlled mode still has one confirmation. Rejections stay on the exact plan with visible errors; previews are not execution results.
+- Improved RouterOS login source/account normalization and fast-attempt deduplication. Registered containment now checks an existing effective input Drop rule before source-list writes and verifies state afterward. IPv4 router-input only; no automatic firewall-rule mutation. Automatic review rejected automatic first-position Drop provisioning due to management-lockout risk; that expansion needs specific authorization. Campaign source actions remain explicitly single-IP, not bulk.
+- Final builds/scoped local API/web deployments pass; 14 focused tests and five synthetic desktop/mobile captures pass with zero runtime errors/overflow. Catalog: 248 valid items. No schema migration, physical-router end-to-end claim, push or server deployment. Prerequisites and product priorities: `docs/RESPONSE_RELIABILITY.md`.
+
 ## 2026-10-17 - Dashboard graphs and community/support (local only)
 
 - Restored light-mode health gauges, kept offline/missing sensors unknown, added semantic score colors and refined pearl/mint/lavender surfaces.

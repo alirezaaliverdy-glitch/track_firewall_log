@@ -23,6 +23,7 @@ export type ActionCenterItem = {
   validationJson: Record<string, unknown>;
   commandPreview: Record<string, unknown>;
   approval: Record<string, unknown>;
+  approvalRequirements?: { typedApprove: boolean; breakGlass: boolean; reason: boolean };
   connectorResult: Record<string, unknown>;
   rollback: Record<string, unknown>;
   evidence: { connectorInvoked: boolean; integrityError: string | null; approvals: unknown };
@@ -101,6 +102,7 @@ export function normalizeActionCenterItem(value: unknown): ActionCenterItem {
     },
     parametersJson: object(source.parametersJson), validationJson: object(source.validationJson),
     commandPreview: object(source.commandPreview ?? source.dryRunJson), approval: object(source.approval ?? source.approvalJson),
+    approvalRequirements: { typedApprove: object(source.approvalRequirements).typedApprove === true, breakGlass: object(source.approvalRequirements).breakGlass === true, reason: object(source.approvalRequirements).reason === true },
     connectorResult: rawResult, rollback: object(source.rollback ?? source.rollbackJson),
     evidence: { connectorInvoked, integrityError: typeof rawEvidence.integrityError === "string" ? rawEvidence.integrityError : null, approvals: rawEvidence.approvals ?? [] },
     audit: Array.isArray(source.audit) ? source.audit : []

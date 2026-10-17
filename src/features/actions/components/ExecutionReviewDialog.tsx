@@ -1,5 +1,5 @@
 import { HardDriveDownload, Server, ShieldCheck, SlidersHorizontal, Terminal, TriangleAlert, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActionCenterItem } from "@/lib/actionCenter";
 import { backupRequirement, commandLines, humanize, record } from "../actionCenterWorkspaceModel";
 
@@ -48,7 +48,7 @@ export function ExecutionReviewDialog({
   isFa: boolean;
   onParameterChange: (key: string, value: string) => void;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (approval?: Record<string, unknown>) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const commands = useMemo(() => commandLines(item.commandPreview), [item.commandPreview]);
@@ -56,6 +56,11 @@ export function ExecutionReviewDialog({
   const deviceName = item.device?.name ?? item.deviceId ?? (isFa ? "دستگاه مشخص نشده" : "No device selected");
   const deviceDetails = [item.device?.host, item.device?.vendor].filter(Boolean).join(" · ");
   const parameterEntries = Object.entries(parameters);
+  const requirements = item.approvalRequirements;
+  const [confirmation, setConfirmation] = useState("");
+  const [reason, setReason] = useState("");
+  const [breakGlass, setBreakGlass] = useState(false);
+  const approvalReady = (!requirements?.typedApprove || confirmation.trim() === "APPROVE") && (!requirements?.reason || !!reason.trim()) && (!requirements?.breakGlass || breakGlass);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -113,12 +118,15 @@ export function ExecutionReviewDialog({
             <dl><div><dt>ActionPlan</dt><dd dir="ltr">{item.id}</dd></div><div><dt>Connector</dt><dd>{item.support.execution}</dd></div><div><dt>{isFa ? "وضعیت پشتیبانی" : "Support state"}</dt><dd>{item.support.state}</dd></div></dl>
           </details>
 
+          {requirements?.typedApprove ? <section className="execution-review__parameters"><h3>{isFa ? "تأیید لازم طبق سیاست فعلی" : "Confirmation required by current policy"}</h3><label>{isFa ? "برای تأیید، APPROVE را وارد کن" : "Type APPROVE to confirm"}<input aria-label={isFa ? "تأیید اجرای پرریسک" : "High risk execution confirmation"} value={confirmation} onChange={e => setConfirmation(e.target.value)} autoComplete="off" dir="ltr" disabled={busy}/></label></section> : null}
+          {requirements?.reason ? <label className="execution-review__parameters">{isFa ? "دلیل اجرا" : "Reason for execution"}<textarea value={reason} maxLength={500} onChange={e => setReason(e.target.value)} disabled={busy}/></label> : null}
+          {requirements?.breakGlass ? <label className="execution-review__blocked"><input type="checkbox" checked={breakGlass} onChange={e => setBreakGlass(e.target.checked)} disabled={busy}/>{isFa ? "اجرای اضطراری این اقدام بحرانی را تأیید می‌کنم." : "I authorize emergency execution of this critical action."}</label> : null}
           {!permission.allowed && permission.reason ? <div className="execution-review__blocked" role="alert"><TriangleAlert aria-hidden="true" /><span>{permission.reason}</span></div> : null}
         </main>
 
         <footer className="execution-review__footer">
           <p><ShieldCheck aria-hidden="true" />{isFa ? "پس از تأیید، PolicyGuard بررسی و Connector واقعی اجرا می‌شود." : "After confirmation, PolicyGuard checks and the real connector runs."}</p>
-          <div><button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>{isFa ? "انصراف" : "Cancel"}</button><button className="primary-button execution-review__confirm" type="button" disabled={busy || !permission.allowed || commands.length === 0} title={permission.reason ?? undefined} onClick={onConfirm}>{busy ? (isFa ? "در حال اجرا..." : "Executing...") : (isFa ? "تأیید و اجرای عملیات" : "Confirm and execute")}</button></div>
+          <div><button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>{isFa ? "انصراف" : "Cancel"}</button><button className="primary-button execution-review__confirm" type="button" disabled={busy || !permission.allowed || commands.length === 0 || !approvalReady} title={permission.reason ?? undefined} onClick={() => onConfirm({ ...(requirements?.typedApprove ? { approvalConfirmation: confirmation.trim() } : {}), ...(requirements?.reason ? { reason: reason.trim() } : {}), ...(requirements?.breakGlass ? { breakGlass } : {}) })}>{busy ? (isFa ? "در حال اجرا..." : "Executing...") : (isFa ? "تأیید و اجرای عملیات" : "Confirm and execute")}</button></div>
         </footer>
       </div>
     </section>

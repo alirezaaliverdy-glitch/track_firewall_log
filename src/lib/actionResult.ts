@@ -10,6 +10,18 @@ export type ActionCommandOutput = {
   state: "succeeded" | "failed" | "unknown";
 };
 
+export function actionExecutionSucceeded(action: ActionPlan) {
+  const result = normalizeObject(action.resultJson);
+  const metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
+  return action.status === "succeeded" && result.executed === true &&
+    (result.connectorInvoked === true || metadata.connectorInvoked === true) &&
+    normalizeArray(result.commands).length > 0;
+}
+
+export function actionExecutionPending(action: ActionPlan) {
+  return ["proposed", "validation_failed", "dry_run_ready", "awaiting_approval", "approved", "executing"].includes(action.status);
+}
+
 function commandExitCode(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "") {

@@ -1,3 +1,10 @@
+## 2026-10-17 - Fix admin visibility and strengthen evidence-backed responses
+
+- Preserved manager linkage across admin creation/promotion; recovered legacy orphan admins only through creator audit evidence. Tested reset/manage access and independent-admin isolation without widening asset access.
+- Reproduced production's safe-mode typed-confirmation rejection using sanitized read-only metadata. Added mode-specific confirmation UI, active-account-ID role lookup, anti-forgery/username-collision regression, visible selected-plan errors and honest preview/pending results. No change to protected lab's one-confirmation policy.
+- Normalized RouterOS login identities/remote sources, preserved fast distinct attempts and verified containment prerequisites/readback over a real SSH fixture. Automatic review rejected automatic first-position firewall Drop installation because of router-lockout risk; implemented read-only prerequisite verification instead. No automatic filter modifications, forwarded-traffic/IPv6 containment or physical-router execution claim. Single-IP campaign action scope is explicit.
+- Passed 14 focused tests, five synthetic browser captures and 248-item catalog validation. Reviewed mobile confirmation/rejection and desktop quick-mode screenshots; final frontend/API local builds and scoped deployments pass. No schema change/push/production release. Added `docs/RESPONSE_RELIABILITY.md` with limitations and product priorities.
+
 ## 2026-10-17 - Restore dashboard gauges and add community/support
 
 - Diagnosed light CSS explicitly removing the resource dial; restored its chart and center with readable tracks and score colors, keeping absent/offline metrics unknown. Refined light surfaces and sensor-card layout.

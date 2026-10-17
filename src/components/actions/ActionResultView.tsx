@@ -12,17 +12,14 @@ import {
   SquareTerminal,
 } from "lucide-react";
 import { getAction, normalizeObject, type ActionPlan } from "@/lib/actions";
-import { actionCommandOutputs, type ActionCommandOutput } from "@/lib/actionResult";
+import { actionCommandOutputs, actionExecutionSucceeded, actionExecutionPending, type ActionCommandOutput } from "@/lib/actionResult";
 import { formatActionResult } from "@/features/actions/actionResultFormatter";
 import { useNavigate } from "react-router-dom";
 
 const metadataOf = (action: ActionPlan) => normalizeObject(normalizeObject(action.parametersJson).metadata);
 
 function executionSucceeded(action: ActionPlan) {
-  const result = normalizeObject(action.resultJson);
-  const metadata = metadataOf(action);
-  const connectorInvoked = metadata.connectorInvoked === true || result.connectorInvoked === true;
-  return action.status === "succeeded" && result.executed === true && connectorInvoked;
+  return actionExecutionSucceeded(action);
 }
 
 function formatDuration(action: ActionPlan) {
@@ -164,6 +161,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
 
   const metadata = metadataOf(action);
   const succeeded = executionSucceeded(action);
+  const pending = actionExecutionPending(action);
   const result = normalizeObject(action.resultJson);
   const deviceName = action.device?.name ?? action.deviceId ?? "-";
   const vendor = String(metadata.vendor ?? action.device?.vendor ?? action.device?.type ?? "-");
@@ -181,7 +179,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
             </div>
             <button
               type="button"
-              onClick={() => navigate("/actions")}
+              onClick={() => navigate(`/actions/${encodeURIComponent(action.id)}`)}
               className="inline-flex max-w-full w-fit items-center gap-2 whitespace-normal rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-200 transition hover:border-cyan-700 hover:text-cyan-200"
             >
               <ArrowRight className="h-4 w-4" />
@@ -191,15 +189,16 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
         </header>
 
         <section className={`rounded-2xl border p-4 sm:p-5 ${
-          succeeded ? "border-emerald-800/80 bg-emerald-950/25" : "border-rose-800/80 bg-rose-950/20"
+          succeeded ? "border-emerald-800/80 bg-emerald-950/25" : pending ? "border-cyan-800/80 bg-cyan-950/20" : "border-rose-800/80 bg-rose-950/20"
         }`}>
           <div className="flex items-start gap-3">
             {succeeded
               ? <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-400" />
-              : <CircleX className="mt-0.5 h-6 w-6 shrink-0 text-rose-400" />}
+              : pending ? <Clock3 className="mt-0.5 h-6 w-6 shrink-0 text-cyan-400" /> : <CircleX className="mt-0.5 h-6 w-6 shrink-0 text-rose-400" />}
             <div>
-              <h2 className="font-semibold">{succeeded ? "دستور با موفقیت روی دستگاه اجرا شد" : "اجرای دستور کامل نشد"}</h2>
-              {!succeeded && <p className="mt-1 text-sm leading-6 text-slate-300">{failureMessage}</p>}
+              <h2 className="font-semibold">{succeeded ? "دستور با موفقیت روی دستگاه اجرا شد" : pending ? action.status === "executing" ? "عملیات در حال اجراست" : "اقدام هنوز اجرا نشده است" : "اجرای دستور کامل نشد"}</h2>
+              {!succeeded && !pending && <p className="mt-1 text-sm leading-6 text-slate-300">{failureMessage}</p>}
+              {pending && action.status !== "executing" && <button className="mt-3 rounded-xl border border-cyan-700 px-4 py-2" onClick={() => navigate(`/actions/${encodeURIComponent(action.id)}`)}>بازبینی و تأیید همین اقدام</button>}
             </div>
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 lg:grid-cols-4">

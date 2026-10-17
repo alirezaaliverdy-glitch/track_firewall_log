@@ -64,7 +64,7 @@ function mapRows(title: string, rows: Array<{ label: string; value: string }>): 
   return rows.length > 0 ? [{ title, rows }] : [];
 }
 
-export function formatActionResult(action: ActionPlan): FormattedActionResult {
+function formatActionResultContent(action: ActionPlan): FormattedActionResult {
   const rawOutput = actionRawOutput(action);
   const params = normalizeObject(action.parametersJson);
   const parsed = normalizeObject(normalizeObject(action.resultJson).parsedResult);
@@ -244,4 +244,14 @@ export function formatActionResult(action: ActionPlan): FormattedActionResult {
   }
 
   return genericFormatted(action);
+}
+
+export function formatActionResult(action: ActionPlan): FormattedActionResult {
+  const formatted = formatActionResultContent(action);
+  const result = normalizeObject(action.resultJson), metadata = normalizeObject(normalizeObject(action.parametersJson).metadata);
+  const verified = action.status === "succeeded" && result.executed === true && (result.connectorInvoked === true || metadata.connectorInvoked === true) && normalizeArray(result.commands).length > 0;
+  if (verified) return formatted;
+  const pending = ["proposed", "validation_failed", "dry_run_ready", "awaiting_approval", "approved"].includes(action.status);
+  return { ...formatted, summaryFa: pending ? "این اقدام هنوز اجرا نشده؛ پیش‌نمایش و تأیید را در مرکز عملیات تکمیل کنید." : action.status === "executing" ? "در حال اجرای عملیات؛ نتیجه نهایی هنوز ثبت نشده است." : String(result.message ?? result.error ?? "اجرای تأییدشده روی دستگاه ثبت نشده است."),
+    nextActionsFa: pending ? ["همین اقدام را برای بررسی و تأیید باز کنید."] : action.status === "executing" ? ["تا دریافت نتیجه نهایی صبر کنید."] : formatted.nextActionsFa };
 }
