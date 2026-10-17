@@ -1,7 +1,14 @@
 name: firewall-soar
 
+x-bounded-logs: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   secrets-init:
+    logging: *bounded-logs
     image: caddy:2.10-alpine
     network_mode: none
     restart: "no"
@@ -25,6 +32,7 @@ services:
         create_secret /run/firewall-secrets/credential_encryption_key 48
 
   firewall-db:
+    logging: *bounded-logs
     image: postgres:16-alpine
     depends_on:
       secrets-init:
@@ -48,6 +56,7 @@ services:
     stop_grace_period: 30s
 
   firewall-api:
+    logging: *bounded-logs
     image: firewall-soar-api:local
     build:
       context: ./backend
@@ -120,6 +129,7 @@ services:
     stop_grace_period: 30s
 
   firewall-web:
+    logging: *bounded-logs
     image: firewall-soar-web:local
     build:
       context: .
@@ -143,6 +153,7 @@ services:
     restart: unless-stopped
 
   firewall-vpn:
+    logging: *bounded-logs
     image: firewall-soar-api:local
     user: "0:0"
     entrypoint: ["node", "dist/vpn/vpn-agent.js"]
@@ -163,6 +174,7 @@ services:
     stop_grace_period: 20s
 
   gateway:
+    logging: *bounded-logs
     image: caddy:2.10-alpine
     init: true
     depends_on:

@@ -1,5 +1,12 @@
+x-bounded-logs: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *bounded-logs
     image: postgres:16-alpine
     container_name: firewall-log-dev-db
     environment:

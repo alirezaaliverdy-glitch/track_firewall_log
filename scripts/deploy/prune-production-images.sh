@@ -38,6 +38,7 @@ done
 docker image prune --all --force \
   --filter label=io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope=production-app
 
-# Target 2 GB of BuildKit cache; shared/in-use layers may keep Docker's total
-# cache accounting above that target. Containers and volumes are untouched.
-docker buildx prune --force --max-used-space 2gb
+# Keep disposable private build cache small and also seek free-space headroom.
+# Shared/in-use layers, containers and volumes remain untouched. The free-space
+# target is best effort: this must never delete data to achieve it.
+docker buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb

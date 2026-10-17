@@ -65,7 +65,7 @@ case "$available_kb" in
 esac
 if [ "$available_kb" -lt 6291456 ]; then
   echo "Less than 6 GiB free; trimming only reclaimable BuildKit cache before deployment"
-  docker buildx prune --force --max-used-space 2gb
+  docker buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb
   available_kb=$(df -Pk . | awk 'NR == 2 { print $4 }')
 fi
 case "$available_kb" in

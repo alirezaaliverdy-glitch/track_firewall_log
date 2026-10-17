@@ -1,5 +1,12 @@
+x-bounded-logs: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   main-nginx:
+    logging: *bounded-logs
     image: nginx:1.27-alpine
     container_name: firewall-production-nginx
     depends_on:
@@ -19,6 +26,7 @@ services:
     restart: unless-stopped
 
   firewall-web:
+    logging: *bounded-logs
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to an immutable frontend image tag}
     container_name: firewall-production-web
     expose:
@@ -34,6 +42,7 @@ services:
     restart: unless-stopped
 
   firewall-api:
+    logging: *bounded-logs
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable backend image tag}
     container_name: firewall-production-api
     depends_on:
@@ -108,6 +117,7 @@ services:
     restart: unless-stopped
 
   firewall-vpn:
+    logging: *bounded-logs
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to an immutable backend image tag}
     user: "0:0"
     entrypoint: ["node", "dist/vpn/vpn-agent.js"]
@@ -128,6 +138,7 @@ services:
     stop_grace_period: 20s
 
   firewall-db:
+    logging: *bounded-logs
     image: postgres:16-alpine
     container_name: firewall-production-db
     environment:

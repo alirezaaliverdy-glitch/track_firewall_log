@@ -1,7 +1,14 @@
 name: track_firewall_log
 
+x-bounded-logs: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   main-nginx:
+    logging: *bounded-logs
     image: nginx:1.27-alpine
     container_name: main-nginx
     depends_on:
@@ -21,6 +28,7 @@ services:
     restart: unless-stopped
 
   firewall-web:
+    logging: *bounded-logs
     image: ${FRONTEND_IMAGE:-firewall-log-analyzer-web:local}
     build:
       context: .
@@ -43,6 +51,7 @@ services:
     restart: unless-stopped
 
   firewall-api:
+    logging: *bounded-logs
     image: ${BACKEND_IMAGE:-firewall-log-analyzer-api:local}
     build:
       context: ./backend
@@ -132,6 +141,7 @@ services:
     restart: unless-stopped
 
   firewall-vpn:
+    logging: *bounded-logs
     image: ${BACKEND_IMAGE:-firewall-log-analyzer-api:local}
     container_name: firewall-vpn
     user: "0:0"
@@ -155,6 +165,7 @@ services:
     stop_grace_period: 20s
 
   firewall-db:
+    logging: *bounded-logs
     image: postgres:16-alpine
     container_name: firewall-db
     environment:

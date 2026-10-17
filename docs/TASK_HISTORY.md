@@ -1,3 +1,8 @@
+## 2026-10-17 - Limit future disposable-storage growth
+
+- User requested prevention of repeated disk exhaustion. Added bounded container logs in all five Compose variants, private-only build-cache reclamation (512 MB target/8 GB best-effort headroom), and hourly scoped image/cache maintenance sharing the deployment lock. Current images, data, volumes, evidence and active deployments remain protected. Added check-only default and critical-space reporting without destructive fallback.
+- Added six new regression groups; all 22 focused safety checks and resolved logging policies pass. Existing retention/lab/PolicyGuard semantics unchanged. Local API/VPN scoped rebuild/deployment passed; web/release verification and timer installation pending. Deployment run `39046142648` is still in runtime-package installation, not proven successful.
+
 ## 2026-10-17 - Authorized scoped storage cleanup and release retry
 
 - User explicitly approved targeted cleanup. Resolved candidates read-only, verified disabled Snap revisions and exact image/cache consumers, then held the production deployment lock during removal. Removed seven inactive revisions, unlinked downloaded Snap cache, nine exact private/reclaimable build records, the unused certbot image and two APT binary cache files. No global prune, active-image/package removal, user data, databases, logs, volumes or certificate deletion.

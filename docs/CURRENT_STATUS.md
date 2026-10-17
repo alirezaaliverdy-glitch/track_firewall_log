@@ -1,3 +1,8 @@
+## 2026-10-17 - Bounded logs and scheduled disposable-cache maintenance
+
+- Every service in five Compose variants has 10m/3-file log rotation. Private BuildKit cache targets 512 MB and best-effort 8 GB free; unchanged 6-GiB deployment minimum. No shared/current-image or data/volume deletion to meet targets.
+- Added check-only default, explicit scoped apply, deployment-lock skipping, current-image protection and low-space status, plus an hourly deployment-user systemd timer. No automatic recurring Snap/package/audit cleanup. Existing data-retention policies unchanged; finite-disk/data growth still needs capacity monitoring. Twenty-two safety tests and resolved manifest checks pass; final release/timer acceptance pending.
+
 ## 2026-10-17 - Authorized targeted cleanup; release retry pending
 
 - Removed seven disabled Snap revisions, unlinked downloadable Snap cache, nine verified private project build records, one unused certbot image and two regenerable APT binary cache files. Exact targets/consumers were checked and the deployment lock held; no global prune or removal of active services/images, data, logs, volumes or certificates.
