@@ -1,3 +1,9 @@
+## 2026-10-17 - Add reference-inspired light theme and settings selector
+
+- Implemented all-role Settings > Appearance with native keyboard-accessible Light/Dark preview choices, browser persistence, cross-tab sync, first-paint bootstrap and a versioned offline shell asset. Dark remains the initial default; saving failures are disclosed without preventing switching.
+- Unified legacy app color declarations through light-only semantic tokens with exact original dark fallbacks. Added pearl surfaces, white cards, ink text, teal actions, lavender selection, compact desktop sensor layout and mobile settings navigation. Preserved camera image pixels and original login/marketing artwork.
+- Passed final local web build/deployment, production Compose, locale/Persian/UTF-8, three boot and three environment-security tests. Verified 45 migrated stylesheets preserve dark values. Passed 36 synthetic browser captures across appearance, cameras and findings/actions/VPN with zero errors/overflow; no real vendor/provider invocation. Text contrast sampled on white surfaces, persistence, keyboard, cross-tab, viewer, English and blocked-storage behavior verified. Desktop/mobile/dialog/media/security captures reviewed; five local services healthy, UI/boot asset/readiness 200 and anonymous cameras 401. No backend/schema/protected execution changes or production push.
+
 ## 2026-10-16 - Refresh camera workspace UI and repair playback interaction
 
 - Deferred proprietary cloud integration at the operator's request; implemented only the existing camera workspace UI/interaction scope. No customer/provider credentials, vendor configuration, backend migration or server release.

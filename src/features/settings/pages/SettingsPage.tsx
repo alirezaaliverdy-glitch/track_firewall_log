@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AuthApiError, createManagedUser, deleteManagedUser, listManagedUsers, listSessions, resetManagedUserPassword, revokeSession, updateManagedUser, type ApplicationSection, type AuthSession, type AuthUser, type ManagedUser, type UserAccessCatalog } from "@/lib/auth";
 import { CredentialManager } from "@/features/settings/components/CredentialManager";
 import { AiProviderSettings } from "../components/AiProviderSettings";
+import { AppearanceSettings } from "../components/AppearanceSettings";
 import "./SettingsPage.css";
 
 const sectionMeta: Record<ApplicationSection, { fa: string; en: string; hintFa: string; hintEn: string; icon: typeof LayoutDashboard; tone: string }> = {
@@ -42,7 +43,7 @@ export default function SettingsPage() {
   const isFa = i18n.resolvedLanguage?.startsWith("fa") ?? true;
   const locale = isFa ? "fa-IR" : "en-US";
   const isAdmin = user?.role === "admin";
-  const [tab, setTab] = useState<"users" | "credentials" | "account" | "ai">(() => isAdmin && new URLSearchParams(window.location.search).get("tab") === "ai" ? "ai" : isAdmin && new URLSearchParams(window.location.search).get("tab") === "credentials" ? "credentials" : isAdmin ? "users" : "account");
+  const [tab, setTab] = useState<"users" | "credentials" | "account" | "ai" | "appearance">(() => new URLSearchParams(window.location.search).get("tab") === "appearance" ? "appearance" : isAdmin && new URLSearchParams(window.location.search).get("tab") === "ai" ? "ai" : isAdmin && new URLSearchParams(window.location.search).get("tab") === "credentials" ? "credentials" : isAdmin ? "users" : "account");
 
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [catalog, setCatalog] = useState<UserAccessCatalog | null>(null);
@@ -214,13 +215,14 @@ export default function SettingsPage() {
   return <section className="page-stack settings-hub">
     <PageHeader title={isFa ? "کاربران و تنظیمات" : "Users and settings"} eyebrow={isFa ? "مدیریت امن و ساده" : "Simple, secure administration"} description={isFa ? "حساب‌ها، سطح دسترسی و امنیت حساب خود را از یک نقطه مدیریت کنید." : "Manage accounts, access scope and your account security in one place."} />
     <div className="settings-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected={tab === "appearance"} className={tab === "appearance" ? "is-active" : ""} onClick={() => setTab("appearance")}><Eye />{isFa ? "ظاهر برنامه" : "Appearance"}</button>
       {isAdmin ? <button type="button" role="tab" aria-selected={tab === "ai"} className={tab === "ai" ? "is-active" : ""} onClick={() => setTab("ai")}><Bot />OpenRouter</button> : null}
       {isAdmin ? <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "is-active" : ""} onClick={() => setTab("users")}><UsersRound />{isFa ? "کاربران و دسترسی‌ها" : "Users and access"}</button> : null}
       {isAdmin ? <button type="button" role="tab" aria-selected={tab === "credentials"} className={tab === "credentials" ? "is-active" : ""} onClick={() => setTab("credentials")}><KeyRound />{isFa ? "اعتبارنامه‌های دستگاه" : "Device credentials"}</button> : null}
       <button type="button" role="tab" aria-selected={tab === "account"} className={tab === "account" ? "is-active" : ""} onClick={() => setTab("account")}><ShieldCheck />{isFa ? "امنیت حساب من" : "My account security"}</button>
     </div>
 
-    {tab === "users" && isAdmin ? <div className="user-management-workspace">
+    {tab === "appearance" ? <AppearanceSettings isFa={isFa} /> : tab === "users" && isAdmin ? <div className="user-management-workspace">
       <section className="user-overview"><div data-tone="cyan"><UsersRound /><span>{isFa ? "کل حساب‌ها" : "All accounts"}<strong>{counts.all}</strong></span></div><div data-tone="emerald"><ShieldCheck /><span>{isFa ? "فعال" : "Active"}<strong>{counts.active}</strong></span></div><div data-tone="violet"><KeyRound /><span>{isFa ? "مدیر" : "Admins"}<strong>{counts.admins}</strong></span></div></section>
       <section className="users-panel"><header className="users-toolbar"><div><h2>{isFa ? "حساب‌های سامانه" : "Platform accounts"}</h2><p>{isFa ? "نقش، بخش‌های قابل مشاهده و وضعیت هر کاربر را تعیین کنید." : "Control each user's role, visible sections and status."}</p></div><div className="users-toolbar__actions"><label className="users-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={isFa ? "جست‌وجوی کاربر..." : "Search users..."} /></label><button type="button" className="primary-button" onClick={() => openEditor()}><Plus />{isFa ? "افزودن حساب" : "Add account"}</button></div></header>
         {usersError ? <p className="settings-error" role="alert">{usersError}<button type="button" onClick={() => void loadUsers()}>{isFa ? "تلاش دوباره" : "Retry"}</button></p> : null}

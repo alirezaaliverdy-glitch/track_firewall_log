@@ -1,0 +1,150 @@
+/* Light palette: pearl surfaces, ink text, teal actions and lavender selection.
+   --theme-* values are intentionally absent in dark mode: migrated legacy
+   declarations retain their original colors via explicit fallbacks. */
+html[data-theme="light"] {
+  --theme-surface: #fff;
+  --theme-text: #17263f;
+  --theme-muted: #53667d;
+  --theme-border: #dce4ee;
+  --theme-accent: #087c85;
+  --theme-success: #137650;
+  --theme-warning: #956008;
+  --theme-danger: #b52c49;
+  --theme-blue: #2b62ac;
+  --theme-violet: #7150af;
+  --color-background: #f4f6fb;
+  --color-surface: #fff;
+  --color-surface-strong: #fff;
+  --color-border: #dce4ee;
+  --color-border-strong: #b8c9d8;
+  --color-text: #17263f;
+  --color-muted: #53667d;
+  --color-primary: #087c85;
+  --color-primary-strong: #06636e;
+  --color-success: #137650;
+  --color-warning: #956008;
+  --color-danger: #b52c49;
+  --color-info: #2b62ac;
+  --severity-critical: #b52c49;
+  --severity-high: #ad4e16;
+  --severity-medium: #956008;
+  --severity-low: #087c85;
+  --app-bg: #f4f6fb;
+  --app-panel: #fff;
+  --app-panel-strong: #fff;
+  --app-border: #dce4ee;
+  --app-border-active: #8db8c1;
+  --app-text: #17263f;
+  --app-muted: #53667d;
+  --app-accent: #087c85;
+  --soc-bg: #f4f6fb;
+  --soc-surface: #fff;
+  --soc-surface-2: #eef2f8;
+  --soc-elevated: #fff;
+  --soc-border: #dce4ee;
+  --soc-border-strong: #b8c9d8;
+  --soc-text: #17263f;
+  --soc-muted: #53667d;
+  --soc-faint: #64748b;
+  --soc-cyan: #087c85;
+  --soc-success: #137650;
+  --soc-warning: #956008;
+  --soc-danger: #b52c49;
+  --background: #f4f6fb;
+  --foreground: #17263f;
+  --card: #fff;
+  --card-foreground: #17263f;
+  --popover: #fff;
+  --popover-foreground: #17263f;
+  --primary: #087c85;
+  --primary-foreground: #fff;
+  --secondary: #edf1f8;
+  --secondary-foreground: #253851;
+  --muted: #edf1f8;
+  --muted-foreground: #53667d;
+  --accent: #efebff;
+  --accent-foreground: #6445ab;
+  --destructive: #b52c49;
+  --border: #dce4ee;
+  --input: #c6d2e0;
+  --ring: #087c85;
+  --chart-1: #0e9f9c;
+  --chart-2: #8a70e6;
+  --chart-3: #398fca;
+  --chart-4: #d58c21;
+  --chart-5: #c74b67;
+  --sidebar: #fff;
+  --sidebar-foreground: #17263f;
+  --sidebar-accent: #efebff;
+  --sidebar-accent-foreground: #6445ab;
+  --sidebar-border: #dce4ee;
+  --shadow-panel: 0 7px 30px rgba(40,62,99,.045);
+  --focus-ring: 0 0 0 3px rgba(8,124,133,.18);
+}
+
+html[data-theme="light"] body,
+html[data-theme="light"] .authenticated-app { background:var(--app-bg); }
+html[data-theme="light"] .app-background { background:radial-gradient(ellipse at 90% 0%,#f0edff 0,transparent 40%),#f4f6fb; }
+html[data-theme="light"] :is(.app-background__grid,.app-background__glow,.app-background__network,.app-background__particles,.app-background__scan,.app-background__vignette,.platform-sidebar__aurora) { display:none; }
+html[data-theme="light"] :is(.platform-sidebar,.platform-topbar,.platform-bottom-nav,.topbar-account__menu) { background:#fff;box-shadow:0 4px 22px rgba(35,53,86,.035);border-color:var(--app-border); }
+html[data-theme="light"] .platform-nav-group.is-active { background:#efebff;border-color:#ded5fa; }
+html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label { color:#684db7; }
+html[data-theme="light"] :is(.platform-sidebar__brand-copy strong,.topbar-current strong) { color:var(--app-text); }
+html[data-theme="light"] .platform-sidebar__brand-mark { background:#f2f5ff;border-color:#d4dfee; }
+html[data-theme="light"] :is(.topbar-create,.primary-button,.camera-button--primary) { background:linear-gradient(115deg,#0a9199,#087883);color:#fff;border-color:#108e94;box-shadow:0 5px 14px rgba(8,124,133,.12); }
+html[data-theme="light"] :is(.page-header,.dashboard-hero,.dashboard-section,.dashboard-kpi,.fleet-health-card,.camera-device-card,.camera-wall,.appearance-settings) { box-shadow:var(--shadow-panel); }
+html[data-theme="light"] :is(input,textarea,select) { color:var(--app-text);color-scheme:light; }
+html[data-theme="light"] :is(input,textarea)::placeholder { color:#687b90;opacity:1; }
+html[data-theme="light"] :is(.cameras-page,.camera-dialog) { --camera-accent:#087c85;--camera-muted:#53667d;--camera-border:#dce4ee; }
+html[data-theme="light"] .camera-overview__item { --stat-color:#7150af; }
+html[data-theme="light"] .camera-overview__item--verified { --stat-color:#137650; }
+html[data-theme="light"] .camera-overview__item--attention { --stat-color:#956008; }
+html[data-theme="light"] .camera-device-card { background:#fff; }
+html[data-theme="light"] .camera-device-card--nvr { border-color:#d9cef4; }
+html[data-theme="light"] .camera-filter button[aria-pressed="true"] { color:#684db7;background:#efebff;border-color:#d9cef4; }
+/* Media itself is never recolored; retain an intentional dark video stage. */
+html[data-theme="light"] .camera-player__image { background:#040a10;color:#e6f3fb; }
+html[data-theme="light"] :is(.camera-player__paused,.camera-player__error) { --theme-surface:initial;--theme-text:initial;--theme-muted:initial;--theme-accent:initial;--theme-warning:initial;--theme-blue:initial; }
+html[data-theme="light"] .camera-player__overlay { color:#e6f3fb; }
+html[data-theme="light"] :is(.recharts-cartesian-axis-tick-value,.recharts-text) { fill:var(--app-muted); }
+html[data-theme="light"] .recharts-cartesian-grid line { stroke:#dce4ee; }
+html[data-theme="light"] :is(.recharts-default-tooltip,.recharts-tooltip-wrapper) { color:var(--app-text); }
+/* Older utility-based panels share the same palette as the component styles. */
+html[data-theme="light"] :is(.bg-slate-950,.bg-slate-900,.bg-gray-900,.bg-gray-950) { background-color:var(--app-panel); }
+html[data-theme="light"] :is(.text-slate-100,.text-slate-200,.text-gray-100,.text-gray-200) { color:var(--app-text); }
+html[data-theme="light"] :is(.text-slate-300,.text-slate-400,.text-gray-300,.text-gray-400) { color:var(--app-muted); }
+html[data-theme="light"] :is(.border-slate-700,.border-slate-800,.border-gray-700,.border-gray-800) { border-color:var(--app-border); }
+html[data-theme="light"] .dashboard-command-center {
+  --command-bg:#fff;--command-border:#dce4ee;--command-muted:#53667d;
+  --command-cyan:#087c85;--command-green:#137650;--command-red:#b52c49;
+  --command-orange:#956008;--command-violet:#7150af;
+}
+html[data-theme="light"] .fleet-summary-resources dd { background:#edf1f6; }
+html[data-theme="light"] .fleet-status.is-online { background:#e9f8f1;color:#137650;border-color:#c9e8db; }
+html[data-theme="light"] .fleet-status.is-offline { background:#fff0f2;color:#b52c49;border-color:#f2d0d9; }
+html[data-theme="light"] .fleet-health-grid { gap:18px; }
+html[data-theme="light"] .fleet-device { box-shadow:none; }
+html[data-theme="light"] .fleet-device:nth-child(3n+1) { border-top:3px solid #66bfb3; }
+html[data-theme="light"] .fleet-device:nth-child(3n+2) { border-top:3px solid #b3a0e7; }
+html[data-theme="light"] .fleet-device:nth-child(3n+3) { border-top:3px solid #7caed5; }
+html[data-theme="light"] :is(.command-panel,.platform-sidebar__profile,.camera-device-card:hover) { box-shadow:var(--shadow-panel); }
+html[data-theme="light"] .camera-device-card { --tile-accent:#087c85; }
+html[data-theme="light"] .camera-device-card--nvr { --tile-accent:#7150af; }
+html[data-theme="light"] .camera-device-card.has-error { --tile-accent:#956008; }
+html[data-theme="light"] .platform-nav-group__label>svg { color:#637a93; }
+html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label>svg { color:#7859ca; }
+html[data-theme="light"] .fleet-summary-visual { grid-template-columns:1fr;gap:18px; }
+html[data-theme="light"] .fleet-summary-dial { width:100%;aspect-ratio:auto;background:none; }
+html[data-theme="light"] .fleet-summary-dial::before { display:none; }
+html[data-theme="light"] .fleet-summary-dial>div { display:flex;width:100%;align-items:center;gap:8px;justify-content:space-between; }
+html[data-theme="light"] .fleet-summary-dial strong { font-size:18px; }
+html[data-theme="light"] .fleet-summary-dial em { display:none; }
+html[data-theme="light"] .fleet-summary-resources>div { gap:8px; }
+html[data-theme="light"] .fleet-summary-resources dt svg { color:var(--app-accent); }
+html[data-theme="light"] .fleet-summary-resources>div:nth-child(2) dt svg { color:#7150af; }
+html[data-theme="light"] .fleet-summary-resources>div:nth-child(3) dt svg { color:#956008; }
+@media(min-width:1250px){html[data-theme="light"] .fleet-health-grid {grid-template-columns:repeat(3,minmax(0,1fr));}}
+/* Login and public marketing retain their original art direction. */
+html[data-theme="light"] :is(.eos-login,.landing) { --theme-surface:initial;--theme-text:initial;--theme-muted:initial;--theme-border:initial;--theme-accent:initial;--theme-success:initial;--theme-warning:initial;--theme-danger:initial;--theme-blue:initial;--theme-violet:initial; }
+html[data-theme="light"] .eos-login input { color:#e5edf7;color-scheme:dark; }
+html[data-theme="light"] .eos-login input::placeholder { color:#8296bb; }

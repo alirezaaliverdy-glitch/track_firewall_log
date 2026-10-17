@@ -9,6 +9,7 @@ import { getMobilePreference, setMobilePreference } from "@/lib/mobileStorage";
 import { clearNativeServerUrl, isNativeAndroidApp } from "@/mobile/nativeServerConfig";
 import { clearNativeSessionToken } from "@/mobile/nativeSession";
 import EosnetLogo from "@/components/branding/EosnetLogo";
+import { useAppearance } from "@/lib/appearance";
 import "./AppShellNavigation.css";
 import "./AppShellTopbar.css";
 // Load the final mobile overrides after the desktop navigation skin. The navigation
@@ -60,6 +61,7 @@ function deferAfterFirstPaint(callback: () => void) {
 }
 
 export function AppShell({ children, currentGroup = "dashboard" }: { children: ReactNode; currentGroup?: string }) {
+  useAppearance(); // Keep appearance synchronized between browser tabs on every route.
   const { user, logout } = useAuth();
   const { t, i18n } = useTranslation();
   const location = useLocation();

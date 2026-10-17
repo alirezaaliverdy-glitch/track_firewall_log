@@ -1,3 +1,9 @@
+## 2026-10-17 - Optional light appearance (local only)
+
+- Settings > Appearance exposes Light/Dark visual choices to all roles. The saved browser preference applies before render, persists across reloads and synchronizes tabs; blocked storage remains usable with honest feedback. Dark is still the default.
+- Added a white/pearl palette with teal actions, lavender selections, readable semantic statuses and compact desktop sensor cards. Migrated 45 application stylesheets with original dark fallback values preserved. Camera images are untouched; login/marketing retain their branded artwork. Mobile settings tabs are horizontally scrollable.
+- Final frontend build/scoped web deployment, production Compose, locale/UTF-8 and six focused boot/environment tests pass. Browser acceptance: 36 synthetic captures (11 appearance, 18 cameras, seven finding/action/VPN), no runtime errors or overflow; sampled text contrast, persistence, cross-tab/keyboard/viewer/English/blocked-storage behavior pass. Representative captures visually reviewed. Five local services healthy, UI/bootstrap/readiness 200 and anonymous cameras 401. No backend/schema/action-policy changes, real vendor mutation, push or production rollout.
+
 ## 2026-10-16 - Camera workspace design and playback usability (local only)
 
 - Cloud ID work is deferred at the operator's request. No vendor cloud credentials, new cloud connectivity, real camera operation or production publication was performed.

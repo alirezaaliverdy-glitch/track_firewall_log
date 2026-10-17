@@ -9,6 +9,7 @@ import puppeteer from "puppeteer-core";
 const base = process.env.QA_BASE_URL || "http://host.docker.internal/firewall";
 const browser = await puppeteer.launch({ executablePath: "/usr/bin/chromium-browser", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
 const page = await browser.newPage(); await page.setBypassServiceWorker(true);
+if (process.env.QA_APPEARANCE === "light") await page.evaluateOnNewDocument(() => localStorage.setItem("eosnet.appearance", "light"));
 await page.evaluateOnNewDocument(() => localStorage.setItem("firewall-log-analyzer.locale", "fa"));
 const errors = []; page.on("pageerror", error => errors.push(error.message));
 page.on("console", message => { if (message.type() === "error") errors.push(message.text().slice(0, 1200)); });

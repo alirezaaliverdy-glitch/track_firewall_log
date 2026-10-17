@@ -6,6 +6,7 @@ const image = execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-f"
 const browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH ?? "/usr/bin/chromium-browser", headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
 const page = await browser.newPage(), errors = [];
 await page.setBypassServiceWorker(true);
+if (process.env.QA_APPEARANCE === "light") await page.evaluateOnNewDocument(() => localStorage.setItem("eosnet.appearance", "light"));
 const base = process.env.QA_BASE_URL || "http://host.docker.internal/firewall";
 let executions = 0;
 let frameRequests = 0;

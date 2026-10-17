@@ -16,6 +16,7 @@ const [serviceWorker, indexHtml, assetNames] = await Promise.all([
 
 const buildFingerprint = createHash("sha256")
   .update(indexHtml)
+  .update(await readFile(path.join(distRoot, "appearance.js")))
   .update(assetNames.sort().join("\n"))
   .digest("hex")
   .slice(0, 16);
