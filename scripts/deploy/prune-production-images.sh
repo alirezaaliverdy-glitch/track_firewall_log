@@ -41,4 +41,4 @@ docker image prune --all --force \
 # Keep disposable private build cache small and also seek free-space headroom.
 # Shared/in-use layers, containers and volumes remain untouched. The free-space
 # target is best effort: this must never delete data to achieve it.
-docker buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb
+docker buildx prune --force --filter 'private=""' --max-used-space 512mb --min-free-space 8gb

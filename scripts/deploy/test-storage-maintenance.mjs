@@ -25,7 +25,7 @@ case "$*" in
   'inspect --format '*container-web) [ "$FIXTURE_BAD_ID" = 1 ] && printf invalid || printf 'sha256:${'1'.repeat(64)}' ;;
   'inspect --format '*container-api) printf 'sha256:${'2'.repeat(64)}' ;;
   'image prune --all --force --filter label=io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope=production-app') : ;;
-  'buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb') : ;;
+  'buildx prune --force --filter private="" --max-used-space 512mb --min-free-space 8gb') : ;;
   *) echo 'Unexpected fixture Docker command' >&2; exit 98 ;;
 esac`);
     const result = spawnSync('sh', [join(scripts, 'maintain-production-storage.sh'), ...args], {
@@ -43,7 +43,7 @@ test('storage check is non-destructive by default', () => {
 test('apply preserves current images and scopes both image and private-cache cleanup', () => {
   const result = simulate(['--apply']); assert.equal(result.status, 0, result.stderr);
   assert.match(result.calls, /image prune --all --force --filter label=io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope=production-app/);
-  assert.match(result.calls, /buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb/);
+  assert.match(result.calls, /buildx prune --force --filter private="" --max-used-space 512mb --min-free-space 8gb/);
   assert.doesNotMatch(result.calls, /image rm|system prune|volume|container prune/);
 });
 test('maintenance skips active deployments and cannot prune without live app images', () => {

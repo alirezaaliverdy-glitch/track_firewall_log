@@ -1,5 +1,6 @@
 ## 2026-10-17 - Bounded logs and scheduled disposable-cache maintenance
 
+- Recovery: an interrupted build left stale Docker/BuildKit leases. Explicitly approved daemon restart restored all five healthy services; a further 4.689 GB cache was reclaimed and free capacity reached about 8.4 GiB. Corrected Docker's private-cache selector to the verified presence expression `private=""`; added real Docker-backed CI inventory equality so an empty, ineffective filter cannot silently pass. Final release/timer acceptance remains pending.
 - Every service in five Compose variants has 10m/3-file log rotation. Private BuildKit cache targets 512 MB and best-effort 8 GB free; unchanged 6-GiB deployment minimum. No shared/current-image or data/volume deletion to meet targets.
 - Added check-only default, explicit scoped apply, deployment-lock skipping, current-image protection and low-space status, plus an hourly deployment-user systemd timer. No automatic recurring Snap/package/audit cleanup. Existing data-retention policies unchanged; finite-disk/data growth still needs capacity monitoring. Twenty-two safety tests and resolved manifest checks pass; final release/timer acceptance pending.
 

@@ -19,7 +19,7 @@ calls=
 set -- "$one" "$two" "$three" "$four"
 . scripts/deploy/prune-production-images.sh
 case "$calls" in
-  *"image rm $one"*"image rm $two"*"image prune --all --force --filter label=io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope=production-app"*"buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb"*) ;;
+  *"image rm $one"*"image rm $two"*"image prune --all --force --filter label=io.github.alirezaaliverdy-glitch.track-firewall-log.cleanup-scope=production-app"*'buildx prune --force --filter private="" --max-used-space 512mb --min-free-space 8gb'*) ;;
   *) echo "Expected only superseded application images and bounded cache to be removed" >&2; exit 1 ;;
 esac
 
@@ -28,7 +28,7 @@ set -- "$one" "$two" "$one" "$four"
 . scripts/deploy/prune-production-images.sh
 case "$calls" in
   *"image rm $one"*) echo "Current web image must not be removed" >&2; exit 1 ;;
-  *"image rm $two"*"buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb"*) ;;
+  *"image rm $two"*'buildx prune --force --filter private="" --max-used-space 512mb --min-free-space 8gb'*) ;;
   *) echo "Expected only superseded API image to be removed" >&2; exit 1 ;;
 esac
 
@@ -37,7 +37,7 @@ set -- "$one" "$one" "$three" "$four"
 . scripts/deploy/prune-production-images.sh
 case "$calls" in
   *"image rm $one"*"image rm $one"*) echo "Duplicate old image must be removed only once" >&2; exit 1 ;;
-  *"image rm $one"*"buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb"*) ;;
+  *"image rm $one"*'buildx prune --force --filter private="" --max-used-space 512mb --min-free-space 8gb'*) ;;
   *) echo "Expected shared old image to be removed once" >&2; exit 1 ;;
 esac
 
@@ -47,7 +47,7 @@ set -- "$one" "$two" "$three" "$four"
 . scripts/deploy/prune-production-images.sh
 case "$calls" in
   *"image rm $one"*) echo "Already-absent old image must be skipped" >&2; exit 1 ;;
-  *"image rm $two"*"buildx prune --force --filter shared=false --max-used-space 512mb --min-free-space 8gb"*) ;;
+  *"image rm $two"*'buildx prune --force --filter private="" --max-used-space 512mb --min-free-space 8gb'*) ;;
   *) echo "Cleanup did not continue after an old image was absent" >&2; exit 1 ;;
 esac
 unset missing_image

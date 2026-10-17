@@ -154,6 +154,7 @@ jobs:
           sh -n scripts/deploy/verify-main-server.sh
           node --test scripts/deploy/test-migration-role.mjs scripts/deploy/test-streamed-deploy.mjs scripts/deploy/test-gateway-probe.mjs scripts/deploy/test-storage-maintenance.mjs
           docker run --rm -v "$PWD:/workspace:ro" -w /workspace node:22-alpine node --test scripts/deploy/test-runtime-tools.mjs
+          node --test scripts/deploy/test-buildkit-cache-filter.mjs
           sh -n scripts/deploy/prune-production-images.sh
           sh scripts/deploy/test-prune-production-images.sh
 
