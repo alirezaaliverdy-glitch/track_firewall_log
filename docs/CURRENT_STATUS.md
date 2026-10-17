@@ -1,3 +1,8 @@
+## 2026-10-17 - Pushed release blocked by stale deployment test
+
+- Remote main contains `44da7df`; CI run `39037168693` passed frontend/backend but failed the streamed-deploy safety test (`5 !== 4`, `test-streamed-deploy.mjs:18`). Community migration added a fifth database probe; the test still expects four. All five use detached stdin.
+- Production deploy job was skipped. Read-only SSH confirms checkout/deploy marker `934391d`, five healthy services and public dashboard/readiness HTTP 200. No server update or runtime fix performed; this request was diagnostic only. Local reproduction could not start because Docker Desktop's Linux daemon was stopped; CI and source inspection confirm the issue.
+
 ## 2026-10-17 - Managed admins and verified incident response (local only)
 
 - Fixed newly created/promoted admin visibility and audit-proven legacy creator management while preserving unrelated-admin privacy and independent admin asset scope.

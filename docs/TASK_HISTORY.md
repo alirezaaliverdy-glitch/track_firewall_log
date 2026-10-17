@@ -1,3 +1,9 @@
+## 2026-10-17 - Diagnose pushed changes missing from production
+
+- Compared remote main `44da7df`, GitHub CI run `39037168693`, server checkout/deploy marker `934391d` and live service health using read-only checks. Push succeeded; automatic production deployment was skipped after its Compose job failed.
+- Sanitized CI failure identifies the stale database-probe count assertion (`5 !== 4`) in `test-streamed-deploy.mjs:18`; the newly added community migration explains the fifth correctly stdin-detached probe. Frontend/backend jobs passed. Public dashboard/readiness return 200; all five production services healthy on the previous release.
+- No source fix, workflow rerun, push or production mutation. Attempted local reproduction could not start with Docker's daemon stopped; no local passing-test claim. Await explicit fix/publication authorization.
+
 ## 2026-10-17 - Fix admin visibility and strengthen evidence-backed responses
 
 - Preserved manager linkage across admin creation/promotion; recovered legacy orphan admins only through creator audit evidence. Tested reset/manage access and independent-admin isolation without widening asset access.
