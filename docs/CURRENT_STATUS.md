@@ -1,3 +1,8 @@
+## 2026-10-17 - Authorized targeted cleanup; release retry pending
+
+- Removed seven disabled Snap revisions, unlinked downloadable Snap cache, nine verified private project build records, one unused certbot image and two regenerable APT binary cache files. Exact targets/consumers were checked and the deployment lock held; no global prune or removal of active services/images, data, logs, volumes or certificates.
+- Recovered about 2.58 GiB; free space 6,407,488 KiB now exceeds unchanged 6-GiB minimum. Five services healthy. Integration Actions-write permission does not allow a failed-job retry, so normal authorized push/CI retry follows. Production acceptance is not complete yet.
+
 ## 2026-10-17 - Durable deployment test fix published; production blocked by disk
 
 - Removed fixed probe count; each database probe is checked and exercised through a stdin-consuming shell stub. Required migration preflights cannot disappear; safe future checks pass without count edits and missing guards fail.

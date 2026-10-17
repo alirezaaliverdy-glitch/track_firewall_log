@@ -1,3 +1,8 @@
+## 2026-10-17 - Authorized scoped storage cleanup and release retry
+
+- User explicitly approved targeted cleanup. Resolved candidates read-only, verified disabled Snap revisions and exact image/cache consumers, then held the production deployment lock during removal. Removed seven inactive revisions, unlinked downloaded Snap cache, nine exact private/reclaimable build records, the unused certbot image and two APT binary cache files. No global prune, active-image/package removal, user data, databases, logs, volumes or certificate deletion.
+- Free space increased from 3,702,972 to 6,407,488 KiB (about 2.58 GiB); original 6-GiB guard now passes and five services remain healthy. Cache/image artifacts can be rebuilt/downloaded; removed old Snap revisions are not available for immediate rollback. Integration failed-job retry returned Actions-write 403, so authorized normal push/full CI is the release retry path. Final deployment verification pending.
+
 ## 2026-10-17 - Prevent fixed-count deployment test regressions
 
 - User authorized correction, push and production acceptance. Replaced stale numeric probe assertion with required-migration coverage, per-probe detached-stdin validation and real streamed-shell simulation; added future-probe, unsafe-extra, guard-removal and missing-required-check regressions.
