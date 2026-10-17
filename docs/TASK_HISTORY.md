@@ -1,3 +1,8 @@
+## 2026-10-17 - Prevent fixed-count deployment test regressions
+
+- User authorized correction, push and production acceptance. Replaced stale numeric probe assertion with required-migration coverage, per-probe detached-stdin validation and real streamed-shell simulation; added future-probe, unsafe-extra, guard-removal and missing-required-check regressions.
+- Split CI deployment-safety tests into a named step and added exact post-install server revision/migration/health verification before success summary. Application runtime and controlled execution unchanged. Local Compose/shell/safety validation passes; publication acceptance follows push.
+
 ## 2026-10-17 - Diagnose pushed changes missing from production
 
 - Compared remote main `44da7df`, GitHub CI run `39037168693`, server checkout/deploy marker `934391d` and live service health using read-only checks. Push succeeded; automatic production deployment was skipped after its Compose job failed.

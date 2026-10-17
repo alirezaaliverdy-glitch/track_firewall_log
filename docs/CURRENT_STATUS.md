@@ -1,3 +1,8 @@
+## 2026-10-17 - Durable deployment test fix (release in progress)
+
+- Removed fixed probe count; each database probe is checked and exercised through a stdin-consuming shell stub. Required migration preflights cannot disappear; safe future checks pass without count edits and missing guards fail.
+- CI separates deployment-safety testing and now verifies actual server SHA/deploy marker, migrations, five service health checks and public gateway readiness before reporting release success. All five Compose manifests and deployment shell tests pass locally. No application/PolicyGuard/lab behavior change. Push/release verification authorized and in progress.
+
 ## 2026-10-17 - Pushed release blocked by stale deployment test
 
 - Remote main contains `44da7df`; CI run `39037168693` passed frontend/backend but failed the streamed-deploy safety test (`5 !== 4`, `test-streamed-deploy.mjs:18`). Community migration added a fifth database probe; the test still expects four. All five use detached stdin.

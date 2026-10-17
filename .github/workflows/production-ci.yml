@@ -145,6 +145,9 @@ jobs:
           docker compose -f docker-compose.staging.yml config
           docker compose -f docker-compose.production.yml config
           docker compose -f docker-compose.firewall.yml config
+
+      - name: Test deployment safety and migration preflights
+        run: |
           sh -n scripts/deploy/update-main-server.sh
           sh -n scripts/deploy/verify-main-server.sh
           node --test scripts/deploy/test-migration-role.mjs scripts/deploy/test-streamed-deploy.mjs scripts/deploy/test-gateway-probe.mjs
@@ -209,3 +212,24 @@ jobs:
             -o ServerAliveCountMax=20 \
             "$SSH_USER@$SSH_HOST" \
             "sh -s -- '$DEPLOY_PATH' '$DEPLOY_SHA'" < scripts/deploy/update-main-server.sh
+
+      - name: Verify deployed commit, migrations and service health
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          ssh -p "$SSH_PORT" \
+            -i ~/.ssh/deploy_key \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            "$SSH_USER@$SSH_HOST" \
+            "cd '$DEPLOY_PATH' && sh scripts/deploy/verify-main-server.sh '$DEPLOY_SHA'"
+          printf 'Verified production commit: `%s`\n\nCheckout, deploy marker, migrations, service health and public gateway checks passed.\n' "$DEPLOY_SHA" >> "$GITHUB_STEP_SUMMARY"
