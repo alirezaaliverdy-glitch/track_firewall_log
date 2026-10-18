@@ -20,7 +20,7 @@ function apply(value: Appearance) {
   document.documentElement.dataset.theme = value;
   document.documentElement.classList.toggle("dark", value === "dark");
   document.documentElement.style.colorScheme = value;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", value === "light" ? "#f4f6fb" : "#07111a");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", value === "light" ? "#f8fafc" : "#07111a");
 }
 
 function subscribe(notify: () => void) {

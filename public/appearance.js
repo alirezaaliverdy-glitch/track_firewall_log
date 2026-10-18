@@ -7,5 +7,5 @@
   root.classList.toggle("dark", theme === "dark");
   root.style.colorScheme = theme;
   var meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = theme === "light" ? "#f4f6fb" : "#07111a";
+  if (meta) meta.content = theme === "light" ? "#f8fafc" : "#07111a";
 })();

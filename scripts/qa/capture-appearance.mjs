@@ -36,7 +36,13 @@ async function setup(page){
   });
 }
 async function capture(page,name){
+  // Switching mobile emulation may reload the page. Never accept a loading
+  // screen as a successful responsive workspace screenshot.
+  const ready=name.includes('dashboard')?'.fleet-device':name.includes('camera')?'.camera-device-card':'.appearance-settings';
+  await page.waitForSelector(ready,{visible:true});
   await page.evaluate(()=>document.fonts.ready);
+  const headings=await page.$$eval('.authenticated-app :is(h1,h2,h3,h4),dialog[open] :is(h1,h2,h3,h4)',nodes=>nodes.filter(el=>el.getClientRects().length).map(el=>({tag:el.tagName,size:getComputedStyle(el).fontSize,weight:getComputedStyle(el).fontWeight})));
+  for(const heading of headings){assert.equal(heading.size,({H1:'24px',H2:'21px',H3:'18px',H4:'16px'})[heading.tag],`${name}: ${heading.tag} hierarchy`);assert.equal(heading.weight,'700',`${name}: heading weight`);}
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${name}: overflow`);
   await page.screenshot({path:`/out/${name}.png`,fullPage:true});captures++;
 }
@@ -46,7 +52,7 @@ async function checkTextContrast(page,selector){
     const linear=rgb.map(n=>{const v=n/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});
     return 1.05/(linear[0]*.2126+linear[1]*.7152+linear[2]*.0722+.05);
   }));
-  assert.ok(ratios.length>0);assert.ok(ratios.every(ratio=>ratio>=4.5),`${selector}: text contrast on white`);
+  assert.ok(ratios.length>0);assert.ok(ratios.every(ratio=>ratio>=4.5),`${selector}: text contrast on white ${ratios.map(n=>n.toFixed(2)).join(', ')}`);
 }
 const page=await browser.newPage();await setup(page);
 try{
@@ -58,7 +64,10 @@ try{
   await page.click('.appearance-option--light');
   assert.equal(await page.$eval('html',el=>el.dataset.theme),'light');
   assert.equal(await page.evaluate(()=>localStorage.getItem('eosnet.appearance')),'light');
-  assert.equal(await page.$eval('body',el=>getComputedStyle(el).backgroundColor),'rgb(244, 246, 251)');
+  assert.equal(await page.$eval('body',el=>getComputedStyle(el).backgroundColor),'rgb(248, 250, 252)');
+  const palette=await page.$eval('html',el=>Object.fromEntries(['--app-text','--app-muted','--app-border','--primary','--brand-teal','--status-healthy','--status-warning','--status-critical'].map(key=>[key,getComputedStyle(el).getPropertyValue(key).trim()])));
+  assert.deepEqual(palette,{'--app-text':'#0f172a','--app-muted':'#475569','--app-border':'#e2e8f0','--primary':'#4f46e5','--brand-teal':'#0d9488','--status-healthy':'#10b981','--status-warning':'#f59e0b','--status-critical':'#f43f5e'});
+  assert.equal(await page.$eval('.topbar-create',el=>getComputedStyle(el).backgroundColor),'rgb(79, 70, 229)');
   await capture(page,'appearance-light-settings');
   await checkTextContrast(page,'.appearance-settings h2,.appearance-settings p');
   await page.reload({waitUntil:'networkidle0'});
@@ -74,6 +83,12 @@ try{
   assert.ok(await page.$eval('.fleet-summary-dial',el=>getComputedStyle(el).backgroundImage.includes('conic-gradient')),'light health gauge is visible');
   assert.notEqual(await page.$eval('.fleet-summary-dial',el=>getComputedStyle(el,'::before').display),'none','gauge center is rendered');
   assert.equal(await page.$eval('.fleet-device:last-child .fleet-summary-dial',el=>el.style.getPropertyValue('--fleet-health-angle')),'0deg','offline score is not fabricated');
+  assert.equal(await page.$eval('.fleet-summary-resources dd i',el=>getComputedStyle(el).backgroundColor),'rgb(13, 148, 136)','teal CPU chart');
+  await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});await capture(page,'appearance-light-mobile-dashboard');
+  await page.goto(`${base}/settings?tab=appearance`,{waitUntil:'networkidle0'});await page.click('.appearance-option--dark');
+  await page.goto(`${base}/dashboard`,{waitUntil:'networkidle0'});await page.waitForSelector('.fleet-device');await capture(page,'appearance-dark-mobile-dashboard');
+  await page.setViewport({width:1440,height:1000});await capture(page,'appearance-dark-dashboard');
+  await page.goto(`${base}/settings?tab=appearance`,{waitUntil:'networkidle0'});await page.click('.appearance-option--light');
   await page.goto(`${base}/assets/cameras?company=qa-company`,{waitUntil:'networkidle0'});await page.waitForSelector('.camera-device-card');
   await capture(page,'appearance-light-cameras');
   await checkTextContrast(page,'.camera-device-card__kind,.camera-status,.camera-device-card__ip');
@@ -96,5 +111,5 @@ try{
   assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark');
   assert.match(await page.$eval('.appearance-saved',el=>el.textContent),/does not allow saving/);
   assert.equal(writes,0,'theme selection must not mutate server data');assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({ok:true,captures,runtimeErrors:errors.length,writes,checks:['default dark','light palette/text contrast','reload','cross-tab','keyboard','viewer','desktop/mobile/320px','dialog','English','blocked storage'],data:'synthetic only'}));
+  console.log(JSON.stringify({ok:true,captures,runtimeErrors:errors.length,writes,checks:['default dark','reference palette/text contrast','shared heading hierarchy in both themes','teal chart/gauges','reload','cross-tab','keyboard','viewer','desktop/mobile/320px','dialog','English','blocked storage'],data:'synthetic only'}));
 }finally{await browser.close();}

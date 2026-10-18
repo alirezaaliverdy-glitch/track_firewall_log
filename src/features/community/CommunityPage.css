@@ -1,5 +1,4 @@
 .community-hub{--hub-panel:#0d1c2b;--hub-canvas:#091623;--hub-text:#e4edf6;--hub-muted:#9bafc3;--hub-line:#24394d;--hub-accent:#8ddcd0;--hub-tint:#163832;--hub-violet:#c3b6f1;--hub-violet-bg:#28243e;--hub-bubble:#14283b;color:var(--hub-text);min-width:0}
-html[data-theme="light"] .community-hub{--hub-panel:#fff;--hub-canvas:#f6f8fc;--hub-text:#22344c;--hub-muted:#5e7088;--hub-line:#e0e7f1;--hub-accent:#11786e;--hub-tint:#e6f5ef;--hub-violet:#6e51a5;--hub-violet-bg:#f0ebfb;--hub-bubble:#edf3fa}
 .community-hub button,.community-hub input,.community-hub select,.community-hub textarea{font:inherit;color:inherit}
 .community-hub button{cursor:pointer;transition:background .16s,box-shadow .16s;border:1px solid transparent;border-radius:12px;min-height:40px}
 .community-hub button:disabled{opacity:.55;cursor:default}

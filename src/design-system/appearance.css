@@ -1,113 +1,124 @@
-/* Light palette: pearl surfaces, ink text, teal actions and lavender selection.
+/* EOSNET reference palette: slate canvas, white cards, indigo actions and calm teal.
    --theme-* values are intentionally absent in dark mode: migrated legacy
    declarations retain their original colors via explicit fallbacks. */
 html[data-theme="light"] {
+  --brand-indigo: #4f46e5;
+  --brand-teal: #0d9488;
+  --status-healthy: #10b981;
+  --status-warning: #f59e0b;
+  --status-critical: #f43f5e;
+  /* Status text uses darker shades for readable small labels on pale badges. */
   --theme-surface: #fff;
-  --theme-text: #17263f;
-  --theme-muted: #53667d;
-  --theme-border: #dce4ee;
-  --theme-accent: #087c85;
-  --theme-success: #137650;
-  --theme-warning: #956008;
-  --theme-danger: #b52c49;
-  --theme-blue: #2b62ac;
-  --theme-violet: #7150af;
-  --color-background: #f4f6fb;
+  --theme-text: #0f172a;
+  --theme-muted: #475569;
+  --theme-border: #e2e8f0;
+  --theme-accent: #4f46e5;
+  --theme-success: #047857;
+  --theme-warning: #92400e;
+  --theme-danger: #be123c;
+  --theme-blue: #4338ca;
+  --theme-violet: #4f46e5;
+  --color-background: #f8fafc;
   --color-surface: #fff;
   --color-surface-strong: #fff;
-  --color-border: #dce4ee;
-  --color-border-strong: #b8c9d8;
-  --color-text: #17263f;
-  --color-muted: #53667d;
-  --color-primary: #087c85;
-  --color-primary-strong: #06636e;
-  --color-success: #137650;
-  --color-warning: #956008;
-  --color-danger: #b52c49;
-  --color-info: #2b62ac;
-  --severity-critical: #b52c49;
-  --severity-high: #ad4e16;
-  --severity-medium: #956008;
-  --severity-low: #087c85;
-  --app-bg: #f4f6fb;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-text: #0f172a;
+  --color-muted: #475569;
+  --color-primary: #4f46e5;
+  --color-primary-strong: #4338ca;
+  --color-success: #047857;
+  --color-warning: #92400e;
+  --color-danger: #be123c;
+  --color-info: #4338ca;
+  --severity-critical: #be123c;
+  --severity-high: #c2410c;
+  --severity-medium: #92400e;
+  --severity-low: #4f46e5;
+  --app-bg: #f8fafc;
   --app-panel: #fff;
   --app-panel-strong: #fff;
-  --app-border: #dce4ee;
-  --app-border-active: #8db8c1;
-  --app-text: #17263f;
-  --app-muted: #53667d;
-  --app-accent: #087c85;
-  --soc-bg: #f4f6fb;
+  --app-border: #e2e8f0;
+  --app-border-active: #a5b4fc;
+  --app-text: #0f172a;
+  --app-muted: #475569;
+  --app-accent: #4f46e5;
+  --soc-bg: #f8fafc;
   --soc-surface: #fff;
-  --soc-surface-2: #eef2f8;
+  --soc-surface-2: #f1f5f9;
   --soc-elevated: #fff;
-  --soc-border: #dce4ee;
-  --soc-border-strong: #b8c9d8;
-  --soc-text: #17263f;
-  --soc-muted: #53667d;
+  --soc-border: #e2e8f0;
+  --soc-border-strong: #cbd5e1;
+  --soc-text: #0f172a;
+  --soc-muted: #475569;
   --soc-faint: #64748b;
-  --soc-cyan: #087c85;
-  --soc-success: #137650;
-  --soc-warning: #956008;
-  --soc-danger: #b52c49;
-  --background: #f4f6fb;
-  --foreground: #17263f;
+  --soc-blue: #4f46e5;
+  --soc-blue-bright: #4338ca;
+  --soc-cyan: #0d9488;
+  --soc-success: #047857;
+  --soc-warning: #92400e;
+  --soc-danger: #be123c;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #fff;
-  --card-foreground: #17263f;
+  --card-foreground: #0f172a;
   --popover: #fff;
-  --popover-foreground: #17263f;
-  --primary: #087c85;
+  --popover-foreground: #0f172a;
+  --primary: #4f46e5;
   --primary-foreground: #fff;
-  --secondary: #edf1f8;
-  --secondary-foreground: #253851;
-  --muted: #edf1f8;
-  --muted-foreground: #53667d;
-  --accent: #efebff;
-  --accent-foreground: #6445ab;
-  --destructive: #b52c49;
-  --border: #dce4ee;
-  --input: #c6d2e0;
-  --ring: #087c85;
-  --chart-1: #0e9f9c;
-  --chart-2: #8a70e6;
-  --chart-3: #398fca;
-  --chart-4: #d58c21;
-  --chart-5: #c74b67;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #334155;
+  --muted: #f1f5f9;
+  --muted-foreground: #475569;
+  --accent: #eef2ff;
+  --accent-foreground: #4338ca;
+  --destructive: #be123c;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #4f46e5;
+  --chart-1: #0d9488;
+  --chart-2: #4f46e5;
+  --chart-3: #0284c7;
+  --chart-4: #f59e0b;
+  --chart-5: #f43f5e;
+  --sidebar-primary: #4f46e5;
+  --sidebar-primary-foreground: #fff;
+  --sidebar-ring: #4f46e5;
   --sidebar: #fff;
-  --sidebar-foreground: #17263f;
-  --sidebar-accent: #efebff;
-  --sidebar-accent-foreground: #6445ab;
-  --sidebar-border: #dce4ee;
-  --shadow-panel: 0 7px 30px rgba(40,62,99,.045);
-  --focus-ring: 0 0 0 3px rgba(8,124,133,.18);
+  --sidebar-foreground: #0f172a;
+  --sidebar-accent: #eef2ff;
+  --sidebar-accent-foreground: #4338ca;
+  --sidebar-border: #e2e8f0;
+  --shadow-panel: 0 4px 18px rgba(15,23,42,.045), 0 1px 3px rgba(15,23,42,.025);
+  --focus-ring: 0 0 0 3px rgba(79,70,229,.2);
 }
 
 html[data-theme="light"] body,
 html[data-theme="light"] .authenticated-app { background:var(--app-bg); }
-html[data-theme="light"] .app-background { background:radial-gradient(ellipse at 90% 0%,#f0edff 0,transparent 40%),#f4f6fb; }
+html[data-theme="light"] .app-background { background:var(--app-bg); }
 html[data-theme="light"] :is(.app-background__grid,.app-background__glow,.app-background__network,.app-background__particles,.app-background__scan,.app-background__vignette,.platform-sidebar__aurora) { display:none; }
 html[data-theme="light"] :is(.platform-sidebar,.platform-topbar,.platform-bottom-nav,.topbar-account__menu) { background:#fff;box-shadow:0 4px 22px rgba(35,53,86,.035);border-color:var(--app-border); }
-html[data-theme="light"] .platform-nav-group.is-active { background:#efebff;border-color:#ded5fa; }
-html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label { color:#684db7; }
+html[data-theme="light"] .platform-nav-group.is-active { background:#eef2ff;border-color:#c7d2fe; }
+html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label { color:#4338ca; }
 html[data-theme="light"] :is(.platform-sidebar__brand-copy strong,.topbar-current strong) { color:var(--app-text); }
-html[data-theme="light"] .platform-sidebar__brand-mark { background:#f2f5ff;border-color:#d4dfee; }
-html[data-theme="light"] :is(.topbar-create,.primary-button,.camera-button--primary) { background:linear-gradient(115deg,#0a9199,#087883);color:#fff;border-color:#108e94;box-shadow:0 5px 14px rgba(8,124,133,.12); }
+html[data-theme="light"] .platform-sidebar__brand-mark { background:#eef2ff;border-color:#e2e8f0; }
+html[data-theme="light"] :is(.topbar-create,.primary-button,.camera-button--primary) { background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 3px 8px rgba(79,70,229,.16); }
 html[data-theme="light"] :is(.page-header,.dashboard-hero,.dashboard-section,.dashboard-kpi,.fleet-health-card,.camera-device-card,.camera-wall,.appearance-settings) { box-shadow:var(--shadow-panel); }
 html[data-theme="light"] :is(input,textarea,select) { color:var(--app-text);color-scheme:light; }
-html[data-theme="light"] :is(input,textarea)::placeholder { color:#687b90;opacity:1; }
-html[data-theme="light"] :is(.cameras-page,.camera-dialog) { --camera-accent:#087c85;--camera-muted:#53667d;--camera-border:#dce4ee; }
-html[data-theme="light"] .camera-overview__item { --stat-color:#7150af; }
-html[data-theme="light"] .camera-overview__item--verified { --stat-color:#137650; }
-html[data-theme="light"] .camera-overview__item--attention { --stat-color:#956008; }
+html[data-theme="light"] :is(input,textarea)::placeholder { color:#64748b;opacity:1; }
+html[data-theme="light"] :is(.cameras-page,.camera-dialog) { --camera-accent:#0d9488;--camera-muted:#475569;--camera-border:#e2e8f0; }
+html[data-theme="light"] .camera-overview__item { --stat-color:#4f46e5; }
+html[data-theme="light"] .camera-overview__item--verified { --stat-color:#047857; }
+html[data-theme="light"] .camera-overview__item--attention { --stat-color:#92400e; }
 html[data-theme="light"] .camera-device-card { background:#fff; }
-html[data-theme="light"] .camera-device-card--nvr { border-color:#d9cef4; }
-html[data-theme="light"] .camera-filter button[aria-pressed="true"] { color:#684db7;background:#efebff;border-color:#d9cef4; }
+html[data-theme="light"] .camera-device-card--nvr { border-color:#c7d2fe; }
+html[data-theme="light"] .camera-filter button[aria-pressed="true"] { color:#4338ca;background:#eef2ff;border-color:#c7d2fe; }
 /* Media itself is never recolored; retain an intentional dark video stage. */
 html[data-theme="light"] .camera-player__image { background:#040a10;color:#e6f3fb; }
 html[data-theme="light"] :is(.camera-player__paused,.camera-player__error) { --theme-surface:initial;--theme-text:initial;--theme-muted:initial;--theme-accent:initial;--theme-warning:initial;--theme-blue:initial; }
 html[data-theme="light"] .camera-player__overlay { color:#e6f3fb; }
 html[data-theme="light"] :is(.recharts-cartesian-axis-tick-value,.recharts-text) { fill:var(--app-muted); }
-html[data-theme="light"] .recharts-cartesian-grid line { stroke:#dce4ee; }
+html[data-theme="light"] .recharts-cartesian-grid line { stroke:#e2e8f0; }
 html[data-theme="light"] :is(.recharts-default-tooltip,.recharts-tooltip-wrapper) { color:var(--app-text); }
 /* Older utility-based panels share the same palette as the component styles. */
 html[data-theme="light"] :is(.bg-slate-950,.bg-slate-900,.bg-gray-900,.bg-gray-950) { background-color:var(--app-panel); }
@@ -115,38 +126,50 @@ html[data-theme="light"] :is(.text-slate-100,.text-slate-200,.text-gray-100,.tex
 html[data-theme="light"] :is(.text-slate-300,.text-slate-400,.text-gray-300,.text-gray-400) { color:var(--app-muted); }
 html[data-theme="light"] :is(.border-slate-700,.border-slate-800,.border-gray-700,.border-gray-800) { border-color:var(--app-border); }
 html[data-theme="light"] .dashboard-command-center {
-  --command-bg:#fff;--command-border:#dce4ee;--command-muted:#53667d;
-  --command-cyan:#087c85;--command-green:#137650;--command-red:#b52c49;
-  --command-orange:#956008;--command-violet:#7150af;
+  --command-bg:#fff;--command-border:#e2e8f0;--command-muted:#475569;
+  --command-cyan:#4f46e5;--command-green:#047857;--command-red:#be123c;
+  --command-orange:#92400e;--command-violet:#4f46e5;
 }
-html[data-theme="light"] .fleet-summary-resources dd { background:#edf1f6; }
-html[data-theme="light"] .fleet-status.is-online { background:#e9f8f1;color:#137650;border-color:#c9e8db; }
-html[data-theme="light"] .fleet-status.is-offline { background:#fff0f2;color:#b52c49;border-color:#f2d0d9; }
+html[data-theme="light"] .fleet-summary-resources dd { background:#f1f5f9; }
+html[data-theme="light"] .fleet-status.is-online { background:#d1fae5;color:#047857;border-color:#a7f3d0; }
+html[data-theme="light"] .fleet-status.is-offline { background:#ffe4e6;color:#be123c;border-color:#fecdd3; }
 html[data-theme="light"] .fleet-health-grid { gap:18px; }
 html[data-theme="light"] .fleet-device { box-shadow:none; }
-html[data-theme="light"] .fleet-device:nth-child(3n+1) { border-top:3px solid #66bfb3; }
-html[data-theme="light"] .fleet-device:nth-child(3n+2) { border-top:3px solid #b3a0e7; }
-html[data-theme="light"] .fleet-device:nth-child(3n+3) { border-top:3px solid #7caed5; }
+html[data-theme="light"] .fleet-device:nth-child(3n+1) { border-top:3px solid #0d9488; }
+html[data-theme="light"] .fleet-device:nth-child(3n+2) { border-top:3px solid #4f46e5; }
+html[data-theme="light"] .fleet-device:nth-child(3n+3) { border-top:3px solid #94a3b8; }
 html[data-theme="light"] :is(.command-panel,.platform-sidebar__profile,.camera-device-card:hover) { box-shadow:var(--shadow-panel); }
-html[data-theme="light"] .camera-device-card { --tile-accent:#087c85; }
-html[data-theme="light"] .camera-device-card--nvr { --tile-accent:#7150af; }
-html[data-theme="light"] .camera-device-card.has-error { --tile-accent:#956008; }
-html[data-theme="light"] .platform-nav-group__label>svg { color:#637a93; }
-html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label>svg { color:#7859ca; }
+html[data-theme="light"] .camera-device-card { --tile-accent:#0d9488; }
+html[data-theme="light"] .camera-device-card :is(.camera-device-card__kind,.camera-device-card__tags>span:last-child) { color:#0f766e; }
+html[data-theme="light"] .camera-device-card--nvr { --tile-accent:#4f46e5; }
+html[data-theme="light"] .camera-device-card--nvr :is(.camera-device-card__kind,.camera-device-card__tags>span:last-child) { color:#4338ca; }
+html[data-theme="light"] .camera-device-card.has-error { --tile-accent:#92400e; }
+html[data-theme="light"] .platform-nav-group__label>svg { color:#64748b; }
+html[data-theme="light"] .platform-nav-group.is-active .platform-nav-group__label>svg { color:#4f46e5; }
 /* Keep the actual gauge in both appearances, including the unknown-data track. */
-html[data-theme="light"] .fleet-summary-dial { background:conic-gradient(var(--health-color) 0 var(--fleet-health-angle),#e6ecf3 var(--fleet-health-angle) 360deg); }
-html[data-theme="light"] .fleet-summary-dial::before { background:#fbfcff; }
+html[data-theme="light"] .fleet-summary-dial { background:conic-gradient(var(--health-color) 0 var(--fleet-health-angle),#e2e8f0 var(--fleet-health-angle) 360deg); }
+html[data-theme="light"] .fleet-summary-dial::before { background:#ffffff; }
 html[data-theme="light"] .fleet-summary-resources>div { gap:8px; }
-html[data-theme="light"] .fleet-summary-resources dt svg { color:var(--app-accent); }
-html[data-theme="light"] .fleet-summary-resources>div:nth-child(2) dt svg { color:#7150af; }
-html[data-theme="light"] .fleet-summary-resources>div:nth-child(3) dt svg { color:#956008; }
-html[data-theme="light"] .fleet-health { background:#f8faff!important; }
+html[data-theme="light"] .fleet-summary-resources dt svg { color:var(--brand-teal); }
+html[data-theme="light"] .fleet-summary-resources>div:nth-child(2) dt svg { color:#4f46e5; }
+html[data-theme="light"] .fleet-summary-resources>div:nth-child(3) dt svg { color:#92400e; }
+html[data-theme="light"] .fleet-health { background:#f8fafc!important; }
 html[data-theme="light"] .fleet-health-grid { align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr)); }
-html[data-theme="light"] .fleet-device { background:linear-gradient(145deg,#fff,#fbfcff);box-shadow:0 5px 20px #30477208; }
+html[data-theme="light"] .fleet-device { background:linear-gradient(145deg,#fff,#ffffff);box-shadow:0 5px 20px #30477208; }
 html[data-theme="light"] .fleet-device>footer a { padding-block:8px; }
 html[data-theme="light"] .platform-topbar { background:rgba(250,252,255,.96); }
-html[data-theme="light"] .platform-sidebar { background:linear-gradient(180deg,#fafaff,#f3f6fb); }
-html[data-theme="light"] .command-panel { border-color:#e0e6f0;background:linear-gradient(135deg,#fff,#fafbff); }
+html[data-theme="light"] .platform-sidebar { background:linear-gradient(180deg,#ffffff,#f8fafc); }
+html[data-theme="light"] .command-panel { border-color:#e2e8f0;background:linear-gradient(135deg,#fff,#ffffff); }
+html[data-theme="light"] :is(.topbar-create,.primary-button,.camera-button--primary):hover:not(:disabled) { background:#4338ca;border-color:#4338ca; }
+html[data-theme="light"] .secondary-button { background:#f1f5f9;color:#334155;border-color:#cbd5e1;box-shadow:none; }
+html[data-theme="light"] .secondary-button:hover:not(:disabled) { background:#e2e8f0; }
+html[data-theme="light"] :is(.authenticated-app,dialog,[role="dialog"]) :is(button,a,input,select,textarea):focus-visible { outline:2px solid var(--primary);outline-offset:3px; }
+html[data-theme="light"] .community-hub {
+  --hub-panel:#fff;--hub-canvas:#f8fafc;--hub-text:#0f172a;--hub-muted:#475569;
+  --hub-line:#e2e8f0;--hub-accent:#0f766e;--hub-tint:#ccfbf1;
+  --hub-violet:#4338ca;--hub-violet-bg:#eef2ff;--hub-bubble:#f1f5f9;
+}
+html[data-theme="light"] .community-hub :is(.hub-primary,.hub-send) { background:#4f46e5;color:#fff; }
 /* Login and public marketing retain their original art direction. */
 html[data-theme="light"] :is(.eos-login,.landing) { --theme-surface:initial;--theme-text:initial;--theme-muted:initial;--theme-border:initial;--theme-accent:initial;--theme-success:initial;--theme-warning:initial;--theme-danger:initial;--theme-blue:initial;--theme-violet:initial; }
 html[data-theme="light"] .eos-login input { color:#e5edf7;color-scheme:dark; }

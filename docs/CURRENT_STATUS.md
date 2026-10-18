@@ -1,3 +1,9 @@
+## 2026-10-18 - Reference light palette and shared type hierarchy
+
+- Applied the supplied EOSNET indigo/teal/slate/white palette through all light token families, community, cameras, Settings previews and dashboard gauges. Semantic small text uses darker related shades; chart fills keep the supplied indicator colors and unknown/offline data stays unknown. Dark colors, camera pixels and public artwork preserved.
+- Unified authenticated-page and portal-dialog headings at24/21/18/16px, body14px and captions12px in both themes; mobile forms16px prevent focus zoom. Existing browser preference and Settings entry remain. No backend/schema/action-policy changes.
+- Final scoped web build/deployment image `16a0f2457e13baffb0c5038580e61b42a52c0d12efc78cc7fc5c7ee6511e988a` healthy; local dashboard/settings/readiness200.14 synthetic appearance captures pass with exact computed heading/palette assertions, visible gauges, sampled contrast, dark/light/mobile/320px, persistence, keyboard, viewer and English checks. Six boot/environment tests, locale/Persian/UTF-8, local/production Compose validation pass. Additional community16/NVR24 synthetic captures pass:54 total, zero runtime errors/external writes, representative views inspected. Disposable QA browser containers auto-removed; five real services remain healthy. No push/production rollout. See docs/DESIGN_SYSTEM_APPEARANCE.md.
+
 ## 2026-10-18 - Persistent split-route VPN and automatic recovery (completed locally)
 
 - Confirmed Connect persists desired state in the existing encrypted profile; explicit Disconnect survives API/helper/host recreation and wins over in-flight recovery. New saved/disconnected profiles never auto-activate. Worker runs independently of the browser with capped retry pacing, safe auth pause, renewed route/asset checks and sanitized transition audits. No migration/new dependency or Linux/MikroTik execution-policy change.

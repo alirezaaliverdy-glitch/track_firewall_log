@@ -52,13 +52,13 @@ export function FleetHealthPanel({isFa}:{isFa:boolean}) {
       const disk=resource("disk.usage_percent"),datastore=resource("datastore.usage_percent");
       const storage=[disk,datastore].find(row=>row?.value!==null&&row?.value!==undefined)||[disk,datastore].find(row=>!!row?.measuredAt);
       const rows=[
-        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"#22d3ee"},
-        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"#a78bfa"},
-        ...(storage?[{label:storage.metricKey==="datastore.usage_percent"?t("فضای داده","Datastore"):t("دیسک","Disk"),row:storage,icon:HardDrive,color:"#f59e0b"}]:[])
+        {label:"CPU",row:resource("cpu.usage_percent"),icon:Cpu,color:"var(--brand-teal, #22d3ee)"},
+        {label:t("حافظه","Memory"),row:resource("memory.usage_percent"),icon:MemoryStick,color:"var(--brand-indigo, #a78bfa)"},
+        ...(storage?[{label:storage.metricKey==="datastore.usage_percent"?t("فضای داده","Datastore"):t("دیسک","Disk"),row:storage,icon:HardDrive,color:"var(--status-warning, #f59e0b)"}]:[])
       ];
       const coverage=rows.filter(item=>current(item.row)).length;
       const score=coverage&&connected&&Number.isFinite(device.score)?device.score:null;
-      const color=score===null?"#72849a":score>=80?"#18a899":score>=50?"#e5a328":"#e25c79";
+      const color=score===null?"#72849a":score>=80?"var(--status-healthy, #18a899)":score>=50?"var(--status-warning, #e5a328)":"var(--status-critical, #e25c79)";
       return <article className="fleet-device fleet-summary" key={device.id}>
         <header><div><h3>{device.name}</h3><span dir="ltr">{device.vendor} · {device.host}</span></div><span className={`fleet-status is-${state}`}><i/>{state==="online"?t("آنلاین","Online"):state==="offline"?t("آفلاین","Offline"):t("نامشخص","Unknown")}</span></header>
         <div className="fleet-summary-visual">

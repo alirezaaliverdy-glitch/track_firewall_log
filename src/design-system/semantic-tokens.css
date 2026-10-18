@@ -12,12 +12,4 @@
   --app-success: var(--color-success);
 }
 
-[data-theme="light"] {
-  --app-bg: #f6f8fb;
-  --app-panel: rgba(255, 255, 255, 0.92);
-  --app-panel-strong: #ffffff;
-  --app-border: rgba(30, 65, 90, 0.14);
-  --app-border-active: rgba(8, 145, 178, 0.32);
-  --app-text: #10202f;
-  --app-muted: #5f7182;
-}
+/* Light overrides for every token family live in appearance.css. */
