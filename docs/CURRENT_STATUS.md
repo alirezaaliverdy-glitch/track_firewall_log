@@ -1,3 +1,9 @@
+## 2026-10-18 - Production accepted; added VM capacity online
+
+- CI `39048830417` succeeded; server checkout and deploy marker match `b7cdc2e`. Camera/VPN/community migrations applied; five services healthy, verified TLS/readiness/dashboard pass. Public fixture QA: 29 captures, zero errors/real writes/device actions; representative screenshots reviewed. Admin/camera APIs remain authentication-protected.
+- Activated the operator's 40-to-60-GiB virtual disk expansion: GPT backup, guarded dry-run, unchanged root start/UUID, `growpart` then online ext4 `resize2fs`. No reboot, data deletion or service restart. GPT integrity passes; root now reports 59G total, 27G available, 52% used.
+- All five production containers have verified 10m/3-file log rotation. Hourly storage timer installed/enabled/active; first maintenance success/exit 0. Only scoped disposable images/private cache reclaimed; running images and databases/uploads/evidence preserved. Existing data-retention and execution policy unchanged; continued capacity monitoring remains necessary. Acceptance documentation is committed locally, not pushed solely to rebuild production.
+
 ## 2026-10-17 - Bounded logs and scheduled disposable-cache maintenance
 
 - Recovery: an interrupted build left stale Docker/BuildKit leases. Explicitly approved daemon restart restored all five healthy services; a further 4.689 GB cache was reclaimed and free capacity reached about 8.4 GiB. Corrected Docker's private-cache selector to the verified presence expression `private=""`; added real Docker-backed CI inventory equality so an empty, ineffective filter cannot silently pass. Final release/timer acceptance remains pending.

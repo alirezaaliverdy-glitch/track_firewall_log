@@ -28,6 +28,13 @@ Inspect status with `systemctl status firewall-storage-maintenance.timer`; a cri
 
 This is not a guarantee that a finite disk can never fill. Database, customer uploads and other host software can grow independently. The existing 6-GiB deployment guard remains; do not lower it or erase retained evidence to force a release. Capacity growth requires monitoring and additional disk space or an explicitly agreed data-retention policy. Existing event/NetFlow/telemetry policies are unchanged. Removed build/image cache can be rebuilt/downloaded; container stdout/stderr that ages out of rotation is not retained by Docker.
 
+## Production acceptance, 2026-10-18
+
+- Release `b7cdc2e` passed CI and exact deployed-SHA/migration/service/readiness checks. Actual logging options on all five running containers match the limits above.
+- Hourly timer is installed, enabled and active; the first explicit maintenance run completed with `Result=success`, `ExecMainStatus=0`.
+- The operator expanded the virtual disk from 40 to 60 GiB. After GPT metadata backup and dry-run, only the final root partition `/dev/nvme0n1p3` was extended with `growpart`, then its mounted ext4 filesystem with `resize2fs`. Partition start and filesystem UUID were preserved; GPT integrity passed. No reboot, service restart or data deletion was needed. GPT backup is not a database/full-server backup.
+- Post-maintenance `df -hT /`: 59G total, 27G available, 52% used. These are rounded filesystem values, not a promise of fixed future headroom. Application data and unrelated host services still require monitoring.
+
 Tests cover default check-only behavior, deployment-lock skipping, current-image preservation, positive image/private-cache scope, missing/invalid app images, critical space, every Compose service's log bounds and the hourly unit contract. No real device action is involved.
 
 References: [Docker JSON-file rotation](https://docs.docker.com/engine/logging/drivers/json-file/), [BuildKit cache filters and free-space targets](https://docs.docker.com/reference/cli/docker/buildx/prune/).

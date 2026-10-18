@@ -1,3 +1,9 @@
+## 2026-10-18 - Activate expanded production disk and finish release acceptance
+
+- User explicitly requested activation of newly added VM space. Verified 60-GiB disk with the old 40-GiB layout, root ext4 on partition 3, clean filesystem metadata and contiguous free tail. Under the idle deployment lock backed up GPT metadata, grew only partition 3 and expanded ext4 online; retained start/UUID and untouched EFI/boot partitions. Integrity verification passed without reboot, data deletion or service restart.
+- Final filesystem reports 59G total/27G available/52% used. All five services remain healthy and public dashboard/API readiness return 200; anonymous admin/camera requests return 401. This is actual mounted filesystem capacity, not just the virtual disk size.
+- Finished prior release acceptance: CI `39048830417` SUCCESS and exact `b7cdc2e` checkout/deploy marker; four required camera/VPN/community migrations applied. Verified all runtime log caps and installed/enabled the hourly maintenance timer; first run success/exit 0. Public synthetic browser acceptance passed 29 captures without runtime errors or real provider/device/server writes; representative captures visually reviewed. Documentation-only local commit, no further push/rebuild.
+
 ## 2026-10-17 - Limit future disposable-storage growth
 
 - Discovered workflow-level cancellation despite job-level serialization; protected main workflows against new-push cancellation. A canceled build left unreclaimable leases; operator explicitly authorized a Docker restart. Five services recovered healthy, public dashboard/readiness 200; private cache cleanup recovered 4.689 GB and free capacity rose to about 8.4 GiB. Verified/fixed BuildKit presence-filter syntax (`private=""`, not a false-valued boolean comparison), and added a real Docker CI fixture with non-vacuous inventory comparison. No volume/database/upload/certificate deletion. Release acceptance still pending.
