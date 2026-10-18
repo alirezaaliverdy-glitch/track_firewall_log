@@ -6,6 +6,8 @@ import { prisma } from "../db/prisma.js";
 import { encryptSecret, decryptSecret } from "../services/credential-crypto.service.js";
 import { validateVpn, contains, VpnError, type VpnConfig } from "./vpn-validation.js";
 import type { VpnRuntime } from "./vpn-agent.js";
+import type { FastifyBaseLogger } from "fastify";
+import { VpnRecoverySchedule } from "./vpn-recovery.js";
 
 export type VpnActor = { id: string; username: string; role: string; scopeOwnerId?: string | null };
 const owner = (actor: VpnActor) => actor.scopeOwnerId ?? actor.id;
@@ -32,8 +34,22 @@ async function owned(id: string, actor: VpnActor) {
   const profile = await prisma.vpnConnection.findFirst({ where: { id, ownerId: owner(actor) } });
   if (!profile) throw new VpnError("VPN_NOT_FOUND", 404); return profile;
 }
-function safe(profile: VpnConnection) { const { configEncrypted, ...publicData } = profile; return { ...publicData, revision: createHash("sha256").update(`${profile.id}:${profile.updatedAt.toISOString()}`).digest("hex") }; }
+type StoredConfig = Record<string, unknown> & { connectionIntent?: "connected" | "disconnected" };
+function stored(profile: VpnConnection): StoredConfig { try { return JSON.parse(decryptSecret(profile.configEncrypted) ?? "{}"); } catch { throw new VpnError("VPN_CREDENTIAL_UNAVAILABLE", 422); } }
+const recovery = new VpnRecoverySchedule();
+function safe(profile: VpnConnection) {
+  const { configEncrypted, ...publicData } = profile; let desiredConnected = false;
+  try { desiredConnected = stored(profile).connectionIntent === "connected"; } catch { /* Credentials stay private. */ }
+  // Background health/retry timestamps must not invalidate a pending manual disconnect confirmation.
+  return { ...publicData, desiredConnected, ...recovery.info(profile.id), revision: createHash("sha256").update(`${profile.id}:${configEncrypted}`).digest("hex") };
+}
+async function setIntent(profile: VpnConnection, connected: boolean) {
+  const config = stored(profile), intent = connected ? "connected" : "disconnected";
+  if (config.connectionIntent === intent) return profile;
+  return prisma.vpnConnection.update({ where: { id: profile.id }, data: { configEncrypted: encryptSecret(JSON.stringify({ ...config, connectionIntent: intent })) } });
+}
 const activeOperations = new Set<string>();
+const automaticOperations = new Set<string>();
 async function assertAssetRoutes(profileId: string, routes: string[]) {
   const [cameras, devices, bindings] = await Promise.all([
     prisma.cameraDevice.findMany({ select: { host: true, vpnConnectionId: true } }),
@@ -60,6 +76,7 @@ export async function saveVpn(input: Record<string, unknown>, actor: VpnActor, i
   if (id) activeOperations.add(id);
   try {
   if (previous) {
+    if (stored(previous).connectionIntent === "connected") throw new VpnError("VPN_DISCONNECT_FIRST", 409);
     const runtime = await vpnAgentCall<VpnRuntime>("/status", { id });
     if (runtime.state !== "disconnected") throw new VpnError("VPN_DISCONNECT_FIRST", 409);
   } else if (await prisma.vpnConnection.count({ where: { ownerId: owner(actor) } }) >= 32) throw new VpnError("VPN_PROFILE_LIMIT", 409);
@@ -76,7 +93,7 @@ export async function saveVpn(input: Record<string, unknown>, actor: VpnActor, i
     ]);
     if ([...devices, ...cameras].some(item => !config.routes.some(range => contains(range, item.host)))) throw new VpnError("VPN_BOUND_TARGET_OUTSIDE_ROUTES", 409);
   }
-  const data = { name, protocol: config.protocol, endpoint: config.endpoint, endpointPort: config.endpointPort, routesJson: metadata(config.routes), configEncrypted: encryptSecret(JSON.stringify(config)), lastErrorCode: null };
+  const data = { name, protocol: config.protocol, endpoint: config.endpoint, endpointPort: config.endpointPort, routesJson: metadata(config.routes), configEncrypted: encryptSecret(JSON.stringify({ ...config, connectionIntent: "disconnected" })), lastErrorCode: null };
   const profile = previous ? await prisma.vpnConnection.update({ where: { id }, data }) : await prisma.vpnConnection.create({ data: { ...data, ownerId: owner(actor) } });
   await audit(actor, "vpn.profile_saved", profile.id, { protocol: config.protocol, routes: config.routes });
   return safe(profile);
@@ -86,18 +103,32 @@ export async function operateVpn(id: string, operation: "connect" | "disconnect"
   admin(actor); const profile = await owned(id, actor);
   if (input.intent !== "execute" || input.confirmed !== true) throw new VpnError("VPN_CONFIRM_REQUIRED");
   if (input.revision !== safe(profile).revision) throw new VpnError("VPN_PROFILE_CHANGED", 409);
+  if (operation === "disconnect" && automaticOperations.has(id)) {
+    await setIntent(profile, false); recovery.clear(id);
+    await audit(actor, "vpn.disconnect_pending", id, { connectorInvoked: false, desiredConnected: false });
+    return { id, state: "disconnecting", protocol: profile.protocol, routes: profile.routesJson as string[] };
+  }
   if (activeOperations.has(id)) throw new VpnError("VPN_OPERATION_BUSY", 409);
   activeOperations.add(id);
   try {
     await audit(actor, `vpn.${operation}_requested`, id, { protocol: profile.protocol, routes: profile.routesJson, policyGuard: "split_routes_only" });
     let config: VpnConfig | undefined;
     if (operation === "connect") { try { config = validateVpn(JSON.parse(decryptSecret(profile.configEncrypted) ?? "{}")); } catch (error) { throw error instanceof VpnError ? error : new VpnError("VPN_CREDENTIAL_UNAVAILABLE", 422); } await assertAssetRoutes(id, config.routes); }
-    const runtime = await vpnAgentCall<VpnRuntime>(`/${operation}`, { id, ...(config ? { config } : {}) });
+    // Commit user intent before touching the helper. It survives process/host restarts and failed disconnect RPCs.
+    await setIntent(profile, operation === "connect"); recovery.clear(id);
+    let runtime: VpnRuntime;
+    try { runtime = await vpnAgentCall<VpnRuntime>(operation === "connect" ? "/recover" : "/disconnect", { id, ...(config ? { config } : {}) }); }
+    catch (error) {
+      if (operation !== "disconnect" || !(error instanceof VpnError) || error.code !== "VPN_AGENT_UNAVAILABLE") throw error;
+      await audit(actor, "vpn.disconnect_pending", id, { connectorInvoked: false, desiredConnected: false });
+      return { id, state: "unavailable", protocol: profile.protocol, routes: profile.routesJson as string[], code: error.code };
+    }
     await prisma.vpnConnection.update({ where: { id }, data: { lastErrorCode: null, lastOperationAt: new Date() } });
     await audit(actor, `vpn.${operation}_result`, id, { connectorInvoked: true, state: runtime.state });
     return runtime;
   } catch (error) {
     const code = error instanceof VpnError ? error.code : "VPN_RUNTIME_FAILED";
+    if (operation === "connect") recovery.failed(id, code);
     await prisma.vpnConnection.update({ where: { id }, data: { lastErrorCode: code, lastOperationAt: new Date() } });
     await audit(actor, `vpn.${operation}_failed`, id, { code }); throw error;
   } finally { activeOperations.delete(id); }
@@ -130,7 +161,8 @@ export async function assertVpnTarget(profileId: unknown, host: string, ownerId?
   return profile.id;
 }
 export async function deleteVpn(id: string, actor: VpnActor) {
-  admin(actor); await owned(id, actor);
+  admin(actor); const profile = await owned(id, actor);
+  if (stored(profile).connectionIntent === "connected") throw new VpnError("VPN_DISCONNECT_FIRST", 409);
   if (activeOperations.has(id)) throw new VpnError("VPN_OPERATION_BUSY", 409);
   activeOperations.add(id);
   try {
@@ -139,6 +171,64 @@ export async function deleteVpn(id: string, actor: VpnActor) {
   const bindings = await prisma.vpnDeviceBinding.findMany({ where: { vpnConnectionId: id }, select: { deviceId: true } });
   const linked = await prisma.device.count({ where: { id: { in: bindings.map(binding => binding.deviceId) }, deletedAt: null } }) + await prisma.cameraDevice.count({ where: { vpnConnectionId: id } });
   if (linked) throw new VpnError("VPN_ASSETS_BOUND", 409);
-  await prisma.vpnConnection.delete({ where: { id } }); await audit(actor, "vpn.profile_removed", id, {}); return { deleted: true };
+  await prisma.vpnConnection.delete({ where: { id } }); recovery.clear(id); await audit(actor, "vpn.profile_removed", id, {}); return { deleted: true };
   } finally { activeOperations.delete(id); }
 }
+
+let supervisorTimer: ReturnType<typeof setInterval> | undefined, supervisorRun: Promise<unknown> | undefined, cursor: string | undefined;
+/** Re-read encrypted persisted intent on every cycle; no browser tab or volatile helper map is authoritative. */
+export async function reconcileVpnConnections(now = Date.now()) {
+  const health = await vpnAgentCall<{ available: boolean }>("/health").catch(() => null);
+  if (!health?.available) return;
+  const profiles = await prisma.vpnConnection.findMany({ where: { owner: { isActive: true } }, orderBy: { id: "asc" }, take: 64,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+  cursor = profiles.length === 64 ? profiles.at(-1)!.id : undefined;
+  // A bounded scan makes progress across workspaces without retaining keys/configs in a retry registry.
+  for (const profile of profiles) {
+    if (activeOperations.has(profile.id)) continue;
+    activeOperations.add(profile.id); automaticOperations.add(profile.id);
+    const actor = { id: profile.ownerId, username: "system:vpn-recovery", role: "admin" };
+    try {
+      const raw = stored(profile), runtime = await vpnAgentCall<VpnRuntime>("/status", { id: profile.id });
+      if (raw.connectionIntent === undefined) {
+        // Upgrade only proven pre-existing managed tunnels; never activate saved/disconnected profiles.
+        if (["connected", "waiting", "stale"].includes(runtime.state)) await setIntent(profile, true);
+        continue;
+      }
+      if (raw.connectionIntent !== "connected") {
+        recovery.clear(profile.id);
+        if (runtime.state !== "disconnected") { await vpnAgentCall("/disconnect", { id: profile.id }); await audit(actor, "vpn.manual_disconnect_completed", profile.id, { connectorInvoked: true }); }
+        if (profile.lastErrorCode) await prisma.vpnConnection.update({ where: { id: profile.id }, data: { lastErrorCode: null } });
+        continue;
+      }
+      if (runtime.state === "connected") {
+        recovery.clear(profile.id);
+        if (profile.lastErrorCode) { await prisma.vpnConnection.update({ where: { id: profile.id }, data: { lastErrorCode: null } }); await audit(actor, "vpn.recovered", profile.id, { connectorInvoked: true }); }
+        continue;
+      }
+      if (!recovery.due(profile.id, now)) continue;
+      if (runtime.code === "VPN_PPP_AUTH_FAILED" || profile.lastErrorCode === "VPN_PPP_AUTH_FAILED") throw new VpnError("VPN_PPP_AUTH_FAILED", 401);
+      const config = validateVpn(raw); await assertAssetRoutes(profile.id, config.routes);
+      const current = await prisma.vpnConnection.findUnique({ where: { id: profile.id } });
+      if (!current || stored(current).connectionIntent !== "connected") continue;
+      const result = await vpnAgentCall<VpnRuntime>("/recover", { id: profile.id, config });
+      const after = await prisma.vpnConnection.findUnique({ where: { id: profile.id } });
+      if (after && stored(after).connectionIntent !== "connected") { await vpnAgentCall("/disconnect", { id: profile.id }); await audit(actor, "vpn.manual_disconnect_completed", profile.id, { connectorInvoked: true }); continue; }
+      if (result.state === "connected") recovery.clear(profile.id); else recovery.failed(profile.id, result.code, now);
+      if (profile.lastErrorCode !== (result.code ?? null) || runtime.state === "disconnected") {
+        await prisma.vpnConnection.update({ where: { id: profile.id }, data: { lastErrorCode: result.code ?? null } });
+        await audit(actor, "vpn.reconnect_result", profile.id, { connectorInvoked: true, state: result.state });
+      }
+    } catch (error) {
+      const code = error instanceof VpnError ? error.code : "VPN_RUNTIME_FAILED";
+      recovery.failed(profile.id, code, now);
+      if (profile.lastErrorCode !== code) { await prisma.vpnConnection.update({ where: { id: profile.id }, data: { lastErrorCode: code } }); await audit(actor, "vpn.reconnect_delayed", profile.id, { code }); }
+    } finally { activeOperations.delete(profile.id); automaticOperations.delete(profile.id); }
+  }
+}
+export function startVpnSupervisor(logger: FastifyBaseLogger) {
+  if (supervisorTimer) return;
+  const tick = () => { if (!supervisorRun) supervisorRun = reconcileVpnConnections().catch(() => logger.warn({ code: "VPN_RECOVERY_UNAVAILABLE" }, "VPN recovery deferred")).finally(() => { supervisorRun = undefined; }); };
+  tick(); supervisorTimer = setInterval(tick, 15000); supervisorTimer.unref();
+}
+export async function stopVpnSupervisor() { clearInterval(supervisorTimer); supervisorTimer = undefined; await supervisorRun; }

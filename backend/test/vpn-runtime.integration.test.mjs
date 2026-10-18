@@ -20,6 +20,12 @@ test("real WireGuard handshake and private TCP access preserve API default route
     await agent.connect("fixture-wireguard", { protocol: "wireguard", endpoint, endpointPort: 51820, address: "10.70.0.2/32", privateKey, publicKey: serverKey, routes: ["192.168.77.0/24"] });
     assert.equal((await agent.test("fixture-wireguard", "192.168.77.1", 8055)).reachable, true);
     assert.equal((await agent.status("fixture-wireguard")).state, "connected");
+    // Simulate a lost local link; recover using the same key/profile without touching the API default route or DNS.
+    execFileSync("ip", ["link", "delete", agent.tunnels.get("fixture-wireguard").iface]);
+    await agent.recover("fixture-wireguard", { protocol: "wireguard", endpoint, endpointPort: 51820, address: "10.70.0.2/32", privateKey, publicKey: serverKey, routes: ["192.168.77.0/24"] });
+    assert.equal((await agent.test("fixture-wireguard", "192.168.77.1", 8055)).reachable, true);
+    assert.equal((await agent.status("fixture-wireguard")).state, "connected");
+    assert.equal(originalDefault(), defaults); assert.equal(await readFile("/etc/resolv.conf", "utf8"), dns);
     const secondKey = execFileSync("wg", ["genkey"], { encoding: "utf8" }).trim();
     const secondPublic = execFileSync("wg", ["pubkey"], { input: secondKey, encoding: "utf8" }).trim();
     await configure("wg-peer", { publicKey: secondPublic });

@@ -1,6 +1,6 @@
 import { apiRequest } from "./apiTransport";
 export type VpnRuntime = { state: string; handshakeAt?: string; rxBytes?: number; txBytes?: number; code?: string };
-export type VpnProfile = { id: string; revision: string; name: string; protocol: "wireguard" | "l2tp"; endpoint: string; endpointPort: number; routesJson: string[]; lastErrorCode: string | null; runtime: VpnRuntime };
+export type VpnProfile = { id: string; revision: string; name: string; protocol: "wireguard" | "l2tp"; endpoint: string; endpointPort: number; routesJson: string[]; lastErrorCode: string | null; desiredConnected?: boolean; recoveryBlocked?: boolean; retryAt?: string | null; runtime: VpnRuntime };
 export type VpnInput = { name: string; protocol: "wireguard" | "l2tp"; endpoint: string; endpointPort: number; routes: string[]; address?: string; privateKey?: string; publicKey?: string; presharedKey?: string; mtu?: number; username?: string; password?: string; ipsecPsk?: string };
 export type VpnList = { available: boolean; splitOnly: boolean; l2tpReady?: boolean; profiles: VpnProfile[] };
 export async function vpnRequest<T>(path = "", method = "GET", data?: unknown): Promise<T> {
@@ -9,6 +9,7 @@ export async function vpnRequest<T>(path = "", method = "GET", data?: unknown): 
   if (!response.ok) throw new Error(result?.error?.code ?? "VPN_REQUEST_FAILED"); return result;
 }
 const errors: Record<string, string> = {
+  VPN_RECONNECT_PENDING: "مسیرهای خصوصی محافظت می‌شوند؛ اتصال خودکار دوباره تلاش می‌کند.",
   VPN_CONFIG_INVALID: "فایل تنظیمات معتبر WireGuard را انتخاب کن؛ باید یک Interface و یک Peer داشته باشد.",
   VPN_FILE_READ_FAILED: "فایل خوانده نشد؛ دوباره انتخاب کن یا متن تنظیمات را جای‌گذاری کن.",
   VPN_FILE_TOO_LARGE: "حجم فایل تنظیمات باید کمتر از ۱۶ کیلوبایت باشد.",

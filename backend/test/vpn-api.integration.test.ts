@@ -17,7 +17,7 @@ test("VPN API encrypts credentials, enforces admin/CSRF/workspace scope and requ
     let value: unknown = { id: input.id, state: states.get(input.id) ?? "disconnected" };
     if (request.url === "/health") value = { available: true };
     if (request.url === "/route") value = { throughTunnel: states.size > 0, profileId: states.size ? [...states.keys()][0] : null };
-    if (request.url === "/connect") { assert.equal(input.config.privateKey, secret); writes++; await new Promise(resolve => setTimeout(resolve, 50)); states.set(input.id, "connected"); value = { id: input.id, state: "connected", protocol: "wireguard", routes: input.config.routes }; }
+    if (request.url === "/connect" || request.url === "/recover") { assert.equal(input.config.privateKey, secret); writes++; await new Promise(resolve => setTimeout(resolve, 50)); states.set(input.id, "connected"); value = { id: input.id, state: "connected", protocol: "wireguard", routes: input.config.routes }; }
     if (request.url === "/disconnect") { states.delete(input.id); value = { id: input.id, state: "disconnected" }; }
     reply.end(JSON.stringify(value));
   });
@@ -46,7 +46,7 @@ test("VPN API encrypts credentials, enforces admin/CSRF/workspace scope and requ
     const deviceResult = await app.inject({ method: "POST", url: "/api/devices", headers: owner.headers, payload: deviceInput });
     assert.equal(deviceResult.statusCode, 201); const device = deviceResult.json(); assert.equal(device.vpnConnectionId, profile.id);
     assert.equal((await prisma.vpnDeviceBinding.findUnique({ where: { deviceId: device.id } }))?.vpnConnectionId, profile.id);
-    const cameraInput = { host: "192.168.18.50", name: "VPN camera", kind: "camera", connectionMode: "rtsp", rtspUrl: "rtsp://192.168.18.50:554/stream", vpnConnectionId: profile.id };
+    const cameraInput = { companyId: company.id, host: "192.168.18.50", name: "VPN camera", kind: "camera", connectionMode: "rtsp", rtspUrl: "rtsp://192.168.18.50:554/stream", vpnConnectionId: profile.id };
     assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: { ...cameraInput, host: "192.168.19.50", rtspUrl: "rtsp://192.168.19.50:554/stream" } })).statusCode, 400);
     const cameraResult = await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: cameraInput });
     assert.equal(cameraResult.statusCode, 201); const camera = cameraResult.json().camera; assert.equal(camera.vpnConnectionId, profile.id);
