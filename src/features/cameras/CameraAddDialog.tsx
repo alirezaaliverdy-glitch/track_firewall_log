@@ -5,9 +5,9 @@ import { CameraDialog } from "./CameraDialog";
 import { VpnAccessField } from "@/features/vpn/VpnAccessField";
 
 const defaultInput: CameraInput = { host: "", name: "", location: "", kind: "camera", connectionMode: "onvif", onvifPort: 80, onvifPath: "/onvif/device_service", username: "", password: "", rtspUrl: "", vpnConnectionId: "" };
-export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onClose: () => void; onSaved: (devices: CameraDevice[]) => void }) {
+export function CameraAddDialog({ isFa, companyId, onClose, onSaved }: { isFa: boolean; companyId: string; onClose: () => void; onSaved: (devices: CameraDevice[]) => void }) {
   const [tab, setTab] = useState<"discover" | "manual">("discover"), [cidr, setCidr] = useState("192.168.18.0/24");
-  const [input, setInput] = useState(defaultInput), [result, setResult] = useState<CameraDiscovery | null>(null);
+  const [input, setInput] = useState({ ...defaultInput, companyId }), [result, setResult] = useState<CameraDiscovery | null>(null);
   const [selected, setSelected] = useState<string[]>([]), [scanning, setScanning] = useState(false), [saving, setSaving] = useState(false);
   const [error, setError] = useState(""), [message, setMessage] = useState(""), [progress, setProgress] = useState("");
   const [ports, setPorts] = useState("80,8000,8080,8899,2020");
@@ -25,7 +25,7 @@ export function CameraAddDialog({ isFa, onClose, onSaved }: { isFa: boolean; onC
   const available = result?.candidates.filter((candidate) => !candidate.registered) ?? [];
   const scan = async () => {
     setScanning(true); setError(""); setMessage(""); setResult(null); setSelected([]);
-    try { setResult(await discoverCameras(cidr, ports.split(",").map((port) => Number(port.trim())), input.vpnConnectionId)); }
+    try { setResult(await discoverCameras(cidr, ports.split(",").map((port) => Number(port.trim())), input.vpnConnectionId, companyId)); }
     catch (failure) { setError(cameraErrorMessage(failure, isFa)); }
     finally { setScanning(false); }
   };

@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { CameraError } from "../cameras/camera-network.js";
-import { cameraActionHistory, cameraOwner, createCamera, deleteCamera, executeCameraAction, getCameraPresets, listCameras, previewCameraAction, refreshCamera, runCameraDiscovery, selectedCameraProfile, updateCamera, type CameraActor } from "../cameras/camera.service.js";
+import { cameraActionHistory, cameraOwner, createCamera, deleteCamera, executeCameraAction, getCameraPresets, listCameras, listCameraCompanies, previewCameraAction, refreshCamera, runCameraDiscovery, selectedCameraProfile, updateCamera, type CameraActor } from "../cameras/camera.service.js";
+import { getNvrMonitor, refreshNvrMonitor, stopNvrMonitor } from "../cameras/nvr-monitor.js";
 import { cameraFrame, cameraSnapshot, startCameraMedia, stopCameraStreams } from "../cameras/camera-media.js";
 
 function actor(request: FastifyRequest): CameraActor {
@@ -13,7 +14,16 @@ function failure(reply: FastifyReply, error: unknown) {
 }
 
 export const cameraRoutes: FastifyPluginAsync = async (app) => {
-  app.addHook("onClose", async () => { stopCameraStreams(); });
+  app.addHook("onClose", async () => { stopCameraStreams(); await stopNvrMonitor(); });
+  app.get("/api/cameras/companies", async (request, reply) => {
+    try { return await listCameraCompanies(actor(request)); } catch (error) { return failure(reply, error); }
+  });
+  app.get<{ Params: { id: string } }>("/api/cameras/:id/monitor", async (request, reply) => {
+    try { return await getNvrMonitor(request.params.id, actor(request)); } catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>("/api/cameras/:id/monitor/refresh", async (request, reply) => {
+    try { return await refreshNvrMonitor(request.params.id, actor(request)); } catch (error) { return failure(reply, error); }
+  });
   app.get<{ Params: { id: string }; Querystring: { profile?: string } }>("/api/cameras/:id/frame", async (request, reply) => {
     try {
       const user = actor(request), { camera, profile, connection } = await selectedCameraProfile(request.params.id, request.query.profile, user);
@@ -22,8 +32,8 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
       return reply.header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff").type("image/jpeg").send(frame);
     } catch (error) { return failure(reply, error); }
   });
-  app.get("/api/cameras", async (request, reply) => {
-    try { return { cameras: await listCameras(actor(request)) }; } catch (error) { return failure(reply, error); }
+  app.get<{ Querystring: { companyId?: string } }>("/api/cameras", async (request, reply) => {
+    try { return { cameras: await listCameras(actor(request), request.query.companyId) }; } catch (error) { return failure(reply, error); }
   });
   app.post<{ Body: Record<string, unknown> }>("/api/cameras", async (request, reply) => {
     try { return reply.code(201).send({ camera: await createCamera(request.body ?? {}, actor(request)) }); } catch (error) { return failure(reply, error); }

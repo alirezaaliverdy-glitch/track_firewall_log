@@ -7,3 +7,8 @@
 SELECT format('GRANT REFERENCES (id) ON TABLE public.%I TO %I', 'AppUser', :'api_role')
 WHERE NOT has_column_privilege(:'api_role', format('public.%I', 'AppUser'), 'id', 'REFERENCES')
 \gexec
+-- Company is an older owner-managed table. New camera company bindings need
+-- only REFERENCES(id), never ownership or broader write privileges.
+SELECT format('GRANT REFERENCES (id) ON TABLE public.%I TO %I', 'Company', :'api_role')
+WHERE NOT has_column_privilege(:'api_role', format('public.%I', 'Company'), 'id', 'REFERENCES')
+\gexec

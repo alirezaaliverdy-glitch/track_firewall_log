@@ -1,0 +1,31 @@
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { Building2, Camera, ChevronLeft, FolderOpen, Plus, RefreshCw, Search, Server } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { createCompany } from "@/lib/companies";
+import { cameraErrorMessage, listCameraCompanies, type CameraCompany } from "@/lib/cameras";
+import { CameraDialog } from "./CameraDialog";
+import "./CameraCompanies.css";
+
+export function CameraCompanies({ selected, onSelect, renderWorkspace }: { selected: string; onSelect: (id: string) => void; renderWorkspace: (id: string, name: string, back: () => void) => ReactNode }) {
+  const { i18n } = useTranslation(), { user } = useAuth(), isFa = i18n.language.startsWith("fa"), t = (fa: string, en: string) => isFa ? fa : en;
+  const [companies, setCompanies] = useState<CameraCompany[]>([]), [unassigned, setUnassigned] = useState(0), [loading, setLoading] = useState(true), [error, setError] = useState("");
+  const [search, setSearch] = useState(""), [adding, setAdding] = useState(false), [name, setName] = useState(""), [code, setCode] = useState(""), [busy, setBusy] = useState(false), [createError, setCreateError] = useState("");
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const data = await listCameraCompanies(); setCompanies(data.companies); setUnassigned(data.unassigned.cameraCount + data.unassigned.nvrCount); } catch (e) { setError(cameraErrorMessage(e, isFa)); } finally { setLoading(false); } }, [isFa]);
+  useEffect(() => { void load(); }, [load, selected]);
+  const company = companies.find(company => company.id === selected);
+  if (selected && (company || selected === "unassigned")) return renderWorkspace(selected, company?.name ?? t("بدون شرکت", "Unassigned"), () => onSelect(""));
+  const filtered = companies.filter(company => `${company.name} ${company.code}`.toLowerCase().includes(search.trim().toLowerCase()));
+  return <section className="cameras-page camera-companies" dir={isFa ? "rtl" : "ltr"}>
+    <header className="camera-companies__hero"><span className="camera-heading-mark"><Building2 size={32}/></span><div><span className="cameras-page__eyebrow">EOSNET / VISION</span><h1>{t("هر شرکت، فضای دید خودش", "Every company. Its own view.")}</h1><p>{t("شرکت را انتخاب کن؛ تصاویر، ضبط‌کننده‌ها و وضعیت پایش کنار هم‌اند.", "Choose a company to see its cameras, recorders and monitoring.")}</p></div><button className="camera-icon-button" disabled={loading} onClick={() => void load()} aria-label={t("به‌روزرسانی", "Refresh")}><RefreshCw size={19}/></button></header>
+    <div className="camera-company-toolbar"><label className="camera-search"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("جست‌وجوی شرکت…", "Search companies…")} aria-label={t("جست‌وجوی شرکت", "Search companies")}/></label>{user?.role === "admin" && <button className="camera-button camera-button--primary" onClick={() => setAdding(true)}><Plus size={18}/>{t("شرکت جدید", "New company")}</button>}</div>
+    {selected && !loading && !company && selected !== "unassigned" && <p className="camera-alert">{t("شرکت در دسترس نیست؛ یکی از شرکت‌های خودت را انتخاب کن.", "Company unavailable. Choose one of your companies.")}</p>}
+    {error && <p className="camera-alert" role="alert">{error}</p>}
+    {loading && !companies.length ? <p role="status">{t("دریافت شرکت‌ها…", "Loading companies…")}</p> : <div className="camera-company-grid">{filtered.map((company, index) => <button key={company.id} className={`camera-company-card palette-${index % 3}`} onClick={() => onSelect(company.id)}><span className="camera-company-card__mark"><Building2 size={25}/></span><span className="camera-company-card__code" dir="ltr">{company.code}</span><h2>{company.name}</h2><p>{company.description || t("فضای اختصاصی دوربین‌ها", "Dedicated camera workspace")}</p><div className="camera-company-card__counts"><span><Camera size={17}/>{company.cameraCount.toLocaleString(isFa ? "fa-IR" : "en-US")} {t("دوربین", "cameras")}</span><span><Server size={17}/>{company.nvrCount.toLocaleString(isFa ? "fa-IR" : "en-US")} NVR</span></div><footer>{t("ورود به فضای دید", "Open workspace")}<ChevronLeft size={18}/></footer></button>)}
+      {unassigned > 0 && <button className="camera-company-card is-unassigned" onClick={() => onSelect("unassigned")}><span className="camera-company-card__mark"><FolderOpen size={25}/></span><h2>{t("بدون شرکت", "Unassigned")}</h2><p>{t("دستگاه‌های قبلی محفوظ‌اند. از جزئیات هر دستگاه، شرکت را مشخص کن.", "Existing devices are preserved. Assign their company from device details.")}</p><footer>{unassigned} {t("دستگاه", "devices")}<ChevronLeft size={18}/></footer></button>}
+    </div>}
+    {!loading && !error && !filtered.length && !unassigned && <div className="camera-empty"><Building2 size={38}/><h2>{t("از یک شرکت شروع کن", "Start with a company")}</h2><p>{t("ابتدا شرکت بساز، سپس دوربین یا NVR آن را اضافه کن.", "Create a company, then add its cameras or NVR.")}</p></div>}
+    <p className="camera-hint">{t("تصاویر فقط با درخواست شما باز می‌شوند. شبکه و VPN هر دستگاه جداگانه مشخص می‌شود.", "Video opens only when requested. Each device keeps its own network and VPN selection.")}</p>
+    {adding && <CameraDialog title={t("شرکت جدید", "New company")} onClose={() => { if (!busy) setAdding(false); }}><form className="camera-form" onSubmit={async e => { e.preventDefault(); setBusy(true); setCreateError(""); try { const company = await createCompany({ name, code }); setAdding(false); await load(); onSelect(company.id); } catch { setCreateError(t("ثبت نشد؛ نام و کد یکتا را بررسی کن.", "Not saved. Check the name and unique code.")); } finally { setBusy(false); } }}><label>{t("نام شرکت", "Company name")}<input required value={name} maxLength={160} onChange={e => setName(e.target.value)}/></label><label>{t("کد یکتا", "Unique code")}<input required dir="ltr" value={code} maxLength={40} onChange={e => setCode(e.target.value)}/></label>{createError && <p className="camera-alert" role="alert">{createError}</p>}<button className="camera-button camera-button--primary" disabled={busy}>{t("ثبت و ادامه", "Create & continue")}</button></form></CameraDialog>}
+  </section>;
+}

@@ -61,7 +61,7 @@ test('collaboration: authorship, replies, change feed, private files, quotas, ta
     assert.equal((await app.inject({ url: `/api/community/threads/${ticket}/attachments/${file.id}` })).statusCode, 401);
     assert.equal((await upload(viewer, ticket, [{ name: 'active.svg', data: Buffer.from('<svg onload="alert(1)"/>') }])).statusCode, 415);
     assert.equal((await upload(viewer, ticket, [{ name: 'fake.png', data: Buffer.from('MZnot-an-image') }])).statusCode, 415);
-    assert.equal((await upload(viewer, ticket, [{ name: 'large.txt', data: Buffer.alloc(5242881, 65) }])).statusCode, 413);
+    assert.equal((await upload(viewer, ticket, [{ name: 'large.txt', data: Buffer.alloc(52428801, 65) }])).statusCode, 413);
     const nativeHeaders = { authorization: `Bearer ${viewer.token}`, 'x-firewall-client': 'android' };
     const nativeFile = await upload({ headers: nativeHeaders }, topic, [{ name: 'native.txt', data: Buffer.from('native viewer fixture') }]);
     assert.equal(nativeFile.statusCode, 200, 'native viewer can send attachments without granting device permissions');
@@ -74,13 +74,13 @@ test('collaboration: authorship, replies, change feed, private files, quotas, ta
     assert.equal((await upload(peer, topic, Array.from({ length: 4 }, () => ({ name: 'file.txt', data: Buffer.from('text') })))).statusCode, 413);
     // Synthetic quota metadata only, scoped to these fixture users and removed below.
     const quota = await prisma.communityAttachment.create({ data: { messageId: source.id, workspaceId: owner.id, uploaderId: owner.id,
-      fileName: 'quota.txt', mimeType: 'text/plain', size: 5242880, checksum: 'fixture', content: new Uint8Array([65]) } });
-    await prisma.communityAttachment.createMany({ data: Array.from({ length: WORKSPACE_FILE_LIMIT / 5242880 - 1 }, (_, i) => ({
-      messageId: source.id, workspaceId: owner.id, uploaderId: owner.id, fileName: `quota-${i}.txt`, mimeType: 'text/plain', size: 5242880, checksum: 'fixture', content: new Uint8Array([65]) })) });
+      fileName: 'quota.txt', mimeType: 'text/plain', size: 4194304, checksum: 'fixture', content: new Uint8Array([65]) } });
+    await prisma.communityAttachment.createMany({ data: Array.from({ length: WORKSPACE_FILE_LIMIT / 4194304 - 1 }, (_, i) => ({
+      messageId: source.id, workspaceId: owner.id, uploaderId: owner.id, fileName: `quota-${i}.txt`, mimeType: 'text/plain', size: 4194304, checksum: 'fixture', content: new Uint8Array([65]) })) });
     assert.equal((await upload(peer, topic, [{ name: 'quota.txt', data: Buffer.from('over quota') }])).statusCode, 413);
     await prisma.communityAttachment.deleteMany({ where: { messageId: source.id } });
     assert.ok(quota.id);
-    await prisma.auditLog.create({ data: { actor: peer.id, action: 'community.files_uploaded', targetType: 'community', targetId: tag, dryRun: false, metadata: { bytes: 50 * 1024 * 1024, files: 10 } } });
+    await prisma.auditLog.create({ data: { actor: peer.id, action: 'community.files_uploaded', targetType: 'community', targetId: tag, dryRun: false, metadata: { bytes: 200 * 1024 * 1024, files: 10 } } });
     assert.equal((await upload(peer, topic, [{ name: 'daily.txt', data: Buffer.from('daily quota survives deletion') }])).statusCode, 413);
     const members = (await send(viewer, 'GET', '/members')).json().members;
     assert.ok(members.some(m => m.id === viewer.id)); assert.ok(members.some(m => m.id === owner.id));

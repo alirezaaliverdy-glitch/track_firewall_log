@@ -1,14 +1,17 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Check, Crosshair, LoaderCircle, RefreshCw, RotateCw, Save, Trash2 } from "lucide-react";
-import { cameraErrorMessage, cameraJson, executeCameraAction, previewCameraAction, refreshCamera, removeCamera, updateCamera, type CameraDevice, type CameraHistory, type CameraPreview, type CameraResult } from "@/lib/cameras";
+import { cameraErrorMessage, cameraJson, executeCameraAction, previewCameraAction, refreshCamera, removeCamera, updateCamera, listCameraCompanies, type CameraCompany, type CameraDevice, type CameraHistory, type CameraPreview, type CameraResult } from "@/lib/cameras";
 import { VpnAccessField } from "@/features/vpn/VpnAccessField";
 import { CameraDialog } from "./CameraDialog";
+import { NvrMonitorPanel } from "./NvrMonitorPanel";
 
 export function CameraDetailDialog({ camera, isFa, role, canOperate, onClose, onChanged, onRemoved }: { camera: CameraDevice; isFa: boolean; role: string; canOperate: boolean; onClose: () => void; onChanged: (camera: CameraDevice) => void; onRemoved: (id: string) => void }) {
   const [name, setName] = useState(camera.name), [location, setLocation] = useState(camera.location), [username, setUsername] = useState(""), [password, setPassword] = useState("");
   const [vpnConnectionId, setVpnConnectionId] = useState(camera.vpnConnectionId ?? "");
   const [port, setPort] = useState(camera.onvifPort), [path, setPath] = useState(camera.onvifPath), [rtsp, setRtsp] = useState("");
   const [https, setHttps] = useState(camera.onvifHttps);
+  const [companies, setCompanies] = useState<CameraCompany[]>([]), [companyId, setCompanyId] = useState(camera.companyId ?? "");
+  useEffect(() => { if (role !== "viewer") void listCameraCompanies().then(data => setCompanies(data.companies)).catch(() => setError(isFa ? "فهرست شرکت‌ها دریافت نشد." : "Company list unavailable.")); }, [role, isFa]);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false), [plan, setPlan] = useState<CameraPreview | null>(null), [result, setResult] = useState<CameraResult | null>(null);
   const [history, setHistory] = useState<CameraHistory[]>([]), [historyError, setHistoryError] = useState(false);
@@ -38,6 +41,8 @@ export function CameraDetailDialog({ camera, isFa, role, canOperate, onClose, on
   });
   return <CameraDialog title={camera.name} wide onClose={() => { if (!busy) onClose(); }}>
     <div className="camera-detail">
+      {canManage && <div className="camera-preset-row"><label>{copy("شرکت دستگاه", "Device company")}<select value={companyId} onChange={e => setCompanyId(e.target.value)} disabled={busy}><option value="" disabled>{copy("انتخاب شرکت", "Choose company")}</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><button className="camera-button" disabled={busy || !companyId || companyId === camera.companyId} onClick={() => void run(async () => { const data = await updateCamera(camera.id, { companyId }); setPlan(null); onChanged(data.camera); })}>{copy("ذخیره شرکت", "Save company")}</button></div>}
+      {camera.kind === "nvr" && <NvrMonitorPanel camera={camera} isFa={isFa} canManage={canManage} onChanged={onChanged}/>}
       <div className="camera-detail__identity"><span dir="ltr">{camera.host}:{camera.onvifPort}</span><span>{camera.kind === "nvr" ? "NVR" : copy("دوربین", "Camera")} · {camera.connectionMode.toUpperCase()}</span><button className="camera-button" type="button" disabled={busy || !canManage} onClick={() => void run(async () => { const data = await refreshCamera(camera.id); onChanged(data.camera); if (data.camera.lastErrorCode) setError(cameraErrorMessage(new Error(data.camera.lastErrorCode), isFa)); else setNotice(copy("اتصال بررسی شد", "Connection checked")); })}><RefreshCw size={16} />{copy("بررسی اتصال", "Check connection")}</button></div>
       {canManage ? <div className="camera-vpn-route"><VpnAccessField value={vpnConnectionId} onChange={setVpnConnectionId} host={camera.host} isFa={isFa} /><button className="camera-button" type="button" disabled={busy || vpnConnectionId === (camera.vpnConnectionId ?? "")} onClick={() => void run(async () => { const updated = await updateCamera(camera.id, { vpnConnectionId }); onChanged(updated.camera); setNotice(copy("مسیر ذخیره شد؛ اتصال را بررسی کن.", "Route saved. Check the connection.")); })}>{copy("ذخیره مسیر", "Save route")}</button></div> : null}
       {camera.lastErrorCode ? <p className="camera-alert">{cameraErrorMessage(new Error(camera.lastErrorCode), isFa)}</p> : null}

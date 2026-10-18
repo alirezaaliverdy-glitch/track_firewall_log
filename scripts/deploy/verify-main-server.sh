@@ -25,4 +25,7 @@ printf 'community_migration=applied\n'
 collaboration_migrations=$(compose exec -T firewall-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public._prisma_migrations WHERE migration_name = '\''20261018120000_community_collaboration'\'' AND finished_at IS NOT NULL AND rolled_back_at IS NULL"')
 [ "$collaboration_migrations" = 1 ]
 printf 'community_collaboration_migration=applied\n'
+storage_nvr_migrations=$(compose exec -T firewall-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM public._prisma_migrations WHERE migration_name IN ('\''20261018150000_community_storage_retention'\'', '\''20261018160000_camera_company_monitoring'\'') AND finished_at IS NOT NULL AND rolled_back_at IS NULL"')
+[ "$storage_nvr_migrations" = 2 ]
+printf 'storage_and_nvr_migrations=applied\n'
 compose exec -T firewall-api node < scripts/deploy/probe-production-gateway.cjs

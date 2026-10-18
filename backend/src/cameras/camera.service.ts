@@ -1,4 +1,4 @@
-import type { CameraDevice, Prisma } from "@prisma/client";
+import { Prisma, type CameraDevice } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { decryptSecret, encryptSecret } from "../services/credential-crypto.service.js";
 import { cameraPort, cameraSubnet, cameraUrl, privateCameraHost, CameraError } from "./camera-network.js";
@@ -12,7 +12,7 @@ export type CameraActor = { id: string; username: string; role: string; scopeOwn
 export const cameraOwner = (actor: CameraActor) => actor.scopeOwnerId ?? actor.id;
 export const cameraProfiles = (camera: Pick<CameraDevice, "profilesJson">) => Array.isArray(camera.profilesJson) ? camera.profilesJson as unknown as CameraProfile[] : [];
 const json = (value: unknown) => value as Prisma.InputJsonValue;
-async function cameraVpnTarget(profileId: unknown, host: string, actor: CameraActor, connected = false) {
+export async function cameraVpnTarget(profileId: unknown, host: string, actor: CameraActor, connected = false) {
   try { return await assertVpnTarget(profileId, host, cameraOwner(actor), connected); }
   catch (error) { if (error instanceof VpnError) throw new CameraError(error.code, error.statusCode); throw error; }
 }
@@ -21,9 +21,11 @@ export function cameraConnection(camera: Pick<CameraDevice, "connectionEncrypted
   try { return JSON.parse(decryptSecret(camera.connectionEncrypted) ?? "{}"); } catch { throw new CameraError("CAMERA_CREDENTIAL_UNAVAILABLE", 422); }
 }
 
-function safeCamera(camera: CameraDevice) {
-  const { connectionEncrypted, ...data } = camera;
-  return { ...data, credentialsConfigured: Boolean(connectionEncrypted), profiles: cameraProfiles(camera), profilesJson: undefined };
+export function safeCamera(camera: CameraDevice) {
+  const { connectionEncrypted, monitorLeaseUntil: _lease, monitorNextRunAt: _next, monitorHistoryJson: _history, ...data } = camera;
+  let storage: CameraConnection["storage"];
+  try { storage = cameraConnection(camera).storage; } catch { /* A missing encryption key is exposed by the connection check, never as raw data. */ }
+  return { ...data, storageSettings: { adapter: storage?.adapter ?? "auto", port: storage?.port ?? camera.onvifPort, https: storage?.https ?? camera.onvifHttps, separateCredentials: Boolean(storage?.username) }, credentialsConfigured: Boolean(connectionEncrypted), profiles: cameraProfiles(camera), profilesJson: undefined };
 }
 
 function optionalText(value: unknown, max = 160) { return typeof value === "string" ? value.trim().slice(0, max) : ""; }
@@ -35,7 +37,7 @@ function devicePath(value: unknown) {
 function errorCode(error: unknown) { return error instanceof CameraError ? error.code : "CAMERA_CONNECTION_FAILED"; }
 
 export async function ownedCamera(id: string, actor: CameraActor) {
-  const camera = await prisma.cameraDevice.findFirst({ where: { id, ownerId: cameraOwner(actor) } });
+  const camera = await prisma.cameraDevice.findFirst({ where: { id, ...activeCameraScope(actor) } });
   if (!camera) throw new CameraError("CAMERA_NOT_FOUND", 404);
   return camera;
 }
@@ -44,11 +46,30 @@ async function audit(actor: CameraActor, action: string, cameraId: string | null
   await prisma.auditLog.create({ data: { actor: actor.username, action, targetType: "camera", targetId: cameraId, dryRun, approvalStatus: dryRun ? "not_required" : "approved", metadata: json({ ownerId: cameraOwner(actor), ...metadata }) } });
 }
 
-export async function listCameras(actor: CameraActor) {
-  return (await prisma.cameraDevice.findMany({ where: { ownerId: cameraOwner(actor) }, orderBy: { createdAt: "desc" }, take: 256 })).map(safeCamera);
+export function activeCameraScope(actor: CameraActor): Prisma.CameraDeviceWhereInput {
+  return { ownerId: cameraOwner(actor), OR: [{ companyId: null }, { company: { ownerId: cameraOwner(actor), deletedAt: null } }] };
+}
+export async function cameraCompany(value: unknown, actor: CameraActor, allowUnassigned = false) {
+  if (allowUnassigned && (value === "unassigned" || value === null || value === "")) return null;
+  if (typeof value !== "string" || !value || value.length > 100) throw new CameraError("CAMERA_COMPANY_REQUIRED", 400);
+  if (!await prisma.company.findFirst({ where: { id: value, ownerId: cameraOwner(actor), deletedAt: null }, select: { id: true } })) throw new CameraError("CAMERA_COMPANY_NOT_FOUND", 404);
+  return value;
+}
+export async function listCameraCompanies(actor: CameraActor) {
+  const companies = await prisma.company.findMany({ where: { ownerId: cameraOwner(actor), deletedAt: null }, orderBy: { name: "asc" },
+    select: { id: true, name: true, code: true, description: true } });
+  const counts = await prisma.cameraDevice.groupBy({ by: ["companyId", "kind"], where: activeCameraScope(actor), _count: { _all: true } });
+  const totals = (companyId: string | null) => ({ cameraCount: counts.filter(row => row.companyId === companyId && row.kind === "camera").reduce((sum, row) => sum + row._count._all, 0),
+    nvrCount: counts.filter(row => row.companyId === companyId && row.kind === "nvr").reduce((sum, row) => sum + row._count._all, 0) });
+  return { companies: companies.map(company => ({ ...company, ...totals(company.id) })), unassigned: totals(null) };
+}
+export async function listCameras(actor: CameraActor, company?: unknown) {
+  const companyId = company === undefined ? undefined : await cameraCompany(company, actor, true);
+  return (await prisma.cameraDevice.findMany({ where: { ...activeCameraScope(actor), ...(companyId !== undefined ? { companyId } : {}) }, orderBy: { createdAt: "desc" }, take: 256 })).map(safeCamera);
 }
 
 export async function createCamera(input: Record<string, unknown>, actor: CameraActor) {
+  const companyId = await cameraCompany(input.companyId, actor);
   const host = privateCameraHost(input.host), onvifPort = cameraPort(input.onvifPort), onvifPath = devicePath(input.onvifPath);
   const vpnConnectionId = await cameraVpnTarget(input.vpnConnectionId, host, actor);
   const name = optionalText(input.name) || host, location = optionalText(input.location);
@@ -59,7 +80,7 @@ export async function createCamera(input: Record<string, unknown>, actor: Camera
   if (await prisma.cameraDevice.count({ where: { ownerId: cameraOwner(actor) } }) >= 256) throw new CameraError("CAMERA_DEVICE_LIMIT", 409);
   let camera: CameraDevice;
   try {
-    camera = await prisma.cameraDevice.create({ data: { ownerId: cameraOwner(actor), host, onvifPort, onvifPath, name, location, vpnConnectionId,
+    camera = await prisma.cameraDevice.create({ data: { ownerId: cameraOwner(actor), companyId, host, onvifPort, onvifPath, name, location, vpnConnectionId,
       kind: input.kind === "nvr" ? "nvr" : "camera", connectionMode, onvifHttps: input.onvifHttps === true, connectionEncrypted: encryptSecret(JSON.stringify(connection)),
       profilesJson: connectionMode === "rtsp" ? json([{ token: "manual", sourceToken: "manual", name, ptz: false, streamAvailable: true, snapshotAvailable: false, width: null, height: null, fps: null, encoding: null }]) : json([]) } });
   } catch (error) {
@@ -97,19 +118,40 @@ export async function refreshCamera(id: string, actor: CameraActor) {
 export async function updateCamera(id: string, input: Record<string, unknown>, actor: CameraActor) {
   const camera = await ownedCamera(id, actor);
   const data: Prisma.CameraDeviceUpdateInput = {};
+  if (input.companyId !== undefined) { const companyId = await cameraCompany(input.companyId, actor); data.company = { connect: { id: companyId! } }; stopCameraStreams(id); }
+  if (input.monitoringEnabled !== undefined) { if (typeof input.monitoringEnabled !== "boolean" || camera.kind !== "nvr") throw new CameraError("CAMERA_MONITOR_UNAVAILABLE", 422); data.monitoringEnabled = input.monitoringEnabled; data.monitorNextRunAt = new Date(); }
+  if (input.monitorIntervalSeconds !== undefined) { const interval = input.monitorIntervalSeconds; if (typeof interval !== "number" || !Number.isInteger(interval) || interval < 60 || interval > 3600) throw new CameraError("CAMERA_MONITOR_INTERVAL_INVALID", 400); data.monitorIntervalSeconds = interval; }
   if (input.name !== undefined) { const name = optionalText(input.name); if (!name) throw new CameraError("CAMERA_NAME_REQUIRED"); data.name = name; }
   if (input.location !== undefined) data.location = optionalText(input.location);
   if (input.vpnConnectionId !== undefined) data.vpnConnection = (await cameraVpnTarget(input.vpnConnectionId, camera.host, actor)) ? { connect: { id: String(input.vpnConnectionId) } } : { disconnect: true };
   const connection = cameraConnection(camera);
-  const connectionChanged = ["username", "password", "onvifPort", "onvifPath", "onvifHttps", "rtspUrl"].some((key) => input[key] !== undefined) || input.vpnConnectionId !== undefined && input.vpnConnectionId !== (camera.vpnConnectionId ?? "");
+  const connectionChanged = ["username", "password", "onvifPort", "onvifPath", "onvifHttps", "rtspUrl", "storageSettings"].some((key) => input[key] !== undefined) || input.vpnConnectionId !== undefined && input.vpnConnectionId !== (camera.vpnConnectionId ?? "");
+  if (input.storageSettings !== undefined) {
+    const settings = input.storageSettings as Record<string, unknown>;
+    if (!settings || typeof settings !== "object" || !["auto", "hikvision", "dahua", "xiongmai"].includes(String(settings.adapter)) || typeof settings.https !== "boolean") throw new CameraError("NVR_STORAGE_SETTINGS_INVALID", 400);
+    const previous = connection.storage;
+    connection.storage = { adapter: settings.adapter as "auto" | "hikvision" | "dahua" | "xiongmai", port: cameraPort(settings.port, settings.adapter === "xiongmai" ? 34567 : 80), https: settings.https };
+    if (settings.useDeviceCredentials !== true && (previous?.username || settings.username)) {
+      const username = settings.username === undefined ? previous?.username : settings.username;
+      const password = settings.password === undefined ? previous?.password : settings.password;
+      if (typeof username !== "string" || !username.trim() || username.length > 128 || typeof password !== "string" || password.length > 1024) throw new CameraError("CAMERA_CREDENTIAL_INVALID", 400);
+      connection.storage.username = username.trim(); connection.storage.password = password;
+    }
+  }
   if (input.username !== undefined) connection.username = optionalText(input.username, 128);
   if (input.password !== undefined) { if (typeof input.password !== "string" || input.password.length > 1024) throw new CameraError("CAMERA_CREDENTIAL_INVALID"); connection.password = input.password; }
   if (input.rtspUrl !== undefined) connection.rtspUrl = cameraUrl(input.rtspUrl, camera.host, ["rtsp:"]).href;
   if (input.onvifPort !== undefined) data.onvifPort = cameraPort(input.onvifPort);
   if (input.onvifPath !== undefined) data.onvifPath = devicePath(input.onvifPath);
   if (input.onvifHttps !== undefined) data.onvifHttps = input.onvifHttps === true;
-  if (connectionChanged) { data.connectionEncrypted = encryptSecret(JSON.stringify(connection)); data.status = "unverified"; data.lastErrorCode = null; stopCameraStreams(id); }
-  const updated = await prisma.cameraDevice.update({ where: { id }, data });
+  if (connectionChanged) {
+    data.connectionEncrypted = encryptSecret(JSON.stringify(connection));
+    if (["username", "password", "onvifPort", "onvifPath", "onvifHttps", "rtspUrl", "vpnConnectionId"].some(key => input[key] !== undefined)) { data.status = "unverified"; data.lastErrorCode = null; stopCameraStreams(id); }
+  }
+  if (connectionChanged || input.companyId !== undefined) { data.monitorReportJson = Prisma.JsonNull; data.monitorHistoryJson = Prisma.JsonNull; data.monitorCheckedAt = null; }
+  let updated: CameraDevice;
+  try { updated = await prisma.cameraDevice.update({ where: { id }, data }); }
+  catch (error) { if ((error as { code?: string }).code === "P2002") throw new CameraError("CAMERA_ALREADY_REGISTERED", 409); throw error; }
   await audit(actor, "camera.updated", id, { connectionChanged });
   return safeCamera(updated);
 }
@@ -124,6 +166,7 @@ export async function deleteCamera(id: string, actor: CameraActor) {
 const discoveryBusy = new Set<string>();
 export async function runCameraDiscovery(input: Record<string, unknown>, actor: CameraActor) {
   const ownerId = cameraOwner(actor);
+  const companyId = await cameraCompany(input.companyId, actor);
   if (input.vpnConnectionId) {
     const subnet = cameraSubnet(input.cidr);
     await cameraVpnTarget(input.vpnConnectionId, subnet.addresses[0], actor, true);
@@ -135,7 +178,7 @@ export async function runCameraDiscovery(input: Record<string, unknown>, actor: 
   discoveryBusy.add(ownerId);
   try {
     const result = await discoverCameras(input.cidr, ports);
-    const registered = new Set((await prisma.cameraDevice.findMany({ where: { ownerId }, select: { host: true, onvifPort: true } })).map((camera) => `${camera.host}:${camera.onvifPort}`));
+    const registered = new Set((await prisma.cameraDevice.findMany({ where: { ownerId, companyId }, select: { host: true, onvifPort: true } })).map((camera) => `${camera.host}:${camera.onvifPort}`));
     await audit(actor, "camera.discovery_completed", null, { cidr: result.cidr, candidateCount: result.candidates.length, scannedAddresses: result.scannedAddresses, partial: result.partial });
     return { ...result, candidates: result.candidates.map((candidate) => ({ ...candidate, registered: registered.has(`${candidate.host}:${candidate.onvifPort}`) })) };
   } finally { discoveryBusy.delete(ownerId); }

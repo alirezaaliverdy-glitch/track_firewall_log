@@ -28,6 +28,7 @@ async function setup(page){
     if(api==='/assets')return void respond({assets:[],summary:{}});
     if(api==='/security/findings')return void respond({findings:[]});
     if(api==='/cameras')return void respond({cameras:[camera,{...camera,id:'nvr',name:'ضبط‌کننده اصلی',kind:'nvr',host:'192.0.2.41'},{...camera,id:'error',name:'پارکینگ',status:'error',lastSeenAt:null,lastErrorCode:'CAMERA_TIMEOUT'}]});
+    if(api==='/cameras/companies')return void respond({companies:[{id:'qa-company',name:'شرکت نمونه',code:'DEMO',cameraCount:2,nvrCount:1}],unassigned:{cameraCount:0,nvrCount:0}});
     if(api.endsWith('/actions'))return void respond({actions:[]});
     if(api.endsWith('/presets'))return void respond({presets:[]});
     if(api==='/vpn')return void respond({profiles:[],helper:{available:false,protocols:[]}});
@@ -73,7 +74,7 @@ try{
   assert.ok(await page.$eval('.fleet-summary-dial',el=>getComputedStyle(el).backgroundImage.includes('conic-gradient')),'light health gauge is visible');
   assert.notEqual(await page.$eval('.fleet-summary-dial',el=>getComputedStyle(el,'::before').display),'none','gauge center is rendered');
   assert.equal(await page.$eval('.fleet-device:last-child .fleet-summary-dial',el=>el.style.getPropertyValue('--fleet-health-angle')),'0deg','offline score is not fabricated');
-  await page.goto(`${base}/assets/cameras`,{waitUntil:'networkidle0'});await page.waitForSelector('.camera-device-card');
+  await page.goto(`${base}/assets/cameras?company=qa-company`,{waitUntil:'networkidle0'});await page.waitForSelector('.camera-device-card');
   await capture(page,'appearance-light-cameras');
   await checkTextContrast(page,'.camera-device-card__kind,.camera-status,.camera-device-card__ip');
   await page.click('.camera-device-card .camera-icon-button');await page.waitForSelector('dialog[open]');await capture(page,'appearance-light-camera-dialog');await page.keyboard.press('Escape');
@@ -82,7 +83,7 @@ try{
   await page.setViewport({width:320,height:740,isMobile:true,hasTouch:true});await capture(page,'appearance-light-small-settings');
   await page.focus('input[value="light"]');await page.keyboard.press('ArrowRight');
   assert.equal(await page.$eval('html',el=>el.dataset.theme),'dark','native radio keyboard selection');
-  await page.goto(`${base}/assets/cameras`,{waitUntil:'networkidle0'});await capture(page,'appearance-dark-mobile-cameras');
+  await page.goto(`${base}/assets/cameras?company=qa-company`,{waitUntil:'networkidle0'});await capture(page,'appearance-dark-mobile-cameras');
   role='viewer';await page.goto(`${base}/settings?tab=appearance`,{waitUntil:'networkidle0'});await page.waitForSelector('.appearance-settings');await page.click('.appearance-option--light');
   assert.equal(await page.$eval('html',el=>el.dataset.theme),'light','viewer can choose theme');
   await capture(page,'appearance-viewer-settings');

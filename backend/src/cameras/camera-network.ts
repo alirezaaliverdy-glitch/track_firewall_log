@@ -89,6 +89,9 @@ export function cameraHttp(url: URL, options: { method?: string; body?: string; 
       response.once("error", () => reject(new CameraError("CAMERA_CONNECTION_FAILED", 502)));
     });
     request.setTimeout(options.timeout ?? 4000, () => { request.destroy(); reject(new CameraError("CAMERA_TIMEOUT", 504)); });
+    // An inactivity timeout alone allows an endless trickle to hold a monitor lease.
+    const deadline = setTimeout(() => { request.destroy(); reject(new CameraError("CAMERA_TIMEOUT", 504)); }, options.timeout ?? 4000);
+    deadline.unref(); request.once("close", () => clearTimeout(deadline));
     request.once("error", () => reject(new CameraError("CAMERA_CONNECTION_FAILED", 502)));
     request.end(body);
   });

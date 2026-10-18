@@ -18,6 +18,7 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
   let port = 0, writes = 0;
   const soap = (action: string, body = "") => `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:d="http://www.onvif.org/ver10/device/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:m="http://www.onvif.org/ver10/media/wsdl"><s:Body><d:${action}Response>${body}</d:${action}Response></s:Body></s:Envelope>`;
   const server = createServer(async (request, reply) => {
+    if (request.url?.startsWith("/ISAPI/")) { reply.writeHead(403); reply.end(); return; }
     if (request.url === "/snapshot") { reply.setHeader("Content-Type", "image/jpeg"); reply.end(Buffer.from([0xff, 0xd8, 0xff, 0xd9])); return; }
     let body = ""; for await (const chunk of request) body += chunk;
     const action = /action="[^\"]*\/([^\/"]+)"/.exec(String(request.headers["content-type"]))?.[1] ?? "";
@@ -47,12 +48,36 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
   try {
     const owner = await identity("admin"), other = await identity("admin"), viewer = await identity("viewer", owner.id);
     assert.equal((await app.inject({ url: "/api/cameras" })).statusCode, 401);
-    const input = { host, onvifPort: port, name: "Fixture camera", username: "fixture-camera", password: secret };
+    const company = await prisma.company.create({ data: { ownerId: owner.id, name: "Fixture company", code: tag } });
+    const input = { companyId: company.id, kind: "nvr", host, onvifPort: port, name: "Fixture camera", username: "fixture-camera", password: secret };
     assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: { cookie: owner.headers.cookie }, payload: input })).statusCode, 403);
     assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: viewer.headers, payload: input })).statusCode, 403);
     const created = await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: input });
     assert.equal(created.statusCode, 201); const camera = created.json().camera;
     assert.equal(camera.status, "verified"); assert.equal(camera.profiles.length, 1);
+    const companyTwo = await prisma.company.create({ data: { ownerId: owner.id, name: "Second fixture", code: `${tag}-two` } });
+    const duplicateIp = await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: { ...input, companyId: companyTwo.id } });
+    assert.equal(duplicateIp.statusCode, 201, 'same private IP can belong to different customer routes');
+    assert.equal((await app.inject({ url: `/api/cameras?companyId=${company.id}`, headers: owner.headers })).json().cameras.length, 1);
+    assert.equal((await app.inject({ url: `/api/cameras?companyId=${company.id}`, headers: other.headers })).statusCode, 404);
+    assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: { ...input, companyId: "foreign" } })).statusCode, 404);
+    const directory = (await app.inject({ url: "/api/cameras/companies", headers: viewer.headers })).json();
+    assert.equal(directory.companies.length, 2); assert.equal(directory.companies[0].nvrCount, 1);
+    const monitorUrl = `/api/cameras/${camera.id}/monitor`;
+    assert.equal((await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: viewer.headers })).statusCode, 403);
+    assert.equal((await app.inject({ url: monitorUrl, headers: other.headers })).statusCode, 404);
+    await prisma.cameraDevice.update({ where: { id: camera.id }, data: { monitorHistoryJson: Array.from({ length: 48 }, () => ({ checkedAt: new Date().toISOString(), reachable: true, warningCount: 0 })) } });
+    const monitoring = await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: owner.headers });
+    assert.equal(monitoring.statusCode, 200); assert.equal(monitoring.json().report.reachable, true); assert.equal(monitoring.json().history.length, 48); assert.equal(monitoring.json().report.coverage.diskHealth, "unsupported");
+    await prisma.company.update({ where: { id: company.id }, data: { deletedAt: new Date() } });
+    assert.equal((await app.inject({ url: monitorUrl, headers: owner.headers })).statusCode, 404, 'archived company blocks media and monitoring too');
+    await prisma.company.update({ where: { id: company.id }, data: { deletedAt: null } });
+    const storageSetting = await app.inject({ method: "PATCH", url: `/api/cameras/${camera.id}`, headers: owner.headers, payload: { monitoringEnabled: true, storageSettings: { adapter: "hikvision", port, https: false, useDeviceCredentials: false, username: "storage-fixture", password: secret } } });
+    assert.equal(storageSetting.statusCode, 200); assert.equal(storageSetting.body.includes(secret), false); assert.equal(storageSetting.body.includes("storage-fixture"), false);
+    assert.equal(storageSetting.json().camera.status, "verified", 'disk-only settings do not invalidate video connection');
+    assert.equal(storageSetting.json().camera.monitorReportJson, null, 'previous disk report is invalidated');
+    const deniedMonitor = await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: owner.headers });
+    assert.equal(deniedMonitor.statusCode, 200); assert.equal(deniedMonitor.json().report.storage.status, "denied"); assert.equal(deniedMonitor.json().monitoringEnabled, false, 'credential errors stop scheduled retries');
     assert.equal(created.body.includes(secret), false); assert.equal(created.body.includes("rtsp://"), false); assert.equal(created.body.includes("connectionEncrypted"), false);
     const stored = await prisma.cameraDevice.findUniqueOrThrow({ where: { id: camera.id } });
     assert.equal(stored.connectionEncrypted?.includes(secret), false); assert.ok(decryptSecret(stored.connectionEncrypted)?.includes(secret));

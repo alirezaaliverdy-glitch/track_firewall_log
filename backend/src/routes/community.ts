@@ -3,8 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import type { PublicUser } from "../services/auth.service.js";
 import { author, messageInclude, safeMessage, nextChange, communityError, messageHash, validateCommunityFile,
-  FILE_LIMIT, WORKSPACE_FILE_LIMIT, GLOBAL_FILE_LIMIT, type ValidatedFile } from "../services/community-collaboration.service.js";
+  FILE_LIMIT, WORKSPACE_FILE_LIMIT, GLOBAL_FILE_LIMIT, DAILY_FILE_LIMIT, type ValidatedFile } from "../services/community-collaboration.service.js";
 import { communityTaskRoutes } from "./community-tasks.js";
+import { communityRetentionRoutes } from "./community-retention.js";
 
 // Community is shared only inside the authenticated workspace. Tickets are private.
 export function communityScope(user: PublicUser): Prisma.CommunityThreadWhereInput {
@@ -25,6 +26,7 @@ export async function communityRoutes(app: FastifyInstance) {
     if (!req.authUser) return reply.code(401).send({ error: "unauthorized" });
   });
   await app.register(communityTaskRoutes);
+  await app.register(communityRetentionRoutes);
   app.get<{ Querystring: { kind: "discussion" | "ticket"; search?: string; status?: string; offset?: number } }>("/api/community/threads", {
     schema: { querystring: { type: "object", required: ["kind"], additionalProperties: false, properties: {
       kind: { enum: ["discussion", "ticket"] }, search: { type: "string", maxLength: 100 },
@@ -124,7 +126,7 @@ export async function communityRoutes(app: FastifyInstance) {
           FROM "AuditLog" WHERE "actor" = ${user.id} AND "action" = 'community.files_uploaded'
           AND "createdAt" >= ${new Date(Date.now() - 86400000)}`;
         const bytes = files.reduce((sum, f) => sum + f.size, 0);
-        if ((global._sum.size ?? 0) + bytes > GLOBAL_FILE_LIMIT || (workspace._sum.size ?? 0) + bytes > WORKSPACE_FILE_LIMIT || Number(daily[0].bytes) + bytes > 50 * 1024 * 1024)
+        if ((global._sum.size ?? 0) + bytes > GLOBAL_FILE_LIMIT || (workspace._sum.size ?? 0) + bytes > WORKSPACE_FILE_LIMIT || Number(daily[0].bytes) + bytes > DAILY_FILE_LIMIT)
           throw communityError("COMMUNITY_STORAGE_QUOTA", 413);
       }
       const message = await tx.communityMessage.create({ data: { threadId: found.id, authorId: user.id, body: input.body.trim(),
@@ -134,7 +136,7 @@ export async function communityRoutes(app: FastifyInstance) {
         dryRun: false, metadata: { bytes: files.reduce((sum, file) => sum + file.size, 0), files: files.length } } });
       await tx.communityThread.update({ where: { id: found.id }, data: { updatedAt: new Date() } });
       return safeMessage(message);
-    });
+    }, { timeout: files.length ? 120000 : 15000, maxWait: 10000 });
   }
   app.post<{ Params: { id: string }; Body: { body: string; clientKey: string; replyToId?: string } }>("/api/community/threads/:id/messages", {
     bodyLimit: 24000, schema: { params, body: { type: "object", required: ["body", "clientKey"], additionalProperties: false,
@@ -142,14 +144,14 @@ export async function communityRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     return { message: await createMessage(req.authUser!, req.params.id, req.body, []) };
   });
-  app.post<{ Params: { id: string } }>("/api/community/threads/:id/messages/files", { bodyLimit: 16 * 1024 * 1024, schema: { params } }, async (req, reply) => {
+  app.post<{ Params: { id: string } }>("/api/community/threads/:id/messages/files", { bodyLimit: 160 * 1024 * 1024, schema: { params } }, async (req, reply) => {
     const user = req.authUser!;
     // Authorize before consuming bytes; cap simultaneous buffered requests as well as disk use.
     if (!await prisma.communityThread.findFirst({ where: { AND: [communityScope(user), { id: req.params.id }] } }))
       return reply.code(404).send({ error: "not_found" });
-    if (activeUploads.has(user.id) || activeUploads.size >= 4) return reply.code(429).send({ error: "COMMUNITY_UPLOAD_BUSY" });
+    if (activeUploads.has(user.id) || activeUploads.size >= 1) return reply.code(429).send({ error: "COMMUNITY_UPLOAD_BUSY" });
     activeUploads.add(user.id);
-    const timeout = setTimeout(() => req.raw.destroy(), 30000); timeout.unref();
+    const timeout = setTimeout(() => req.raw.destroy(), 300000); timeout.unref();
     try {
       const fields: Record<string, string> = {}, files: ValidatedFile[] = [];
       for await (const part of req.parts({ limits: { fileSize: FILE_LIMIT, files: 3, fields: 3, parts: 6, fieldSize: 16000, fieldNameSize: 40 } })) {
@@ -169,7 +171,12 @@ export async function communityRoutes(app: FastifyInstance) {
       return { message: await createMessage(user, req.params.id, { body: fields.body ?? "", clientKey: fields.clientKey, replyToId: fields.replyToId }, files) };
     } catch (error) {
       if ((error as { code?: string }).code?.startsWith("FST_")) return reply.code(413).send({ error: "COMMUNITY_FILE_SIZE" });
-      throw error;
+      const safe = error as { message?: string; statusCode?: number; code?: string };
+      if (safe.statusCode && safe.statusCode >= 400 && safe.statusCode < 500 && /^(COMMUNITY_[A-Z_]+|not_found|forbidden)$/.test(safe.message ?? ""))
+        return reply.code(safe.statusCode).send({ error: safe.message });
+      // Database exceptions can contain serialized upload arguments. Never log them.
+      req.log.warn({ code: "COMMUNITY_FILE_STORE_FAILED", databaseCode: /^P\d{4}$/.test(safe.code ?? "") ? safe.code : undefined }, "Attachment could not be stored");
+      return reply.code(500).send({ error: "COMMUNITY_FILE_STORE_FAILED" });
     } finally { clearTimeout(timeout); activeUploads.delete(user.id); }
   });
   const messageParams = { type: "object", required: ["id", "messageId"], additionalProperties: false, properties: { id: idSchema, messageId: idSchema } };
@@ -208,10 +215,10 @@ export async function communityRoutes(app: FastifyInstance) {
     const thread = await prisma.communityThread.findFirst({ where: { AND: [communityScope(req.authUser!), { id: req.params.id }] } });
     if (!thread) return reply.code(404).send({ error: "not_found" });
     const userId = req.authUser!.id;
-    if (downloadCount >= 8 || (activeDownloads.get(userId) ?? 0) >= 2) return reply.code(429).send({ error: "COMMUNITY_DOWNLOAD_BUSY" });
+    if (downloadCount >= 2 || (activeDownloads.get(userId) ?? 0) >= 1) return reply.code(429).send({ error: "COMMUNITY_DOWNLOAD_BUSY" });
     downloadCount++; activeDownloads.set(userId, (activeDownloads.get(userId) ?? 0) + 1);
     let released = false;
-    const timeout = setTimeout(() => reply.raw.destroy(), 30000); timeout.unref();
+    const timeout = setTimeout(() => reply.raw.destroy(), 300000); timeout.unref();
     const release = () => {
       if (released) return; released = true; clearTimeout(timeout); downloadCount--;
       const remaining = (activeDownloads.get(userId) ?? 1) - 1;
@@ -247,7 +254,7 @@ export async function communityRoutes(app: FastifyInstance) {
     const thread = await prisma.communityThread.findFirst({ where: { AND: [communityScope(user), { id: req.params.id }] } });
     if (!thread) return reply.code(404).send({ error: "not_found" });
     const message = await prisma.communityMessage.findFirst({ where: { threadId: thread.id, sequence: req.body.sequence }, select: { id: true } });
-    if (!message) return reply.code(400).send({ error: "invalid_cursor" });
+    if (!message && req.body.sequence !== thread.prunedThroughSequence) return reply.code(400).send({ error: "invalid_cursor" });
     // Monotonic across open tabs; never mark future/unseen messages as read.
     await prisma.$executeRaw`INSERT INTO "CommunityRead" ("threadId", "userId", "lastSequence") VALUES (${thread.id}, ${user.id}, ${req.body.sequence})
       ON CONFLICT ("threadId", "userId") DO UPDATE SET "lastSequence" = GREATEST("CommunityRead"."lastSequence", EXCLUDED."lastSequence")`;

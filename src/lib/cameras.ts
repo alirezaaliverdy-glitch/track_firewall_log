@@ -2,18 +2,34 @@ import { apiRequest, apiUrl } from "./apiTransport";
 
 export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; streamAvailable: boolean; snapshotAvailable: boolean };
 export type CameraDevice = {
-  id: string; name: string; location: string; host: string; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp";
+  id: string; name: string; location: string; host: string; companyId?: string | null; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; monitorReportJson?: NvrReport | null; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp";
   onvifPort: number; onvifPath: string; onvifHttps: boolean; status: "verified" | "error" | "unverified"; lastSeenAt: string | null; lastErrorCode: string | null;
   infoJson: Record<string, string> | null; profiles: CameraProfile[]; credentialsConfigured: boolean; createdAt: string;
+  storageSettings?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port: number; https: boolean; separateCredentials: boolean };
 };
 export type CameraCandidate = { host: string; onvifPort: number; onvifPath: string; onvifHttps: boolean; name: string; evidence: "onvif" | "rtsp"; requiresCredentials: boolean; registered: boolean };
 export type CameraDiscovery = { cidr: string; candidates: CameraCandidate[]; scannedAddresses: number; partial: boolean };
-export type CameraInput = { host: string; name: string; location: string; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp"; onvifPort: number; onvifPath: string; onvifHttps?: boolean; username?: string; password?: string; rtspUrl?: string; vpnConnectionId?: string };
+export type CameraInput = { storageSettings?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port: number; https: boolean; useDeviceCredentials: boolean; username?: string; password?: string }; companyId?: string; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; host: string; name: string; location: string; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp"; onvifPort: number; onvifPath: string; onvifHttps?: boolean; username?: string; password?: string; rtspUrl?: string; vpnConnectionId?: string };
+export type CameraCompany = { id: string; name: string; code: string; description: string | null; cameraCount: number; nvrCount: number };
+export type NvrReport = { checkedAt: string; reachable: boolean; durationMs: number; errorCode?: string; configuredChannels: number; clockDriftSeconds: number | null; storageConfigurations: number | null; recordingCount: number | null;
+  jobs: { token: string; state: string; error: boolean }[]; interfaces: { name: string; enabled: boolean | null; addresses: string[] }[]; coverage: Record<string, string>; warnings: string[]; truncated: boolean; identity: Record<string, string>;
+  storage?: { source: "hikvision" | "dahua" | "xiongmai" | null; status: string; errorCode?: string; truncated: boolean; disks: { id: string; name: string; capacityBytes: number | null; usedBytes: number | null; freeBytes: number | null; health: string; reportedState: string; smart: string; temperatureC: number | null }[] } };
+export type NvrMonitor = { report: NvrReport | null; history: { checkedAt: string; reachable: boolean; warningCount: number }[]; monitoringEnabled: boolean; intervalSeconds: number };
 export type CameraPreview = { id: string; status: string; expiresAt: string; preview: { titleFa: string; titleEn: string; cameraName: string; host: string; effectFa: string; effectEn: string; risk: string; connectorInvoked: false } };
 export type CameraResult = { status: string; connectorInvoked: boolean; accepted?: boolean; code?: string; requiresReconnect?: boolean };
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  CAMERA_COMPANY_REQUIRED: ["ابتدا شرکت دستگاه را انتخاب کن.", "Select the device company first."],
+  CAMERA_COMPANY_NOT_FOUND: ["شرکت انتخاب‌شده در دسترس نیست.", "This company is not available."],
+  CAMERA_MONITOR_BUSY: ["پایش در حال اجراست؛ کمی بعد تلاش کن.", "Monitoring is busy. Try again shortly."],
+  CAMERA_MONITOR_UNAVAILABLE: ["پایش ساخت‌یافته به NVR با ONVIF نیاز دارد.", "Structured monitoring requires an ONVIF NVR."],
+  NVR_STORAGE_ADAPTER_REQUIRED: ["مسیر هارد را در تنظیمات زیر انتخاب کن؛ برای مدل‌های دیگر API یا SDK سازنده لازم است.", "Select a disk adapter below. Other models require their manufacturer's API or SDK."],
+  NVR_STORAGE_UNSUPPORTED: ["این دستگاه مسیر هارد انتخاب‌شده را پشتیبانی نمی‌کند یا API غیرفعال است.", "This disk API is unsupported or disabled on the device."],
+  NVR_STORAGE_RESPONSE_INVALID: ["پاسخ هارد با پروتکل انتخاب‌شده سازگار نبود؛ برند و پورت وب را بررسی کن.", "Disk response did not match the selected protocol. Check the vendor and web port."],
+  NVR_STORAGE_UNAVAILABLE: ["اطلاعات هارد دریافت نشد؛ مسیر و مجوز حساب را بررسی کن.", "Disk data unavailable. Check the route and account permissions."],
+  NVR_ACCOUNT_LOCKED: ["دستگاه حساب یا IP را قفل کرده؛ پایش خودکار متوقف شد. ابتدا قفل و اطلاعات ورود را بررسی کن.", "Device locked the account or IP. Scheduled checks stopped; review credentials and unlock first."],
+  NVR_DVRIP_ENCRYPTION_REQUIRED: ["این نسخهٔ DVRIP به رمزنگاری اختصاصی نیاز دارد؛ این مسیر فعلاً پشتیبانی نمی‌شود.", "This DVRIP firmware requires vendor encryption that is not currently supported."],
   VPN_NOT_FOUND: ["این VPN در فضای کاری شما پیدا نشد.", "This VPN was not found in your workspace."],
   VPN_TARGET_OUTSIDE_ROUTES: ["IP دوربین در بازهٔ VPN انتخاب‌شده نیست.", "The camera IP is outside the selected VPN ranges."],
   VPN_CONNECT_FIRST: ["ابتدا VPN این دوربین را وصل کن، سپس دوباره تلاش کن.", "Connect this camera's VPN and try again."],
@@ -56,12 +72,13 @@ export async function cameraJson<T>(path: string, init?: RequestInit): Promise<T
   if (!response.ok) throw new Error(typeof data?.error?.code === "string" ? data.error.code : "CAMERA_REQUEST_FAILED");
   return data as T;
 }
-export const listCameras = () => cameraJson<{ cameras: CameraDevice[] }>("");
+export const listCameras = (companyId?: string) => cameraJson<{ cameras: CameraDevice[] }>(companyId ? `?companyId=${encodeURIComponent(companyId)}` : "");
+export const listCameraCompanies = () => cameraJson<{ companies: CameraCompany[]; unassigned: { cameraCount: number; nvrCount: number } }>("/companies");
 export const createCamera = (input: CameraInput) => cameraJson<{ camera: CameraDevice }>("", { method: "POST", body: JSON.stringify(input) });
 export const updateCamera = (id: string, input: Partial<CameraInput>) => cameraJson<{ camera: CameraDevice }>(`/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 export const removeCamera = (id: string) => cameraJson(`/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const refreshCamera = (id: string) => cameraJson<{ camera: CameraDevice }>(`/${encodeURIComponent(id)}/refresh`, { method: "POST" });
-export const discoverCameras = (cidr: string, ports?: number[], vpnConnectionId?: string) => cameraJson<CameraDiscovery>("/discover", { method: "POST", body: JSON.stringify({ cidr, ports, vpnConnectionId }) });
+export const discoverCameras = (cidr: string, ports?: number[], vpnConnectionId?: string, companyId?: string) => cameraJson<CameraDiscovery>("/discover", { method: "POST", body: JSON.stringify({ cidr, ports, vpnConnectionId, companyId }) });
 export const previewCameraAction = (id: string, operation: string, parameters?: Record<string, string>) => cameraJson<CameraPreview>(`/${encodeURIComponent(id)}/actions/preview`, { method: "POST", body: JSON.stringify({ operation, ...parameters }) });
 export const executeCameraAction = (id: string, planId: string) => cameraJson<CameraResult>(`/${encodeURIComponent(id)}/actions/${encodeURIComponent(planId)}/execute`, { method: "POST", body: JSON.stringify({ intent: "execute", confirmed: true }) });
 export const cameraImageUrl = (id: string, profile: string, mode: "live" | "snapshot" | "frame") => apiUrl(`/cameras/${encodeURIComponent(id)}/${mode}?profile=${encodeURIComponent(profile)}`);

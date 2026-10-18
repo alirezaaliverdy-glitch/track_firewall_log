@@ -45,11 +45,23 @@ model CommunityThread {
   priority      String @default("normal")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  retentionCheckedAt DateTime?
+  prunedThroughSequence Int @default(0)
   messages      CommunityMessage[]
   reads         CommunityRead[]
   @@unique([creatorId, clientKey])
   @@index([workspaceId, kind, updatedAt])
   @@index([workspaceId, creatorId, kind])
+  @@index([retentionCheckedAt])
+}
+
+model CommunityRetentionPolicy {
+  workspaceId String @id
+  enabled Boolean @default(true)
+  discussionDays Int @default(30)
+  closedTicketDays Int @default(90)
+  maxMessages Int @default(5000)
+  updatedAt DateTime @updatedAt
 }
 
 model CommunityMessage {
@@ -159,6 +171,8 @@ model CameraDevice {
   id                  String   @id @default(cuid())
   ownerId             String
   owner               AppUser  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  companyId           String?
+  company             Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   vpnConnectionId     String?
   vpnConnection       VpnConnection? @relation(fields: [vpnConnectionId], references: [id], onDelete: SetNull)
   name                String
@@ -175,12 +189,21 @@ model CameraDevice {
   status              String   @default("unverified")
   lastSeenAt          DateTime?
   lastErrorCode        String?
+  monitoringEnabled   Boolean @default(false)
+  monitorIntervalSeconds Int @default(300)
+  monitorCheckedAt    DateTime?
+  monitorNextRunAt    DateTime?
+  monitorLeaseUntil   DateTime?
+  monitorReportJson   Json?
+  monitorHistoryJson  Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   actionPlans         CameraActionPlan[]
 
-  @@unique([ownerId, host, onvifPort])
+  @@unique([ownerId, companyId, host, onvifPort])
   @@index([ownerId, createdAt])
+  @@index([companyId])
+  @@index([monitoringEnabled, monitorNextRunAt])
   @@index([vpnConnectionId])
 }
 
@@ -217,6 +240,7 @@ model Company {
   devices     Device[]
   assets      Asset[]
   ipAddresses AssetIpAddress[]
+  cameras     CameraDevice[]
 
   @@unique([ownerId, code])
   @@index([ownerId, deletedAt])

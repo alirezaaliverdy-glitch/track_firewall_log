@@ -25,6 +25,7 @@ page.on('request', async request => {
   if(path==='/auth/session-status')return respond({authenticated:true,user:{...self,username:'qa',role,allowedSections:[]}});
   if(path==='/auth/csrf')return respond({csrfToken:'synthetic-csrf'});
   if(path==='/product-state/navigation')return respond({navigation:[]});
+  if(path==='/community/retention')return respond({policy:{enabled:true,discussionDays:30,closedTicketDays:90,maxMessages:5000},usedBytes:104857600,workspaceFileLimit:536870912,fileLimit:52428800});
   if(!path.startsWith('/community/threads')) { if(method!=='GET') writes.push(path); return respond({}); }
   if(method!=='GET')assert.equal(request.headers()['x-csrf-token'],'synthetic-csrf');
   const parts=path.split('/'),id=parts[3],action=parts[4],body=request.postData()?JSON.parse(request.postData()):null;
@@ -48,6 +49,7 @@ async function capture(name){await page.waitForSelector('.hub-workspace');await 
 async function go(query=''){await page.goto(`${base}/community${query}`,{waitUntil:'networkidle0'});await page.waitForSelector('.hub-thread');}
 try{
   await page.setViewport({width:1440,height:1050});await go();await capture('community-light-welcome');
+  await page.click('.hub-storage-access');await page.waitForSelector('dialog[open]');await capture('community-retention-admin');assert.equal(await page.$$eval('dialog input[type=number]',inputs=>inputs.length),3);await page.keyboard.press('Escape');
   await page.click('.hub-thread');await page.waitForSelector('.hub-bubble');await capture('community-light-chat');
   failSend=true;await page.type('#community-message','پیام آزمایشی قابل تکرار');await page.click('.hub-send');await page.waitForSelector('.hub-composer-wrap [role=alert]');
   assert.equal(await page.$eval('#community-message',e=>e.value),'پیام آزمایشی قابل تکرار');await capture('community-retry-draft');
@@ -59,8 +61,11 @@ try{
   await page.evaluate(()=>sessionStorage.setItem('qa-theme','dark'));await go('?tab=discussion&thread=topic');await capture('community-dark-chat');
   role='viewer';await page.evaluate(()=>sessionStorage.setItem('qa-theme','light'));await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});await go('?tab=ticket&thread=ticket');assert.equal(await page.$('.hub-conversation__header select'),null);await capture('community-mobile-ticket');
   await page.click('.hub-back');await page.waitForFunction(()=>!new URL(location.href).searchParams.has('thread'));await capture('community-mobile-inbox');
+  await page.click('.hub-storage-access');await page.waitForSelector('dialog[open]');await capture('community-retention-viewer');assert.equal(await page.$eval('dialog input[type=number]',input=>input.disabled),true);await page.keyboard.press('Escape');
   await page.click('.hub-inbox__actions .hub-primary');await page.waitForSelector('dialog[open]');await capture('community-mobile-create');await page.type('dialog input','تیکت آزمایشی');await page.type('dialog textarea','لطفاً این درخواست را بررسی کنید.');await page.click('dialog button[type=submit]');await page.waitForFunction(()=>document.querySelector('.hub-conversation h2')?.textContent==='تیکت آزمایشی');await capture('community-mobile-created');
   await page.setViewport({width:320,height:740,isMobile:true,hasTouch:true});await capture('community-small');
   await page.evaluate(()=>localStorage.setItem('firewall-log-analyzer.locale','en'));await page.setViewport({width:1440,height:1000});await go('?tab=discussion&thread=topic');await capture('community-english');
+  assert.ok(await page.$('#message-m1'));threads[0].prunedThroughSequence=2;messages.topic=messages.topic.filter(message=>message.sequence>2);
+  await page.waitForFunction(()=>!document.querySelector('#message-m1')&&!document.querySelector('#message-m2'));await capture('community-retention-pruned');
   assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);console.log(JSON.stringify({ok:true,captures,runtimeErrors:errors.length,externalWrites:writes.length,scope:'synthetic APIs only'}));
 } finally {await browser.close();}

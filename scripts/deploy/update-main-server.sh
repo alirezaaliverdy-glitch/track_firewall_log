@@ -131,6 +131,15 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261018120000_communi
   [ "$collaboration_access" = ready ] || { echo "Collaboration migration needs CommunityMessage ownership, schema CREATE and referenced-table access; leaving the running deployment unchanged" >&2; exit 2; }
 fi
 
+if git cat-file -e "$target_sha:backend/prisma/migrations/20261018150000_community_storage_retention/migration.sql" 2>/dev/null; then
+  retention_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261018150000_community_storage_retention' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('CommunityThread','CommunityAttachment') AND tableowner <> '$camera_migration_role')) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
+  [ "$retention_access" = ready ] || { echo "Retention migration requires ownership of community tables; deployment unchanged" >&2; exit 2; }
+fi
+if git cat-file -e "$target_sha:backend/prisma/migrations/20261018160000_camera_company_monitoring/migration.sql" 2>/dev/null; then
+  nvr_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261018160000_camera_company_monitoring' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_column_privilege('$camera_migration_role', 'public.' || quote_ident('Company'), 'id', 'REFERENCES') AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'CameraDevice' AND tableowner <> '$camera_migration_role')) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
+  [ "$nvr_access" = ready ] || { echo "NVR migration requires camera ownership and Company(id) REFERENCES; deployment unchanged" >&2; exit 2; }
+fi
+
 git merge --ff-only "$target_sha"
 
 compose config --quiet

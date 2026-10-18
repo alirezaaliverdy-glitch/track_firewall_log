@@ -14,7 +14,7 @@ let mediaRequests = 0, inventoryMode = "normal", failMedia = false, role = "admi
 let screenshotCount = 0;
 let emptyDesktopStream = true;
 const profile = (token, source, name, width, ptz = false) => ({ token, sourceToken: source, name, width, height: Math.round(width * 9 / 16), encoding: "H264", fps: 25, ptz, streamAvailable: true, snapshotAvailable: true });
-const device = (id, name, host, kind, location, profiles) => ({ id, name, host, kind, location, profiles, onvifPort: 80, onvifHttps: false, onvifPath: "/onvif/device_service", connectionMode: "onvif", status: "verified", lastSeenAt: new Date().toISOString(), lastErrorCode: null, credentialsConfigured: true, infoJson: { Manufacturer: "ONVIF fixture", Model: kind === "nvr" ? "NVR fixture" : "MCA52 fixture", FirmwareVersion: "Test fixture", SerialNumber: "QA-only" } });
+const device = (id, name, host, kind, location, profiles) => ({ id, companyId: "qa-company", name, host, kind, location, profiles, onvifPort: 80, onvifHttps: false, onvifPath: "/onvif/device_service", connectionMode: "onvif", status: "verified", lastSeenAt: new Date().toISOString(), lastErrorCode: null, credentialsConfigured: true, infoJson: { Manufacturer: "ONVIF fixture", Model: kind === "nvr" ? "NVR fixture" : "MCA52 fixture", FirmwareVersion: "Test fixture", SerialNumber: "QA-only" } });
 const devices = [device("nvr", "ضبط‌کنندهٔ اصلی", "192.168.18.50", "nvr", "اتاق تجهیزات", [profile("ch1-main", "ch1", "ورودی · اصلی", 1920), profile("ch1-sub", "ch1", "ورودی · کم‌مصرف", 640), profile("ch2-main", "ch2", "پارکینگ", 1280)]), ...Array.from({ length: 5 }, (_, i) => device(`c${i}`, ["ورودی ساختمان", "پارکینگ", "راهروی طبقهٔ اول", "حیاط", "انبار"][i], `192.168.18.${i + 4}`, "camera", ["همکف", "زیرزمین", "طبقهٔ اول", "محوطه", "همکف"][i], [profile("main", "source", "اصلی", 1920, i === 0), profile("sub", "source", "کم‌مصرف", 640, i === 0)]))];
 devices[5].status = "error"; devices[5].lastErrorCode = "CAMERA_TIMEOUT"; devices[5].lastSeenAt = null;
 devices[0].profiles.push({ ...profile("still-only", "ch1", "عکس", 320), streamAvailable: false });
@@ -27,6 +27,8 @@ page.on("request", (request) => {
   const respond = (value, status = 200) => request.respond({ status, contentType: "application/json", body: JSON.stringify(value) });
   if (path === "/auth/session-status") return void respond({ ok: true, authenticated: true, user: { id: "qa", username: "qa", displayName: "مدیر آزمایش", role, allowedSections: role === "admin" ? ["assets", "actions"] : ["assets"] } });
   if (path === "/auth/csrf") return void respond({ ok: true, csrfToken: "qa-only" });
+  if (path === "/cameras/companies") return void respond({ companies: [{ id: "qa-company", name: "شرکت مبنا", code: "MABNA", description: "دفتر مرکزی و فضای تولید", cameraCount: 5, nvrCount: 1 }, { id: "qa-second", name: "شرکت آفتاب", code: "AFTAB", description: "شعبه دوم", cameraCount: 0, nvrCount: 0 }], unassigned: { cameraCount: 1, nvrCount: 0 } });
+  if (/\/monitor(?:\/refresh)?$/.test(path)) return void respond({ monitoringEnabled: true, intervalSeconds: 300, history: [{ checkedAt: new Date().toISOString(), reachable: true, warningCount: 0 }], report: { checkedAt: new Date().toISOString(), reachable: true, configuredChannels: 16, recordingCount: null, clockDriftSeconds: 3, interfaces: [], jobs: [], coverage: { diskCapacity: "measured", diskHealth: "unsupported", recordingJobs: "unsupported", cpu: "unsupported" }, warnings: [], storage: { source: "xiongmai", status: "measured", disks: [{ id: "1", name: "HDD 1", capacityBytes: 2e12, usedBytes: 1.3e12, freeBytes: .7e12, health: "unknown", smart: "unknown", temperatureC: null }] } } });
   if (path === "/product-state/navigation") return void respond({ navigation: [{ key: "assets", iconKey: "assets", titleFa: "دارایی‌ها", titleEn: "Assets", route: "/assets", mobilePrimary: true, items: [{ key: "assets.cameras", titleFa: "دوربین‌ها", titleEn: "Cameras", route: "/assets/cameras", state: "partial" }] }] });
   if (path === "/cameras" && method === "GET") return void respond(inventoryMode === "failure" ? { error: { code: "CAMERA_REQUEST_FAILED" } } : { cameras: inventoryMode === "empty" ? [] : devices }, inventoryMode === "failure" ? 503 : 200);
   if (path === "/vpn") return void respond({ profiles: [], helper: { available: false, protocols: [] } });
@@ -60,6 +62,16 @@ async function capture(name) {
 try {
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await page.goto(`${base}/assets/cameras`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector(".camera-company-card");
+  assert.equal(mediaRequests, 0, "company chooser must not start any video");
+  await capture("camera-companies-desktop");
+  for (const width of [390, 320]) {
+    await page.setViewport({ width, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    await page.waitForSelector(".camera-company-card"); await capture(`camera-companies-${width}`);
+  }
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+  await page.waitForSelector(".camera-company-card");
+  await page.click(".camera-company-card");
   await page.waitForSelector(".camera-device-card", { timeout: 20000 });
   await page.evaluate(() => document.fonts.ready);
   assert.equal(mediaRequests, 0, "inventory must not auto-start camera decoders");
@@ -73,7 +85,7 @@ try {
   await page.click(".camera-search__clear");
   assert.equal(await page.$$eval(".camera-device-card", cards => cards.length), 6);
   await page.click(".camera-device-card .camera-button--primary");
-  await page.waitForFunction(() => document.querySelector(".camera-player img")?.complete);
+  await page.waitForFunction(() => document.querySelector(".camera-player img")?.naturalWidth > 0);
   assert.ok(await page.$eval(".camera-player img", (img) => img.naturalWidth > 0));
   assert.equal(await page.$eval('.camera-player select', el => el.value), 'ch1-sub', 'prefer a playable stream over a lower-resolution snapshot-only profile');
   assert.ok(frameRequests > 0, 'an empty multipart response falls back to bounded JPEG frames');
@@ -81,6 +93,8 @@ try {
   await page.click(".camera-player .camera-icon-button");
   await page.click(".camera-device-card .camera-icon-button");
   await page.waitForSelector("dialog[open]");
+  await page.waitForSelector(".nvr-disk");
+  await capture("cameras-nvr-monitor-desktop");
   await page.locator(".camera-controls > .camera-button").click();
   await page.waitForSelector(".camera-confirm"); assert.equal(executions, 0);
   await capture("cameras-desktop-confirm");
@@ -91,6 +105,9 @@ try {
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await page.waitForSelector(".camera-device-card");
   await capture("cameras-mobile");
+  await page.click(".camera-device-card .camera-icon-button");
+  await page.waitForSelector(".nvr-disk"); await capture("cameras-nvr-monitor-mobile");
+  await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector('dialog[open]'));
   await page.click(".camera-device-card .camera-button--primary");
   await page.waitForFunction(() => document.querySelector(".camera-player img")?.naturalWidth > 0);
   assert.ok(frameRequests > 0, "touch devices must use bounded authenticated JPEG frames");

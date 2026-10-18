@@ -8,7 +8,7 @@ const statuses = (t: Translate): Record<TaskStatus, string> => ({ todo: t("بر�
 export function collaborationError(error: unknown, t: Translate) {
   const e = error as { status?: number; code?: string };
   if (e.code === "COMMUNITY_STORAGE_QUOTA") return t("سهمیهٔ فایل پر شده است؛ با مدیر فضای کاری هماهنگ کن.", "Attachment quota reached. Contact your workspace administrator.");
-  if (e.status === 413) return t("هر فایل حداکثر ۵ مگابایت و هر پیام حداکثر سه فایل.", "Up to three files per message, 5 MB per file.");
+  if (e.status === 413) return t("هر فایل حداکثر ۵۰ مگابایت و هر پیام حداکثر سه فایل.", "Up to three files per message, 50 MiB per file.");
   if (e.status === 415) return t("نوع یا نام فایل مجاز نیست. تصویر، PDF یا متن ساده انتخاب کن.", "Unsupported file type or name. Choose an image, PDF or plain text.");
   if (e.status === 409) return t("این مورد تغییر کرده است؛ تازه‌سازی کن و دوباره بررسی کن. متن تو حفظ شد.", "This item changed. Refresh and review; your draft is kept.");
   if (e.status === 403) return t("اجازهٔ این تغییر را نداری.", "You do not have permission to make this change.");

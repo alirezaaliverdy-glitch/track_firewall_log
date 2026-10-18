@@ -12,8 +12,8 @@ export function cameraOperation(value: unknown): CameraOperation {
   if (typeof value !== "string" || !Object.hasOwn(CAMERA_CONTROL_TEMPLATES, value)) throw new CameraError("CAMERA_OPERATION_UNSUPPORTED", 422);
   return value as CameraOperation;
 }
-export function cameraRevision(camera: Pick<CameraDevice, "host" | "onvifPort" | "onvifPath" | "connectionEncrypted"> & { onvifHttps?: boolean }) {
-  return createHash("sha256").update(JSON.stringify([camera.host, camera.onvifPort, camera.onvifPath, camera.onvifHttps === true, camera.connectionEncrypted])).digest("hex");
+export function cameraRevision(camera: Pick<CameraDevice, "host" | "onvifPort" | "onvifPath" | "connectionEncrypted"> & { onvifHttps?: boolean; companyId?: string | null; vpnConnectionId?: string | null }) {
+  return createHash("sha256").update(JSON.stringify([camera.host, camera.onvifPort, camera.onvifPath, camera.onvifHttps === true, camera.connectionEncrypted, camera.companyId ?? null, camera.vpnConnectionId ?? null])).digest("hex");
 }
 
 /** Camera PolicyGuard: one explicit confirmation executes one registered ONVIF template. */

@@ -11,6 +11,8 @@ const requiredMigrations = [
   "20261013170000_vpn_asset_binding",
   "20261017120000_community",
   "20261018120000_community_collaboration",
+  "20261018150000_community_storage_retention",
+  "20261018160000_camera_company_monitoring",
 ];
 
 function databaseProbes(script) {

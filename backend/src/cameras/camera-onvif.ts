@@ -5,7 +5,7 @@ import { authenticatedCameraHttp, boundedMap, cameraSubnet, cameraUrl, CameraErr
 
 export type XmlNode = { name: string; namespace: string; attributes: Record<string, string>; text: string; children: XmlNode[] };
 export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; streamAvailable: boolean; snapshotAvailable: boolean };
-export type CameraConnection = CameraCredentials & { rtspUrl?: string; mediaUrl?: string; media2?: boolean; ptzUrl?: string; timeOffsetMs?: number; profiles?: Record<string, { rtspUrl?: string; snapshotUrl?: string }> };
+export type CameraConnection = CameraCredentials & { storage?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port?: number; https?: boolean; username?: string; password?: string }; rtspUrl?: string; mediaUrl?: string; media2?: boolean; ptzUrl?: string; timeOffsetMs?: number; profiles?: Record<string, { rtspUrl?: string; snapshotUrl?: string }> };
 const DEVICE = "http://www.onvif.org/ver10/device/wsdl";
 const MEDIA = "http://www.onvif.org/ver10/media/wsdl";
 const MEDIA2 = "http://www.onvif.org/ver20/media/wsdl";

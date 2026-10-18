@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import type { PublicUser } from "./auth.service.js";
 
-export const FILE_LIMIT = 5 * 1024 * 1024;
-export const WORKSPACE_FILE_LIMIT = 100 * 1024 * 1024;
-export const GLOBAL_FILE_LIMIT = 512 * 1024 * 1024;
+export const FILE_LIMIT = 50 * 1024 * 1024;
+export const WORKSPACE_FILE_LIMIT = 512 * 1024 * 1024;
+export const GLOBAL_FILE_LIMIT = 1536 * 1024 * 1024;
+export const DAILY_FILE_LIMIT = 200 * 1024 * 1024;
 export const author = { select: { id: true, displayName: true } } as const;
 export const fileMetadata = { id: true, fileName: true, mimeType: true, size: true } as const;
 export const messageInclude = { author, attachments: { select: fileMetadata }, replyTo: {
-  select: { id: true, author, body: true, deletedAt: true }
+  select: { id: true, sequence: true, author, body: true, deletedAt: true }
 } } as const;
 export type RichMessage = Prisma.CommunityMessageGetPayload<{ include: typeof messageInclude }>;
 export function safeMessage({ clientKey: _key, requestHash: _hash, ...message }: RichMessage) {

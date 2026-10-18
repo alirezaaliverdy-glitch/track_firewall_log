@@ -6,6 +6,8 @@ import { useAuth } from "@/context/AuthContext";
 import { communityApi, mergeMessages, messageKey, attachmentUrl, type Detail, type Kind, type ChatMessage, type Thread, type ThreadStatus, type Attachment } from "./communityApi";
 import { TaskBoard, TaskDialog, collaborationError } from "./TaskBoard";
 import "./CommunityPage.css";
+import { RetentionDialog } from "./RetentionDialog";
+import { HardDrive } from "lucide-react";
 
 type Translate = (fa: string, en: string) => string;
 const labels = (t: Translate): Record<ThreadStatus, string> => ({ open: t("باز", "Open"), in_progress: t("در حال رسیدگی", "In progress"), resolved: t("بسته‌شده", "Closed") });
@@ -20,7 +22,7 @@ export default function CommunityPage() {
   const [threads, setThreads] = useState<Thread[]>([]), [search, setSearch] = useState(""), [filter, setFilter] = useState("");
   const [status, setStatus] = useState(""), [limit, setLimit] = useState(30), [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true), [error, setError] = useState(false), [revision, setRevision] = useState(0);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(false), [storage, setStorage] = useState(false);
   const drafts = useRef<Record<string, string>>({});
   const workspace = useRef<HTMLDivElement>(null);
   // Reserve the shell navigation and visual viewport (including a touch keyboard).
@@ -62,7 +64,7 @@ export default function CommunityPage() {
   }, [kind, filter, status, limit, revision, taskView]);
   function changeTab(next: Kind) { setQuery({ tab: next }); setSearch(""); setFilter(""); setStatus(""); setThreads([]); setLimit(30); }
   return <section className={`community-hub ${selected && !taskView ? "has-conversation" : ""}`} dir={isFa ? "rtl" : "ltr"}>
-    <header className="hub-heading"><div className="hub-heading__icon"><MessagesSquare size={25}/></div><div><span>EOSNET · {t("کنار هم", "Together")}</span><h1>{t("گفت‌وگو و پشتیبانی", "Community & support")}</h1><p>{t("سؤال بپرس، تجربه به اشتراک بگذار یا درخواستت را پیگیری کن.", "Ask, share an idea, or follow up on a request.")}</p></div></header>
+    <header className="hub-heading"><div className="hub-heading__icon"><MessagesSquare size={25}/></div><div><span>EOSNET · {t("کنار هم", "Together")}</span><h1>{t("گفت‌وگو و پشتیبانی", "Community & support")}</h1><p>{t("سؤال بپرس، تجربه به اشتراک بگذار یا درخواستت را پیگیری کن.", "Ask, share an idea, or follow up on a request.")}</p></div><button className="hub-storage-access" onClick={() => setStorage(true)} aria-label={t("فضای فایل‌ها و نگهداری پیام‌ها", "File storage & message retention")} title={t("فضای فایل‌ها و نگهداری پیام‌ها", "File storage & message retention")}><HardDrive size={18}/><span>{t("فضا و پیام‌ها", "Storage & retention")}</span></button></header>
     {taskView ? <><div className="hub-tabs hub-tabs--board"><button onClick={() => changeTab("discussion")}><MessagesSquare size={17}/>{t("گفت‌وگوها", "Community")}</button><button onClick={() => changeTab("ticket")}><Ticket size={17}/>{t("تیکت‌ها", "Tickets")}</button><button aria-pressed="true"><ClipboardList size={17}/>{t("کارها", "Tasks")}</button></div><TaskBoard isFa={isFa} onThread={id => setQuery({ tab: "discussion", thread: id })}/></> : <div className="hub-workspace" ref={workspace}>
       <aside className="hub-inbox" aria-label={t("فهرست گفت‌وگوها", "Conversations")}>
         <div className="hub-tabs" aria-label={t("نوع گفت‌وگو", "Conversation type")}>
@@ -87,6 +89,7 @@ export default function CommunityPage() {
       </aside>
       {selected ? <Conversation key={selected} id={selected} isFa={isFa} draft={drafts.current[selected] ?? ""} saveDraft={body => { drafts.current[selected] = body; }} onBack={() => setQuery({ tab: kind })} refreshList={refresh}/> : <div className="hub-welcome"><div className="hub-welcome__art"><span/><MessagesSquare size={48}/><i><CheckCheck size={21}/></i></div><span className="hub-eyebrow">{kind === "ticket" ? t("پشتیبانی، قابل پیگیری", "Support, with a clear next step") : t("جایی برای هم‌فکری", "A space to connect")}</span><h2>{kind === "ticket" ? t("هر درخواست، یک مسیر روشن", "Every request has a place") : t("گفت‌وگوی خوب از یک سؤال شروع می‌شود", "Good conversations start with a question")}</h2><p>{kind === "ticket" ? t("مشکلت را بنویس؛ پاسخ‌ها و وضعیت رسیدگی همین‌جا می‌مانند.", "Describe the issue. Replies and progress stay together here.") : t("یک موضوع را انتخاب کن یا تجربه و سؤال خودت را با دیگر کاربران در میان بگذار.", "Choose a topic, or share your question and experience with other users.")}</p><button className="hub-primary" onClick={() => setCreating(true)}><Plus size={18}/>{kind === "ticket" ? t("ثبت اولین درخواست", "Create a request") : t("شروع گفت‌وگو", "Start a conversation")}</button><small><LockKeyhole size={13}/>{t("رمز، کلید API یا اطلاعات محرمانه نفرست.", "Never share passwords, API keys or confidential information.")}</small></div>}
     </div>}
+    {storage && <RetentionDialog isFa={isFa} onClose={() => setStorage(false)}/>}
     {creating && <CreateConversation kind={kind} t={t} onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setSearch(""); setFilter(""); setStatus(""); setQuery({ tab: kind, thread: id }); refresh(); }}/ >}
   </section>;
 }
@@ -120,7 +123,9 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
         const data = await communityApi<Detail>(`/${id}${first ? "" : changeCursor.current ? `?changeAfter=${changeCursor.current}` : `?after=${latest.current}`}`, { signal: abort.signal });
         if (abort.signal.aborted) return;
         setThread(data.thread); setError(""); if (first) setHasOlder(data.hasMore);
-        if (data.messages.length) { latest.current = Math.max(latest.current, ...data.messages.map(m => m.sequence)); setMessages(items => mergeMessages(items, data.messages)); }
+        latest.current = Math.max(latest.current, data.thread.prunedThroughSequence ?? 0, ...data.messages.map(m => m.sequence));
+        setMessages(items => mergeMessages(items, data.messages, data.thread.prunedThroughSequence ?? 0));
+        if (data.thread.prunedThroughSequence) { setReplyTo(item => item && item.sequence <= data.thread.prunedThroughSequence! ? null : item); setEditing(item => item && item.sequence <= data.thread.prunedThroughSequence! ? null : item); }
         if (data.changeCursor) changeCursor.current = Math.max(changeCursor.current, data.changeCursor);
       } catch (e) { if (!abort.signal.aborted) setError(requestError(e, (fa, en) => isFa ? fa : en)); }
       finally { running = false; }
@@ -141,7 +146,7 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
     if (olderBusy || !messages.length) return; setOlderBusy(true);
     const height = viewport.current?.scrollHeight ?? 0;
     try { const data = await communityApi<Detail>(`/${id}?before=${messages[0].sequence}`); if (!alive.current) return;
-      stick.current = false; setMessages(items => mergeMessages(items, data.messages)); setHasOlder(data.hasMore);
+      stick.current = false; setMessages(items => mergeMessages(items, data.messages, Math.max(thread?.prunedThroughSequence ?? 0, data.thread.prunedThroughSequence ?? 0))); setHasOlder(data.hasMore);
       requestAnimationFrame(() => { if (viewport.current) viewport.current.scrollTop += viewport.current.scrollHeight - height; });
     } catch (e) { if (alive.current) setError(requestError(e, t)); } finally { if (alive.current) setOlderBusy(false); }
   }
@@ -169,7 +174,7 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
   function cancelEdit() { setEditing(null); setBody(previousDraft.current); saveDraft(previousDraft.current); setSendError(""); }
   function chooseFiles(next: FileList | null) {
     const chosen = [...files, ...Array.from(next ?? [])];
-    if (chosen.length > 3 || chosen.some(file => file.size > 5 * 1024 * 1024 || !file.size)) { setSendError(t("حداکثر سه فایل، هر فایل تا ۵ مگابایت.", "Up to three files, 5 MB each.")); return; }
+    if (chosen.length > 3 || chosen.some(file => file.size > 50 * 1024 * 1024 || !file.size)) { setSendError(t("حداکثر سه فایل، هر فایل تا ۵۰ مگابایت.", "Up to three files, 50 MiB each.")); return; }
     if (chosen.some(file => !/\.(png|jpe?g|webp|pdf|txt|log|csv)$/i.test(file.name))) { setSendError(t("تصویر، PDF یا متن ساده انتخاب کن؛ فایل اجرایی مجاز نیست.", "Choose an image, PDF or plain text. Executables are not allowed.")); return; }
     setFiles(chosen); setSendError("");
   }
@@ -218,7 +223,7 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
           {!message.deletedAt && message.attachments?.map(file => <button type="button" key={file.id} className="hub-file" onClick={() => void download(file)}><span><FileText size={20}/></span><span><strong dir="auto">{file.fileName}</strong><small>{(file.size / 1024).toLocaleString(isFa ? "fa-IR" : "en-US", { maximumFractionDigits: 0 })} KB · {t("دانلود فایل", "Download file")}</small></span><Download size={16}/></button>)}
           <time dateTime={message.createdAt}>{message.editedAt && !message.deletedAt && <span>{t("ویرایش‌شده", "Edited")} · </span>}{new Date(message.createdAt).toLocaleTimeString(isFa ? "fa-IR" : "en-US", { hour: "2-digit", minute: "2-digit" })}{mine && <CheckCheck size={13} aria-label={t("ثبت‌شده", "Saved")}/>}</time></div></div></div>;
       })}
-      {!messages.length && !error && <p className="hub-list-empty">{t("در حال دریافت پیام‌ها…", "Loading messages…")}</p>}
+      {!messages.length && !error && <p className="hub-list-empty">{thread ? t("پیامی باقی نمانده؛ پیام‌های قدیمی ممکن است طبق سیاست نگهداری حذف شده باشند.", "No retained messages. Older messages may have expired under the retention policy.") : t("در حال دریافت پیام‌ها…", "Loading messages…")}</p>}
     </div>
     {!atBottom && <button className="hub-jump" onClick={() => { stick.current = true; setAtBottom(true); if (viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight; }}><ArrowDown size={15}/>{t("آخرین پیام‌ها", "Latest messages")}</button>}
     <div className="hub-composer-wrap">{sendError && <p role="alert" className="hub-error">{sendError}</p>}
@@ -226,9 +231,9 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
       {(replyTo || editing) && <div className="hub-compose-context">{editing ? <Pencil size={17}/> : <Reply size={17}/>}<div><strong>{editing ? t("ویرایش پیام", "Editing message") : `${t("پاسخ به", "Reply to")} ${replyTo!.author.displayName}`}</strong><span>{(editing ?? replyTo)?.body.slice(0, 130) || t("پیوست", "Attachment")}</span></div><button type="button" disabled={sending} onClick={() => editing ? cancelEdit() : setReplyTo(null)} aria-label={t("انصراف", "Cancel")}><X size={17}/></button></div>}
       {!!files.length && !editing && <div className="hub-pending-files">{files.map((file, i) => <span key={`${file.name}-${i}`}><Paperclip size={13}/><span dir="auto">{file.name}</span><button type="button" disabled={sending} onClick={() => setFiles(items => items.filter((_, index) => index !== i))} aria-label={t("برداشتن فایل", "Remove file")}><X size={14}/></button></span>)}</div>}
       {thread?.status === "resolved" ? <p className="hub-closed"><CheckCheck size={18}/>{t("گفت‌وگو بسته شده؛ مدیر می‌تواند دوباره بازش کند.", "Closed. An administrator can reopen this conversation.")}</p> : <form onSubmit={send} className="hub-composer">
-        {!editing && <><input ref={fileInput} type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.log,.csv" aria-label={t("انتخاب پیوست", "Choose attachments")} onChange={e => { chooseFiles(e.target.files); e.target.value = ""; }}/><button className="hub-attach" type="button" disabled={sending || !thread || files.length >= 3} onClick={() => fileInput.current?.click()} aria-label={t("پیوست فایل", "Attach files")} title={t("حداکثر سه فایل، هر فایل ۵ مگابایت", "Three files, 5 MB each")}><Paperclip size={20}/></button></>}
+        {!editing && <><input ref={fileInput} type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.log,.csv" aria-label={t("انتخاب پیوست", "Choose attachments")} onChange={e => { chooseFiles(e.target.files); e.target.value = ""; }}/><button className="hub-attach" type="button" disabled={sending || !thread || files.length >= 3} onClick={() => fileInput.current?.click()} aria-label={t("پیوست فایل", "Attach files")} title={t("حداکثر سه فایل، هر فایل ۵۰ مگابایت", "Three files, 50 MiB each")}><Paperclip size={20}/></button></>}
         <label className="sr-only" htmlFor="community-message">{t("متن پیام", "Your message")}</label><textarea id="community-message" ref={composer} value={body} maxLength={4000} disabled={sending || !thread} rows={2} dir="auto" placeholder={t("پیامت را بنویس…", "Write a message…")} onChange={e => { setBody(e.target.value); if (!editing) saveDraft(e.target.value); }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !window.matchMedia("(pointer: coarse)").matches) { e.preventDefault(); void send(); } }}/><button className="hub-send" type="submit" disabled={sending || !thread || (!body.trim() && (!files.length || !!editing))} aria-label={editing ? t("ذخیرهٔ پیام", "Save message") : t("ارسال پیام", "Send message")}>{editing ? <Check size={19}/> : <Send size={19}/>}<span>{sending ? t("ارسال…", "Sending…") : editing ? t("ذخیره", "Save") : t("ارسال", "Send")}</span></button></form>}
-      <div className="hub-composer__hint"><span><LockKeyhole size={12}/>{files.length ? t("فایل‌ها اسکن آنتی‌ویروس نشده‌اند.", "Files are not antivirus-scanned.") : t("اطلاعات محرمانه نفرست.", "Keep confidential information private.")}</span><span>{files.length ? t("هر فایل تا ۵ MB", "5 MB per file") : `${body.length.toLocaleString(isFa ? "fa-IR" : "en-US")} / ${Number(4000).toLocaleString(isFa ? "fa-IR" : "en-US")}`}</span></div>
+      <div className="hub-composer__hint"><span><LockKeyhole size={12}/>{files.length ? t("فایل‌ها اسکن آنتی‌ویروس نشده‌اند.", "Files are not antivirus-scanned.") : t("اطلاعات محرمانه نفرست.", "Keep confidential information private.")}</span><span>{files.length ? t("هر فایل تا ۵۰ MB", "50 MiB per file") : `${body.length.toLocaleString(isFa ? "fa-IR" : "en-US")} / ${Number(4000).toLocaleString(isFa ? "fa-IR" : "en-US")}`}</span></div>
     </div>
     {deleting && <DeleteMessageDialog busy={deleteBusy} error={sendError} t={t} onClose={() => setDeleting(null)} onConfirm={() => void removeMessage()}/>}
     {taskSource && <TaskDialog source={taskSource} isFa={isFa} onClose={() => setTaskSource(null)} onSaved={() => { setTaskSource(null); setNotice(t("کار ثبت شد؛ از تب کارها پیگیری کن.", "Task created. Follow up in Tasks.")); }}/ >}

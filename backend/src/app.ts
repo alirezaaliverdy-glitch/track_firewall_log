@@ -52,6 +52,7 @@ import { NATIVE_APP_ORIGINS } from "./security/session-transport.js";
 import { cameraRoutes } from "./routes/cameras.js";
 import { vpnRoutes } from "./routes/vpn.js";
 import { communityRoutes } from "./routes/community.js";
+import { stopCommunityRetention } from "./services/community-retention.service.js";
 
 export async function buildApp(options: { authRequired?: boolean } = {}) {
   validateCommandCatalog(COMMAND_CATALOG);
@@ -151,6 +152,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(incidentRoutes);
 
   app.addHook("onClose", async () => {
+    await stopCommunityRetention();
     await stopSecurityMonitor();
     await stopDeviceConnectivitySensor();
     await stopScheduledTaskWorker();

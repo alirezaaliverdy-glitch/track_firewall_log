@@ -6,6 +6,8 @@ import { startSecurityMonitor, stopSecurityMonitor } from "./services/security-m
 import { startScheduledTaskWorker, stopScheduledTaskWorker } from "./services/scheduled-task-worker.service.js";
 import { startDeviceConnectivitySensor, stopDeviceConnectivitySensor } from "./services/device-connectivity-sensor.service.js";
 import { startNetflowV5Collector, stopNetflowV5Collector } from "./services/netflow-v5.service.js";
+import { startCommunityRetention, stopCommunityRetention } from "./services/community-retention.service.js";
+import { startNvrMonitor, stopNvrMonitor } from "./cameras/nvr-monitor.js";
 
 let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -17,6 +19,8 @@ async function shutdown(signal: NodeJS.Signals) {
     await stopDeviceConnectivitySensor();
     await stopScheduledTaskWorker();
     await stopNetflowV5Collector();
+    await stopCommunityRetention();
+    await stopNvrMonitor();
     await app?.close();
     await shutdownDatabase();
     process.exit(0);
@@ -35,6 +39,8 @@ try {
   startSecurityMonitor(app.log);
   startFleetHealthMonitor();
   startDeviceConnectivitySensor(app.log);
+  startCommunityRetention(app.log);
+  startNvrMonitor(app.log);
   await startScheduledTaskWorker(app.log);
   await startNetflowV5Collector(app.log).catch((error) => app?.log.warn({ code: "NETFLOW_RECEIVER_START_FAILED", reason: error instanceof Error ? error.name : "unknown" }, "NetFlow receiver unavailable"));
 } catch (error) {
