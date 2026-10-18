@@ -59,6 +59,8 @@ export async function cameraSoap(url: URL, namespace: string, action: string, bo
     if (!/onvif\.org|NotAuthorized|FailedAuthentication|InvalidSecurity/i.test(content)) throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 502);
     throw new CameraError(connection.username ? "CAMERA_AUTH_FAILED" : "CAMERA_AUTH_REQUIRED", 401);
   }
+  // A web UI / HTML 404 is not a malformed ONVIF XML reply.
+  if ([404, 405, 501].includes(response.status) || /<!doctype\s+html|<html[\s>]/i.test(response.body.toString("utf8"))) throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 502);
   const root = parseCameraXml(response.body.toString("utf8"));
   if (nodes(root, "Fault").length) {
     if (/NotAuthorized|FailedAuthentication|InvalidSecurity|MessageExpired/i.test(response.body.toString("utf8"))) throw new CameraError(connection.username ? "CAMERA_AUTH_FAILED" : "CAMERA_AUTH_REQUIRED", 401);

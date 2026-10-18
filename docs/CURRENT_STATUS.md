@@ -1,3 +1,9 @@
+## 2026-10-18 - Real AppWeb NVR compatibility (completed locally)
+
+- Actual direct-LAN AppWeb challenge login and read-only version/HDD/local-clock requests succeeded with the existing encrypted account. The panel's hex_md5 is a nonstandard eight-character transform; initial203 did not mean the saved password was wrong. No device/plugin/time/configuration/format command was executed.
+- Explicit AppWeb2.0 and independent DVRIP connection modes, bounded protocol clients, visible stage-specific errors, whitelist-only reports and conservative sensor coverage added. AppWeb HDD size uses explicit rounded unit strings; undocumented SMART/CPU/memory/recording states remain unknown.21 focused isolated PostgreSQL/API/protocol tests pass;18 deployment checks, locale/Persian/UTF-8/workflow YAML/contract and synthetic-variable production Compose validation pass.
+- Final API `ecc9decfa2177b9675200b85525ab8bcc44d0ac10de178b616b7e19dd0a677c1` and web `fda72916ad5e89c910f20d5e324e931d646bc1461a90b94fb357640d72414c16` rebuilt/deployed through scoped scripts, VPN rebound and Nginx reloaded. Five services healthy; dashboard/NVR/readiness200 and anonymous camera API401. Customer NVR saved as AppWeb/direct with five-minute monitoring, verified status,16 configured channels and actual measured HDD/history; no hardware settings changed. Dark24/light24 synthetic browser captures pass with zero errors/overflow/external writes; representative AppWeb mobile inspected. No push or production mutation.
+
 ## 2026-10-18 - NVR assets, sensor workspace and camera transfer (completed locally)
 
 - Unassigned Add opens a visible company dialog immediately; existing or inline-created companies can own the new device. Added selection/bulk transfer with explicit destination and one confirmation, all-or-nothing conflict handling, tenant/viewer/CSRF checks, preserved credentials/VPN and invalidated old control previews/reports.

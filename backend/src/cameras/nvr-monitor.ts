@@ -8,11 +8,14 @@ import { cameraRevision } from "./camera-policy.js";
 import { probeNvrStorage, type NvrStorage } from "./nvr-storage.js";
 import { nvrSensors } from "./nvr-sensors.js";
 import { syncNvrAsset } from "./nvr-asset.js";
+import type { NvrNative } from "./nvr-dvrip.js";
+import { probeNativeNvr } from "./nvr-native-monitor.js";
+import { probeAppWebNvr } from "./nvr-appweb.js";
 
 const DEVICE = "http://www.onvif.org/ver10/device/wsdl", RECORDING = "http://www.onvif.org/ver10/recording/wsdl", SEARCH = "http://www.onvif.org/ver10/search/wsdl";
 const value = (root: XmlNode, key: string) => (nodes(root, key)[0]?.text.trim() ?? "").slice(0, 160);
 type Coverage = "measured" | "unsupported" | "denied" | "unavailable";
-export type NvrReport = { checkedAt: string; adapter: "onvif"; reachable: boolean; errorCode?: string; durationMs: number;
+export type NvrReport = { checkedAt: string; adapter: "onvif" | "dvrip" | "appweb"; native?: NvrNative; reachable: boolean; errorCode?: string; durationMs: number;
   identity: Record<string, string>; configuredChannels: number; clockDriftSeconds: number | null; storageConfigurations: number | null;
   recordingCount: number | null; jobs: Array<{ token: string; state: string; error: boolean }>;
   interfaces: Array<{ name: string; enabled: boolean | null; addresses: string[] }>;
@@ -113,8 +116,8 @@ export async function refreshNvrMonitor(id: string, actor: CameraActor, backgrou
     const claim = await prisma.cameraDevice.updateMany({ where: { id, OR: [{ monitorLeaseUntil: null }, { monitorLeaseUntil: { lt: now } }] }, data: { monitorLeaseUntil: lease } });
     if (!claim.count) throw new CameraError("CAMERA_MONITOR_BUSY", 409);
     let report: NvrReport;
-    try { await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true); report = await probeNvr(camera, cameraConnection(camera)); }
-    catch (error) { report = { checkedAt: now.toISOString(), adapter: "onvif", reachable: false, errorCode: error instanceof CameraError ? error.code : "CAMERA_CONNECTION_FAILED", durationMs: 0, identity: {}, configuredChannels: 0, clockDriftSeconds: null, storageConfigurations: null, recordingCount: null, jobs: [], interfaces: [], coverage: {}, warnings: ["device_check_failed"], truncated: false }; }
+    try { await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true); report = camera.connectionMode === "appweb" ? await probeAppWebNvr(camera.host, camera.onvifPort, camera.onvifHttps, cameraConnection(camera)) : camera.connectionMode === "dvrip" ? await probeNativeNvr(camera.host, camera.onvifPort, cameraConnection(camera)) : await probeNvr(camera, cameraConnection(camera)); }
+    catch (error) { report = { checkedAt: now.toISOString(), adapter: camera.connectionMode === "appweb" ? "appweb" : camera.connectionMode === "dvrip" ? "dvrip" : "onvif", reachable: false, errorCode: error instanceof CameraError ? error.code : "CAMERA_CONNECTION_FAILED", durationMs: Date.now() - now.getTime(), identity: {}, configuredChannels: 0, clockDriftSeconds: null, storageConfigurations: null, recordingCount: null, jobs: [], interfaces: [], coverage: {}, warnings: ["device_check_failed"], truncated: false }; }
     await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT "id" FROM "CameraDevice" WHERE "id" = ${id} FOR UPDATE`;
       const current = await tx.cameraDevice.findFirst({ where: { id, ...activeCameraScope(actor) } });
@@ -125,7 +128,8 @@ export async function refreshNvrMonitor(id: string, actor: CameraActor, backgrou
         readings: Object.fromEntries(sensors.filter(sensor => sensor.value !== null).map(sensor => [sensor.id, sensor.value])) };
       const updated = await tx.cameraDevice.update({ where: { id }, data: { monitorCheckedAt: new Date(report.checkedAt), monitorReportJson: report as unknown as Prisma.InputJsonValue,
         monitorHistoryJson: [...history.slice(-47), entry] as Prisma.InputJsonValue, monitorNextRunAt: new Date(Date.now() + current.monitorIntervalSeconds * 1000),
-        ...([report.errorCode, report.storage?.errorCode].some(code => code === "CAMERA_AUTH_FAILED" || code === "NVR_ACCOUNT_LOCKED") ? { monitoringEnabled: false } : {}) } });
+        ...(["dvrip", "appweb"].includes(camera.connectionMode) ? { status: report.reachable ? "verified" : "error", lastErrorCode: report.errorCode ?? null, ...(report.reachable ? { infoJson: report.identity, lastSeenAt: new Date(report.checkedAt) } : {}) } : {}),
+        ...([report.errorCode, report.storage?.errorCode].some(code => code?.includes("AUTH") || code === "NVR_ACCOUNT_LOCKED" || code === "NVR_ACCESS_DENIED") ? { monitoringEnabled: false } : {}) } });
       await syncNvrAsset(tx, updated);
       if (!background) await tx.auditLog.create({ data: { actor: actor.username, action: "camera.monitor_refreshed", targetType: "camera", targetId: id, dryRun: true, metadata: { reachable: report.reachable, warningCount: report.warnings.length, connectorInvoked: true, readOnly: true } } });
     });

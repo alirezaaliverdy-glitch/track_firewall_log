@@ -4,7 +4,7 @@ import { readDvripStorage } from "./nvr-dvrip.js";
 
 export type NvrDisk = { id: string; name: string; capacityBytes: number | null; usedBytes: number | null; freeBytes: number | null;
   health: "reported_ok" | "error" | "unknown"; reportedState: string; temperatureC: number | null; smart: "passed" | "failed" | "unknown" };
-export type NvrStorage = { source: "hikvision" | "dahua" | "xiongmai" | null; status: "measured" | "unsupported" | "denied" | "unavailable";
+export type NvrStorage = { source: "hikvision" | "dahua" | "xiongmai" | "appweb" | null; status: "measured" | "unsupported" | "denied" | "unavailable";
   disks: NvrDisk[]; errorCode?: string; truncated: boolean };
 const text = (root: XmlNode, key: string) => (nodes(root, key)[0]?.text.trim() ?? "").slice(0, 160);
 function bytes(value: string, multiplier = 1) { if (!/^\d+(?:\.\d+)?$/.test(value)) return null; const result = Math.round(Number(value) * multiplier); return Number.isSafeInteger(result) && result >= 0 ? result : null; }
