@@ -69,6 +69,18 @@ jobs:
     name: Backend typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      collaboration-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_DB: eosnet_ci_community_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fixture -d eosnet_ci_community_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://127.0.0.1:1/ci_prisma_generate
 
@@ -105,6 +117,22 @@ jobs:
       - name: Backend smoke tests
         working-directory: backend
         run: pnpm run test:smoke
+
+      - name: Migrate disposable collaboration test database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://fixture@127.0.0.1:5432/eosnet_ci_community_test
+        run: pnpm exec prisma migrate deploy
+
+      - name: Collaboration permissions, files, tasks and migration-role regressions
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          LOG_LEVEL: silent
+          TEST_DATABASE_URL: postgresql://fixture@127.0.0.1:5432/eosnet_ci_community_test
+        run: |
+          pnpm exec tsx --test --test-force-exit test/community-collaboration.test.ts
+          node --test --test-concurrency=1 test/community-api.integration.test.mjs test/community-collaboration.integration.test.mjs test/community-migration-role.integration.test.mjs
 
       - name: Validate command catalog
         working-directory: backend

@@ -1,3 +1,10 @@
+## 2026-10-18 - Community collaboration and shared task board (local)
+
+- Author-only edit/delete with revision conflicts, deleted-message markers, same-thread replies and edit/delete synchronization. Private attachments: three/message, 5 MiB/file; allowlisted bytes/types/names, authenticated forced downloads, no inline execution and no public file URLs. Payload quotas, durable rolling-day upload audit, request deadlines and rate/concurrency controls. No antivirus claim.
+- Tasks: active workspace assignees (including viewers), due date/priority/status, assigned-to-me/search/paging and public-message conversion. Creator/admin metadata control, assignee status control. Tickets remain private; independent customers/workspaces remain isolated. Collaboration permissions do not grant device execution.
+- Additive migration and production preflight/acceptance updated; dedicated isolated database CI tests added. Local API/web builds/deployments, three API/migration suites, 16 targeted auth/product-state checks, 19 deployment checks and six environment/appearance tests pass. Broader old registry source test reports two baseline missing declarations outside community; unchanged, not an all-suite success. No push/production release for these feature changes.
+- Final browser acceptance: 29 synthetic captures (16 extended/13 existing), zero errors/external writes, literal-XSS safety, draft/file retries, viewer task status, light/dark/mobile/320px and menu bounds. Representative captures reviewed. All five local services healthy; UI/readiness 200 and anonymous community APIs 401. Generated isolated database/container/volume/network/test image removed; real application data/volumes preserved.
+
 ## 2026-10-18 - Production accepted; added VM capacity online
 
 - CI `39048830417` succeeded; server checkout and deploy marker match `b7cdc2e`. Camera/VPN/community migrations applied; five services healthy, verified TLS/readiness/dashboard pass. Public fixture QA: 29 captures, zero errors/real writes/device actions; representative screenshots reviewed. Admin/camera APIs remain authentication-protected.

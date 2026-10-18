@@ -87,6 +87,8 @@ function bodyValue(request: FastifyRequest, keys: string[]) {
 }
 
 function policyForRequest(pathname: string, method?: string) {
+  if (/^\/api\/community\/threads\/[^/]+\/messages\/files$/.test(pathname)) return { id: "community_files", limit: 6, windowMs: 60_000 };
+  if (/^\/api\/community\/threads\/[^/]+\/attachments\//.test(pathname)) return { id: "community_download", limit: 30, windowMs: 60_000 };
   if (/^\/api\/community(?:\/|$)/.test(pathname)) return { id: method === "GET" ? "community_read" : "community_write", limit: method === "GET" ? 180 : 45, windowMs: 60_000 };
   if (/^\/api\/cameras\/[^/]+\/frame$/.test(pathname)) return ROUTE_POLICIES[7];
   if (pathname === "/api/cameras/discover") return ROUTE_POLICIES[5];

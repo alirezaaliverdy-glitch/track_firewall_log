@@ -126,6 +126,11 @@ if git cat-file -e "$target_sha:backend/prisma/migrations/20261017120000_communi
   [ "$community_migration_access" = ready ] || { echo "Community migration needs schema CREATE and AppUser(id) REFERENCES; leaving the running deployment unchanged" >&2; exit 2; }
 fi
 
+if git cat-file -e "$target_sha:backend/prisma/migrations/20261018120000_community_collaboration/migration.sql" 2>/dev/null; then
+  collaboration_access=$(compose exec -T firewall-db sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -Atc \"SELECT CASE WHEN EXISTS (SELECT 1 FROM public._prisma_migrations WHERE migration_name = '20261018120000_community_collaboration' AND finished_at IS NOT NULL AND rolled_back_at IS NULL) OR (has_schema_privilege('$camera_migration_role', 'public', 'CREATE') AND has_column_privilege('$camera_migration_role', 'public.' || quote_ident('AppUser'), 'id', 'REFERENCES') AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'CommunityMessage' AND tableowner = '$camera_migration_role') AND has_table_privilege('$camera_migration_role', 'public.' || quote_ident('CommunityThread'), 'REFERENCES')) THEN 'ready' ELSE 'missing' END\"" </dev/null) || exit 2
+  [ "$collaboration_access" = ready ] || { echo "Collaboration migration needs CommunityMessage ownership, schema CREATE and referenced-table access; leaving the running deployment unchanged" >&2; exit 2; }
+fi
+
 git merge --ff-only "$target_sha"
 
 compose config --quiet
