@@ -64,7 +64,7 @@ export default function AssetsOverviewPage() {
         title={t("assets.title")}
         eyebrow={t("assets.eyebrow")}
         description={t("assets.description")}
-        actions={<><Link className="secondary-link" to="/assets/devices">{t("assets.actions.devices")}</Link><Link className="primary-link" to="/assets/devices/new">{t("assets.actions.register")}</Link></>}
+        actions={<><Link className="secondary-link" to="/assets/devices">{t("assets.actions.devices")}</Link><Link className="primary-link" to="/assets/devices/new">{t("assets.actions.register")}</Link><Link className="secondary-link" to="/assets/devices/new?vendor=nvr">NVR +</Link></>}
       />
 
       <AssetSummaryCards stats={stats} />
@@ -92,7 +92,7 @@ export default function AssetsOverviewPage() {
         {filtered.length ? (
           <div className="asset-inventory-list" data-testid="asset-inventory-list">
             {filtered.map((asset) => {
-              const openPath = `/assets/devices/${asset.device?.id ?? asset.id}`;
+              const openPath = asset.openPath ?? `/assets/devices/${asset.device?.id ?? asset.id}`;
               const lastSeen = asset.lastSeenAt ? new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(asset.lastSeenAt)) : t("assets.notCollected");
               return (
                 <article className="asset-inventory-row" key={asset.id} data-testid="asset-inventory-row">

@@ -2,6 +2,7 @@ import { apiRequest, apiUrl } from "./apiTransport";
 
 export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; streamAvailable: boolean; snapshotAvailable: boolean };
 export type CameraDevice = {
+  company?: { id: string; name: string; code: string } | null;
   id: string; name: string; location: string; host: string; companyId?: string | null; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; monitorReportJson?: NvrReport | null; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp";
   onvifPort: number; onvifPath: string; onvifHttps: boolean; status: "verified" | "error" | "unverified"; lastSeenAt: string | null; lastErrorCode: string | null;
   infoJson: Record<string, string> | null; profiles: CameraProfile[]; credentialsConfigured: boolean; createdAt: string;
@@ -14,12 +15,17 @@ export type CameraCompany = { id: string; name: string; code: string; descriptio
 export type NvrReport = { checkedAt: string; reachable: boolean; durationMs: number; errorCode?: string; configuredChannels: number; clockDriftSeconds: number | null; storageConfigurations: number | null; recordingCount: number | null;
   jobs: { token: string; state: string; error: boolean }[]; interfaces: { name: string; enabled: boolean | null; addresses: string[] }[]; coverage: Record<string, string>; warnings: string[]; truncated: boolean; identity: Record<string, string>;
   storage?: { source: "hikvision" | "dahua" | "xiongmai" | null; status: string; errorCode?: string; truncated: boolean; disks: { id: string; name: string; capacityBytes: number | null; usedBytes: number | null; freeBytes: number | null; health: string; reportedState: string; smart: string; temperatureC: number | null }[] } };
-export type NvrMonitor = { report: NvrReport | null; history: { checkedAt: string; reachable: boolean; warningCount: number }[]; monitoringEnabled: boolean; intervalSeconds: number };
+export type NvrSensor = { id: string; labelFa: string; labelEn: string; group: "connection" | "storage" | "recording" | "hardware"; value: number | null; unit: string; status: "ok" | "warning" | "critical" | "unknown" | "stale"; source: string; observedAt: string | null; noteFa: string; noteEn: string };
+export type NvrMonitor = { report: NvrReport | null; sensors?: NvrSensor[]; history: { checkedAt: string; reachable: boolean; warningCount: number; readings?: Record<string, number> }[]; monitoringEnabled: boolean; intervalSeconds: number };
 export type CameraPreview = { id: string; status: string; expiresAt: string; preview: { titleFa: string; titleEn: string; cameraName: string; host: string; effectFa: string; effectEn: string; risk: string; connectorInvoked: false } };
 export type CameraResult = { status: string; connectorInvoked: boolean; accepted?: boolean; code?: string; requiresReconnect?: boolean };
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  CAMERA_TRANSFER_SAME_COMPANY: ["شرکت مقصد باید با شرکت فعلی دستگاه متفاوت باشد.", "Choose a different destination company."],
+  CAMERA_SELECTION_INVALID: ["یک تا ۲۵۶ دستگاه را انتخاب کن.", "Select between 1 and 256 devices."],
+  NVR_ASSET_IP_CONFLICT: ["در شرکت مقصد یک دارایی دیگر با همین IP وجود دارد؛ انتقال یا ثبت انجام نشد.", "Another destination asset already uses this IP. Nothing was moved or registered."],
+  CAMERA_TRANSFER_CONFLICT: ["دستگاه هم‌آدرس در مقصد وجود دارد؛ هیچ‌کدام منتقل نشدند.", "A matching device exists at the destination. No devices were moved."],
   CAMERA_COMPANY_REQUIRED: ["ابتدا شرکت دستگاه را انتخاب کن.", "Select the device company first."],
   CAMERA_COMPANY_NOT_FOUND: ["شرکت انتخاب‌شده در دسترس نیست.", "This company is not available."],
   CAMERA_MONITOR_BUSY: ["پایش در حال اجراست؛ کمی بعد تلاش کن.", "Monitoring is busy. Try again shortly."],
@@ -74,6 +80,8 @@ export async function cameraJson<T>(path: string, init?: RequestInit): Promise<T
 }
 export const listCameras = (companyId?: string) => cameraJson<{ cameras: CameraDevice[] }>(companyId ? `?companyId=${encodeURIComponent(companyId)}` : "");
 export const listCameraCompanies = () => cameraJson<{ companies: CameraCompany[]; unassigned: { cameraCount: number; nvrCount: number } }>("/companies");
+export const getCamera = (id: string) => cameraJson<{ camera: CameraDevice }>(`/${encodeURIComponent(id)}`);
+export const transferCameras = (ids: string[], companyId: string) => cameraJson<{ transferred: number; companyId: string }>("/transfer", { method: "POST", body: JSON.stringify({ ids, companyId }) });
 export const createCamera = (input: CameraInput) => cameraJson<{ camera: CameraDevice }>("", { method: "POST", body: JSON.stringify(input) });
 export const updateCamera = (id: string, input: Partial<CameraInput>) => cameraJson<{ camera: CameraDevice }>(`/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 export const removeCamera = (id: string) => cameraJson(`/${encodeURIComponent(id)}`, { method: "DELETE" });

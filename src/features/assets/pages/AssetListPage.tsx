@@ -35,7 +35,7 @@ export default function AssetListPage() {
   if (error) return <ErrorState title={t("assets.errors.title")} message={error} onRetry={refresh} />;
   return (
     <section className="page-stack asset-list-page">
-      <PageHeader title={t("assets.devices.title")} eyebrow={t("assets.devices.eyebrow")} description={t("assets.devices.description")} actions={<><Link className="secondary-link" to="/assets">{t("assets.actions.overview")}</Link><Link className="primary-link" to="/assets/devices/new">{t("assets.actions.register")}</Link></>} />
+      <PageHeader title={t("assets.devices.title")} eyebrow={t("assets.devices.eyebrow")} description={t("assets.devices.description")} actions={<><Link className="secondary-link" to="/assets">{t("assets.actions.overview")}</Link><Link className="primary-link" to="/assets/devices/new">{t("assets.actions.register")}</Link><Link className="secondary-link" to="/assets/devices/new?vendor=nvr">NVR +</Link></>} />
       <CompanyManager companies={companies} archived={archivedCompanies} selectedId={selectedCompanyId} onSelect={selectCompany} onChanged={async () => { await refreshCompanies(); refresh(); }} />
       <div className="asset-list-search"><Search size={17} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("assets.searchPlaceholder")} aria-label={t("assets.searchLabel")} /><span>{t("assets.devices.resultCount", { count: filtered.length })}</span></div>
       {filtered.length ? <AssetTable assets={filtered} onRemoved={(assetId) => setHiddenIds((current) => [...current, assetId])} /> : <EmptyState title={t("assets.empty.title")} description={t("assets.empty.description")} />}

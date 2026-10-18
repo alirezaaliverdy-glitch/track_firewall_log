@@ -69,6 +69,8 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
     await prisma.cameraDevice.update({ where: { id: camera.id }, data: { monitorHistoryJson: Array.from({ length: 48 }, () => ({ checkedAt: new Date().toISOString(), reachable: true, warningCount: 0 })) } });
     const monitoring = await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: owner.headers });
     assert.equal(monitoring.statusCode, 200); assert.equal(monitoring.json().report.reachable, true); assert.equal(monitoring.json().history.length, 48); assert.equal(monitoring.json().report.coverage.diskHealth, "unsupported");
+    assert.equal(monitoring.json().history.at(-1).readings.connection, 1); assert.equal(monitoring.json().history.at(-1).readings.cpu, undefined);
+    assert.equal(monitoring.json().sensors.find((sensor: { id: string }) => sensor.id === "cpu").status, "unknown");
     await prisma.company.update({ where: { id: company.id }, data: { deletedAt: new Date() } });
     assert.equal((await app.inject({ url: monitorUrl, headers: owner.headers })).statusCode, 404, 'archived company blocks media and monitoring too');
     await prisma.company.update({ where: { id: company.id }, data: { deletedAt: null } });

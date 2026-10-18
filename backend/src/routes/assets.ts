@@ -11,6 +11,8 @@ import {
 } from "../assets/asset-intelligence.service.js";
 import { mockNetBoxAssets, mockNetBoxHealth } from "../integrations/netbox/mock-adapter.js";
 import { clearPortOverride, clearServiceEndpointOverride, discoverDevicePorts, listPortTopology, refreshLinuxServicePorts, savePortOverride, saveServiceEndpointOverride } from "../assets/port-topology.service.js";
+import { deleteCamera } from "../cameras/camera.service.js";
+import { CameraError } from "../cameras/camera-network.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
   async function activeCompanyId(userId?: string, requested?: unknown) {
@@ -87,9 +89,14 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete<{ Params: { id: string } }>("/api/assets/:id", async (request, reply) => {
     try {
+      if (request.params.id.startsWith("nvr-") && request.authUser) {
+        const cameraId = request.params.id.slice(4);
+        if (await prisma.cameraDevice.findFirst({ where: { id: cameraId, kind: "nvr", ownerId: request.authUser.scopeOwnerId ?? request.authUser.id } })) return await deleteCamera(cameraId, request.authUser);
+      }
       const result = await removeAssetFromInventory(request.params.id, request.authUser?.id);
       return result ?? reply.code(404).send({ error: { code: "ASSET_NOT_FOUND", message: "Asset not found." } });
     } catch (error) {
+      if (error instanceof CameraError) return reply.code(error.statusCode).send({ error: { code: error.code, message: error.code } });
       const message = error instanceof Error ? error.message : "Asset removal failed.";
       return reply.code(409).send({ error: { code: "ASSET_REMOVAL_FAILED", message } });
     }

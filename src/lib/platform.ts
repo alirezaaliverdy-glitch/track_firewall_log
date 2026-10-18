@@ -2,6 +2,8 @@ import { API_BASE_URL } from "@/config/frontendEnv";
 
 export type PlatformAsset = {
   id: string;
+  openPath?: string;
+  nvrCameraId?: string;
   companyId?: string | null;
   company?: { id: string; name: string; code: string } | null;
   name: string;

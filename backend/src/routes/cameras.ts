@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { CameraError } from "../cameras/camera-network.js";
-import { cameraActionHistory, cameraOwner, createCamera, deleteCamera, executeCameraAction, getCameraPresets, listCameras, listCameraCompanies, previewCameraAction, refreshCamera, runCameraDiscovery, selectedCameraProfile, updateCamera, type CameraActor } from "../cameras/camera.service.js";
+import { cameraActionHistory, cameraOwner, createCamera, deleteCamera, executeCameraAction, getCameraPresets, listCameras, listCameraCompanies, ownedCamera, safeCamera, transferCameras, previewCameraAction, refreshCamera, runCameraDiscovery, selectedCameraProfile, updateCamera, type CameraActor } from "../cameras/camera.service.js";
 import { getNvrMonitor, refreshNvrMonitor, stopNvrMonitor } from "../cameras/nvr-monitor.js";
 import { cameraFrame, cameraSnapshot, startCameraMedia, stopCameraStreams } from "../cameras/camera-media.js";
 
@@ -17,6 +17,12 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onClose", async () => { stopCameraStreams(); await stopNvrMonitor(); });
   app.get("/api/cameras/companies", async (request, reply) => {
     try { return await listCameraCompanies(actor(request)); } catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Body: { ids: string[]; companyId: string } }>("/api/cameras/transfer", { bodyLimit: 40000 }, async (request, reply) => {
+    try { return await transferCameras(request.body?.ids, request.body?.companyId, actor(request)); } catch (error) { return failure(reply, error); }
+  });
+  app.get<{ Params: { id: string } }>("/api/cameras/:id", async (request, reply) => {
+    try { return { camera: safeCamera(await ownedCamera(request.params.id, actor(request))) }; } catch (error) { return failure(reply, error); }
   });
   app.get<{ Params: { id: string } }>("/api/cameras/:id/monitor", async (request, reply) => {
     try { return await getNvrMonitor(request.params.id, actor(request)); } catch (error) { return failure(reply, error); }

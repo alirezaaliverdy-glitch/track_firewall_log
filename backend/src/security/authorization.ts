@@ -28,6 +28,7 @@ export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "POST", path: "/api/vpn/:id/test", permission: "devices.manage" },
   { method: "POST", path: "/api/cameras", permission: "devices.manage" },
   { method: "POST", path: "/api/cameras/discover", permission: "devices.manage" },
+  { method: "POST", path: "/api/cameras/transfer", permission: "devices.manage" },
   { method: "PATCH", path: "/api/cameras/:id", permission: "devices.manage" },
   { method: "DELETE", path: "/api/cameras/:id", permission: "devices.manage" },
   { method: "POST", path: "/api/cameras/:id/refresh", permission: "devices.manage" },

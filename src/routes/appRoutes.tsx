@@ -16,7 +16,7 @@ const DashboardPage = lazy(() => import("@/features/dashboard/pages/DashboardPag
 const CommunityPage = lazy(() => import("@/features/community/CommunityPage"));
 const AssetsOverviewPage = lazy(() => import("@/features/assets/pages/AssetsOverviewPage"));
 const AssetListPage = lazy(() => import("@/features/assets/pages/AssetListPage"));
-const AssetDetailPage = lazy(() => import("@/features/assets/pages/AssetDetailPage"));
+const AssetDetailPage = lazy(() => import("@/features/assets/pages/AssetDevicePage"));
 const AssetSyncPage = lazy(() => import("@/features/assets/pages/AssetSyncPage"));
 const PortTopologyPage = lazy(() => import("@/features/assets/pages/PortTopologyPage"));
 const CamerasPage = lazy(() => import("@/features/cameras/CamerasPage"));
@@ -41,7 +41,7 @@ const MonitoringPage = lazy(() => import("@/features/monitoring/pages/Monitoring
 const LinuxMonitoringPage = lazy(() => import("@/features/monitoring/pages/LinuxMonitoringPage"));
 const CiscoOverviewPage = lazy(() => import("@/features/vendors/cisco/pages/CiscoOverviewPage"));
 const SettingsPage = lazy(() => import("@/features/settings/pages/SettingsPage"));
-const DeviceOnboardingPage = lazy(() => import("@/features/assets/pages/DeviceOnboardingPage"));
+const DeviceOnboardingPage = lazy(() => import("@/features/assets/pages/DeviceRegistrationPage"));
 const VendorDetailPage = lazy(() => import("@/features/vendors/pages/VendorDetailPage"));
 const LocalMobileRuntimePage = lazy(() => import("@/features/mobile-local/pages/LocalMobileRuntimePage"));
 const planned = (title: string, description?: string): ComponentType<RouteComponentProps> => () => <PlannedState title={title} description={description} />;

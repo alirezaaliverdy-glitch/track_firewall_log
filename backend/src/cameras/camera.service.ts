@@ -7,6 +7,7 @@ import { cameraSnapshot, stopCameraStreams } from "./camera-media.js";
 import { cameraOperation, cameraRevision, CAMERA_CONTROL_TEMPLATES, evaluateCameraPolicy } from "./camera-policy.js";
 import { assertVpnTarget } from "../vpn/vpn.service.js";
 import { VpnError } from "../vpn/vpn-validation.js";
+import { nvrAssetId, syncNvrAsset } from "./nvr-asset.js";
 
 export type CameraActor = { id: string; username: string; role: string; scopeOwnerId?: string | null };
 export const cameraOwner = (actor: CameraActor) => actor.scopeOwnerId ?? actor.id;
@@ -37,7 +38,7 @@ function devicePath(value: unknown) {
 function errorCode(error: unknown) { return error instanceof CameraError ? error.code : "CAMERA_CONNECTION_FAILED"; }
 
 export async function ownedCamera(id: string, actor: CameraActor) {
-  const camera = await prisma.cameraDevice.findFirst({ where: { id, ...activeCameraScope(actor) } });
+  const camera = await prisma.cameraDevice.findFirst({ where: { id, ...activeCameraScope(actor) }, include: { company: { select: { id: true, name: true, code: true } } } });
   if (!camera) throw new CameraError("CAMERA_NOT_FOUND", 404);
   return camera;
 }
@@ -80,9 +81,9 @@ export async function createCamera(input: Record<string, unknown>, actor: Camera
   if (await prisma.cameraDevice.count({ where: { ownerId: cameraOwner(actor) } }) >= 256) throw new CameraError("CAMERA_DEVICE_LIMIT", 409);
   let camera: CameraDevice;
   try {
-    camera = await prisma.cameraDevice.create({ data: { ownerId: cameraOwner(actor), companyId, host, onvifPort, onvifPath, name, location, vpnConnectionId,
+    camera = await prisma.$transaction(async tx => { const created = await tx.cameraDevice.create({ data: { ownerId: cameraOwner(actor), companyId, host, onvifPort, onvifPath, name, location, vpnConnectionId,
       kind: input.kind === "nvr" ? "nvr" : "camera", connectionMode, onvifHttps: input.onvifHttps === true, connectionEncrypted: encryptSecret(JSON.stringify(connection)),
-      profilesJson: connectionMode === "rtsp" ? json([{ token: "manual", sourceToken: "manual", name, ptz: false, streamAvailable: true, snapshotAvailable: false, width: null, height: null, fps: null, encoding: null }]) : json([]) } });
+      profilesJson: connectionMode === "rtsp" ? json([{ token: "manual", sourceToken: "manual", name, ptz: false, streamAvailable: true, snapshotAvailable: false, width: null, height: null, fps: null, encoding: null }]) : json([]) } }); await syncNvrAsset(tx, created); return created; });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") throw new CameraError("CAMERA_ALREADY_REGISTERED", 409);
     throw error;
@@ -150,7 +151,7 @@ export async function updateCamera(id: string, input: Record<string, unknown>, a
   }
   if (connectionChanged || input.companyId !== undefined) { data.monitorReportJson = Prisma.JsonNull; data.monitorHistoryJson = Prisma.JsonNull; data.monitorCheckedAt = null; }
   let updated: CameraDevice;
-  try { updated = await prisma.cameraDevice.update({ where: { id }, data }); }
+  try { updated = await prisma.$transaction(async tx => { const result = await tx.cameraDevice.update({ where: { id }, data }); await syncNvrAsset(tx, result); return result; }); }
   catch (error) { if ((error as { code?: string }).code === "P2002") throw new CameraError("CAMERA_ALREADY_REGISTERED", 409); throw error; }
   await audit(actor, "camera.updated", id, { connectionChanged });
   return safeCamera(updated);
@@ -158,9 +159,32 @@ export async function updateCamera(id: string, input: Record<string, unknown>, a
 
 export async function deleteCamera(id: string, actor: CameraActor) {
   await ownedCamera(id, actor); stopCameraStreams(id);
-  await prisma.cameraDevice.delete({ where: { id } });
+  await prisma.$transaction(async tx => { await tx.asset.updateMany({ where: { id: nvrAssetId(id), company: { ownerId: cameraOwner(actor) } }, data: { deletedAt: new Date(), managedState: "archived", healthState: "archived" } }); await tx.cameraDevice.delete({ where: { id } }); });
   await audit(actor, "camera.removed", id, {});
   return { deleted: true };
+}
+
+export async function transferCameras(ids: unknown, destination: unknown, actor: CameraActor) {
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 256 || ids.some(id => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(id))) throw new CameraError("CAMERA_SELECTION_INVALID", 400);
+  const uniqueIds = [...new Set(ids)] as string[], companyId = await cameraCompany(destination, actor);
+  try {
+    await prisma.$transaction(async tx => {
+      // Stable ordering prevents deadlock between overlapping batch moves.
+      for (const id of [...uniqueIds].sort()) await tx.$queryRaw`SELECT "id" FROM "CameraDevice" WHERE "id" = ${id} AND "ownerId" = ${cameraOwner(actor)} FOR UPDATE`;
+      const cameras = await tx.cameraDevice.findMany({ where: { id: { in: uniqueIds }, ...activeCameraScope(actor) } });
+      if (cameras.length !== uniqueIds.length) throw new CameraError("CAMERA_NOT_FOUND", 404);
+      if (cameras.some(camera => camera.companyId === companyId)) throw new CameraError("CAMERA_TRANSFER_SAME_COMPANY", 400);
+      if (!await tx.company.findFirst({ where: { id: companyId!, ownerId: cameraOwner(actor), deletedAt: null } })) throw new CameraError("CAMERA_COMPANY_NOT_FOUND", 404);
+      for (const camera of cameras) {
+        const updated = await tx.cameraDevice.update({ where: { id: camera.id }, data: { companyId, monitorReportJson: Prisma.JsonNull, monitorHistoryJson: Prisma.JsonNull, monitorCheckedAt: null } });
+        await syncNvrAsset(tx, updated);
+      }
+      await tx.auditLog.create({ data: { actor: actor.username, action: "camera.company_transferred", targetType: "camera", dryRun: false,
+        metadata: { ownerId: cameraOwner(actor), companyId, cameraIds: uniqueIds, count: cameras.length } } });
+    }, { timeout: 20000 });
+  } catch (e) { if ((e as { code?: string }).code === "P2002") throw new CameraError("CAMERA_TRANSFER_CONFLICT", 409); throw e; }
+  for (const id of uniqueIds) stopCameraStreams(id);
+  return { transferred: uniqueIds.length, companyId };
 }
 
 const discoveryBusy = new Set<string>();

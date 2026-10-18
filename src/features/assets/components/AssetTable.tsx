@@ -11,7 +11,7 @@ import { AssetIdentityIcon } from "./AssetIdentityIcon";
 function healthTone(value: string): "good" | "warning" | "danger" | "neutral" {
   if (["online", "healthy"].includes(value)) return "good";
   if (["warning", "degraded", "needs_review", "unknown"].includes(value)) return "warning";
-  if (["offline", "error"].includes(value)) return "danger";
+  if (["offline", "error", "critical"].includes(value)) return "danger";
   return "neutral";
 }
 
@@ -66,7 +66,7 @@ export function AssetTable({ assets, onRemoved }: { assets: PlatformAsset[]; onR
         <thead><tr><th>{t("assets.table.asset")}</th><th>{t("assets.table.managementAddress")}</th><th>{t("assets.table.status")}</th><th>{t("assets.table.lastVerified")}</th><th><span className="sr-only">{t("assets.table.actions")}</span></th></tr></thead>
         <tbody>{assets.map((asset) => {
           const workspaceId = asset.device?.id ?? asset.id;
-          const openPath = `/assets/devices/${workspaceId}`;
+          const openPath = asset.openPath ?? `/assets/devices/${workspaceId}`;
           return (
             <tr key={asset.id}>
               <td><div className="asset-table-identity"><AssetIdentityIcon asset={asset} /><div><Link to={openPath}>{asset.name}</Link><span>{vendorPlatform(asset, t("assets.unknownPlatform"))}</span>{rowError[asset.id] ? <p className="row-error" role="alert">{rowError[asset.id]}</p> : null}{rowNotice[asset.id] ? <p className="row-notice" role="status">{rowNotice[asset.id]}</p> : null}</div></div></td>
@@ -78,7 +78,7 @@ export function AssetTable({ assets, onRemoved }: { assets: PlatformAsset[]; onR
           );
         })}</tbody>
       </table>
-      {pendingRemove ? <div className="action-review-dialog" role="dialog" aria-modal="true" aria-labelledby="asset-remove-title"><section className="action-review-dialog__card company-dialog company-dialog--danger"><header><div><h2 id="asset-remove-title">حذف دارایی «{pendingRemove.name}»؟</h2><p>این دارایی و دستگاه متصل به آن از فهرست فعال خارج می‌شوند.</p></div><button type="button" onClick={() => setPendingRemove(null)} aria-label="بستن"><X /></button></header><div className="company-delete-warning"><AlertTriangle /><div><strong>قبل از ادامه اثر عملیات را بررسی کنید</strong><p>حذف فعلی نرم و قابل بازیابی توسط پشتیبانی است. اگر بعداً پاک‌سازی دائمی انجام شود، اطلاعات قابل بازگشت نخواهد بود.</p></div></div><label className="company-confirm company-confirm--check"><input type="checkbox" checked={removeConfirmed} onChange={(event) => setRemoveConfirmed(event.target.checked)} /><span>متوجه شدم که این دارایی از محیط عملیاتی و گزارش‌ها خارج می‌شود.</span></label><footer><button type="button" className="secondary-button" onClick={() => setPendingRemove(null)}>انصراف</button><button type="button" className="danger-button" disabled={!removeConfirmed || busyId === pendingRemove.id} onClick={() => void remove(pendingRemove)}><Trash2 size={17} />{busyId === pendingRemove.id ? "در حال حذف…" : "حذف دارایی"}</button></footer></section></div> : null}
+      {pendingRemove ? <div className="action-review-dialog" role="dialog" aria-modal="true" aria-labelledby="asset-remove-title"><section className="action-review-dialog__card company-dialog company-dialog--danger"><header><div><h2 id="asset-remove-title">حذف دارایی «{pendingRemove.name}»؟</h2><p>این دارایی و دستگاه متصل به آن از فهرست فعال خارج می‌شوند.</p></div><button type="button" onClick={() => setPendingRemove(null)} aria-label="بستن"><X /></button></header><div className="company-delete-warning"><AlertTriangle /><div><strong>قبل از ادامه اثر عملیات را بررسی کنید</strong><p>{pendingRemove.nvrCameraId ? "ثبت NVR، اطلاعات اتصال ذخیره‌شده و تاریخچهٔ کنترل آن از برنامه حذف می‌شوند؛ دارایی بایگانی می‌شود. این عملیات قابل بازگشت نیست و روی دستگاه، فایل ضبط یا هارد تغییری نمی‌دهد." : "حذف فعلی نرم و قابل بازیابی توسط پشتیبانی است. اگر بعداً پاک‌سازی دائمی انجام شود، اطلاعات قابل بازگشت نخواهد بود."}</p></div></div><label className="company-confirm company-confirm--check"><input type="checkbox" checked={removeConfirmed} onChange={(event) => setRemoveConfirmed(event.target.checked)} /><span>متوجه شدم که این دارایی از محیط عملیاتی و گزارش‌ها خارج می‌شود.</span></label><footer><button type="button" className="secondary-button" onClick={() => setPendingRemove(null)}>انصراف</button><button type="button" className="danger-button" disabled={!removeConfirmed || busyId === pendingRemove.id} onClick={() => void remove(pendingRemove)}><Trash2 size={17} />{busyId === pendingRemove.id ? "در حال حذف…" : "حذف دارایی"}</button></footer></section></div> : null}
     </div>
   );
 }

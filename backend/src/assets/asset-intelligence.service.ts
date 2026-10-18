@@ -12,6 +12,7 @@ import { getFindingDecision } from "../services/finding-decision.service.js";
 import { repairMisclassifiedRootFindings } from "../services/finding-analysis.service.js";
 import { COMMAND_CATALOG_VERSION, searchCatalog } from "../commands/catalog/index.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
+import { syncNvrInventory } from "../cameras/nvr-asset.js";
 
 const MAX_IMPORT_ASSETS = 100;
 const SECRET_KEY_PATTERN = /(password|passwd|token|api[_-]?key|secret|authorization|privateKey|passphrase)/i;
@@ -174,6 +175,7 @@ async function projectionCandidates(tx: Prisma.TransactionClient, device: Device
         { deviceId: device.id },
         {
           deviceId: null,
+          AND: [{ OR: [{ externalId: null }, { NOT: { externalId: { startsWith: "nvr:" } } }] }],
           OR: [
             { managementIp: device.host },
             { hostname: { equals: device.name, mode: "insensitive" } },
@@ -354,6 +356,7 @@ export async function applyAssetImport(input: ImportInput) {
       const roleId = await upsertNameModel(tx, "assetRole", item.role);
       const identity = assetIdentity(item);
       const existing = await tx.asset.findFirst({ where: duplicateWhere(item, normalized.companyId) });
+      if (existing?.externalId?.startsWith("nvr:") || identity.externalId.startsWith("nvr:")) throw new Error("NVR_USE_CAMERA_MANAGEMENT");
       const data = {
         companyId: normalized.companyId || null,
         name: cleanText(item.name || item.hostname || item.managementIp, "Unnamed asset"),
@@ -401,6 +404,7 @@ export async function applyAssetImport(input: ImportInput) {
 }
 
 export async function listAssets(view: "active" | "archived" | "all" = "active", ownerId?: string, companyId?: string) {
+  await syncNvrInventory(ownerId);
   await syncExistingDevicesToAssets(ownerId);
   const telemetrySince = new Date(Date.now() - 15 * 60_000);
   const openFindingWhere = {
@@ -465,8 +469,9 @@ export async function listAssets(view: "active" | "archived" | "all" = "active",
     if (!device || asset.managedState === "archived") {
       return {
         ...asset,
-        availability: device?.statusChecks[0]?.status ?? device?.status ?? "unknown",
-        availabilityObservedAt: device?.statusChecks[0]?.checkedAt ?? null,
+        ...(asset.externalId?.startsWith("nvr:") ? { nvrCameraId: asset.externalId.slice(4), openPath: `/assets/devices/nvr-${asset.externalId.slice(4)}`, vendor: { name: "NVR" }, platform: { name: "ONVIF / vendor API" } } : {}),
+        availability: asset.externalId?.startsWith("nvr:") ? String(object(asset.metadataJson).availability ?? "unknown") : device?.statusChecks[0]?.status ?? device?.status ?? "unknown",
+        availabilityObservedAt: asset.externalId?.startsWith("nvr:") ? object(asset.metadataJson).observedAt ?? null : device?.statusChecks[0]?.checkedAt ?? null,
         device: device ? { id: device.id, name: device.name, type: device.type, host: device.host } : null
       };
     }

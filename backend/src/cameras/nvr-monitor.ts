@@ -6,6 +6,8 @@ import { cameraUrl, CameraError } from "./camera-network.js";
 import { activeCameraScope, ownedCamera, cameraConnection, cameraVpnTarget, type CameraActor } from "./camera.service.js";
 import { cameraRevision } from "./camera-policy.js";
 import { probeNvrStorage, type NvrStorage } from "./nvr-storage.js";
+import { nvrSensors } from "./nvr-sensors.js";
+import { syncNvrAsset } from "./nvr-asset.js";
 
 const DEVICE = "http://www.onvif.org/ver10/device/wsdl", RECORDING = "http://www.onvif.org/ver10/recording/wsdl", SEARCH = "http://www.onvif.org/ver10/search/wsdl";
 const value = (root: XmlNode, key: string) => (nodes(root, key)[0]?.text.trim() ?? "").slice(0, 160);
@@ -98,7 +100,7 @@ export async function probeNvr(camera: Pick<CameraDevice, "host" | "onvifPort" |
 
 export async function getNvrMonitor(id: string, actor: CameraActor) {
   const camera = await ownedCamera(id, actor);
-  return { report: camera.monitorReportJson, history: camera.monitorHistoryJson ?? [], monitoringEnabled: camera.monitoringEnabled, intervalSeconds: camera.monitorIntervalSeconds };
+  return { report: camera.monitorReportJson, sensors: nvrSensors(camera.monitorReportJson as NvrReport | null, camera.monitorIntervalSeconds), history: camera.monitorHistoryJson ?? [], monitoringEnabled: camera.monitoringEnabled, intervalSeconds: camera.monitorIntervalSeconds };
 }
 let activeProbes = 0;
 export async function refreshNvrMonitor(id: string, actor: CameraActor, background = false) {
@@ -118,10 +120,13 @@ export async function refreshNvrMonitor(id: string, actor: CameraActor, backgrou
       const current = await tx.cameraDevice.findFirst({ where: { id, ...activeCameraScope(actor) } });
       if (!current || cameraRevision(current) !== cameraRevision(camera)) throw new CameraError("CAMERA_PREVIEW_EXPIRED", 409);
       const history = Array.isArray(current.monitorHistoryJson) ? current.monitorHistoryJson : [];
-      const entry = { checkedAt: report.checkedAt, reachable: report.reachable, warningCount: report.warnings.length };
-      await tx.cameraDevice.update({ where: { id }, data: { monitorCheckedAt: new Date(report.checkedAt), monitorReportJson: report as unknown as Prisma.InputJsonValue,
+      const sensors = nvrSensors(report, current.monitorIntervalSeconds);
+      const entry = { checkedAt: report.checkedAt, reachable: report.reachable, warningCount: report.warnings.length,
+        readings: Object.fromEntries(sensors.filter(sensor => sensor.value !== null).map(sensor => [sensor.id, sensor.value])) };
+      const updated = await tx.cameraDevice.update({ where: { id }, data: { monitorCheckedAt: new Date(report.checkedAt), monitorReportJson: report as unknown as Prisma.InputJsonValue,
         monitorHistoryJson: [...history.slice(-47), entry] as Prisma.InputJsonValue, monitorNextRunAt: new Date(Date.now() + current.monitorIntervalSeconds * 1000),
         ...([report.errorCode, report.storage?.errorCode].some(code => code === "CAMERA_AUTH_FAILED" || code === "NVR_ACCOUNT_LOCKED") ? { monitoringEnabled: false } : {}) } });
+      await syncNvrAsset(tx, updated);
       if (!background) await tx.auditLog.create({ data: { actor: actor.username, action: "camera.monitor_refreshed", targetType: "camera", targetId: id, dryRun: true, metadata: { reachable: report.reachable, warningCount: report.warnings.length, connectorInvoked: true, readOnly: true } } });
     });
     return getNvrMonitor(id, actor);

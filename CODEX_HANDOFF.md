@@ -1,5 +1,7 @@
 # CODEX_HANDOFF.md
 
+Completed local acceptance 2026-10-18: fixed unassigned camera Add to open immediate company selection; added atomic bulk company transfers with conflict rollback, preserved encrypted connection/VPN, closed streams, invalidated reports/previews and scoped audit. NVRs now project durable reserved Asset identities (not fake SSH Devices), register from Assets, and open a dedicated sensor/storage workspace. Added 13 capability-aware sensor definitions, real bounded history curves, unknown/stale states, conservative health and visible authentication/disk errors. No new schema/package or generic action-policy changes. Unchanged inventory polling skips writes. Focused actual PostgreSQL/protocol/asset regression set passes 26 tests, deployment checks22, locale/Persian/UTF-8, all workflow YAML, five full Compose variants and L2TP override pass; production/staging validation uses synthetic required variables, not runtime changes. Final dark18/light18 plus existing camera23 = 59 synthetic captures, zero runtime errors/overflow or actual external writes. Representative light/dark desktop, mobile transfer/inventory/sensors inspected. Final API `48c73531edbbc55ffa4ba58a861fb447c64b83c1c39a484803239ff6a1a722fc`, web `0f30bfd909e801e5b491ebd36d0dc975372cc0c0a5ef6d8a470283b2211dceba` scoped rebuild/deploy complete, VPN rebound and Nginx reloaded; five local services healthy, UI/readiness200, anonymous camera APIs401. Removed only identity-validated disposable QA DB/container/anonymous volume/network/test image; real application data untouched. Memory heading structure normalized without discarding history; memory checker passes. No push or production deployment authorized. See docs/CAMERA_COMPANIES_NVR_STORAGE.md. Customer hardware authentication/HDD measurement remains unverified; do not reuse credentials from chat via command probes. No universal model/CPU/SMART support or full-suite-pass claim.
+
 Completed local implementation 2026-10-18: company-first camera workspaces, opt-in bounded ONVIF NVR monitoring and real read-only disk adapters (Hikvision/HiLook ISAPI, Dahua/Amcrest-compatible CGI, Xiongmai/XMEye DVRIP). Existing cameras remain unassigned, archived/foreign companies are blocked server-side, company/VPN/settings bind preview freshness. No universal model/SMART/CPU support claim. NVR web panel was reachable; credential-in-command probe was rejected by automatic security review and not retried indirectly. Real NVR authentication/disk read remains unverified; use the application's encrypted credential form. No device setting/format/reboot was performed on customer hardware. See docs/CAMERA_COMPANIES_NVR_STORAGE.md.
 
 Final acceptance: expanded sequential camera browser rerun PASS (23 captures, zero runtime errors/overflow), plus community16 and appearance11 = 50 final synthetic captures. Desktop/mobile disk panel, company chooser, retention settings and pruning reviewed; all five local services healthy, dashboard/camera/community/readiness200, anonymous directory/retention401. Dedicated 50-MiB upload header reaches authentication401 while generic uploads stay413. One earlier parallel screenshot write failed ENOMEM; sequential acceptance supersedes it. Isolated test DB/container/anonymous volume/network and development test image are eligible for scoped cleanup only; no actual application data deletion (retention audit0) or production/push. Commit after acceptance; release requires explicit push authorization.
@@ -111,41 +113,41 @@ Latest task (2026-10-12): per-device traffic and NetFlow v5 receiver.
 - FortiGate collector normalization now preserves explicit `sentbyte`/`rcvdbyte` values. The dashboard prefers NetFlow when present, otherwise allowed byte-bearing flow logs; it does not add both sources or substitute event counts for bytes. Sampled/lost data is labeled as incomplete. See `docs/NETFLOW_V5_SETUP.md`.
 - Backend/frontend production-style builds passed. Thirteen focused tests passed (interface rates, malformed/sampled NetFlow parsing, FortiGate normalization). Both aggregation queries passed PostgreSQL `EXPLAIN` and an owned-device read-only runtime query completed for five local devices. Development/production Compose validated; local API/web rebuilt healthy. Dashboard/API health return 200, unauthenticated traffic endpoint 401, and UDP/2055 is listening inside the API but host-bound only to 127.0.0.1. UTF-8 and locale checks passed. No local exporter was configured, so no actual per-IP/port volume is reported yet. No push or live vendor configuration was performed.
 
-## 2026-10-12 - Evidence correlation and decision/action card
+### 2026-10-12 - Evidence correlation and decision/action card
 
 - Finding detail now presents a compact Persian-first decision card: why the finding matters, matching/retrievable log coverage, related devices, later successful logins, trusted/application-owned source cautions, and one clear next step. The card refreshes while visible and has a mobile layout and an explicit error/retry state. Dashboard attention items now open this decision instead of attempting an unsupported plan directly.
 - The new workspace-scoped `/api/security/findings/:id/decision` endpoint correlates exact referenced logs with the finding source, device and current age. It does not treat detector confidence as proof: missing/stale/mismatched or application-owned references, trusted IPs, and later successful logins prevent an IP-block suggestion. Only fresh, sufficiently supported attack findings expose the review action.
 - Finding-to-ActionPlan handoff now uses that same decision. An action is still only previewed; registered catalog support, user confirmation, PolicyGuard, real connector result and audit remain mandatory. Unsupported/investigation-only items show logs rather than a misleading action button; direct unsupported plan requests remain 409. No schema migration or vendor command was made.
 - Backend/frontend production builds passed. Five focused unit/integration tests passed against a separate local test database, including application-owned exclusion and exact evidence API behavior; both Compose paths validated. Local API/web were rebuilt healthy; dashboard and API health return 200, and the unauthenticated decision route returns 401. The disposable test database and two test-only images were removed. No push or production rollout occurred.
 
-## 2026-10-11 - Dashboard proposal and evidence-gated remediation
+### 2026-10-11 - Dashboard proposal and evidence-gated remediation
 
 - Dashboard now exposes one compact Persian-first action composer: choose a managed device, type the desired change, and let the existing catalog-first resolver map it to a registered ActionPlan or guided workflow. The dashboard shows the proposed action and opens its review/configuration path; it never executes from the composer.
 - High-priority finding cards offer a direct `پیشنهاد اقدام` button. This reuses the finding's existing preview-ready ActionPlan and opens that exact item in Action Center; unsupported/manual cases remain review-only.
 - Finding remediation no longer proposes an IP block merely because a finding has a source IP. Blocking is limited to open, credible attack categories; account, privilege, configuration and already-denied traffic findings remain manual proposals. Protected quick-controlled confirmation, PolicyGuard, connector and audit behavior are unchanged.
 - Frontend and backend production builds passed, the focused remediation gate test passed, and development/production Compose structure validated. Local web/API were rebuilt healthy, with routed dashboard and API health HTTP 200. No device action, migration, push or production rollout occurred.
 
-## 2026-10-11 - Real Docker port unpublish and compact Network Lab
+### 2026-10-11 - Real Docker port unpublish and compact Network Lab
 
 - Closing a Docker-owned Linux port from Ports & Connections now sends the live container identity through the existing controlled ActionPlan flow and removes the selected host-port publication by transactionally recreating that container. The connector preserves unrelated bindings, mounts and networks, verifies the replacement state, and restores the original container automatically if creation, startup or health verification fails.
 - The result records the real connector outcome and warns when Docker Compose can republish the port until its source configuration is updated. Ordinary non-Docker close actions and the existing protected-port/PolicyGuard/audit controls are unchanged.
 - Network scanning now sits as a compact `اسکن شبکه` sub-tab inside Network Lab. The redundant hero, `جدید` marker, range explanation and verbose execution copy were removed; the remaining scope/profile controls are shorter and responsive.
 - Focused Docker evidence tests passed 3/3, backend/frontend production images built, production Compose validates, and the scoped local API/web rebuilds are healthy. Routed API health and Network Lab both return HTTP 200. No vendor/container mutation, migration, push or production deployment occurred.
 
-## 2026-10-11 - Cisco ACL and expanded MikroTik command catalog
+### 2026-10-11 - Cisco ACL and expanded MikroTik command catalog
 
 - Promoted 22 RouterOS operations into the Persian command catalog with registered templates and verified connector support: interface/route/address-list/DNS/DHCP/resource/log reads plus managed firewall, NAT, route, DNS, DHCP, management-service, identity, SSH-port and sanitized-export workflows.
 - RouterOS write workflows now use bounded parameters and explicit post-change sentinel checks. Newly created firewall/NAT/routes remain disabled until a separate confirmed enable action.
 - Added four executable Cisco named-standard-ACL operations: create/remove an exact sequence and apply/detach an ACL on an interface direction. They use the existing Cisco preview, safety-backup, connector and audit path.
 - Production build, production Compose validation, the 248-item catalog validator, 55 focused regressions and an isolated PostgreSQL ActionPlan sweep passed. The local API was rebuilt and is healthy/readiness 200. No remote vendor command or production push occurred.
 
-## 2026-10-11 Docker-aware port control and quieter shell
+### 2026-10-11 Docker-aware port control and quieter shell
 
 Ports & Connections now identifies Linux ports published by Docker from live `docker ps` evidence and shows the owning container, image, host-to-container mapping, protocol, and current `DOCKER-USER` enforcement state. Closing a Docker-published port no longer relies on UFW: the controlled Linux connector inserts an idempotent DROP rule in `DOCKER-USER`, verifies that exact original-destination port rule, records container evidence and rollback commands, and leaves the container running. Non-Docker ports keep the existing UFW/firewalld/nftables/iptables path. Protected management ports and the current SSH port remain blocked from closure.
 
 The Network Lab scanner header is now a compact functional label instead of a marketing hero, and the selected-device widget and its extra device fetch were removed from the global topbar. Backend/frontend production builds, 26 topology/Docker regressions, UTF-8/i18n checks and development/production Compose validation passed. Local API/web were rebuilt through the scoped scripts; all four services are healthy and readiness/topology return HTTP 200. No vendor command, container stop/removal, migration, push or production deployment occurred.
 
-## 2026-10-11 professional IP/MAC network inventory
+### 2026-10-11 professional IP/MAC network inventory
 
 Network Lab now has a dedicated `اسکن IP و MAC` tab. The operator selects a workspace device and an RFC1918 CIDR bounded to at most 256 addresses, then chooses fast discovery or a deeper service/version scan with up to 24 explicit TCP ports. The result keeps every address in the range and shows active/vendor-seen/down state, latency, hostname, normalized MAC, Nmap OUI manufacturer when available, open ports and detected service product/version, probable device class, interface/VLAN, evidence sources and an evidence-confidence label. Search, evidence filters, expandable details, CSV export, per-user audit history and a separate mobile card layout are included.
 
@@ -159,7 +161,7 @@ The backend combines non-root Nmap 7.99 evidence with fresh read-only neighbor t
 
 Backend and frontend production builds, four CIDR/Nmap/vendor-merge unit tests, UTF-8, locale/Persian-copy and production Compose validation passed. The complete API image contains Nmap and its non-root loopback probe succeeded. Local API/web were rebuilt with the scoped scripts; API, web, database and Nginx are healthy, the dashboard/readiness routes return 200, and the unauthenticated scanner API correctly returns 401. No real vendor/network scan, device mutation, migration, push or production deployment occurred.
 
-## 2026-10-11 administrator expert command execution
+### 2026-10-11 administrator expert command execution
 
 The advanced script editor now exposes an administrator-only expert toggle. An authenticated active admin may enter their own Linux, MikroTik, FortiGate, or Cisco SSH command lines outside the curated vendor allowlist; post-check lines are optional. These user-authored plans are always normalized to high risk and use the existing registered `custom_vendor_action` execution template and real vendor connector. Preview, one explicit confirmation in protected quick-controlled mode, PolicyGuard, connector invocation, result evidence, and audit remain mandatory.
 
@@ -167,7 +169,7 @@ AI-authored custom plans remain allowlist-controlled with `rawCommandExecution=f
 
 Backend and frontend production builds, production Compose validation, 33 focused safety/policy tests, one isolated PostgreSQL integration test, the 227-item catalog validation, locale parity, Persian-copy, and UTF-8 checks passed. The integration test proved operator rejection and admin `dry_run_ready` without connector invocation; its disposable database container and data were removed. Local API and web were rebuilt with the scoped scripts. No vendor command, schema migration, push, or production deployment occurred.
 
-## 2026-10-11 complete script sources and preview-ready finding remediation
+### 2026-10-11 complete script sources and preview-ready finding remediation
 
 The advanced editor now loads the complete connector command list for catalog and assistant ActionPlans instead of treating read-only `commandSpecs` as post-checks or showing the Linux Daily Check placeholder. Linux Daily Check and read actions share one command library between planner, dry-run, editor and real connector execution; the existing local Daily Check plan now returns six full editable commands and no placeholder. Unchanged registered read bundles are accepted by the vendor policy, while new or changed text still must pass the existing vendor allowlist, secret/catastrophic checks, preview, explicit confirmation, PolicyGuard, connector and audit. The editor line limit is 64 and long commands retain one-line horizontal editing.
 
@@ -175,7 +177,7 @@ Finding remediation now binds the evidence IP under both canonical `srcIp` and c
 
 Production API/web builds, both production Compose config validations, 36 focused regressions, the 227-item catalog validation, locale parity and UTF-8 checks passed. An isolated disposable PostgreSQL test proved repeated-login finding -> Linux IP-block -> `dry_run_ready` with `connectorInvoked != true`; its container and data were removed afterward. Local API/web were rebuilt with the scoped scripts, all four services are healthy, and routed readiness/dashboard/editor paths return HTTP 200. A sanitized live service check confirmed the existing Daily Check editor returns six execution lines, one post-check and no placeholder. No schema migration, vendor mutation, push or production deployment occurred.
 
-## 2026-10-10 live attention and verified remediation refresh
+### 2026-10-10 live attention and verified remediation refresh
 
 Dashboard attention is now driven by fresh per-device connectivity, collection, health snapshot, resource and open high/critical Finding evidence for every managed vendor, rather than the persisted connectivity label alone. Findings refresh every five seconds while the page is visible; attention rows are deduplicated per device, ordered by severity then observation time, and resolved/closed findings disappear without a page reload. A verified controlled action immediately runs a read-only health recollection. Linux additionally takes a fresh security snapshot so explicit safe posture can auto-resolve snapshot findings. Connector-verified IP-block/deny-policy actions created from a Finding resolve only that linked Finding with an audit record; new evidence reopens it through the existing detector. Refresh failure never changes a successfully verified ActionPlan into a fake failure and never hides the device problem. Protected quick-controlled execution, PolicyGuard, confirmation and connector/audit requirements are unchanged.
 
@@ -273,7 +275,7 @@ Backend/frontend builds, 17 original focused/regression tests and validation of 
 
 Project rules are in AGENTS.md; current work status is in docs/CURRENT_STATUS.md and docs/TASK_HISTORY.md.
 
-## 2026-10-10 - Separate security alerts from device health and serve the public domain
+### 2026-10-10 - Separate security alerts from device health and serve the public domain
 
 - Corrected the asset-health model: availability comes from fresh connectivity checks and operational health comes only from reachability, collection, resource and service evidence. Open security Findings remain actionable in Security/attention views but cannot mark an online healthy device offline, lower the device count, or clamp its health score.
 - Linux authentication warnings remain visible as security signals but no longer contaminate operational health snapshots or the operational recent-problems list. Repeated same-title Findings are grouped into one issue card, with a short Persian explanation and a single “بررسی و رفع مشکل” path.
@@ -346,7 +348,7 @@ Final acceptance: isolated PostgreSQL tests passed 14/14, including proposed-onl
 - هیچ migration، فرمان تغییردهندهٔ تجهیز، push یا production deployment در این task انجام نشد.
 - secret، credential، raw log، database، upload، dependency folder و build output نباید چاپ، مستند یا commit شوند.
 
-## 2026-10-10 - Professional editable vendor scripts
+### 2026-10-10 - Professional editable vendor scripts
 
 - Assistant proposals and existing prepared ActionPlans now expose **ویرایش حرفه‌ای اسکریپت** in a new tab. The Persian RTL workspace supports editable multiline execution and verification text, line numbers, copy/reset, per-line feedback, device context and a three-step edit/preview/confirm flow.
 - Edited text is never sent to a raw shell. Preview creates a derived registered `custom_vendor_action`; each executable line is checked by the existing Linux/MikroTik/FortiGate/Cisco policy, while secrets and catastrophic or unknown commands fail closed. The original ActionPlan is preserved.
