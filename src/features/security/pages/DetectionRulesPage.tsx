@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Power, SlidersHorizontal } from "lucide-react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";

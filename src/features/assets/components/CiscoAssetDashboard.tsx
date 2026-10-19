@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 
 type UnknownRecord = Record<string, unknown>;
 

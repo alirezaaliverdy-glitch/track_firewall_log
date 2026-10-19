@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Cable, Check, ChevronDown, LoaderCircle, LockKeyhole, Network, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Upload, Wifi } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { CameraDialog } from "@/features/cameras/CameraDialog";

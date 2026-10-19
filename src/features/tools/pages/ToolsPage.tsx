@@ -3,7 +3,8 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { listDiagnostics, listNmapScans, runDiagnostic, runNmapScan, type DiagnosticSession, type NmapScan } from "@/lib/diagnostics";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 
 const routeTitle: Record<string, string> = {
   "/tools/network-check": "تست سریع شبکه",

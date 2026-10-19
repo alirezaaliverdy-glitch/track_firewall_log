@@ -1,4 +1,5 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { useTranslation } from "react-i18next";
 import { Network, Server } from "lucide-react";
 import type { RouteComponentProps } from "@/routes/appRoutes";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Bot, CalendarClock, CheckCircle2, CirclePause, Clock3, History, Library, LoaderCircle, Pause, Play, RotateCcw, ShieldCheck, Sparkles, TimerReset, XCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { searchCommands, type CatalogItem, type CatalogParam } from "@/lib/commandCatalog";
 import { listDevices, type Device } from "@/lib/devices";
 import {

@@ -11,7 +11,7 @@ export type AuthUser = {
   allowedSections: string[];
 };
 
-export type ApplicationSection = "dashboard" | "assets" | "security" | "monitoring" | "actions" | "assistant" | "attackers";
+export type ApplicationSection = import("./pageAccess").PageGrant;
 
 export type ManagedUser = {
   id: string;

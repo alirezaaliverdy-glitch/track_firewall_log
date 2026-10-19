@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { ArrowUpLeft, Copy, RefreshCw, ShieldAlert } from "lucide-react";
 import { apiRequest } from "@/lib/apiTransport";
 import type { FindingCampaign, FindingDecision, SecurityFinding } from "@/lib/platform";

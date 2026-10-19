@@ -8,10 +8,10 @@ import { APPLICATION_SECTIONS, hasSectionAccess, normalizeApplicationSections, s
 import { getProductNavigation } from "../src/product-state/product-state.registry.js";
 
 test("Task 30 normalizes section grants and rejects empty or unknown access", () => {
-  assert.deepEqual(normalizeApplicationSections(["dashboard", "assets", "dashboard"]), ["dashboard", "assets"]);
+  assert.deepEqual(normalizeApplicationSections(["page:tools.vpn", "page:assets.cameras", "page:tools.vpn"]), ["page:assets.cameras", "page:tools.vpn"]);
   assert.throws(() => normalizeApplicationSections([]), /SECTION_ACCESS_REQUIRED/);
   assert.throws(() => normalizeApplicationSections(["dashboard", "root"]), /INVALID_SECTION_ACCESS/);
-  assert.equal(APPLICATION_SECTIONS.length, 7);
+  assert.equal(APPLICATION_SECTIONS.length, 23);
 });
 
 test("Task 30 maps sensitive API paths to their product section", () => {
@@ -43,10 +43,10 @@ test("Task 30 applies least privilege and reserves user administration for admin
   assert.equal(findMutationPermission("POST", "/api/admin/users/user-1/reset-password"), "users.manage");
 });
 
-test("Task 30 filters navigation and keeps settings available", () => {
-  const groups = getProductNavigation(["dashboard", "security"]);
-  assert.deepEqual(groups.map((group) => group.key), ["dashboard", "security", "settings"]);
-  assert.ok(groups.flatMap((group) => group.items).some((item) => item.route === "/settings"));
+test("Task 30 filters navigation without implicit settings access", () => {
+  const groups = getProductNavigation(["page:dashboard.overview", "page:security.findings"]);
+  assert.deepEqual(groups.map((group) => group.key), ["dashboard", "security"]);
+  assert.ok(!groups.flatMap((group) => group.items).some((item) => item.route === "/settings"));
   assert.ok(!groups.flatMap((group) => group.items).some((item) => item.route === "/assets"));
 });
 

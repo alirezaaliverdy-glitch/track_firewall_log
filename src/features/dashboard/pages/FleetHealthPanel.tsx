@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Cpu, HardDrive, MemoryStick } from "lucide-react";
 import { API_BASE_URL } from "@/config/frontendEnv";
 import "./FleetHealthPanel.css";

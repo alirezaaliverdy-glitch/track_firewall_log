@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CalendarClock, ChevronDown, Code2, ExternalLink, TriangleAlert } from "lucide-react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import {
   completeAiActionRequest,
   normalizeArray,

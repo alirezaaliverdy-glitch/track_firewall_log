@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Activity, Bot, ChevronDown, Code2, ExternalLink, MessageCircle, ScanSearch, Send, Server, ShieldAlert, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import {
   getAiProviderStatus,

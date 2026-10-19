@@ -5,7 +5,7 @@ import { findMutationPermission, isMutationMethod } from "../security/authorizat
 import { hasPermission } from "../security/permissions.js";
 import { CSRF_HEADER_NAME, validateCsrfToken } from "../security/csrf.js";
 import { consumeRouteRateLimit } from "../security/rate-limit.js";
-import { hasSectionAccess, sectionForApiPath } from "../security/section-access.js";
+import { canAccessApi } from "../security/section-access.js";
 import { NATIVE_APP_ORIGINS, sessionCredentialsForRequest } from "../security/session-transport.js";
 
 const PUBLIC_PATHS = new Set([
@@ -39,7 +39,9 @@ function isAllowedOrigin(origin: string | undefined) {
 
 export async function registerSecurityPlugin(app: FastifyInstance, options: { authRequired: boolean }) {
   app.addHook("preHandler", async (request, reply) => {
-    const pathname = request.url.split("?", 1)[0];
+    let pathname: string;
+    try { pathname = decodeURIComponent(request.url.split("?", 1)[0]); }
+    catch { return reply.code(400).send({ error: "invalid_path" }); }
     if (!pathname.startsWith("/api/") && pathname !== "/health") return;
     if (!options.authRequired) return;
 
@@ -58,8 +60,7 @@ export async function registerSecurityPlugin(app: FastifyInstance, options: { au
       request.authTransport = credentials.transport;
     }
 
-    const requestedSection = sectionForApiPath(pathname);
-    if (request.authUser && requestedSection && !hasSectionAccess(request.authUser, requestedSection)) {
+    if (request.authUser && !canAccessApi(request.authUser, pathname, request.method)) {
       return reply.code(403).send(forbidden(
         "SECTION_ACCESS_DENIED",
         "دسترسی این حساب به بخش درخواستی توسط مدیر غیرفعال شده است."

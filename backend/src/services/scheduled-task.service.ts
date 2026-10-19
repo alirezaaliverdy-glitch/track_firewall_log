@@ -17,6 +17,7 @@ import { proposeActionPlan, quickExecuteActionPlan } from "./action-plan.service
 import { copyActionPlanSecrets } from "./action-plan-secret.service.js";
 import { requiredExecutionPermissionForRisk } from "../security/authorization.js";
 import { hasPermission, type Role } from "../security/permissions.js";
+import { canAccessPage } from "../security/page-access.js";
 
 const ALLOWED_TIME_ZONES = new Set(["Asia/Tehran", "UTC"]);
 const MAX_FUTURE_MS = 366 * 24 * 60 * 60 * 1000;
@@ -181,7 +182,7 @@ function assertActorCanExecute(actor: SchedulerActor, riskLevel: string) {
   if (!hasPermission(actor.role, permission)) {
     throw new ScheduledTaskError("SCHEDULE_PERMISSION_REVOKED", "مجوز اجرای این عملیات وجود ندارد.", 403);
   }
-  if (actor.role !== "admin" && !actor.allowedSections.includes("actions")) {
+  if (!canAccessPage(actor, "actions.scheduled")) {
     throw new ScheduledTaskError("SCHEDULE_PERMISSION_REVOKED", "دسترسی بخش اقدامات برای این حساب فعال نیست.", 403);
   }
 }
@@ -223,7 +224,7 @@ export async function listScheduledTaskHistory(limit = 100) {
 }
 
 export async function listSchedulableAssistantPlans(actor: SchedulerActor) {
-  if (actor.role !== "admin" && !actor.allowedSections.includes("actions")) {
+  if (!canAccessPage(actor, "actions.scheduled")) {
     throw new ScheduledTaskError("SCHEDULE_PERMISSION_REVOKED", "دسترسی بخش اقدامات برای این حساب فعال نیست.", 403);
   }
   const plans = await prisma.actionPlan.findMany({

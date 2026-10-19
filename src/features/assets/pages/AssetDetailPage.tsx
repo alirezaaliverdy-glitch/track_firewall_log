@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DeviceTerminalLink } from "@/features/terminal/DeviceTerminalLink";

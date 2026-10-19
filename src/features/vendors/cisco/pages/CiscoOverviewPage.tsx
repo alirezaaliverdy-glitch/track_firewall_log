@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getCiscoDevices, getVendorDetail, listVendors, type VendorDetail, type VendorSummary } from "@/lib/vendors";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Boxes, CheckCircle2, ChevronLeft, CircleDashed, Network, Radio, Router, Server, Shield, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 

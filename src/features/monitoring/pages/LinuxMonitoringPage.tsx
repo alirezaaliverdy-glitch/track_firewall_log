@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Activity, AlertTriangle, ArrowRight, CheckCircle2, Clock3, Cpu, Database, Gauge, HardDrive, LoaderCircle, MemoryStick, Network, Search, Server, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { getLinuxMonitoringMetrics, getLinuxMonitoringSummary, type LinuxHealthSnapshot, type LinuxMetricSample, type LinuxMonitoringDevice, type LinuxSummary } from "@/lib/linuxMonitoring";
 import "./LinuxMonitoringPage.css";

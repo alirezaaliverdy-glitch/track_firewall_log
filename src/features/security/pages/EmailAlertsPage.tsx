@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ArrowLeft, BellRing, CheckCircle2, Clock3, ExternalLink, Eye, EyeOff, Inbox, KeyRound, Mail, Pencil, Plus, Send, ShieldCheck, Unplug, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";

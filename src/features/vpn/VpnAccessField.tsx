@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { vpnRequest, type VpnList, type VpnProfile } from "@/lib/vpn";
+import { useAuth } from "@/context/AuthContext";
+import { canAccessPage } from "@/lib/pageAccess";
 import "./VpnAccessField.css";
 
 export function VpnAccessField({ value, onChange, host, isFa = true }: { value: string; onChange: (id: string) => void; host?: string; isFa?: boolean }) {
+  const { user } = useAuth();
+  const allowed = canAccessPage(user, "tools.vpn");
   const [profiles, setProfiles] = useState<VpnProfile[]>([]);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let mounted = true;
+    if (!allowed) return;
     void vpnRequest<VpnList>().then(data => { if (mounted) { setProfiles(data.profiles); setFailed(false); } }).catch(() => { if (mounted) setFailed(true); });
     return () => { mounted = false; };
-  }, []);
+  }, [allowed]);
+  if (!allowed) return value ? <p className="camera-hint">{isFa ? "مسیر اتصال ذخیره‌شده حفظ می‌شود؛ تغییر VPN نیازمند دسترسی مدیر است." : "The saved connection route is preserved. Ask your manager for VPN access to change it."}</p> : null;
   const selected = profiles.find(profile => profile.id === value);
   const unavailable = selected && selected.runtime.state !== "connected";
   return <div className="vpn-access-field">

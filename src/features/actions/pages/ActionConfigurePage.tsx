@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { correctActionFields, dryRunAction, getAction, getActionParameterSchema, normalizeObject, type ActionParameterField, type ActionParameterSchema, type ActionPlan } from "@/lib/actions";

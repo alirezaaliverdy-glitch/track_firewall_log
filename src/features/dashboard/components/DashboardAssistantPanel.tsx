@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 
 type DashboardAssistantPanelProps = {
   isFa: boolean;

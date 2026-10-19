@@ -1,7 +1,7 @@
 import { AlertTriangle, MoreVertical, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { deleteDevice, testDeviceConnection } from "@/lib/devices";
 import type { PlatformAsset } from "@/lib/platform";

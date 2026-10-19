@@ -1,7 +1,8 @@
 import { Activity, AlertTriangle, ChevronLeft, Clock3, FileSearch2, Info, KeyRound, LogIn, Search, Server, ShieldCheck, UsersRound, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { listVendorUserActivity, type VendorUserActivity } from "@/lib/platform";
 import { createCatalogAction } from "@/lib/commandCatalog";
 import { publishActionPlanCreated } from "@/lib/actionPlanHandoff";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Activity, AlertTriangle, Check, ChevronDown, Clipboard, Clock3, Database, FileCode2, Fingerprint, Network, Server, ShieldCheck, Tags } from "lucide-react";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";

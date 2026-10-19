@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import {
   Activity,
   ChevronLeft,

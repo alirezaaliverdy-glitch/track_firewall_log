@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { useTranslation } from "react-i18next";
 import { correctActionFields, quickExecuteAction } from "@/lib/actions";
 import { clearActionCenterHistory, getActionCenterItem, listActionCenter, retryActionCenterItem, type ActionCenterItem, type ActionLifecycle } from "@/lib/actionCenter";

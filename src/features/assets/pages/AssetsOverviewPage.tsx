@@ -6,7 +6,7 @@ import type { PlatformAsset } from "@/lib/platform";
 import { ArrowUpLeft, CircleAlert, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { AssetIdentityIcon } from "../components/AssetIdentityIcon";
 import { AssetSummaryCards } from "../components/AssetSummaryCards";
 import { useAssets } from "../hooks/useAssets";

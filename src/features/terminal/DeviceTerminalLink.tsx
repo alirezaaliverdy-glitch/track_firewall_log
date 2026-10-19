@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { TerminalSquare } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 export function DeviceTerminalLink({deviceId,isFa}:{deviceId:string;isFa:boolean}){

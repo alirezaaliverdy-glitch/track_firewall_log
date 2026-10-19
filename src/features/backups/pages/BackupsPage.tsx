@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, Download, Loader2, ShieldCheck, Search, Trash2 } from "lucide-react";
 import { apiRequest } from "@/lib/apiTransport";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import "./BackupsPage.css";
 import BackupHistory, { backupTime } from "./BackupHistory";
 import BackupDeleteDialog from "./BackupDeleteDialog";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { ReportFollowups } from "./ReportFollowups";
 import { AlertTriangle, Building2, CheckCircle2, Clock3, Download, Eye, FileCode2, FileSpreadsheet, FileText, History, LoaderCircle, PencilLine, RefreshCw, ServerCog, Trash2, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";

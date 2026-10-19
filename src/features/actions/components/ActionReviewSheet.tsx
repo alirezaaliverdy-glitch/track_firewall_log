@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Code2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { ActionCenterItem, ActionLifecycle } from "@/lib/actionCenter";

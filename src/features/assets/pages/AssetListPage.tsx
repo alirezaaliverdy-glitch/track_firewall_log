@@ -5,7 +5,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AssetTable } from "../components/AssetTable";
 import { useAssets } from "../hooks/useAssets";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { ACTIVE_COMPANY_STORAGE_KEY, listCompanies, type Company } from "@/lib/companies";

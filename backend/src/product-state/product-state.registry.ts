@@ -1,4 +1,5 @@
 import { VENDOR_REGISTRY } from "../vendors/vendor.registry.js";
+import { expandPageGrants, pageForFeature, type PageGrant } from "../security/page-access.js";
 import type { ProductFeature, ProductFeatureState, ProductIntegrationState, ProductNavigationGroup } from "./product-state.types.js";
 
 const VERIFIED_AT = "2026-07-13";
@@ -15,6 +16,7 @@ export const PRODUCT_FEATURES: ProductFeature[] = [
 
   feature({ key: "assets.overview", titleFa: "نمای کلی", titleEn: "Overview", route: "/assets", groupKey: "assets", order: 10, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.devices", titleFa: "تجهیزات", titleEn: "Devices", route: "/assets/devices", groupKey: "assets", order: 20, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
+  feature({ key: "assets.device_terminal", titleFa: "کنسول CLI تجهیز", titleEn: "Device CLI", route: "/assets/devices/:deviceId/terminal", groupKey: "assets", order: 22, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "Admin-only audited SSH session for a registered device; inherits device page visibility, never an independent sidebar tab." }),
   feature({ key: "assets.cameras", titleFa: "دوربین‌ها", titleEn: "Cameras", route: "/assets/cameras", groupKey: "assets", order: 27, state: "partial", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true, reason: "ONVIF discovery/profile inventory, RTSP browser preview and registered camera controls; vendor compatibility depends on real device capabilities. Recording/replay is not implemented." }),
   feature({ key: "assets.device_onboarding_new", titleFa: "ثبت دستگاه", titleEn: "Register device", route: "/assets/devices/new", groupKey: "assets", order: 21, state: "implemented", userVisible: true, navigationVisible: true, backendReady: true, apiReady: true, uiReady: true, tested: true }),
   feature({ key: "assets.device_onboarding", titleFa: "راه‌اندازی دستگاه", titleEn: "Device onboarding", route: "/assets/onboarding", groupKey: "assets", order: 22, state: "implemented", userVisible: true, navigationVisible: false, backendReady: true, apiReady: true, uiReady: true, tested: true }),
@@ -121,13 +123,12 @@ export function validateProductState(features: ProductFeature[] = PRODUCT_FEATUR
 
 export function getProductNavigation(allowedGroups?: readonly string[]): ProductNavigationGroup[] {
   validateProductState();
-  const allowed = allowedGroups ? new Set([...allowedGroups, ...(allowedGroups.includes("assets") ? ["reports", "backups"] : []), "settings", "community"]) : null;
+  const allowed = allowedGroups ? new Set(expandPageGrants(allowedGroups)) : null;
   return NAVIGATION_GROUPS.flatMap((group) => {
-    if (allowed && !allowed.has(group.key === "tools" ? "actions" : group.key)) return [];
-    const features = PRODUCT_FEATURES.filter((item) => item.groupKey === group.key && item.navigationVisible).sort((a, b) => a.order - b.order);
+    const features = PRODUCT_FEATURES.filter((item) => item.groupKey === group.key && item.navigationVisible && (!allowed || allowed.has(`page:${item.key}` as PageGrant))).sort((a, b) => a.order - b.order);
     const landing = features[0];
     if (!landing?.route) return [];
-    return [{ ...group, route: landing.route, items: features.map(({ key, titleFa, titleEn, route, state }) => ({ key, titleFa, titleEn, route, state })) }];
+    return [{ ...group, ...(allowed && features.length === 1 ? { titleFa: landing.titleFa, titleEn: landing.titleEn } : {}), route: landing.route, items: features.map(({ key, titleFa, titleEn, route, state }) => ({ key, titleFa, titleEn, route, state })) }];
   });
 }
 
@@ -152,7 +153,7 @@ export function getProductStateContract(allowedGroups?: readonly string[]) {
   return {
     contractVersion: PRODUCT_STATE_CONTRACT_VERSION,
     verifiedAt: VERIFIED_AT,
-    features: PRODUCT_FEATURES,
+    features: allowedGroups ? PRODUCT_FEATURES.filter(item => { const page = pageForFeature(item.key, item.groupKey); return page && expandPageGrants(allowedGroups).includes(`page:${page}`); }) : PRODUCT_FEATURES,
     navigation: getProductNavigation(allowedGroups),
     vendors: getProductVendors(),
     integrations: PRODUCT_INTEGRATIONS

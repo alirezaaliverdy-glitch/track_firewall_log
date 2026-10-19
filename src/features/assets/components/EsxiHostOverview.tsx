@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import "./EsxiHostOverview.css";
 
 const rows = (v:unknown):Record<string,unknown>[] => Array.isArray(v) ? v.filter(item=>item && typeof item==="object") as Record<string,unknown>[] : [];

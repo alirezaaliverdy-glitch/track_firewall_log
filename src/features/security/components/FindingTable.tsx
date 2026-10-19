@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { ChevronLeft, Clock3, Crosshair, FileSearch2, ShieldAlert } from "lucide-react";
 import type { SecurityFinding, VendorFindingProfile } from "@/lib/platform";
 import { securityDisplayText } from "../securityPresentation";

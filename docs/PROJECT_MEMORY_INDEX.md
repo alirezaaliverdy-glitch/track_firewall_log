@@ -1,5 +1,7 @@
 # Project Memory Index
 
+Page-level account visibility and authorization: `docs/PAGE_ACCESS.md` (Settings selections, independent Cameras/VPN, hidden navigation/direct-route/API gates and legacy compatibility).
+
 ## Read in This Order
 
 1. `AGENTS.md` — stable rules, protected execution behavior, and task workflow.

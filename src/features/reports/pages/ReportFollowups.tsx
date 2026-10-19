@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import type { CompanyStatusReport } from "@/lib/reports";
 
 export function ReportFollowups({ report }: { report: CompanyStatusReport }) {

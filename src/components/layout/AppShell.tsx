@@ -1,4 +1,4 @@
-import { Bot, Boxes, ChevronDown, Crosshair, Eye, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, WifiOff, Wrench, X } from "lucide-react";
+import { Bot, Boxes, Camera, LockKeyhole, ChevronDown, Crosshair, Eye, FileBarChart2, Gauge, LayoutDashboard, LogOut, Menu, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Plus, Server, Settings, ShieldAlert, WifiOff, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
@@ -10,6 +10,7 @@ import { clearNativeServerUrl, isNativeAndroidApp } from "@/mobile/nativeServerC
 import { clearNativeSessionToken } from "@/mobile/nativeSession";
 import EosnetLogo from "@/components/branding/EosnetLogo";
 import { useAppearance } from "@/lib/appearance";
+import { PAGE_ACCESS, canAccessPage, firstAccessibleRoute, pageForLocation } from "@/lib/pageAccess";
 import { MessagesSquare } from "lucide-react";
 import "./AppShellNavigation.css";
 import "./AppShellTopbar.css";
@@ -18,6 +19,8 @@ import "./AppShellTopbar.css";
 import "./MobileShell.css";
 
 const navigationIcons = {
+  cameras: Camera,
+  vpn: LockKeyhole,
   community: MessagesSquare,
   backups: Server,
   tools: Gauge,
@@ -37,6 +40,7 @@ const navigationTones: Record<string, string> = {
   dashboard: "cyan", assets: "violet", security: "rose", monitoring: "emerald",
   actions: "amber", assistant: "fuchsia", attackers: "red", settings: "sky", tools: "cyan", reports: "sky"
 };
+const navigationOrder = ["dashboard", "assets", "security", "monitoring", "actions", "reports", "tools", "assistant", "attackers", "backups", "settings", "community"];
 
 const fallbackNavigation: ProductNavigationGroup[] = [
   { key: "reports", titleFa: "گزارش‌گیری", titleEn: "Reports", iconKey: "reports", route: "/reports", mobilePrimary: false, items: [] },
@@ -81,14 +85,16 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
   const isFa = i18n.language?.startsWith("fa");
   const direction = isFa ? "rtl" : "ltr";
   const activeGroup = currentGroup;
-  const localNavigation = useMemo(() => fallbackNavigation.filter((group) => (
-    ["settings", "community"].includes(group.key) || user?.role === "admin" || (user?.allowedSections ?? []).includes(group.key)
-  )), [user?.allowedSections, user?.role]);
-  const visibleNavigation = navigation.length ? navigation : localNavigation;
+  const visibleNavigation = useMemo(() => (navigation.length ? navigation : fallbackNavigation).flatMap(group => {
+    const source = group.items.length ? group.items : PAGE_ACCESS.filter(([, key]) => key === group.key).map(([key, , route, titleFa, titleEn]) => ({ key, route, titleFa, titleEn, state: "implemented" as const }));
+    const items = source.filter(item => { const page = pageForLocation(item.route); return page && canAccessPage(user, page); });
+    if (!items.length) return [];
+    const only = items.length === 1 ? items[0] : null;
+    return [{ ...group, route: items[0].route, items, ...(only ? { titleFa: only.titleFa, titleEn: only.titleEn,
+      iconKey: only.key === "assets.cameras" ? "cameras" : only.key === "tools.vpn" ? "vpn" : group.iconKey } : {}) }];
+  }).sort((a, b) => navigationOrder.indexOf(a.key) - navigationOrder.indexOf(b.key)), [navigation, user]);
   const connectionHealthy = online && navigation.length > 0 && !navigationError;
-  const mobileNavigation = ["dashboard", "assets", "security", "actions"]
-    .map((key) => visibleNavigation.find((group) => group.key === key))
-    .filter((group): group is ProductNavigationGroup => Boolean(group));
+  const mobileNavigation = visibleNavigation.slice(0, 4);
   const moreNavigationActive = !mobileNavigation.some((group) => group.key === activeGroup);
   const SidebarToggleIcon = direction === "rtl" ? (collapsed ? PanelRightOpen : PanelRightClose) : (collapsed ? PanelLeftOpen : PanelLeftClose);
   const activeNavigation = visibleNavigation.find((group) => group.key === activeGroup);
@@ -134,7 +140,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
       cancelDeferred();
       if (retryId !== undefined) window.clearTimeout(retryId);
     };
-  }, []);
+  }, [user?.id, user?.role, user?.allowedSections]);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -178,7 +184,7 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
       <aside id="platform-primary-navigation" className={`platform-sidebar ${collapsed && !mobileNavOpen ? "is-collapsed" : ""} ${mobileNavOpen ? "is-mobile-open" : ""}`} aria-label={t("shell.primaryNavigation")}>
         <span className="platform-sidebar__aurora" aria-hidden="true" />
         <div className="platform-sidebar__controls">
-          <Link to="/dashboard" className="platform-sidebar__brand" aria-label={isFa ? "داشبورد EOSNET" : "EOSNET dashboard"}>
+          <Link to={firstAccessibleRoute(user)} className="platform-sidebar__brand" aria-label="EOSNET">
             <span className="platform-sidebar__brand-mark"><EosnetLogo variant="symbol" decorative /><i aria-hidden="true" /><i aria-hidden="true" /></span>
             <span className="platform-sidebar__brand-copy"><strong dir="ltr">EOSNET</strong><small>{isFa ? "مرکز فرمان امنیت" : "Security command"}</small></span>
           </Link>
@@ -237,13 +243,13 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
             <i className={`topbar-health-dot ${connectionHealthy ? "is-online" : "is-offline"}`} title={connectionHealthy ? t("shell.backendConnected") : t("shell.backendUnavailable")} />
           </div>
           <nav className="topbar-tools" aria-label={t("shell.operationContext")}>
-            {user?.role !== "viewer" ? <Link to="/actions" className="topbar-create"><Plus aria-hidden="true" /><span>{isFa ? "اقدام جدید" : "New action"}</span></Link> : null}
+            {user?.role !== "viewer" && canAccessPage(user, "actions.center") ? <Link to="/actions" className="topbar-create"><Plus aria-hidden="true" /><span>{isFa ? "اقدام جدید" : "New action"}</span></Link> : null}
             <details ref={accountMenuRef} className="topbar-account">
               <summary aria-label={isFa ? "منوی حساب" : "Account menu"}><span>{(user?.displayName || user?.username || "U").slice(0, 1).toLocaleUpperCase()}</span><strong>{user?.displayName || user?.username}</strong><ChevronDown aria-hidden="true" /></summary>
               <div className="topbar-account__menu">
                 <header><span>{(user?.displayName || user?.username || "U").slice(0, 1).toLocaleUpperCase()}</span><div><strong>{user?.displayName || user?.username}</strong><small>{user?.role === "admin" ? (isFa ? "مدیر سامانه" : "Administrator") : user?.role}</small></div></header>
                 <div className="topbar-language" aria-label={isFa ? "زبان" : "Language"}><button type="button" aria-pressed={isFa} onClick={() => { accountMenuRef.current?.removeAttribute("open"); void i18n.changeLanguage("fa"); }}>فارسی</button><button type="button" aria-pressed={!isFa} onClick={() => { accountMenuRef.current?.removeAttribute("open"); void i18n.changeLanguage("en"); }}>English</button></div>
-                <Link to="/settings"><Settings aria-hidden="true" />{isFa ? "حساب و تنظیمات" : "Account & settings"}</Link>
+                {canAccessPage(user, "settings") && <Link to="/settings"><Settings aria-hidden="true" />{isFa ? "حساب و تنظیمات" : "Account & settings"}</Link>}
                 {isNativeAndroidApp() ? <button type="button" className="topbar-native-server" onClick={() => void clearNativeSessionToken().finally(() => { clearNativeServerUrl(); window.location.reload(); })}><Server aria-hidden="true" />{isFa ? "تغییر سرور" : "Change server"}</button> : null}
                 <button type="button" className="topbar-logout" onClick={() => void logout()}><LogOut aria-hidden="true" />{t("auth.logout")}</button>
               </div>
@@ -257,16 +263,16 @@ export function AppShell({ children, currentGroup = "dashboard" }: { children: R
           </div>
         ) : null}
         <main className="platform-content">
-          {user?.role === "viewer" && currentGroup !== "community" ? <p className="platform-readonly-notice" role="status"><Eye aria-hidden="true" />{isFa ? "حالت فقط‌مشاهده: همهٔ بخش‌ها قابل دیدن‌اند؛ تغییر داده و اجرای عملیات مجاز نیست." : "Read-only mode: you can view every section, but cannot change data or run operations."}</p> : null}
+          {user?.role === "viewer" && currentGroup !== "community" ? <p className="platform-readonly-notice" role="status"><Eye aria-hidden="true" />{isFa ? "حالت فقط‌مشاهده در بخش‌های مجاز؛ تغییر داده و اجرای عملیات مجاز نیست." : "Read-only access to your permitted sections; changes and operations are not allowed."}</p> : null}
           {children}
         </main>
       </div>
-      <nav className="platform-bottom-nav" aria-label={t("shell.mobileNavigation")}>
+      <nav className="platform-bottom-nav" style={{ gridTemplateColumns: `repeat(${Math.max(1, mobileNavigation.length + Number(visibleNavigation.length > mobileNavigation.length))}, minmax(0, 1fr))` }} aria-label={t("shell.mobileNavigation")}>
         {mobileNavigation.map((group) => {
           const Icon = navigationIcons[group.iconKey as keyof typeof navigationIcons] ?? LayoutDashboard;
           return <Link key={group.key} to={group.route} className={activeGroup === group.key ? "is-current" : ""} aria-current={activeGroup === group.key ? "page" : undefined}><Icon aria-hidden="true" /><span>{isFa ? group.titleFa : group.titleEn}</span></Link>;
         })}
-        <button type="button" className={moreNavigationActive ? "is-current" : ""} onClick={openMobileNavigation} aria-expanded={mobileNavOpen} aria-controls="platform-primary-navigation" aria-label={isFa ? "نمایش همه بخش‌ها" : "Show all sections"}><MoreHorizontal aria-hidden="true" /><span>{isFa ? "بیشتر" : "More"}</span></button>
+        {visibleNavigation.length > mobileNavigation.length && <button type="button" className={moreNavigationActive ? "is-current" : ""} onClick={openMobileNavigation} aria-expanded={mobileNavOpen} aria-controls="platform-primary-navigation" aria-label={isFa ? "نمایش بخش‌های مجاز" : "Show permitted sections"}><MoreHorizontal aria-hidden="true" /><span>{isFa ? "بیشتر" : "More"}</span></button>}
       </nav>
     </div>
   );

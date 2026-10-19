@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { listDevices, type Device } from "@/lib/devices";
 import { clearNetworkProbes as clearNetworkProbeHistory, listNetworkProbes, runNetworkProbe, type NetworkProbe } from "@/lib/diagnostics";
 import { NetworkInventoryScanner } from "./NetworkInventoryScanner";
+import { useAuth } from "@/context/AuthContext";
+import { canAccessPage } from "@/lib/pageAccess";
 import "./NetworkLabPage.css";
 const VpnPanel = lazy(() => import("@/features/vpn/VpnPage"));
 
@@ -12,6 +14,7 @@ const tone = (item: NetworkProbe) => ["reachable", "open"].includes(item.status)
 const number = (input: number | null, suffix = "") => input === null ? "—" : `${new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 2 }).format(input)}${suffix}`;
 
 export default function NetworkLabPage() {
+  const { user } = useAuth();
   const [labTab, setLabTab] = useState<"probe" | "scanner" | "vpn">("scanner");
   const [devices, setDevices] = useState<Device[]>([]);
   const [history, setHistory] = useState<NetworkProbe[]>([]);
@@ -64,7 +67,7 @@ export default function NetworkLabPage() {
     <nav className="network-lab__primary-tabs" aria-label="بخش‌های آزمایشگاه شبکه">
       <button type="button" className={labTab === "probe" ? "active" : ""} onClick={() => setLabTab("probe")}><Activity/>تست اتصال</button>
       <button type="button" className={labTab === "scanner" ? "active" : ""} onClick={() => setLabTab("scanner")}><RadioTower/>اسکن شبکه</button>
-      <button type="button" className={labTab === "vpn" ? "active" : ""} onClick={() => setLabTab("vpn")}><LockKeyhole/>اتصال VPN</button>
+      {canAccessPage(user, "tools.vpn") && <button type="button" className={labTab === "vpn" ? "active" : ""} onClick={() => setLabTab("vpn")}><LockKeyhole/>اتصال VPN</button>}
     </nav>
 
     {labTab === "vpn" ? <Suspense fallback={<p role="status">در حال دریافت…</p>}><VpnPanel embedded /></Suspense> : labTab === "scanner" ? <NetworkInventoryScanner devices={devices} /> : <>

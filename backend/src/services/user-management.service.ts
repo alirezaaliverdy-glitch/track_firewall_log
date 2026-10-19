@@ -3,6 +3,7 @@ import type { AppUserRole, Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { permissionsForRole } from "../security/permissions.js";
 import { APPLICATION_SECTIONS, normalizeApplicationSections } from "../security/section-access.js";
+import { effectivePageGrants } from "../security/page-access.js";
 
 const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
 const ROLES = new Set<AppUserRole>(["admin", "operator", "viewer"]);
@@ -53,7 +54,7 @@ function publicManagedUser(user: {
     displayName: user.displayName,
     role: user.role,
     isActive: user.isActive,
-    allowedSections: user.role === "admin" || user.role === "viewer" ? [...APPLICATION_SECTIONS] : user.allowedSections,
+    allowedSections: effectivePageGrants(user),
     effectivePermissions: permissionsForRole(user.role),
     activeSessionCount: user._count.sessions,
     lastSeenAt: user.sessions[0]?.lastSeenAt ?? null,
@@ -98,7 +99,7 @@ export async function createManagedUser(actorId: string, input: { username?: unk
   const identity = normalizeIdentity(input);
   const role = normalizeRole(input.role);
   const password = validateManagedPassword(input.password);
-  const allowedSections = role === "admin" || role === "viewer" ? [...APPLICATION_SECTIONS] : normalizeApplicationSections(input.allowedSections);
+  const allowedSections = role === "admin" ? [...APPLICATION_SECTIONS] : normalizeApplicationSections(input.allowedSections);
   const user = await prisma.appUser.create({
     data: { ...identity, passwordHash: await bcrypt.hash(password, 12), role, allowedSections, isActive: true, workspaceOwnerId: actorId },
     select: managedUserSelect()
@@ -119,10 +120,10 @@ export async function updateManagedUser(actorId: string, userId: string, input: 
     const otherActiveAdmins = await prisma.appUser.count({ where: { id: { not: userId }, role: "admin", isActive: true } });
     if (!otherActiveAdmins) throw new Error("LAST_ACTIVE_ADMIN_REQUIRED");
   }
-  const allowedSections = role === "admin" || role === "viewer"
+  const allowedSections = role === "admin"
     ? [...APPLICATION_SECTIONS]
     : input.allowedSections === undefined
-      ? normalizeApplicationSections(current.allowedSections)
+      ? normalizeApplicationSections(effectivePageGrants(current))
       : normalizeApplicationSections(input.allowedSections);
   const accessChanged = role !== current.role || isActive !== current.isActive || allowedSections.join("|") !== current.allowedSections.join("|");
   const user = await prisma.$transaction(async (transaction) => {

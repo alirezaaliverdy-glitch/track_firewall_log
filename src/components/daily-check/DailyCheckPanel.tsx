@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, ExternalLink, Gauge, History, LoaderCircle, Network, Play, Server, ShieldCheck, Wifi, WifiOff } from "lucide-react";
 import { listActionCenter, type ActionCenterItem } from "@/lib/actionCenter";
 import { reviewInActionCenter } from "@/lib/actionPlanHandoff";

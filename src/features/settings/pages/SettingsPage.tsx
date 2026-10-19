@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Bot, Boxes, Check, Clock3, Crosshair, Eye, Gauge, KeyRound, Laptop, LayoutDashboard, LogOut, Pencil, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2, UserRound, UsersRound, Wrench, X } from "lucide-react";
+import { Bot, Boxes, Camera, LockKeyhole, Settings, MessagesSquare, FileBarChart2, Server, Check, Clock3, Crosshair, Eye, Gauge, KeyRound, Laptop, LayoutDashboard, LogOut, Pencil, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Trash2, UserRound, UsersRound, Wrench, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/context/AuthContext";
@@ -9,26 +9,26 @@ import { CredentialManager } from "@/features/settings/components/CredentialMana
 import { AiProviderSettings } from "../components/AiProviderSettings";
 import { AppearanceSettings } from "../components/AppearanceSettings";
 import "./SettingsPage.css";
+import { PAGE_ACCESS, PAGE_GRANTS, effectivePageGrants } from "@/lib/pageAccess";
 
-const sectionMeta: Record<ApplicationSection, { fa: string; en: string; hintFa: string; hintEn: string; icon: typeof LayoutDashboard; tone: string }> = {
-  dashboard: { fa: "داشبورد", en: "Dashboard", hintFa: "نمای کلی و شاخص‌ها", hintEn: "Overview and indicators", icon: LayoutDashboard, tone: "cyan" },
-  assets: { fa: "دارایی‌ها", en: "Assets", hintFa: "دستگاه‌ها و وندورها", hintEn: "Devices and vendors", icon: Boxes, tone: "violet" },
-  security: { fa: "امنیت", en: "Security", hintFa: "یافته‌ها و قوانین تشخیص", hintEn: "Findings and detection", icon: ShieldAlert, tone: "rose" },
-  monitoring: { fa: "پایش", en: "Monitoring", hintFa: "سلامت و تله‌متری", hintEn: "Health and telemetry", icon: Gauge, tone: "emerald" },
-  actions: { fa: "اقدامات", en: "Actions", hintFa: "اجرای کنترل‌شده", hintEn: "Controlled execution", icon: Wrench, tone: "amber" },
-  assistant: { fa: "دستیار هوشمند", en: "AI assistant", hintFa: "گفت‌وگو و پیشنهاد", hintEn: "Chat and proposals", icon: Bot, tone: "fuchsia" },
-  attackers: { fa: "مهاجمان", en: "Attackers", hintFa: "شاخص‌ها و مهاجمان", hintEn: "Indicators and attackers", icon: Crosshair, tone: "red" }
+const groupMeta: Record<string, { icon: typeof LayoutDashboard; tone: string; fa: string; en: string }> = {
+  dashboard: { icon: LayoutDashboard, tone: "cyan", fa: "داشبورد", en: "Dashboard" },
+  assets: { icon: Boxes, tone: "violet", fa: "دارایی‌ها", en: "Assets" },
+  security: { icon: ShieldAlert, tone: "rose", fa: "امنیت", en: "Security" },
+  monitoring: { icon: Gauge, tone: "emerald", fa: "پایش", en: "Monitoring" },
+  actions: { icon: Wrench, tone: "amber", fa: "اقدامات", en: "Actions" },
+  tools: { icon: Gauge, tone: "cyan", fa: "اتصالات و ابزارها", en: "Connections & tools" },
+  reports: { icon: FileBarChart2, tone: "cyan", fa: "گزارش‌ها", en: "Reports" },
+  assistant: { icon: Bot, tone: "fuchsia", fa: "دستیار هوشمند", en: "AI assistant" },
+  attackers: { icon: Crosshair, tone: "red", fa: "مهاجمان", en: "Attackers" },
+  backups: { icon: Server, tone: "cyan", fa: "بک‌آپ", en: "Backups" },
+  settings: { icon: Settings, tone: "cyan", fa: "تنظیمات", en: "Settings" },
+  community: { icon: MessagesSquare, tone: "violet", fa: "ارتباطات", en: "Community" }
 };
-
-const allSections = Object.keys(sectionMeta) as ApplicationSection[];
-const defaultSections: Record<AuthUser["role"], ApplicationSection[]> = {
-  admin: allSections,
-  operator: ["dashboard", "assets", "security", "monitoring", "actions"],
-  viewer: allSections
-};
+const allSections: ApplicationSection[] = [...PAGE_GRANTS];
 
 type UserEditor = { id?: string; username: string; displayName: string; password: string; role: AuthUser["role"]; isActive: boolean; allowedSections: ApplicationSection[] };
-const emptyEditor = (): UserEditor => ({ username: "", displayName: "", password: "", role: "viewer", isActive: true, allowedSections: [...defaultSections.viewer] });
+const emptyEditor = (): UserEditor => ({ username: "", displayName: "", password: "", role: "viewer", isActive: true, allowedSections: ["page:dashboard.overview"] });
 
 function clientLabel(userAgent: string | null, fallback: string) {
   if (!userAgent) return fallback;
@@ -106,7 +106,7 @@ export default function SettingsPage() {
   function openEditor(item?: ManagedUser) {
     editorReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setEditorError(""); setResetPassword("");
-    setEditor(item ? { id: item.id, username: item.username, displayName: item.displayName, password: "", role: item.role, isActive: item.isActive, allowedSections: [...item.allowedSections] } : emptyEditor());
+    setEditor(item ? { id: item.id, username: item.username, displayName: item.displayName, password: "", role: item.role, isActive: item.isActive, allowedSections: effectivePageGrants(item) } : emptyEditor());
   }
   const editorOpen = Boolean(editor);
   useEffect(() => {
@@ -136,7 +136,7 @@ export default function SettingsPage() {
     else if (!event.shiftKey && (document.activeElement === last || document.activeElement === editorDialogRef.current)) { event.preventDefault(); first.focus(); }
   }
   function toggleSection(section: ApplicationSection) {
-    if (!editor || editor.role !== "operator") return;
+    if (!editor || editor.role === "admin") return;
     setEditor({ ...editor, allowedSections: editor.allowedSections.includes(section) ? editor.allowedSections.filter((item) => item !== section) : [...editor.allowedSections, section] });
   }
   function userErrorCopy(cause: unknown) {
@@ -156,7 +156,7 @@ export default function SettingsPage() {
   }
   async function saveUser(event: FormEvent) {
     event.preventDefault(); if (!editor) return;
-    const sections = editor.role === "admin" || editor.role === "viewer" ? [...allSections] : editor.allowedSections;
+    const sections = editor.role === "admin" ? [...allSections] : editor.allowedSections;
     if (editor.role !== "admin" && !sections.length) return setEditorError(isFa ? "حداقل یک بخش را انتخاب کنید." : "Select at least one section.");
     if (!editor.id && editor.password.length < 6) return setEditorError(isFa ? "رمز اولیه باید حداقل ۶ نویسه باشد." : "The initial password must be at least 6 characters.");
     setSavingUser(true); setEditorError("");
@@ -232,8 +232,27 @@ export default function SettingsPage() {
 
       {editor ? createPortal(<div className="settings-hub settings-editor-backdrop" dir={isFa ? "rtl" : "ltr"} onMouseDown={(event) => { if (event.target === event.currentTarget) setEditor(null); }}><section ref={editorDialogRef} className="user-editor" role="dialog" aria-modal="true" aria-labelledby="user-editor-title" tabIndex={-1} onKeyDown={keepEditorFocus}><header><div><span className="editor-icon"><UserRound /></span><h2 id="user-editor-title">{editor.id ? (isFa ? "ویرایش حساب" : "Edit account") : (isFa ? "ساخت حساب جدید" : "Create account")}</h2><p>{isFa ? "نقش را انتخاب کنید و فقط بخش‌های موردنیاز را فعال کنید." : "Choose a role and enable only the required sections."}</p></div><button type="button" className="icon-button" onClick={() => setEditor(null)} aria-label={isFa ? "بستن" : "Close"}><X /></button></header>
         <form onSubmit={saveUser}><div className="editor-fields"><label>{isFa ? "نام کاربری" : "Username"}<input dir="ltr" value={editor.username} disabled={Boolean(editor.id)} onChange={(event) => setEditor({ ...editor, username: event.target.value })} placeholder="sara.ops" required /></label><label>{isFa ? "نام نمایشی" : "Display name"}<input value={editor.displayName} onChange={(event) => setEditor({ ...editor, displayName: event.target.value })} placeholder={isFa ? "مثلاً سارا احمدی" : "e.g. Sara Ahmadi"} required /></label>{!editor.id ? <label>{isFa ? "رمز اولیه" : "Initial password"}<input type="password" value={editor.password} onChange={(event) => setEditor({ ...editor, password: event.target.value })} minLength={6} maxLength={128} autoComplete="new-password" required /><small>{isFa ? "حداقل ۶ نویسه" : "At least 6 characters"}</small></label> : null}</div>
-          <fieldset className="role-selector"><legend>{isFa ? "نقش عملیاتی" : "Operational role"}</legend>{(["viewer", "operator", "admin"] as const).map((role) => <label key={role} className={editor.role === role ? "is-selected" : ""}><input type="radio" name="role" checked={editor.role === role} disabled={editor.id === user?.id} onChange={() => setEditor({ ...editor, role, allowedSections: role === "admin" || role === "viewer" ? [...allSections] : editor.role === "operator" ? editor.allowedSections : [...defaultSections.operator] })} />{role === "viewer" ? <Eye /> : role === "operator" ? <Wrench /> : <ShieldCheck />}<span><strong>{role === "admin" ? (isFa ? "مدیر" : "Admin") : role === "operator" ? (isFa ? "اپراتور" : "Operator") : (isFa ? "مشاهده‌گر" : "Viewer")}</strong><small>{role === "admin" ? (isFa ? "کنترل کامل" : "Full control") : role === "operator" ? (isFa ? "عملیات در بخش‌های مجاز" : "Operate in allowed sections") : (isFa ? "فقط مشاهده" : "Read only")}</small></span>{editor.role === role ? <Check className="role-check" /> : null}</label>)}</fieldset>
-          <fieldset className="section-selector" disabled={editor.role !== "operator"}><legend>{isFa ? "دسترسی به بخش‌ها" : "Section access"}<small>{editor.role === "viewer" ? (isFa ? "مشاهده‌گر همهٔ بخش‌ها را فقط برای دیدن دارد؛ امکان تغییر یا اجرا ندارد." : "Viewers can see every section but cannot change or run anything.") : editor.role === "admin" ? (isFa ? "مدیر به همه بخش‌ها دسترسی دارد." : "Admins access every section.") : (isFa ? `${editor.allowedSections.length} بخش انتخاب شده` : `${editor.allowedSections.length} selected`)}</small></legend><div>{(catalog?.sections ?? allSections).map((section) => { const meta = sectionMeta[section]; const Icon = meta.icon; const checked = editor.role !== "operator" || editor.allowedSections.includes(section); return <label key={section} data-tone={meta.tone} className={checked ? "is-selected" : ""}><input type="checkbox" checked={checked} onChange={() => toggleSection(section)} /><span className="section-icon"><Icon /></span><span><strong>{isFa ? meta.fa : meta.en}</strong><small>{isFa ? meta.hintFa : meta.hintEn}</small></span><i>{checked ? <Check /> : null}</i></label>; })}</div></fieldset>
+          <fieldset className="role-selector"><legend>{isFa ? "نقش عملیاتی" : "Operational role"}</legend>{(["viewer", "operator", "admin"] as const).map((role) => <label key={role} className={editor.role === role ? "is-selected" : ""}><input type="radio" name="role" checked={editor.role === role} disabled={editor.id === user?.id} onChange={() => setEditor({ ...editor, role, allowedSections: role === "admin" ? [...allSections] : editor.allowedSections })} />{role === "viewer" ? <Eye /> : role === "operator" ? <Wrench /> : <ShieldCheck />}<span><strong>{role === "admin" ? (isFa ? "مدیر" : "Admin") : role === "operator" ? (isFa ? "اپراتور" : "Operator") : (isFa ? "مشاهده‌گر" : "Viewer")}</strong><small>{role === "admin" ? (isFa ? "کنترل کامل" : "Full control") : role === "operator" ? (isFa ? "عملیات در بخش‌های مجاز" : "Operate in allowed sections") : (isFa ? "فقط مشاهده" : "Read only")}</small></span>{editor.role === role ? <Check className="role-check" /> : null}</label>)}</fieldset>
+          <fieldset className="section-selector" disabled={editor.role === "admin"}>
+            <legend>{isFa ? "صفحه‌های قابل دسترسی" : "Page access"}<small>{editor.role === "admin" ? (isFa ? "مدیر کنترل کامل دارد." : "Admins retain full control.") : (isFa ? `${editor.allowedSections.length} صفحه انتخاب شده` : `${editor.allowedSections.length} selected`)}</small></legend>
+            <p className="access-selection-note">{isFa ? "فقط صفحه‌های انتخاب‌شده نمایش داده می‌شوند. صفحه‌های دیگر حتی با لینک مستقیم قابل دسترسی نیستند؛ نقش، اجازهٔ تغییر و اجرا را تعیین می‌کند." : "Only selected pages are visible. Other pages are blocked even by direct link. The role separately controls changes and execution."}</p>
+            <div className="access-presets">
+              <button type="button" onClick={() => setEditor({ ...editor, allowedSections: ["page:assets.cameras", "page:tools.vpn"] })}><Camera size={16}/>{isFa ? "فقط دوربین و VPN" : "Cameras & VPN only"}</button>
+              <button type="button" onClick={() => setEditor({ ...editor, allowedSections: [...allSections] })}>{isFa ? "انتخاب همه" : "Select all"}</button>
+              <button type="button" onClick={() => setEditor({ ...editor, allowedSections: [] })}>{isFa ? "پاک‌کردن انتخاب‌ها" : "Clear selection"}</button>
+            </div>
+            {Object.entries(groupMeta).map(([group, meta]) => {
+              const pages = PAGE_ACCESS.filter(([key, category]) => category === group && (catalog?.sections ?? allSections).includes(`page:${key}`));
+              return <section className="access-category" key={group}><h3>{isFa ? meta.fa : meta.en}</h3><div>{pages.map(([key, , , fa, en]) => {
+                const section: ApplicationSection = `page:${key}`, checked = editor.role === "admin" || editor.allowedSections.includes(section);
+                const Icon = key === "assets.cameras" ? Camera : key === "tools.vpn" ? LockKeyhole : meta.icon;
+                return <label key={key} data-tone={meta.tone} className={checked ? "is-selected" : ""}>
+                  <input type="checkbox" aria-label={isFa ? fa : en} checked={checked} onChange={() => toggleSection(section)}/>
+                  <span className="section-icon"><Icon/></span><span><strong>{isFa ? fa : en}</strong><small>{checked ? (isFa ? "نمایش در برنامه" : "Visible in app") : (isFa ? "مخفی و بدون دسترسی" : "Hidden & inaccessible")}</small></span><i>{checked ? <Check/> : null}</i>
+                </label>;
+              })}</div></section>;
+            })}
+          </fieldset>
           {editor.id ? <div className="editor-account-state"><label className="settings-switch"><input type="checkbox" checked={editor.isActive} disabled={editor.id === user?.id} onChange={(event) => setEditor({ ...editor, isActive: event.target.checked })} /><i /><span><strong>{isFa ? "حساب فعال باشد" : "Account is active"}</strong><small>{isFa ? "غیرفعال‌سازی همه نشست‌ها را می‌بندد." : "Disabling revokes all sessions."}</small></span></label></div> : null}
           {editorError ? <p className="settings-error" role="alert">{editorError}</p> : null}<footer><button type="button" className="secondary-button" onClick={() => setEditor(null)}>{isFa ? "انصراف" : "Cancel"}</button><button type="submit" className="primary-button" disabled={savingUser}><Save />{savingUser ? (isFa ? "در حال ذخیره..." : "Saving...") : (isFa ? "ذخیره حساب" : "Save account")}</button></footer>
         </form>

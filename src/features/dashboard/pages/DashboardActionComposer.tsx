@@ -4,7 +4,8 @@ import { startGuidedSession } from "@/lib/guidedActions";
 import type { PlatformAsset } from "@/lib/platform";
 import { ArrowUpLeft, LoaderCircle, Sparkles } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 
 type Proposal = { title: string; detail: string; path: string };
 

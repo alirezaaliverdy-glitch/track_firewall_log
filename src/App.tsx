@@ -1,7 +1,8 @@
 import "./i18n";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams, useLocation } from "react-router-dom";
+import { canAccessPage, firstAccessibleRoute, pageForFeature, pageForLocation, type PageKey } from "@/lib/pageAccess";
 import { LogProvider } from "@/context/LogContext";
 import { useAuth } from "@/context/AuthContext";
 import AppBackground from "@/components/background/AppBackground";
@@ -30,20 +31,11 @@ function StandaloneGuidedAction({ sessionId }: { sessionId: string }) {
 const legacyDashboardShortcutKey = "dashboard.shortcuts.library";
 void legacyDashboardShortcutKey;
 
-const sectionLanding: Record<string, string> = {
-  dashboard: "/dashboard", assets: "/assets", security: "/security", monitoring: "/monitoring",
-  actions: "/actions", assistant: "/assistant", attackers: "/attackers"
-};
-
-function firstAllowedRoute(allowedSections: string[] = []) {
-  const section = Object.keys(sectionLanding).find((key) => allowedSections.includes(key));
-  return section ? sectionLanding[section] : "/settings";
-}
-
 function SectionGate({ section, children }: { section: string; children: ReactNode }) {
   const { user } = useAuth();
-  if (user?.role !== "admin" && !(user?.allowedSections ?? []).includes(section)) {
-    return <Navigate to={firstAllowedRoute(user?.allowedSections)} replace />;
+  const page = pageForFeature(section, section);
+  if (!page || !canAccessPage(user, page)) {
+    return <Navigate to={firstAccessibleRoute(user)} replace />;
   }
   return children;
 }
@@ -66,10 +58,11 @@ function MonitoringActionResultRoute() {
 function FeatureRoute({ route }: { route: AppRoute }) {
   const { user } = useAuth();
   const params = useParams();
+  const location = useLocation();
   const Page = route.component;
-  const section = route.group === "tools" ? "actions" : ["reports", "backups"].includes(route.group) ? "assets" : route.group;
-  if (user?.role !== "admin" && !["settings", "community"].includes(section) && !(user?.allowedSections ?? []).includes(section)) {
-    return <Navigate to={firstAllowedRoute(user?.allowedSections)} replace />;
+  const page = pageForLocation(location.pathname, location.search) ?? pageForFeature(route.featureKey, route.group);
+  if (!page || !canAccessPage(user, page as PageKey)) {
+    return <Navigate to={firstAccessibleRoute(user)} replace />;
   }
   return (
     <div className="authenticated-app" data-page-id={route.featureKey}>
@@ -143,6 +136,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/landing" element={<Navigate to="/" replace />} />
+          <Route path="/access-unavailable" element={<div className="state-card" role="status">هیچ صفحه‌ای برای این حساب فعال نیست؛ با مدیر سامانه تماس بگیر.</div>} />
           <Route path="/action-library" element={<SectionGate section="actions"><ActionLibraryRoute /></SectionGate>} />
           <Route path="/guided-actions/:sessionId" element={<SectionGate section="actions"><GuidedActionRoute /></SectionGate>} />
           <Route path="/actions/:actionId/result" element={<SectionGate section="actions"><ActionResultRoute /></SectionGate>} />

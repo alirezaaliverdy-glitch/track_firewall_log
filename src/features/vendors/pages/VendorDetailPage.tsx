@@ -3,7 +3,7 @@ import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getVendorDetail, type VendorDetail } from "@/lib/vendors";
 import { listDevices, type Device } from "@/lib/devices";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 
 export default function VendorDetailPage({ params }: RouteComponentProps) {
   const vendorKey = params.vendorKey || "cisco";

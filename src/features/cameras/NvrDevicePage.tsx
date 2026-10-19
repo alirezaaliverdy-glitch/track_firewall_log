@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
+import { canAccessPage } from "@/lib/pageAccess";
 import { useTranslation } from "react-i18next";
 import { Activity, ArrowRight, Camera, Check, CircleHelp, HardDrive, RefreshCw, Server, Settings2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -44,7 +45,7 @@ export default function NvrDevicePage({ params }: RouteComponentProps) {
   const sensors = data?.sensors ?? [], measured = sensors.filter(sensor => sensor.value !== null && sensor.status !== "stale"), alerts = sensors.filter(sensor => ["critical", "warning"].includes(sensor.status));
   const status = { ok: t("دریافت‌شده", "Measured"), warning: t("هشدار", "Warning"), critical: t("نیازمند رسیدگی", "Needs attention"), unknown: t("داده موجود نیست", "Not available"), stale: t("داده قدیمی", "Stale") };
   return <section className="cameras-page nvr-device-page" dir={fa ? "rtl" : "ltr"}>
-    <Link className="nvr-back" to="/assets/devices"><ArrowRight size={16}/>{t("تجهیزات و دارایی‌ها", "Devices & assets")}</Link>
+    <Link className="nvr-back" to={canAccessPage(user, "assets.devices") ? "/assets/devices" : "/assets/cameras"}><ArrowRight size={16}/>{canAccessPage(user, "assets.devices") ? t("تجهیزات و دارایی‌ها", "Devices & assets") : t("دوربین‌ها", "Cameras")}</Link>
     {error && <div className="camera-alert" role="alert">{error}<button className="camera-button" onClick={() => void load()}>{t("دوباره تلاش کن", "Retry")}</button></div>}
     {removed ? <p role="status">{t("تجهیز حذف شد.", "Device removed.")}</p> : !camera ? <p role="status">{error ? t("اطلاعات تجهیز دریافت نشد؛ دوباره تلاش کن.", "Recorder unavailable. Please retry.") : t("در حال دریافت تجهیز…", "Loading recorder…")}</p> : <>
       <header className="nvr-device-hero"><div className="nvr-device-hero__identity"><span className="nvr-device-icon"><Server size={30}/></span><div><span className="cameras-page__eyebrow">EOSNET / RECORDER</span><h1>{camera.name}</h1><p>{camera.company?.name ?? t("بدون شرکت", "Unassigned")} <span aria-hidden="true">·</span> <bdi>{camera.host}</bdi></p></div></div><div className="nvr-device-actions"><Link className="camera-button" to={`/assets/cameras?company=${encodeURIComponent(camera.companyId ?? "unassigned")}&device=${encodeURIComponent(camera.id)}`}><Camera size={17}/>{t("کانال‌ها و تصویر", "Channels & video")}</Link>{canManage && <button className="camera-button" onClick={() => setSettings(true)}><Settings2 size={17}/>{t("تنظیمات و کنترل", "Settings & controls")}</button>}</div>
@@ -59,6 +60,6 @@ export default function NvrDevicePage({ params }: RouteComponentProps) {
         <div className="nvr-sensor-grid">{sensors.filter(sensor => group === "all" || sensor.group === group).map(sensor => <article className={`nvr-sensor is-${sensor.status}`} key={sensor.id}><header><h2>{fa ? sensor.labelFa : sensor.labelEn}</h2><span>{sensor.status === "ok" ? <Check size={12}/> : <CircleHelp size={12}/>} {status[sensor.status]}</span></header><strong className="nvr-sensor__value" dir="auto">{sensorValue(sensor, fa)}</strong><SensorTrend sensor={sensor} history={data?.history ?? []} fa={fa}/><p>{fa ? sensor.noteFa : sensor.noteEn}</p><footer><span>{t("منبع", "Source")}</span><bdi>{sensor.source}</bdi></footer></article>)}</div>
         <p className="camera-hint">{t("سنسور ناموجود، صفر یا سالم فرض نمی‌شود. پشتیبانی CPU، حافظه، SMART و وضعیت ضبط به API، نسخه و مجوز حساب دستگاه بستگی دارد. نمودارها حداکثر ۴۸ اندازه‌گیری واقعی را نشان می‌دهند.", "Missing sensors are not treated as zero or healthy. CPU, memory, SMART and recording support depends on device APIs, firmware and account permissions. Charts contain up to 48 actual measurements.")}</p>
       </section> : <section role="tabpanel" id="nvr-panel-storage" aria-labelledby="nvr-tab-storage"><NvrMonitorPanel camera={camera} isFa={fa} canManage={canManage} onChanged={updated => { setCamera(updated); void load(); }}/></section>}
-      {settings && <CameraDetailDialog showMonitor={false} camera={camera} isFa={fa} role={user?.role ?? "viewer"} canOperate={user?.role === "admin" || Boolean(user?.allowedSections.includes("actions"))} onClose={() => { setSettings(false); void load(); }} onChanged={updated => { setCamera(updated); void load(); }} onRemoved={() => { setSettings(false); setRemoved(true); }}/>}</>}
+      {settings && <CameraDetailDialog showMonitor={false} camera={camera} isFa={fa} role={user?.role ?? "viewer"} canOperate={user?.role !== "viewer" && canAccessPage(user, "assets.cameras")} onClose={() => { setSettings(false); void load(); }} onChanged={updated => { setCamera(updated); void load(); }} onRemoved={() => { setSettings(false); setRemoved(true); }}/>}</>}
   </section>;
 }

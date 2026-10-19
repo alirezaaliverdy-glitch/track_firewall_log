@@ -1,5 +1,9 @@
 # Architecture Map
 
+## Explicit page visibility and authorization
+
+`Settings page selection -> validated page:<feature-key> grants -> persisted AppUser.allowedSections -> fresh auth DTO -> server/API page guards + filtered product navigation -> defensive client menus/links/routes`. Role/CSRF/workspace/PolicyGuard/audit remain independent. Access changes revoke sessions; old coarse grants expand compatibly until explicit save. Cameras includes camera-owned NVR registration/workspace, not general devices/CLI; VPN is independent of Network Lab. Web/API pure contracts have exact-parity tests. See `PAGE_ACCESS.md`.
+
 ## OpenVPN split-route adapter
 
 `Admin .ovpn import -> allowlisted data parser -> existing encrypted VPN profile -> explicit connect -> persistent supervisor -> API-network helper/OpenVPN -> measured Unix management state -> manual /32 + selected private routes -> audit/result`

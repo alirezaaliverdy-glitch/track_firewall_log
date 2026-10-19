@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { ArrowUpLeft, Check, CircleAlert, ClipboardList, FileCode2, LoaderCircle, ShieldCheck } from "lucide-react";
 import { listActionCenter, type ActionCenterItem } from "@/lib/actionCenter";
 import { actionDisplayName, commandLines } from "@/features/actions/actionCenterWorkspaceModel";

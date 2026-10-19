@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { AlertTriangle, Building2, Cable, CheckCircle2, ChevronLeft, CircleCheck, KeyRound, LockKeyhole, Network, RadioTower, RefreshCw, Router, Server, Shield, ShieldAlert, ShieldCheck, Sparkles, Wifi } from "lucide-react";
 import type { RouteComponentProps } from "@/routes/appRoutes";
 import { PageHeader } from "@/components/ui/PageHeader";

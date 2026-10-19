@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Camera, Check, ChevronLeft, CircleAlert, Clock3, Grid2X2, LayoutList, LoaderCircle, MapPin, Plus, RefreshCw, Search, Server, Settings2, ShieldCheck, Video, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { Link, useSearchParams } from "react-router-dom";
+import { canAccessPage } from "@/lib/pageAccess";
+import { useSearchParams } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
 import { cameraErrorMessage, listCameras, transferCameras, type CameraDevice, type CameraProfile } from "@/lib/cameras";
 import { CameraAddDialog } from "./CameraAddDialog";
 import { CameraDetailDialog } from "./CameraDetailDialog";
@@ -83,7 +85,7 @@ export function CameraWorkspace({ companyId, companyName, onBack }: { companyId:
     {add && addCompany ? <CameraAddDialog companyId={addCompany} isFa={isFa} onClose={() => setAdd(false)} onSaved={(added) => { if (addCompany === companyId) setDevices((current) => [...added, ...current.filter((item) => !added.some((camera) => camera.id === item.id))]); else onBack(); }} /> : null}
     {transferDialog && <CameraCompanyDialog isFa={isFa} excludeCompanyId={companyId} title={copy("انتقال دستگاه‌ها", "Transfer devices")} onClose={() => setTransferDialog(false)} onSelected={company => { setTransferTarget(company); setTransferDialog(false); setTransferError(""); }}/>}
     {transferTarget && <CameraDialog title={copy("تأیید انتقال", "Confirm transfer")} onClose={() => { if (!transferBusy) setTransferTarget(null); }}><div className="camera-form"><p>{copy(`${selectedIds.length} دستگاه به «${transferTarget.name}» منتقل می‌شود. تصویرهای باز آن‌ها بسته می‌شود؛ اطلاعات ورود و VPN تغییر نمی‌کند.`, `${selectedIds.length} devices will move to ${transferTarget.name}. Open views close; credentials and VPN stay unchanged.`)}</p>{transferError && <p className="camera-alert" role="alert">{transferError}</p>}<button className="camera-button camera-button--primary" disabled={transferBusy} onClick={async () => { setTransferBusy(true); try { await transferCameras(selectedIds, transferTarget.id); setViews(current => current.filter(view => !selectedIds.includes(view.id))); setSelectedIds([]); setSelectionMode(false); setTransferTarget(null); await load(); } catch(e) { setTransferError(cameraErrorMessage(e, isFa)); } finally { setTransferBusy(false); } }}>{copy("تأیید انتقال", "Confirm transfer")}</button></div></CameraDialog>}
-    {detail ? <CameraDetailDialog key={detail.id} camera={detail} isFa={isFa} role={user?.role ?? "viewer"} canOperate={user?.role === "admin" || Boolean(user?.allowedSections.includes("actions"))} onClose={() => setDetailId(null)} onChanged={changed} onRemoved={(id) => { setDevices((current) => current.filter((item) => item.id !== id)); setViews((current) => current.filter((item) => item.id !== id)); }} /> : null}
+    {detail ? <CameraDetailDialog key={detail.id} camera={detail} isFa={isFa} role={user?.role ?? "viewer"} canOperate={user?.role !== "viewer" && canAccessPage(user, "assets.cameras")} onClose={() => setDetailId(null)} onChanged={changed} onRemoved={(id) => { setDevices((current) => current.filter((item) => item.id !== id)); setViews((current) => current.filter((item) => item.id !== id)); }} /> : null}
   </section>;
 }
 
