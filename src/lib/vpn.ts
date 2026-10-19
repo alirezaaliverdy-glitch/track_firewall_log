@@ -9,6 +9,7 @@ export async function vpnRequest<T>(path = "", method = "GET", data?: unknown): 
   if (!response.ok) throw new Error(result?.error?.code ?? "VPN_REQUEST_FAILED"); return result;
 }
 const errors: Record<string, string> = {
+  VPN_MANAGE_FORBIDDEN: "مدیریت VPN به نقش اپراتور یا مدیر و دسترسی فعال VPN نیاز دارد.",
   VPN_OPENVPN_PROFILE_INVALID: "فایل OpenVPN معتبر و یکپارچه با گواهی CA وارد کن؛ فایل روی سرور اعتبارسنجی می‌شود.",
   VPN_OPENVPN_PROFILE_SIZE: "فایل OpenVPN باید حداکثر ۱۲۸ کیلوبایت باشد.",
   VPN_OPENVPN_OPTION_UNSUPPORTED: "این فایل گزینهٔ پشتیبانی‌نشده، اسکریپت یا ارجاع به فایل جدا دارد. نسخهٔ یکپارچهٔ .ovpn بدون افزونه و اسکریپت صادر کن.",

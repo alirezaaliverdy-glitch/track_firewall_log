@@ -1,5 +1,7 @@
 # Architecture Map
 
+Camera studio: `actual ONVIF archive -> bounded UTC window -> pinned authenticated loopback replay bridge -> in-memory MP4 -> authorized view/export audit`. NVR configuration: `actual AppWeb fields -> one-use camera preview -> PolicyGuard/confirmation -> fresh config hash -> allowlisted single-field write -> actual read-back -> audit/result`. Native monitoring and read-only disk diagnosis remain independent; unknown SMART does not become a physical self-test. VPN profile management now uses narrow `vpn.manage` plus the selected VPN page for operators, not general security-policy elevation. See `CAMERA_STUDIO.md`.
+
 ## Explicit page visibility and authorization
 
 `Settings page selection -> validated page:<feature-key> grants -> persisted AppUser.allowedSections -> fresh auth DTO -> server/API page guards + filtered product navigation -> defensive client menus/links/routes`. Role/CSRF/workspace/PolicyGuard/audit remain independent. Access changes revoke sessions; old coarse grants expand compatibly until explicit save. Cameras includes camera-owned NVR registration/workspace, not general devices/CLI; VPN is independent of Network Lab. Web/API pure contracts have exact-parity tests. See `PAGE_ACCESS.md`.

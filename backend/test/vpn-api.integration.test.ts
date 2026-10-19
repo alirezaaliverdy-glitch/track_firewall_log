@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-test("VPN API encrypts credentials, enforces admin/CSRF/workspace scope and requires confirmation before helper invocation", async () => {
+test("VPN API encrypts credentials, permits selected operators, enforces CSRF/workspace scope and requires confirmation", async () => {
   process.env.CREDENTIAL_ENCRYPTION_KEY = randomBytes(32).toString("hex");
   const dir = await mkdtemp(join(tmpdir(), "vpn-api-fixture-")); process.env.VPN_CONTROL_SOCKET = join(dir, "control.sock");
   const { prisma, shutdownDatabase } = await import("../src/db/prisma.js"), { buildApp } = await import("../src/app.js"), { createSession } = await import("../src/services/auth.service.js");
@@ -34,9 +34,10 @@ test("VPN API encrypts credentials, enforces admin/CSRF/workspace scope and requ
     assert.equal((await app.inject({ url: "/api/vpn" })).statusCode, 401);
     const input = { name: "Fixture VPN", protocol: "wireguard", endpoint: "198.51.100.5", address: "10.70.0.2/32", privateKey: secret, publicKey: randomBytes(32).toString("base64"), routes: ["192.168.18.0/24"] };
     assert.equal((await app.inject({ method: "POST", url: "/api/vpn", headers: { cookie: owner.headers.cookie }, payload: input })).statusCode, 403);
-    for (const actor of [viewer, operator]) assert.equal((await app.inject({ method: "POST", url: "/api/vpn", headers: actor.headers, payload: input })).statusCode, 403);
+    assert.equal((await app.inject({ method: "POST", url: "/api/vpn", headers: viewer.headers, payload: input })).statusCode, 403);
     assert.equal((await app.inject({ method: "POST", url: "/api/vpn", headers: owner.headers, payload: { ...input, routes: ["0.0.0.0/0"] } })).statusCode, 400);
-    const response = await app.inject({ method: "POST", url: "/api/vpn", headers: owner.headers, payload: input }); assert.equal(response.statusCode, 201); assert.ok(!response.body.includes(secret)); const profile = response.json();
+    await prisma.appUser.update({ where: { id: operator.id }, data: { allowedSections: ["page:assets.cameras", "page:tools.vpn"] } });
+    const response = await app.inject({ method: "POST", url: "/api/vpn", headers: operator.headers, payload: input }); assert.equal(response.statusCode, 201); assert.ok(!response.body.includes(secret)); const profile = response.json();
     const second = await app.inject({ method: "POST", url: "/api/vpn", headers: owner.headers, payload: { ...input, name: "Second site", address: "10.71.0.2/32", routes: ["192.168.20.0/24"] } });
     assert.equal(second.statusCode, 201); assert.equal((await app.inject({ url: "/api/vpn", headers: owner.headers })).json().profiles.length, 2);
     const company = await prisma.company.create({ data: { ownerId: owner.id, name: "VPN fixture", code: `vpn-${tag}` } });
@@ -70,7 +71,8 @@ test("VPN API encrypts credentials, enforces admin/CSRF/workspace scope and requ
     const openvpnProfile="client\ndev tun\nproto tcp-client\nremote vpn.example.test 443\nauth-user-pass\n<ca>\n-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n</ca>\n";
     const importPath="/api/vpn/import/openvpn",importData={openvpnProfile};
     assert.equal((await app.inject({method:"POST",url:importPath,payload:importData})).statusCode,401);
-    for(const who of [viewer,operator])assert.equal((await app.inject({method:"POST",url:importPath,headers:who.headers,payload:importData})).statusCode,403);
+    assert.equal((await app.inject({method:"POST",url:importPath,headers:viewer.headers,payload:importData})).statusCode,403);
+    assert.equal((await app.inject({method:"POST",url:importPath,headers:operator.headers,payload:importData})).statusCode,200);
     assert.equal((await app.inject({method:"POST",url:importPath,headers:{cookie:owner.headers.cookie},payload:importData})).statusCode,403);
     const imported=await app.inject({method:"POST",url:importPath,headers:owner.headers,payload:importData});assert.equal(imported.statusCode,200);assert.equal(imported.json().transport,"tcp4-client");assert.ok(!imported.body.includes("ZmFrZQ"));
     assert.equal((await app.inject({method:"POST",url:importPath,headers:owner.headers,payload:{openvpnProfile:openvpnProfile+"up /bin/sh\n"}})).statusCode,400);

@@ -97,7 +97,7 @@ export function cameraHttp(url: URL, options: { method?: string; body?: string; 
   });
 }
 
-export function cameraAuthorization(challenge: string, method: string, url: URL, credentials: CameraCredentials) {
+export function cameraAuthorization(challenge: string, method: string, url: URL, credentials: CameraCredentials, requestTarget = `${url.pathname}${url.search}`) {
   if (!credentials.username || !credentials.password) return undefined;
   if (/^Basic\s/i.test(challenge)) return `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64")}`;
   if (!/^Digest\s/i.test(challenge)) return undefined;
@@ -106,7 +106,7 @@ export function cameraAuthorization(challenge: string, method: string, url: URL,
   const algorithm = (parts.algorithm ?? "MD5").toUpperCase();
   if (!["MD5", "MD5-SESS", "SHA-256", "SHA-256-SESS"].includes(algorithm) || !parts.nonce || !parts.realm) return undefined;
   const hash = (value: string) => createHash(algorithm.startsWith("SHA-256") ? "sha256" : "md5").update(value).digest("hex");
-  const cnonce = randomBytes(12).toString("hex"), nc = "00000001", uri = `${url.pathname}${url.search}`;
+  const cnonce = randomBytes(12).toString("hex"), nc = "00000001", uri = requestTarget;
   const qop = parts.qop?.split(",").map((v) => v.trim()).includes("auth") ? "auth" : undefined;
   if (parts.qop && !qop) return undefined;
   let ha1 = hash(`${credentials.username}:${parts.realm}:${credentials.password}`);

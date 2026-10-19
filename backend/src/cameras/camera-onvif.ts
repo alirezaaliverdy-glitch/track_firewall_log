@@ -4,7 +4,7 @@ import { SaxesParser } from "saxes";
 import { authenticatedCameraHttp, boundedMap, cameraSubnet, cameraUrl, CameraError, openCameraPort, type CameraCredentials } from "./camera-network.js";
 
 export type XmlNode = { name: string; namespace: string; attributes: Record<string, string>; text: string; children: XmlNode[] };
-export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; streamAvailable: boolean; snapshotAvailable: boolean };
+export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; ptzNodeToken?: string; streamAvailable: boolean; snapshotAvailable: boolean };
 export type CameraConnection = CameraCredentials & { storage?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port?: number; https?: boolean; username?: string; password?: string }; rtspUrl?: string; mediaUrl?: string; media2?: boolean; ptzUrl?: string; timeOffsetMs?: number; profiles?: Record<string, { rtspUrl?: string; snapshotUrl?: string }> };
 const DEVICE = "http://www.onvif.org/ver10/device/wsdl";
 const MEDIA = "http://www.onvif.org/ver10/media/wsdl";
@@ -80,7 +80,7 @@ export function parseCameraProfiles(root: XmlNode): CameraProfile[] {
     return { token, name: (text(node, "Name") || token).slice(0, 160), sourceToken: video ? (text(video, "SourceToken") || video.attributes.token || token).slice(0, 256) : token,
       width: encoder ? number(text(encoder, "Width")) : null, height: encoder ? number(text(encoder, "Height")) : null,
       encoding: encoder ? text(encoder, "Encoding").slice(0, 32) || null : null, fps: encoder ? number(text(encoder, "FrameRateLimit")) : null,
-      ptz: Boolean(nodes(node, "PTZConfiguration").length || nodes(node, "PTZ").length), streamAvailable: false, snapshotAvailable: false };
+      ptz: Boolean(nodes(node, "PTZConfiguration").length || nodes(node, "PTZ").length), ptzNodeToken: text(nodes(node, "PTZConfiguration")[0] ?? nodes(node, "PTZ")[0] ?? node, "NodeToken").slice(0, 256) || undefined, streamAvailable: false, snapshotAvailable: false };
   });
 }
 
@@ -212,4 +212,30 @@ export async function runCameraPreset(host: string, profileToken: string, preset
 
 export async function rebootCamera(host: string, port: number, path: string, connection: CameraConnection, useHttps = false) {
   await cameraSoap(cameraUrl(`${useHttps ? "https" : "http"}://${host}:${port}${path}`, host), DEVICE, "SystemReboot", `<d:SystemReboot xmlns:d="${DEVICE}"/>`, connection);
+}
+
+const steps: Record<string, { x?: number; y?: number; zoom?: number }> = { left: { x: -.1, y: 0 }, right: { x: .1, y: 0 }, up: { x: 0, y: .1 }, down: { x: 0, y: -.1 }, zoom_in: { zoom: .1 }, zoom_out: { zoom: -.1 } };
+export function cameraPtzStep(direction: unknown) {
+  if (typeof direction !== "string" || !Object.hasOwn(steps, direction)) throw new CameraError("CAMERA_PTZ_DIRECTION_INVALID");
+  return { direction, ...steps[direction] };
+}
+export async function checkCameraPtzStep(host: string, profile: CameraProfile, direction: unknown, connection: CameraConnection) {
+  const step = cameraPtzStep(direction);
+  if (!profile.ptz || !profile.ptzNodeToken || !connection.ptzUrl) throw new CameraError("CAMERA_PTZ_STEP_UNAVAILABLE", 422);
+  const root = await cameraSoap(cameraUrl(connection.ptzUrl, host), PTZ, "GetNode", `<p:GetNode xmlns:p="${PTZ}"><p:NodeToken>${escapeCameraXml(profile.ptzNodeToken)}</p:NodeToken></p:GetNode>`, connection);
+  const spaceUri = `http://www.onvif.org/ver10/tptz/${step.zoom === undefined ? "PanTiltSpaces/TranslationGenericSpace" : "ZoomSpaces/TranslationGenericSpace"}`;
+  const spaces = nodes(root, step.zoom === undefined ? "RelativePanTiltTranslationSpace" : "RelativeZoomTranslationSpace");
+  const space = spaces.find(item => text(item, "URI") === spaceUri);
+  const contains = (axis: string, amount: number) => { const range = space && nodes(space, axis)[0]; const min = range && Number(text(range, "Min")), max = range && Number(text(range, "Max")); return range && Number.isFinite(min) && Number.isFinite(max) && amount >= min! && amount <= max!; };
+  if (!space || !contains("XRange", step.zoom ?? step.x!) || step.y !== undefined && !contains("YRange", step.y)) throw new CameraError("CAMERA_PTZ_STEP_UNAVAILABLE", 422);
+  return { ...step, spaceUri };
+}
+export async function runCameraPtzStep(host: string, profile: CameraProfile, direction: unknown, connection: CameraConnection) {
+  const step = await checkCameraPtzStep(host, profile, direction, connection);
+  const translation = step.zoom === undefined ? `<tt:PanTilt x="${step.x}" y="${step.y}" space="${step.spaceUri}"/>` : `<tt:Zoom x="${step.zoom}" space="${step.spaceUri}"/>`;
+  await cameraSoap(cameraUrl(connection.ptzUrl!, host), PTZ, "RelativeMove", `<p:RelativeMove xmlns:p="${PTZ}"><p:ProfileToken>${escapeCameraXml(profile.token)}</p:ProfileToken><p:Translation>${translation}</p:Translation></p:RelativeMove>`, connection);
+}
+export async function stopCameraPtz(host: string, profileToken: string, connection: CameraConnection) {
+  if (!connection.ptzUrl) throw new CameraError("CAMERA_PTZ_UNAVAILABLE", 422);
+  await cameraSoap(cameraUrl(connection.ptzUrl, host), PTZ, "Stop", `<p:Stop xmlns:p="${PTZ}"><p:ProfileToken>${escapeCameraXml(profileToken)}</p:ProfileToken><p:PanTilt>true</p:PanTilt><p:Zoom>true</p:Zoom></p:Stop>`, connection);
 }

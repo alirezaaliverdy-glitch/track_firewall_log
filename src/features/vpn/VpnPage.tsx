@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AccessLink as Link } from "@/components/auth/AccessLink";
+import { canAccessPage } from "@/lib/pageAccess";
 import { Cable, Check, ChevronDown, LoaderCircle, LockKeyhole, Network, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Upload, Wifi } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { CameraDialog } from "@/features/cameras/CameraDialog";
@@ -81,7 +82,7 @@ function VpnCard({ profile, admin, available, onEdit, onAction, busy }: { profil
   </article>;
 }
 export default function VpnPage({ embedded = false }: { embedded?: boolean; params?: Record<string, string> }) {
-  const { user } = useAuth(), admin = user?.role === "admin";
+  const { user } = useAuth(), admin = Boolean(user && user.role !== "viewer" && canAccessPage(user, "tools.vpn"));
   const [data, setData] = useState<VpnList>({ available: false, splitOnly: true, profiles: [] }), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const [form, setForm] = useState<VpnProfile | "new" | null>(null), [confirm, setConfirm] = useState<{ profile: VpnProfile; action: "connect" | "disconnect" | "delete" } | null>(null), [busyId, setBusyId] = useState("");
   const load = useCallback(async (quiet = false) => { if (!quiet) setLoading(true); try { setData(await vpnRequest<VpnList>()); setError(""); } catch (failure) { setError(vpnError(failure)); } finally { setLoading(false); } }, []);

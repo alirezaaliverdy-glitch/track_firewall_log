@@ -1,6 +1,6 @@
 import { apiRequest, apiUrl } from "./apiTransport";
 
-export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; streamAvailable: boolean; snapshotAvailable: boolean };
+export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; ptzNodeToken?: string; streamAvailable: boolean; snapshotAvailable: boolean };
 export type CameraDevice = {
   company?: { id: string; name: string; code: string } | null;
   id: string; name: string; location: string; host: string; companyId?: string | null; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; monitorReportJson?: NvrReport | null; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp" | "dvrip" | "appweb";
@@ -23,6 +23,21 @@ export type CameraResult = { status: string; connectorInvoked: boolean; accepted
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  NVR_CONFIG_OPERATION_UNSUPPORTED: ["این نسخهٔ دستگاه تنظیم انتخاب‌شده را ارائه نکرد؛ کنترل غیرفعال است.", "This device firmware does not expose this setting."],
+  NVR_CONFIG_INVALID: ["تنظیم یا شمارهٔ کانال معتبر نیست.", "Invalid setting or channel."],
+  NVR_CONFIG_CHANGED: ["تنظیم دستگاه پس از پیش‌نمایش تغییر کرده؛ دوباره بخوان و پیش‌نمایش بگیر.", "Device configuration changed. Reload and preview again."],
+  NVR_CONFIG_WRITE_REJECTED: ["دستگاه تغییر را به‌صورت قطعی نپذیرفت؛ تنظیم فعلی را دوباره بخوان.", "The device did not confirm the change. Reload its current settings."],
+  NVR_CONFIG_VERIFY_FAILED: ["فرمان ارسال شد اما خواندن مجدد، تغییر را تأیید نکرد؛ وضعیت دستگاه را بررسی کن.", "Command sent, but read-back did not verify the change. Check the device."],
+  CAMERA_PTZ_STEP_UNAVAILABLE: ["این کانال فضای استاندارد حرکت کوتاه یا زوم را ارائه نکرد؛ از موقعیت‌های ذخیره‌شده استفاده کن.", "This profile does not expose standard relative PTZ/zoom. Try presets."],
+  CAMERA_PTZ_DIRECTION_INVALID: ["جهت حرکت معتبر نیست.", "Invalid PTZ direction."],
+  CAMERA_REPLAY_FAILED: ["دستگاه کلیپ قابل‌پخش نداد؛ زمان ضبط، مجوز حساب و سرویس Replay را بررسی کن.", "No playable recording received. Check time, account access and Replay service."],
+  CAMERA_REPLAY_RANGE_UNVERIFIED: ["دستگاه زمان بازپخش را تأیید نکرد؛ برای جلوگیری از نمایش اشتباه، پخش متوقف شد.", "The recorder did not verify replay time. Playback was stopped to avoid showing the wrong footage."],
+  CAMERA_REPLAY_WINDOW_INVALID: ["زمان شروع معتبر و طول کلیپ بین ۵ تا ۶۰ ثانیه انتخاب کن.", "Select a valid past start time and a clip between 5 and 60 seconds."],
+  CAMERA_REPLAY_BUSY: ["یک بررسی یا کلیپ دیگر در این فضای کاری در حال آماده‌سازی است؛ کمی صبر کن.", "Another recording request is running in this workspace. Please wait."],
+  CAMERA_REPLAY_TIMEOUT: ["آماده‌سازی کلیپ به‌موقع تمام نشد؛ بازهٔ کوتاه‌تر یا زمان دیگری را انتخاب کن.", "The recording timed out. Try a shorter clip or another time."],
+  CAMERA_RECORDING_NOT_FOUND: ["این آرشیو در دستگاه موجود نیست؛ فهرست را تازه کن.", "Recording not found. Refresh the list."],
+  CAMERA_RECORDING_OUTSIDE_RANGE: ["زمان انتخابی خارج از بازهٔ آرشیو دستگاه است.", "The selected time is outside the recording range."],
+  CAMERA_REPLAY_SIZE_LIMIT: ["کلیپ از سقف امن ۱۲ مگابایت بیشتر شد؛ بازه را کوتاه کن.", "The clip exceeds 12 MiB. Choose a shorter interval."],
   NVR_APPWEB_AUTH_FAILED: ["پنل NVR اطلاعات ذخیره‌شده را رد کرد (کد ۲۰۳). نام کاربری و رمز همین دستگاه را در ویرایش اتصال دوباره ذخیره کن؛ تلاش خودکار متوقف شد.", "NVR web login rejected the saved account (203). Update this device's credentials. Automatic retries stopped."],
   NVR_APPWEB_AUTH_COOLDOWN: ["برای جلوگیری از قفل حساب، یک دقیقه صبر کن یا اطلاعات ورود اصلاح‌شده را ذخیره کن.", "Wait one minute before retrying failed credentials, or save corrected credentials."],
   NVR_APPWEB_SESSION_BUSY: ["NVR این حساب را در حال استفاده می‌داند؛ از پنل یا نرم‌افزار دیگر خارج شو و دوباره بررسی کن.", "NVR reports this account is already in use. Log out of other clients first."],

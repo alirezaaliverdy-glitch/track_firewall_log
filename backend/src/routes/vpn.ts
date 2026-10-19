@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { listVpn, saveVpn, operateVpn, deleteVpn, testVpn, type VpnActor } from "../vpn/vpn.service.js";
+import { listVpn, saveVpn, operateVpn, deleteVpn, testVpn, requireVpnManager, type VpnActor } from "../vpn/vpn.service.js";
 import { VpnError } from "../vpn/vpn-validation.js";
 import { parseOpenVpnProfile, OpenVpnProfileError } from "../vpn/openvpn-profile.js";
 
@@ -9,7 +9,7 @@ export const vpnRoutes: FastifyPluginAsync = async app => {
   app.setErrorHandler((error, _request, reply) => { const status = error && typeof error === "object" && "statusCode" in error ? Number(error.statusCode) : 500; const safe = error instanceof VpnError ? error : new VpnError("VPN_REQUEST_FAILED", Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500); void reply.code(safe.statusCode).send({ error: { code: safe.code } }); });
   app.get("/api/vpn", request => route(request, () => listVpn(actor(request))));
   app.post<{Body:{openvpnProfile:unknown}}>("/api/vpn/import/openvpn", {bodyLimit:262144}, async request=>{
-    if(actor(request).role!=="admin")throw new VpnError("VPN_ADMIN_REQUIRED",403);
+    requireVpnManager(actor(request));
     try { const p=parseOpenVpnProfile(request.body?.openvpnProfile);return {endpoint:p.endpoint,endpointPort:p.endpointPort,transport:p.transport,authUserPass:p.authUserPass}; }
     catch(error){throw new VpnError(error instanceof OpenVpnProfileError?error.code:"VPN_OPENVPN_PROFILE_INVALID");}
   });

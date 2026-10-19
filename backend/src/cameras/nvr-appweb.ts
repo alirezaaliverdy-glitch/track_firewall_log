@@ -35,7 +35,8 @@ function checkStatus(raw: unknown) {
   throw new CameraError(code === "203" ? "NVR_APPWEB_AUTH_FAILED" : ["206", "207"].includes(code) ? "NVR_ACCOUNT_LOCKED" : code === "208" ? "NVR_APPWEB_SESSION_BUSY" : "NVR_ACCESS_DENIED", 401);
 }
 /** Fixed AppWeb2.0 reads only. Never execute the panel's JS/plugin, clock-sync, storageopt or arbitrary CGI. */
-export async function probeAppWebNvr(host: string, port: number, https: boolean, credentials: CameraCredentials): Promise<NvrReport> {
+export type AppWebRequest = (path: string, method?: string, body?: string) => Promise<{ data: unknown; headers: import("node:http").IncomingHttpHeaders }>;
+export async function withAppWebSession<T>(host: string, port: number, https: boolean, credentials: CameraCredentials, work: (request: AppWebRequest) => Promise<T>): Promise<T> {
   const origin = `${https ? "https" : "http"}://${host}:${port}`, started = Date.now(), deadline = started + 22000;
   cameraUrl(origin, host);
   if (!credentials.username || credentials.password === undefined) throw new CameraError("CAMERA_AUTH_REQUIRED", 401);
@@ -47,6 +48,10 @@ export async function probeAppWebNvr(host: string, port: number, https: boolean,
   active.add(origin);
   let cookie = "", loggedIn = false;
   const request = async (path: string, method = "GET", body?: string) => {
+    const read = /^\/CGI\/(?:Custom\/version|Record\/storageinfo|General\/(?:time|general)|Record\/record\/channels\/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))$/.test(path);
+    const write = path === "/CGI/General/general" || /^\/CGI\/Record\/record\/channels\/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(path);
+    const authentication = method === "GET" && /^\/CGI\/Security\/sessionLogin\?timestamp:\d+$/.test(path) || method === "POST" && path === "/CGI/Security/SelfExt/userCheck";
+    if (!(method === "GET" && read || method === "PUT" && write || authentication)) throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
     const remaining = deadline - Date.now(); if (remaining <= 0) throw new CameraError("CAMERA_TIMEOUT", 504);
     const response = await cameraHttp(cameraUrl(origin + path, host), { method, body, timeout: Math.min(4000, remaining), maxBytes: 512 * 1024,
       headers: { "If-Modified-Since": "0", ...(cookie ? { Cookie: cookie } : {}), ...(body ? { "Content-Type": "application/json" } : {}) } });
@@ -65,6 +70,24 @@ export async function probeAppWebNvr(host: string, port: number, https: boolean,
     const login = object((await request("/CGI/Security/SelfExt/userCheck", "POST", JSON.stringify({ Username: credentials.username, Password: appWebPasswordResponse(credentials.password, a.salt), Sessionid: a.sessionID }))).data);
     if (String(login.statusValue) !== "200" || typeof login.sessionID !== "string" || !/^[\w.-]{1,256}$/.test(login.sessionID)) throw new CameraError("NVR_APPWEB_RESPONSE_INVALID", 502);
     cookie = [...cookie.split("; ").filter(s => s && !s.startsWith("webSessionID=")), `webSessionID=${login.sessionID}`].join("; "); loggedIn = true;
+    return await work(request);
+  } catch (error) {
+    if (error instanceof CameraError && ["NVR_APPWEB_AUTH_FAILED", "NVR_ACCOUNT_LOCKED", "NVR_ACCESS_DENIED"].includes(error.code)) {
+      if (cooldown.size >= 256) cooldown.delete(cooldown.keys().next().value!);
+      cooldown.set(key, Date.now() + 60000);
+    }
+    throw error;
+  } finally {
+    if (loggedIn) await cameraHttp(cameraUrl(origin + "/CGI/Security/Lougout", host), { method: "POST", headers: { Cookie: cookie }, timeout: 1500, maxBytes: 4096 }).catch(() => undefined);
+    active.delete(origin);
+  }
+}
+
+
+/** Existing read-only monitor shares bounded login/cooldown with registered configuration operations. */
+export async function probeAppWebNvr(host: string, port: number, https: boolean, credentials: CameraCredentials): Promise<NvrReport> {
+  const probeStarted = Date.now();
+  return withAppWebSession(host, port, https, credentials, async request => {
     const report: NvrReport = { checkedAt: new Date().toISOString(), adapter: "appweb", reachable: true, durationMs: 0, identity: {}, configuredChannels: 0,
       clockDriftSeconds: null, storageConfigurations: null, recordingCount: null, jobs: [], interfaces: [], warnings: [], truncated: false,
       coverage: { identity: "unavailable", configuredChannels: "unsupported", clock: "unsupported", network: "unsupported", recordings: "unsupported", recordingJobs: "unsupported", cpu: "unsupported", memory: "unsupported", channelOnline: "unsupported", diskCapacity: "unavailable", diskHealth: "unavailable" },
@@ -93,15 +116,6 @@ export async function probeAppWebNvr(host: string, port: number, https: boolean,
     });
     if (report.native!.errors.storage) { report.storage!.errorCode = report.native!.errors.storage; report.storage!.status = report.storage!.errorCode === "NVR_ACCESS_DENIED" ? "denied" : "unavailable"; }
     if (Object.keys(report.native!.errors).length) report.warnings.push("native_partial_coverage");
-    report.durationMs = Date.now() - started; return report;
-  } catch (error) {
-    if (error instanceof CameraError && ["NVR_APPWEB_AUTH_FAILED", "NVR_ACCOUNT_LOCKED", "NVR_ACCESS_DENIED"].includes(error.code)) {
-      if (cooldown.size >= 256) cooldown.delete(cooldown.keys().next().value!);
-      cooldown.set(key, Date.now() + 60000);
-    }
-    throw error;
-  } finally {
-    if (loggedIn) await cameraHttp(cameraUrl(origin + "/CGI/Security/Lougout", host), { method: "POST", headers: { Cookie: cookie }, timeout: 1500, maxBytes: 4096 }).catch(() => undefined);
-    active.delete(origin);
-  }
+    report.durationMs = Date.now() - probeStarted; return report;
+  });
 }

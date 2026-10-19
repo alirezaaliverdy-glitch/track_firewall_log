@@ -1,8 +1,12 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { CameraError } from "../cameras/camera-network.js";
 import { cameraActionHistory, cameraOwner, createCamera, deleteCamera, executeCameraAction, getCameraPresets, listCameras, listCameraCompanies, ownedCamera, safeCamera, transferCameras, previewCameraAction, refreshCamera, runCameraDiscovery, selectedCameraProfile, updateCamera, type CameraActor } from "../cameras/camera.service.js";
-import { getNvrMonitor, refreshNvrMonitor, stopNvrMonitor } from "../cameras/nvr-monitor.js";
+import { getNvrMonitor, refreshNvrMonitor, stopNvrMonitor, type NvrReport } from "../cameras/nvr-monitor.js";
 import { cameraFrame, cameraSnapshot, startCameraMedia, stopCameraStreams } from "../cameras/camera-media.js";
+import { listCameraRecordings, cameraPlaybackClip } from "../cameras/camera-playback.service.js";
+import { readNvrSettings, nvrChannel } from "../cameras/nvr-config.js";
+import { cameraConnection, cameraVpnTarget } from "../cameras/camera.service.js";
+import { diagnoseNvrDisks } from "../cameras/nvr-diagnostics.js";
 
 function actor(request: FastifyRequest): CameraActor {
   if (!request.authUser) throw new CameraError("AUTH_REQUIRED", 401);
@@ -15,6 +19,36 @@ function failure(reply: FastifyReply, error: unknown) {
 
 export const cameraRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("onClose", async () => { stopCameraStreams(); await stopNvrMonitor(); });
+  app.get<{ Params: { id: string }; Querystring: { channel?: number } }>("/api/cameras/:id/nvr/settings", async (request, reply) => {
+    try { const who = actor(request), camera = await ownedCamera(request.params.id, who); await cameraVpnTarget(camera.vpnConnectionId, camera.host, who, true); return await readNvrSettings(camera, cameraConnection(camera), nvrChannel(request.query.channel)); }
+    catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string } }>("/api/cameras/:id/nvr/diagnostics", async (request, reply) => {
+    try { const data = await refreshNvrMonitor(request.params.id, actor(request)); return diagnoseNvrDisks(data.report as NvrReport | null); }
+    catch (error) { return failure(reply, error); }
+  });
+  app.get<{ Params: { id: string } }>("/api/cameras/:id/recordings", async (request, reply) => {
+    try { return await listCameraRecordings(request.params.id, actor(request)); } catch (error) { return failure(reply, error); }
+  });
+  app.post<{ Params: { id: string }; Body: { recordingToken: string; start: string; duration: number } }>("/api/cameras/:id/playback/export", { bodyLimit: 2048,
+    schema: { body: { type: "object", required: ["recordingToken", "start", "duration"], additionalProperties: false, properties: { recordingToken: { type: "string", minLength: 1, maxLength: 256 }, start: { type: "string", maxLength: 40 }, duration: { type: "integer", minimum: 5, maximum: 60 } } } }
+  }, async (request, reply) => {
+    const controller = new AbortController(), close = () => controller.abort(); reply.raw.once("close", close);
+    try { const clip = await cameraPlaybackClip(request.params.id, request.body, actor(request), controller.signal, true);
+      return reply.header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff").header("Content-Disposition", 'attachment; filename="recording.mp4"').type("video/mp4").send(clip);
+    } catch (error) { return failure(reply, error); } finally { reply.raw.off("close", close); }
+  });
+  app.get<{ Params: { id: string }; Querystring: { recordingToken: string; start: string; duration: number } }>("/api/cameras/:id/playback", {
+    schema: { querystring: { type: "object", required: ["recordingToken", "start"], additionalProperties: false, properties: { recordingToken: { type: "string", minLength: 1, maxLength: 256 }, start: { type: "string", maxLength: 40 }, duration: { type: "integer", minimum: 5, maximum: 60, default: 30 } } } }
+  }, async (request, reply) => {
+    const controller = new AbortController(), close = () => controller.abort(); reply.raw.once("close", close);
+    try {
+      const clip = await cameraPlaybackClip(request.params.id, request.query, actor(request), controller.signal);
+      reply.header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff").type("video/mp4");
+      return reply.send(clip);
+    } catch (error) { return failure(reply, error); }
+    finally { reply.raw.off("close", close); }
+  });
   app.get("/api/cameras/companies", async (request, reply) => {
     try { return await listCameraCompanies(actor(request)); } catch (error) { return failure(reply, error); }
   });

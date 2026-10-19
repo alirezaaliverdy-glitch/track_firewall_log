@@ -8,10 +8,11 @@ import { validateVpn, contains, VpnError, type VpnConfig } from "./vpn-validatio
 import type { VpnRuntime } from "./vpn-agent.js";
 import type { FastifyBaseLogger } from "fastify";
 import { VpnRecoverySchedule } from "./vpn-recovery.js";
+import { canAccessPage } from "../security/page-access.js";
 
-export type VpnActor = { id: string; username: string; role: string; scopeOwnerId?: string | null };
+export type VpnActor = { id: string; username: string; role: string; scopeOwnerId?: string | null; allowedSections?: readonly string[] };
 const owner = (actor: VpnActor) => actor.scopeOwnerId ?? actor.id;
-const admin = (actor: VpnActor) => { if (actor.role !== "admin") throw new VpnError("VPN_ADMIN_REQUIRED", 403); };
+export const requireVpnManager = (actor: VpnActor) => { if (actor.role !== "admin" && !(actor.role === "operator" && canAccessPage(actor, "tools.vpn"))) throw new VpnError("VPN_MANAGE_FORBIDDEN", 403); };
 export function vpnAgentCall<T>(path: string, payload: unknown = {}, socket = process.env.VPN_CONTROL_SOCKET ?? "/run/firewall-vpn/control.sock"): Promise<T> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(payload);
@@ -68,7 +69,7 @@ export async function listVpn(actor: VpnActor) {
   return { available, splitOnly: true, l2tpReady, openvpnReady, profiles: items };
 }
 export async function saveVpn(input: Record<string, unknown>, actor: VpnActor, id?: string) {
-  admin(actor);
+  requireVpnManager(actor);
   const name = typeof input.name === "string" ? input.name.trim().slice(0, 100) : "";
   if (!name) throw new VpnError("VPN_NAME_REQUIRED");
   const previous = id ? await owned(id, actor) : null;
@@ -100,7 +101,7 @@ export async function saveVpn(input: Record<string, unknown>, actor: VpnActor, i
   } finally { if (id) activeOperations.delete(id); }
 }
 export async function operateVpn(id: string, operation: "connect" | "disconnect", input: Record<string, unknown>, actor: VpnActor) {
-  admin(actor); const profile = await owned(id, actor);
+  requireVpnManager(actor); const profile = await owned(id, actor);
   if (input.intent !== "execute" || input.confirmed !== true) throw new VpnError("VPN_CONFIRM_REQUIRED");
   if (input.revision !== safe(profile).revision) throw new VpnError("VPN_PROFILE_CHANGED", 409);
   if (operation === "disconnect" && automaticOperations.has(id)) {
@@ -134,6 +135,7 @@ export async function operateVpn(id: string, operation: "connect" | "disconnect"
   } finally { activeOperations.delete(id); }
 }
 export async function testVpn(id: string, input: Record<string, unknown>, actor: VpnActor) {
+  requireVpnManager(actor);
   const profile = await owned(id, actor), target = String(input.target ?? "");
   if (!(profile.routesJson as string[]).some(route => contains(route, target))) throw new VpnError("VPN_TEST_TARGET_INVALID");
   const result = await vpnAgentCall("/test", { id, target, port: Number(input.port ?? 80) });
@@ -161,7 +163,7 @@ export async function assertVpnTarget(profileId: unknown, host: string, ownerId?
   return profile.id;
 }
 export async function deleteVpn(id: string, actor: VpnActor) {
-  admin(actor); const profile = await owned(id, actor);
+  requireVpnManager(actor); const profile = await owned(id, actor);
   if (stored(profile).connectionIntent === "connected") throw new VpnError("VPN_DISCONNECT_FIRST", 409);
   if (activeOperations.has(id)) throw new VpnError("VPN_OPERATION_BUSY", 409);
   activeOperations.add(id);

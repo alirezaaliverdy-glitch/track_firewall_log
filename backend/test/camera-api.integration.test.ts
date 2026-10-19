@@ -47,6 +47,7 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
   }
   try {
     const owner = await identity("admin"), other = await identity("admin"), viewer = await identity("viewer", owner.id);
+    for (const [path, payload] of [["/api/cameras/fixture/playback/export", { recordingToken: "fixture", start: "2026-01-01T00:00:00Z", duration: 5 }], ["/api/cameras/fixture/nvr/diagnostics", {}], ["/api/cameras/fixture/actions/preview", { operation: "nvr_overwrite", value: "StopRecord" }]] as const) assert.equal((await app.inject({ method: "POST", url: path, headers: viewer.headers, payload })).statusCode, 403, "viewer cannot export footage or change NVR settings");
     assert.equal((await app.inject({ url: "/api/cameras" })).statusCode, 401);
     const company = await prisma.company.create({ data: { ownerId: owner.id, name: "Fixture company", code: tag } });
     const input = { companyId: company.id, kind: "nvr", host, onvifPort: port, name: "Fixture camera", username: "fixture-camera", password: secret };

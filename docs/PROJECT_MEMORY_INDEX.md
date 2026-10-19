@@ -1,5 +1,7 @@
 # Project Memory Index
 
+Camera playback/fullscreen, verified NVR settings/diagnostics and operator VPN management: `docs/CAMERA_STUDIO.md` (capability boundaries, real vs fixture acceptance, no universal SMART/replay claim).
+
 Page-level account visibility and authorization: `docs/PAGE_ACCESS.md` (Settings selections, independent Cameras/VPN, hidden navigation/direct-route/API gates and legacy compatibility).
 
 ## Read in This Order

@@ -5,11 +5,15 @@ import { networkInterfaces } from "node:os";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appWebPasswordResponse, parseAppWebDisks, probeAppWebNvr } from "../src/cameras/nvr-appweb.js";
 import { nvrSensors } from "../src/cameras/nvr-sensors.js";
+import { readNvrSettings, writeNvrSetting, nvrConfigChange } from "../src/cameras/nvr-config.js";
+import { diagnoseNvrDisks } from "../src/cameras/nvr-diagnostics.js";
 
 const host = Object.values(networkInterfaces()).flat().find(v => v?.family === "IPv4" && !v.internal)!.address;
 async function fixture() {
   const secret = randomBytes(20).toString("hex"), salt = randomBytes(16).toString("hex"), session = randomBytes(16).toString("hex"), calls: string[] = [];
-  let status = 200, invalidStorage = false;
+  let status = 200, invalidStorage = false, acknowledgeOnly = false;
+  const general = { OverWrite: "OverWrite", MachineName: "preserved", TimeZone: 20, AutoLogout: 10 };
+  const recording = { RecordConfig: { RecordMode: "ConfigRecord", PacketLength: 60, PreRecord: 5, Mask: [1, 2, 3], TimeSection: [{ start: "00:00" }] }, RecordConfigExt: { RecordMode: "ClosedRecord", PacketLength: 30 } };
   const server = createServer(async (req, res) => {
     const path = req.url!.split("?")[0]; calls.push(`${req.method} ${path}`);
     const send = (data: unknown) => { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(data)); };
@@ -22,7 +26,12 @@ async function fixture() {
     }
     assert.match(req.headers.cookie!, new RegExp(`webSessionID=${session}`));
     if (path === "/CGI/Security/Lougout") { assert.equal(req.method, "POST"); return send({ statusValue: 200 }); }
-    assert.equal(req.method, "GET", "no settings or clock writes");
+    if (path === "/CGI/General/general" || path === "/CGI/Record/record/channels/0") {
+      const source = path.includes("/General/") ? general : recording;
+      if (req.method === "PUT") { let body = ""; for await (const chunk of req) body += chunk; if (!acknowledgeOnly) Object.assign(source, JSON.parse(body)); return send({ statusCode: 1, statusString: "OK" }); }
+      assert.equal(req.method, "GET"); return send(source);
+    }
+    assert.equal(req.method, "GET", "no unexpected settings or clock writes");
     if (path === "/CGI/Custom/version") return send({ HardWareVersion: "Fixture AppWeb", Version: "fixture", SeriaNo: "fixture-serial", BulidDate: "2026-10-18", VideoInChannel: 0, DigChannel: 16, Password: secret, sessionID: session });
     if (path === "/CGI/Record/storageinfo") { if (invalidStorage) return send({ statusValue: 403 }); return send([{ Storage: "1", StorageSize: "1024 GB", StorageRemain: "512 GB", StorageState: "StateOK", Password: secret }]); }
     if (path === "/CGI/General/time") return send({ SystemTime: "2026-10-18 14:30:00" });
@@ -30,8 +39,33 @@ async function fixture() {
   });
   await new Promise<void>(resolve => server.listen(0, "0.0.0.0", resolve));
   return { port: (server.address() as { port: number }).port, credentials: { username: "fixture", password: secret }, salt, session, calls,
-    deny: (value: number) => { status = value; }, partial: () => { invalidStorage = true; }, close: () => new Promise<void>(resolve => server.close(() => resolve())) };
+    general, recording, rejectReadBack: () => { acknowledgeOnly = true; }, deny: (value: number) => { status = value; }, partial: () => { invalidStorage = true; }, close: () => new Promise<void>(resolve => server.close(() => resolve())) };
 }
+
+test("NVR config preserves unrelated fields, detects races and verifies actual read-back", async () => {
+  const f = await fixture(), camera = { host, onvifPort: f.port, onvifHttps: false, kind: "nvr", connectionMode: "appweb" };
+  let invoked = 0;
+  try {
+    const before = await readNvrSettings(camera, f.credentials, 0);
+    assert.equal(before.overwrite, "OverWrite"); assert.equal(before.recordingMode, "ConfigRecord");
+    assert.equal(f.calls.some(c => c.startsWith("PUT")), false, "read is never execution");
+    const after = await writeNvrSetting(camera, f.credentials, { setting: "overwrite", value: "StopRecord" }, before.revision, () => invoked++);
+    assert.equal(after.overwrite, "StopRecord"); assert.equal(invoked, 1); assert.equal(f.general.MachineName, "preserved"); assert.equal(f.general.TimeZone, 20);
+    await assert.rejects(writeNvrSetting(camera, f.credentials, { setting: "overwrite", value: "OverWrite" }, before.revision, () => invoked++), /NVR_CONFIG_CHANGED/); assert.equal(invoked, 1);
+    const changed = await writeNvrSetting(camera, f.credentials, { setting: "recordingMode", value: "ManualRecord", channel: 0 }, after.revision, () => invoked++);
+    assert.equal(changed.recordingMode, "ManualRecord"); assert.deepEqual(f.recording.RecordConfig.Mask, [1, 2, 3]); assert.deepEqual(f.recording.RecordConfig.TimeSection, [{ start: "00:00" }]); assert.equal(f.recording.RecordConfigExt.RecordMode, "ClosedRecord");
+    f.rejectReadBack(); await assert.rejects(writeNvrSetting(camera, f.credentials, { setting: "recordingMode", value: "ClosedRecord", channel: 0 }, changed.revision, () => invoked++), /NVR_CONFIG_VERIFY_FAILED/);
+    await assert.rejects(readNvrSettings({ ...camera, connectionMode: "onvif" }, f.credentials, 0), /NVR_CONFIG_OPERATION_UNSUPPORTED/);
+    assert.throws(() => nvrConfigChange({ setting: "format", value: "anything" }), /NVR_CONFIG_INVALID/); assert.throws(() => nvrConfigChange({ setting: "recordingMode", value: "ManualRecord", channel: 128 }), /NVR_CONFIG_INVALID/);
+  } finally { await f.close(); }
+});
+
+test("disk diagnostics never turns missing SMART into healthy or starts a physical test", async () => {
+  assert.equal(diagnoseNvrDisks(null).assessment, "incomplete");
+  const f = await fixture();
+  try { const report = await probeAppWebNvr(host, f.port, false, f.credentials), result = diagnoseNvrDisks(report); assert.equal(result.assessment, "incomplete"); assert.equal(result.selfTestStarted, false); assert.equal(result.smartSelfTestSupported, false); assert.equal(result.checks[0].capacityConsistent, true); assert.ok(result.missing.includes("smart")); report.storage!.disks[0].smart = "failed"; assert.equal(diagnoseNvrDisks(report).assessment, "critical"); }
+  finally { await f.close(); }
+});
 test("AppWeb disk strings have explicit binary units and conservative health", () => {
   assert.equal(appWebPasswordResponse("fixture", "test-salt").length, 8, "panel's misleading hex_md5 function is not a 32-character hex digest");
   const disks = parseAppWebDisks([{ StorageSize: "1 TB", StorageRemain: "512 GB", StorageState: "StateOK" }, { StorageSize: 1024, StorageRemain: "2 TB", StorageState: "other" }, { StorageSize: "1 GB", StorageRemain: "2 GB", StorageState: "StateErr" }]);
@@ -73,6 +107,13 @@ test("AppWeb NVR registration and measured HDD history use the actual connector;
     const id = r.json().camera.id, check = await app.inject({ method: "POST", url: `/api/cameras/${id}/monitor/refresh`, headers });
     assert.equal(check.statusCode, 200); assert.equal(check.json().history.at(-1).readings.capacity, 1024 ** 4);
     assert.equal((await app.inject({ method: "POST", url: `/api/cameras/${id}/actions/preview`, headers, payload: { operation: "reboot" } })).statusCode, 422);
+    const settings = await app.inject({ url: `/api/cameras/${id}/nvr/settings`, headers }); assert.equal(settings.statusCode, 200); assert.equal(settings.json().overwrite, "OverWrite");
+    const plan = await app.inject({ method: "POST", url: `/api/cameras/${id}/actions/preview`, headers, payload: { operation: "nvr_overwrite", value: "StopRecord" } }); assert.equal(plan.statusCode, 200); assert.equal(f.general.OverWrite, "OverWrite");
+    const planId = plan.json().id;
+    const execute = (payload: object) => app.inject({ method: "POST", url: `/api/cameras/${id}/actions/${planId}/execute`, headers, payload });
+    assert.equal((await execute({ intent: "preview", confirmed: true })).statusCode, 400);
+    const result = await execute({ intent: "execute", confirmed: true }); assert.equal(result.statusCode, 200); assert.equal(result.json().status, "succeeded"); assert.equal(result.json().connectorInvoked, true); assert.equal(result.json().verified, true); assert.equal(f.general.OverWrite, "StopRecord");
+    assert.equal((await execute({ intent: "execute", confirmed: true })).statusCode, 409);
     await app.inject({ method: "PATCH", url: `/api/cameras/${id}`, headers, payload: { monitoringEnabled: true } }); f.deny(203);
     const failed = await app.inject({ method: "POST", url: `/api/cameras/${id}/monitor/refresh`, headers }); assert.equal(failed.json().report.errorCode, "NVR_APPWEB_AUTH_FAILED"); assert.equal(failed.json().monitoringEnabled, false);
   } finally { await app.close(); await f.close(); await prisma.auditLog.deleteMany({ where: { actor: tag } }); await prisma.appUser.delete({ where: { id: owner.id } }); await shutdownDatabase(); }

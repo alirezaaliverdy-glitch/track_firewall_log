@@ -10,6 +10,8 @@ import { VpnError } from "../vpn/vpn-validation.js";
 import { nvrAssetId, syncNvrAsset } from "./nvr-asset.js";
 import { probeNativeNvr } from "./nvr-native-monitor.js";
 import { probeAppWebNvr } from "./nvr-appweb.js";
+import { cameraPtzStep, checkCameraPtzStep, runCameraPtzStep, stopCameraPtz } from "./camera-onvif.js";
+import { nvrConfigChange, readNvrSettings, writeNvrSetting } from "./nvr-config.js";
 
 export type CameraActor = { id: string; username: string; role: string; scopeOwnerId?: string | null };
 export const cameraOwner = (actor: CameraActor) => actor.scopeOwnerId ?? actor.id;
@@ -245,8 +247,24 @@ export async function getCameraPresets(id: string, token: string, actor: CameraA
 export async function previewCameraAction(id: string, input: Record<string, unknown>, actor: CameraActor) {
   const camera = await ownedCamera(id, actor), operation = cameraOperation(input.operation);
   if (actor.role === "viewer" || (operation === "reboot" && actor.role !== "admin")) throw new CameraError("CAMERA_CONTROL_FORBIDDEN", 403);
-  if (camera.connectionMode !== "onvif" || camera.status !== "verified") throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 422);
+  if (operation.startsWith("nvr_")) {
+    if (camera.kind !== "nvr" || camera.connectionMode !== "appweb" || camera.status !== "verified") throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
+  } else if (camera.connectionMode !== "onvif" || camera.status !== "verified") throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 422);
   const parameters: Record<string, string> = {};
+  if (operation === "nvr_overwrite" || operation === "nvr_recording_mode") {
+    await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true);
+    const change = nvrConfigChange({ setting: operation === "nvr_overwrite" ? "overwrite" : "recordingMode", value: input.value, channel: input.channel });
+    const current = await readNvrSettings(camera, cameraConnection(camera), change.channel);
+    if (!current.supported[change.setting]) throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
+    parameters.setting = change.setting; parameters.value = change.value; parameters.channel = String(change.channel); parameters.configRevision = current.revision;
+    parameters.previous = String(change.setting === "overwrite" ? current.overwrite : current.recordingMode);
+  }
+  if (operation === "ptz_step" || operation === "ptz_stop") {
+    parameters.profileToken = optionalText(input.profileToken, 256);
+    const { profile, connection } = await selectedCameraProfile(id, parameters.profileToken, actor);
+    if (!profile.ptz) throw new CameraError("CAMERA_PTZ_UNAVAILABLE", 422);
+    if (operation === "ptz_step") { const step = cameraPtzStep(input.direction); await checkCameraPtzStep(camera.host, profile, step.direction, connection); parameters.direction = step.direction; }
+  }
   if (operation === "goto_preset") {
     parameters.profileToken = optionalText(input.profileToken, 256); parameters.presetToken = optionalText(input.presetToken, 256);
     const presets = await getCameraPresets(id, parameters.profileToken, actor);
@@ -256,8 +274,12 @@ export async function previewCameraAction(id: string, input: Record<string, unkn
   }
   const template = CAMERA_CONTROL_TEMPLATES[operation];
   const preview = { template: template.template, handler: template.handler, titleFa: template.labelFa, titleEn: template.labelEn, cameraName: camera.name, host: camera.host,
-    effectFa: operation === "reboot" ? (camera.kind === "nvr" ? "NVR دوباره راه‌اندازی می‌شود؛ تصویر همهٔ کانال‌های آن موقتاً قطع می‌شود." : "دوربین دوباره راه‌اندازی می‌شود و تصویر موقتاً قطع خواهد شد.") : `دوربین به موقعیت «${parameters.presetName}» می‌رود.`,
-    effectEn: operation === "reboot" ? "The device restarts; its video channels will disconnect temporarily." : `Move the camera to preset “${parameters.presetName}”.`, risk: template.risk, connectorInvoked: false };
+    effectFa: operation === "reboot" ? (camera.kind === "nvr" ? "NVR دوباره راه‌اندازی می‌شود؛ تصویر همهٔ کانال‌های آن موقتاً قطع می‌شود." : "دوربین دوباره راه‌اندازی می‌شود و تصویر موقتاً قطع خواهد شد.") : operation === "ptz_step" ? `یک گام کوتاه در جهت ${parameters.direction}؛ حرکت پیوسته فعال نمی‌شود.` : operation === "ptz_stop" ? "حرکت افقی، عمودی و زوم دستگاه متوقف می‌شود." : `دوربین به موقعیت «${parameters.presetName}» می‌رود.`,
+    effectEn: operation === "reboot" ? "The device restarts; its video channels will disconnect temporarily." : operation === "ptz_step" ? `One bounded ${parameters.direction} step, not continuous movement.` : operation === "ptz_stop" ? "Stop pan, tilt and zoom movement." : `Move the camera to preset “${parameters.presetName}”.`, risk: template.risk, connectorInvoked: false };
+  if (operation.startsWith("nvr_")) {
+    preview.effectFa = operation === "nvr_overwrite" ? parameters.value === "OverWrite" ? "پس از پرشدن هارد، ضبط جدید روی قدیمی‌ترین ضبط‌ها بازنویسی می‌شود؛ ضبط‌های قدیمی به‌تدریج از دست می‌روند." : "با پرشدن هارد، ضبط جدید متوقف می‌شود؛ ممکن است رخدادهای بعدی ضبط نشوند." : `حالت ضبط کانال ${Number(parameters.channel) + 1} از ${parameters.previous} به ${parameters.value} تغییر می‌کند. ClosedRecord ضبط را متوقف می‌کند؛ ConfigRecord از زمان‌بندی فعلی پیروی می‌کند.`;
+    preview.effectEn = operation === "nvr_overwrite" ? parameters.value === "OverWrite" ? "New recordings overwrite the oldest footage when storage is full." : "New recording stops when storage is full; future incidents may not be recorded." : `Channel ${Number(parameters.channel) + 1}: ${parameters.previous} → ${parameters.value}. ClosedRecord stops recording. ConfigRecord follows the existing schedule.`;
+  }
   const plan = await prisma.cameraActionPlan.create({ data: { cameraId: id, ownerId: cameraOwner(actor), requestedBy: actor.username, operation, parametersJson: json(parameters), previewJson: json(preview), cameraRevision: cameraRevision(camera), expiresAt: new Date(Date.now() + 5 * 60_000) } });
   await audit(actor, "camera.action_previewed", id, { planId: plan.id, operation, template: template.template });
   return { id: plan.id, status: plan.status, expiresAt: plan.expiresAt, preview };
@@ -271,18 +293,28 @@ export async function executeCameraAction(id: string, planId: string, input: Rec
   const claimed = await prisma.cameraActionPlan.updateMany({ where: { id: plan.id, status: "preview_ready" }, data: { status: "executing" } });
   if (claimed.count !== 1) throw new CameraError("CAMERA_PLAN_ALREADY_USED", 409);
   await audit(actor, "camera.action_started", id, { planId, operation: policy.operation, policyGuard: "allowed", template: policy.template }, false);
-  let result: Record<string, unknown>;
+  let result: Record<string, unknown> = { status: "failed", connectorInvoked: false, code: "CAMERA_OPERATION_UNSUPPORTED" };
   let connectorInvoked = false;
   try {
     await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true);
     const connection = cameraConnection(camera), parameters = plan.parametersJson as Record<string, string>;
-    if (policy.operation === "goto_preset") {
+    if (policy.operation === "nvr_overwrite" || policy.operation === "nvr_recording_mode") {
+      const verified = await writeNvrSetting(camera, connection, parameters, parameters.configRevision, () => { connectorInvoked = true; });
+      result = { status: "succeeded", connectorInvoked: true, accepted: true, verified: true, operation: policy.operation, template: policy.template, completedAt: new Date().toISOString(), settings: verified };
+    } else if (policy.operation === "goto_preset") {
       const profile = cameraProfiles(camera).find((item) => item.token === parameters.profileToken && item.ptz);
       if (!profile || !parameters.presetToken) throw new CameraError("CAMERA_PTZ_UNAVAILABLE", 422);
       connectorInvoked = true;
       await runCameraPreset(camera.host, profile.token, parameters.presetToken, connection);
+    } else if (policy.operation === "ptz_step" || policy.operation === "ptz_stop") {
+      const profile = cameraProfiles(camera).find(item => item.token === parameters.profileToken && item.ptz);
+      if (!profile) throw new CameraError("CAMERA_PTZ_UNAVAILABLE", 422);
+      if (policy.operation === "ptz_step") await checkCameraPtzStep(camera.host, profile, parameters.direction, connection);
+      connectorInvoked = true;
+      if (policy.operation === "ptz_step") await runCameraPtzStep(camera.host, profile, parameters.direction, connection);
+      else await stopCameraPtz(camera.host, profile.token, connection);
     } else { stopCameraStreams(id); connectorInvoked = true; await rebootCamera(camera.host, camera.onvifPort, camera.onvifPath, connection, camera.onvifHttps); }
-    result = { status: "succeeded", connectorInvoked: true, accepted: true, operation: policy.operation, template: policy.template, completedAt: new Date().toISOString(), requiresReconnect: policy.operation === "reboot" };
+    if (!policy.operation.startsWith("nvr_")) result = { status: "succeeded", connectorInvoked: true, accepted: true, operation: policy.operation, template: policy.template, completedAt: new Date().toISOString(), requiresReconnect: policy.operation === "reboot" };
   } catch (error) { result = { status: "failed", connectorInvoked, code: errorCode(error), operation: policy.operation, completedAt: new Date().toISOString() }; }
   await prisma.cameraActionPlan.update({ where: { id: plan.id }, data: { status: String(result.status), resultJson: json(result) } });
   await audit(actor, "camera.action_result", id, { planId, ...result }, false);

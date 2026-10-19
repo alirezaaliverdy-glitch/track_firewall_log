@@ -1,11 +1,50 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { authenticatedCameraHttp, cameraUrl, CameraError } from "./camera-network.js";
 import type { CameraConnection } from "./camera-onvif.js";
+import { openReplayBridge } from "./replay-rtsp.js";
 
 const active = new Map<string, { ownerId: string; cameraId: string; child: ChildProcessWithoutNullStreams; stop: () => void }>();
 type FrameSession = { cameraId: string; latest: Buffer | null; lastRequest: number; stopped: boolean; stop: () => void; waiters: Set<(frame: Buffer | null) => void> };
 const frameSessions = new Map<string, Promise<FrameSession>>();
 let sequence = 0;
+const replayOwners = new Set<string>();
+
+/** A bounded in-memory H.264/MP4 excerpt; no recording cache, customer disk write or raw RTSP URL leaves the server. */
+export async function recordedCameraClip(input: { ownerId: string; cameraId: string; host: string; uri: URL; connection: CameraConnection; start: string; end: string; duration: number; signal?: AbortSignal }) {
+  cameraMediaCapacity(input.ownerId);
+  if (replayOwners.has(input.ownerId) || replayOwners.size >= 2) throw new CameraError("CAMERA_REPLAY_BUSY", 429);
+  if (input.signal?.aborted) throw new CameraError("CAMERA_REPLAY_CANCELLED", 499);
+  replayOwners.add(input.ownerId);
+  let bridge: Awaited<ReturnType<typeof openReplayBridge>> | undefined;
+  let child: ChildProcessWithoutNullStreams | undefined;
+  let deadline: NodeJS.Timeout | undefined;
+  const stop = () => { bridge?.stop(); if (child && child.exitCode === null) { child.kill("SIGTERM"); const force = setTimeout(() => { if (child?.exitCode === null) child.kill("SIGKILL"); }, 1000); force.unref(); } };
+  const key = `${input.cameraId}:replay:${++sequence}`;
+  try {
+    bridge = await openReplayBridge(input.uri, input.host, input.connection, input.start, input.end);
+    child = spawn("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-threads", "1", "-protocol_whitelist", "rtsp,tcp,rtp", "-rtsp_transport", "tcp", "-timeout", "15000000", "-fflags", "+genpts", "-i", bridge.url,
+      "-t", String(input.duration), "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", "fps=12,scale=960:-2:force_original_aspect_ratio=decrease", "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-b:v", "800k", "-maxrate", "1000k", "-bufsize", "2000k", "-g", "24", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "-f", "mp4", "pipe:1"], { shell: false, windowsHide: true });
+    child.stderr.resume();
+    active.set(key, { ownerId: input.ownerId, cameraId: input.cameraId, child, stop });
+    const process = child;
+    const clip = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = []; let length = 0, done = false;
+      const finish = (failure?: CameraError) => { if (done) return; done = true; if (deadline) clearTimeout(deadline); input.signal?.removeEventListener("abort", aborted); if (failure) { stop(); reject(failure); } else resolve(Buffer.concat(chunks)); };
+      const aborted = () => finish(new CameraError("CAMERA_REPLAY_CANCELLED", 499));
+      input.signal?.addEventListener("abort", aborted, { once: true });
+      if (input.signal?.aborted) { aborted(); return; }
+      deadline = setTimeout(() => finish(new CameraError("CAMERA_REPLAY_TIMEOUT", 504)), 90000); deadline.unref();
+      process.stdout.on("data", (chunk: Buffer) => { length += chunk.length; if (length > 12 * 1024 * 1024) finish(new CameraError("CAMERA_REPLAY_SIZE_LIMIT", 502)); else chunks.push(chunk); });
+      process.on("error", () => finish(new CameraError("CAMERA_REPLAY_FAILED", 502)));
+      process.on("close", code => {
+        try { bridge!.check(); } catch (failure) { finish(failure instanceof CameraError ? failure : new CameraError("CAMERA_REPLAY_FAILED", 502)); return; }
+        finish(code === 0 && length > 64 ? undefined : new CameraError("CAMERA_REPLAY_FAILED", 502));
+      });
+    });
+    if (clip.subarray(4, 8).toString() !== "ftyp") throw new CameraError("CAMERA_REPLAY_FAILED", 502);
+    return clip;
+  } finally { if (deadline) clearTimeout(deadline); stop(); active.delete(key); replayOwners.delete(input.ownerId); }
+}
 
 function rtspInput(host: string, profile: string, connection: CameraConnection) {
   const uri = connection.profiles?.[profile]?.rtspUrl ?? connection.rtspUrl;
@@ -16,7 +55,7 @@ function rtspInput(host: string, profile: string, connection: CameraConnection) 
 }
 
 export function cameraMediaCapacity(ownerId: string) {
-  if (active.size >= 8 || [...active.values()].filter((job) => job.ownerId === ownerId).length >= 4) throw new CameraError("CAMERA_VIEW_LIMIT", 429);
+  if (active.size + replayOwners.size >= 8 || [...active.values()].filter((job) => job.ownerId === ownerId).length + Number(replayOwners.has(ownerId)) >= 4) throw new CameraError("CAMERA_VIEW_LIMIT", 429);
 }
 
 export async function startCameraMedia(input: { ownerId: string; cameraId: string; host: string; profile: string; connection: CameraConnection; snapshot?: boolean }) {

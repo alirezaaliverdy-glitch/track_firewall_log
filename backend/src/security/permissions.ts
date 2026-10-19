@@ -1,6 +1,7 @@
 export type Role = "admin" | "operator" | "viewer";
 
 export type Permission =
+  | "vpn.manage"
   | "devices.terminal"
   | "community.participate"
   | "community.moderate"
@@ -22,6 +23,7 @@ export type Permission =
   | "auth.session.manage";
 
 export const ALL_PERMISSIONS: readonly Permission[] = [
+  "vpn.manage",
   "devices.terminal",
   "community.participate",
   "community.moderate",
@@ -52,6 +54,7 @@ export const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "auth.session.manage"
   ]),
   operator: new Set<Permission>([
+    "vpn.manage",
     "community.participate",
     "assistant.chat",
     "devices.read",

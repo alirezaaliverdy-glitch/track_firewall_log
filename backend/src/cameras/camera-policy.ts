@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 import { CameraError } from "./camera-network.js";
 
 export const CAMERA_CONTROL_TEMPLATES = {
+  nvr_overwrite: { labelFa: "تغییر رفتار هاردِ پر", labelEn: "Change disk-full behavior", template: "appweb.nvr.overwrite", handler: "VerifiedGeneralConfig", risk: "high" },
+  nvr_recording_mode: { labelFa: "تغییر حالت ضبط کانال", labelEn: "Change channel recording mode", template: "appweb.nvr.recording_mode", handler: "VerifiedChannelConfig", risk: "high" },
+  ptz_step: { labelFa: "حرکت کوتاه دوربین", labelEn: "Short PTZ step", template: "onvif.ptz.relative_step", handler: "RelativeMove", risk: "medium" },
+  ptz_stop: { labelFa: "توقف حرکت دوربین", labelEn: "Stop PTZ", template: "onvif.ptz.stop", handler: "Stop", risk: "medium" },
   goto_preset: { labelFa: "رفتن به موقعیت ذخیره‌شده", labelEn: "Go to preset", template: "onvif.ptz.goto_preset", handler: "GotoPreset", risk: "medium" },
   reboot: { labelFa: "راه‌اندازی مجدد", labelEn: "Restart device", template: "onvif.device.reboot", handler: "SystemReboot", risk: "high" }
 } as const;
@@ -25,6 +29,8 @@ export function evaluateCameraPolicy(input: { plan: CameraActionPlan; camera: Ca
   if (input.intent !== "execute" || input.confirmed !== true) throw new CameraError("CAMERA_CONFIRM_REQUIRED");
   if (plan.status !== "preview_ready") throw new CameraError("CAMERA_PLAN_ALREADY_USED", 409);
   if (plan.expiresAt.getTime() < Date.now() || plan.cameraRevision !== cameraRevision(camera)) throw new CameraError("CAMERA_PREVIEW_EXPIRED", 409);
-  if (camera.connectionMode !== "onvif" || camera.status !== "verified") throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 422);
+  if (operation.startsWith("nvr_")) {
+    if (camera.kind !== "nvr" || camera.connectionMode !== "appweb" || camera.status !== "verified") throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
+  } else if (camera.connectionMode !== "onvif" || camera.status !== "verified") throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 422);
   return { allowed: true, template: CAMERA_CONTROL_TEMPLATES[operation].template, operation };
 }
