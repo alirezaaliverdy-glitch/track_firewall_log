@@ -80,6 +80,12 @@ compose() {
   docker compose --project-name firewall-soar -f docker-compose.yml -f docker-compose.override.yml "$@"
 }
 
+# OpenVPN needs only this character device inside the API-network VPN helper.
+# Never discover the missing device after replacing healthy production services.
+if git cat-file -e "$target_sha:backend/src/vpn/openvpn-profile.ts" 2>/dev/null; then
+  [ -c /dev/net/tun ] || { echo "OpenVPN needs /dev/net/tun; provision TUN on the Linux Docker host before deployment. Running services unchanged." >&2; exit 2; }
+fi
+
 # A legacy database can have AppUser owned by postgres while the API migrates
 # as firewall_app. Check before replacing a healthy API container: Prisma cannot
 # ALTER a table owned by another role, and a failed startup would cause outage.

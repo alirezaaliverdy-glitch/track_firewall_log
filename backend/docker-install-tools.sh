@@ -4,7 +4,7 @@ set -eu
 # Keep TLS and Alpine package signatures enabled. The alternate mirror belongs
 # to Alpine: https://wiki.alpinelinux.org/wiki/Template:Mirrors
 install_tools() {
-  apk --timeout 30 "$@" add --no-cache iputils nmap chromium fontconfig ffmpeg wireguard-tools iproute2 strongswan xl2tpd ppp iptables procps
+  apk --timeout 30 "$@" add --no-cache iputils nmap chromium fontconfig ffmpeg wireguard-tools iproute2 strongswan xl2tpd ppp iptables procps openvpn
 }
 
 for attempt in 1 2; do

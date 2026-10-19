@@ -1,5 +1,7 @@
 # Codebase Overview
 
+OpenVPN: `backend/src/vpn/openvpn-profile.ts` parses bounded allowlisted profile data and regenerates safe configuration; `openvpn-management.ts` reads private actual state/counters. `vpn-agent.ts` owns only TUN address/selected routes/lifecycle; existing `vpn.service.ts` supplies encrypted profiles, workspace policy and persistent intent. `src/features/vpn/` supplies the shared three-protocol UI. Protocol fixtures and browser acceptance are under `backend/test/openvpn-*` and `scripts/qa/capture-openvpn.mjs`. Cloud ID is explicitly pending licensed vendor/application access; see `docs/CAMERA_CLOUD_PREREQUISITES.md`.
+
 `track_firewall_log` is a React/Vite frontend and Fastify/Prisma/PostgreSQL backend. Frontend requests use the configured API base (normally proxied to backend `/api` routes).
 
 ## Repository Shape

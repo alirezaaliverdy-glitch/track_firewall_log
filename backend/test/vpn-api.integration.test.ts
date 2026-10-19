@@ -67,6 +67,17 @@ test("VPN API encrypts credentials, enforces admin/CSRF/workspace scope and requ
     assert.equal((await app.inject({ method: "DELETE", url: `/api/devices/${device.id}`, headers: owner.headers })).statusCode, 200);
     assert.equal((await app.inject({ method: "DELETE", url: `/api/vpn/${profile.id}`, headers: owner.headers })).statusCode, 200);
     assert.equal((await app.inject({ method: "DELETE", url: `/api/vpn/${second.json().id}`, headers: owner.headers })).statusCode, 200);
+    const openvpnProfile="client\ndev tun\nproto tcp-client\nremote vpn.example.test 443\nauth-user-pass\n<ca>\n-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n</ca>\n";
+    const importPath="/api/vpn/import/openvpn",importData={openvpnProfile};
+    assert.equal((await app.inject({method:"POST",url:importPath,payload:importData})).statusCode,401);
+    for(const who of [viewer,operator])assert.equal((await app.inject({method:"POST",url:importPath,headers:who.headers,payload:importData})).statusCode,403);
+    assert.equal((await app.inject({method:"POST",url:importPath,headers:{cookie:owner.headers.cookie},payload:importData})).statusCode,403);
+    const imported=await app.inject({method:"POST",url:importPath,headers:owner.headers,payload:importData});assert.equal(imported.statusCode,200);assert.equal(imported.json().transport,"tcp4-client");assert.ok(!imported.body.includes("ZmFrZQ"));
+    assert.equal((await app.inject({method:"POST",url:importPath,headers:owner.headers,payload:{openvpnProfile:openvpnProfile+"up /bin/sh\n"}})).statusCode,400);
+    const created=await app.inject({method:"POST",url:"/api/vpn",headers:owner.headers,payload:{name:"OpenVPN fixture",protocol:"openvpn",openvpnProfile,routes:["192.168.111.0/24"],username:"fixture",password:secret}});assert.equal(created.statusCode,201);const ovpn=created.json();assert.equal(ovpn.protocol,"openvpn");assert.equal(ovpn.endpointPort,443);assert.ok(!created.body.includes(openvpnProfile));assert.ok(!created.body.includes(secret));
+    const encrypted=await prisma.vpnConnection.findUniqueOrThrow({where:{id:ovpn.id}});assert.ok(decryptSecret(encrypted.configEncrypted)?.includes("BEGIN CERTIFICATE"));assert.ok(!encrypted.configEncrypted.includes("BEGIN CERTIFICATE"));
+    const edit=await app.inject({method:"PATCH",url:`/api/vpn/${ovpn.id}`,headers:owner.headers,payload:{name:"Edited OpenVPN",protocol:"openvpn",routes:ovpn.routesJson,openvpnProfile:"",password:"",keyPassphrase:""}});assert.equal(edit.statusCode,200);assert.ok(!edit.body.includes(secret));
+    assert.equal((await app.inject({method:"DELETE",url:`/api/vpn/${ovpn.id}`,headers:owner.headers})).statusCode,200);
     const audit = await prisma.auditLog.findMany({ where: { actor: { in: actors } } }); assert.ok(!JSON.stringify(audit).includes(secret)); assert.ok(audit.some(item => item.action === "vpn.connect_result"));
   } finally { await app.close(); await new Promise<void>(resolve => agent.close(() => resolve())); await prisma.auditLog.deleteMany({ where: { actor: { in: actors } } }); await prisma.appUser.deleteMany({ where: { id: { in: users } } }); await shutdownDatabase(); await rm(dir, { recursive: true, force: true }); }
 });

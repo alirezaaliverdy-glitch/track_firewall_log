@@ -1,14 +1,25 @@
 import { apiRequest } from "./apiTransport";
 export type VpnRuntime = { state: string; handshakeAt?: string; rxBytes?: number; txBytes?: number; code?: string };
-export type VpnProfile = { id: string; revision: string; name: string; protocol: "wireguard" | "l2tp"; endpoint: string; endpointPort: number; routesJson: string[]; lastErrorCode: string | null; desiredConnected?: boolean; recoveryBlocked?: boolean; retryAt?: string | null; runtime: VpnRuntime };
-export type VpnInput = { name: string; protocol: "wireguard" | "l2tp"; endpoint: string; endpointPort: number; routes: string[]; address?: string; privateKey?: string; publicKey?: string; presharedKey?: string; mtu?: number; username?: string; password?: string; ipsecPsk?: string };
-export type VpnList = { available: boolean; splitOnly: boolean; l2tpReady?: boolean; profiles: VpnProfile[] };
+export type VpnProfile = { id: string; revision: string; name: string; protocol: "wireguard" | "l2tp" | "openvpn"; endpoint: string; endpointPort: number; routesJson: string[]; lastErrorCode: string | null; desiredConnected?: boolean; recoveryBlocked?: boolean; retryAt?: string | null; runtime: VpnRuntime };
+export type VpnInput = { name: string; protocol: "wireguard" | "l2tp" | "openvpn"; endpoint: string; endpointPort: number; routes: string[]; address?: string; privateKey?: string; publicKey?: string; presharedKey?: string; mtu?: number; username?: string; password?: string; ipsecPsk?: string; openvpnProfile?: string; keyPassphrase?: string };
+export type VpnList = { available: boolean; splitOnly: boolean; l2tpReady?: boolean; openvpnReady?: boolean; profiles: VpnProfile[] };
 export async function vpnRequest<T>(path = "", method = "GET", data?: unknown): Promise<T> {
   const response = await apiRequest(`/vpn${path}`, { method, ...(data === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }) });
   const result = await response.json().catch(() => null);
   if (!response.ok) throw new Error(result?.error?.code ?? "VPN_REQUEST_FAILED"); return result;
 }
 const errors: Record<string, string> = {
+  VPN_OPENVPN_PROFILE_INVALID: "فایل OpenVPN معتبر و یکپارچه با گواهی CA وارد کن؛ فایل روی سرور اعتبارسنجی می‌شود.",
+  VPN_OPENVPN_PROFILE_SIZE: "فایل OpenVPN باید حداکثر ۱۲۸ کیلوبایت باشد.",
+  VPN_OPENVPN_OPTION_UNSUPPORTED: "این فایل گزینهٔ پشتیبانی‌نشده، اسکریپت یا ارجاع به فایل جدا دارد. نسخهٔ یکپارچهٔ .ovpn بدون افزونه و اسکریپت صادر کن.",
+  VPN_OPENVPN_EXTERNAL_FILE: "فایل باید یکپارچه باشد؛ نام کاربری و رمز را در فیلدهای برنامه وارد کن، نه مسیر فایل جداگانه.",
+  VPN_OPENVPN_TUN_REQUIRED: "فقط OpenVPN با TUN پشتیبانی می‌شود؛ TAP لایهٔ دو پشتیبانی نمی‌شود.",
+  VPN_OPENVPN_PROTOCOL_UNSUPPORTED: "فایل باید یک سرور IPv4 با UDP یا TCP-client داشته باشد.",
+  VPN_OPENVPN_CRYPTO_UNSUPPORTED: "رمزنگاری این پروفایل قدیمی یا پشتیبانی‌نشده است؛ TLS 1.2 به بالا و AES یا ChaCha20 لازم است.",
+  VPN_OPENVPN_AUTH_FAILED: "سرور OpenVPN اطلاعات ورود یا رمز کلید را نپذیرفت؛ برای جلوگیری از قفل حساب، بازیابی متوقف شده است.",
+  VPN_OPENVPN_TLS_FAILED: "هویت یا گواهی سرور OpenVPN تأیید نشد؛ CA، نام سرور و تاریخ گواهی را بررسی کن.",
+  VPN_OPENVPN_CONNECTION_FAILED: "OpenVPN اتصال معتبر برقرار نکرد؛ آدرس، پورت، فایروال و سازگاری پروفایل را بررسی کن.",
+  VPN_TUN_UNAVAILABLE: "دستگاه TUN در سرویس VPN در دسترس نیست؛ تنظیمات استقرار سرور را بررسی کن.",
   VPN_RECONNECT_PENDING: "مسیرهای خصوصی محافظت می‌شوند؛ اتصال خودکار دوباره تلاش می‌کند.",
   VPN_CONFIG_INVALID: "فایل تنظیمات معتبر WireGuard را انتخاب کن؛ باید یک Interface و یک Peer داشته باشد.",
   VPN_FILE_READ_FAILED: "فایل خوانده نشد؛ دوباره انتخاب کن یا متن تنظیمات را جای‌گذاری کن.",
@@ -65,8 +76,8 @@ export function importWireguard(text: string): Partial<VpnInput> {
   return { protocol: "wireguard", endpoint: match[1], endpointPort: Number(match[2]), address, privateKey: values["[interface].privatekey"], publicKey: values["[peer].publickey"], presharedKey: values["[peer].presharedkey"] ?? "", mtu: Number(values["[interface].mtu"] ?? 1420), routes };
 }
 
-export async function readWireguardFile(file: File) {
-  if (file.size > 16384) throw new Error("VPN_FILE_TOO_LARGE");
+export async function readWireguardFile(file: File, maxBytes = 16384) {
+  if (file.size > maxBytes) throw new Error(maxBytes > 16384 ? "VPN_OPENVPN_PROFILE_SIZE" : "VPN_FILE_TOO_LARGE");
   // FileReader also works on browsers/WebViews without Blob.text(). File data
   // stays in this form until the operator explicitly saves the connection.
   return new Promise<string>((resolve, reject) => {

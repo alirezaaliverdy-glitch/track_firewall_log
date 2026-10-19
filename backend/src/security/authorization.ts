@@ -7,6 +7,7 @@ export type RoutePermissionPolicy = {
 };
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
+  { method: "POST", path: "/api/vpn/import/openvpn", permission: "security.policy.manage" },
   { method: "POST", path: "/api/devices/:id/terminal/preview", permission: "devices.terminal" },
   { method: "POST", path: "/api/devices/:id/terminal/sessions", permission: "devices.terminal" },
   { method: "POST", path: "/api/terminal-sessions/:id/input", permission: "devices.terminal" },

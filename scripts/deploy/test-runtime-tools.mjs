@@ -30,7 +30,7 @@ test("TLS/index failures retry and use signed HTTPS Alpine alternate repositorie
   assert.ok(result.calls[2].includes("https://dl-4.alpinelinux.org/"));
   for (const call of result.calls) {
     assert.ok(!/allow-untrusted|no-check-certificate|http:\/\//.test(call));
-    assert.ok(call.includes("chromium") && call.includes("ffmpeg") && call.includes("wireguard-tools") && call.includes("xl2tpd"));
+    assert.ok(call.includes("chromium") && call.includes("ffmpeg") && call.includes("wireguard-tools") && call.includes("xl2tpd") && call.includes("openvpn"));
   }
 });
 test("unavailable repositories fail without producing an incomplete runtime", () => {

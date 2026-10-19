@@ -6,7 +6,9 @@ import { mkdir, chmod, chown, unlink, writeFile, readFile, rm, stat } from "node
 import { createHash } from "node:crypto";
 import { connect as tcpConnect } from "node:net";
 import { fileURLToPath } from "node:url";
-import { contains, overlaps, validateVpn, wireguardConfig, l2tpConfigs, ipv4, VpnError, type VpnConfig } from "./vpn-validation.js";
+import { openVpnState } from "./openvpn-management.js";
+import { openVpnConfig, parseOpenVpnProfile } from "./openvpn-profile.js";
+import { contains, overlaps, validateVpn, validateVpnEndpoint, privateRoute, wireguardConfig, l2tpConfigs, ipv4, VpnError, type VpnConfig } from "./vpn-validation.js";
 
 const execute = promisify(execFile);
 export type VpnRuntime = { id: string; state: string; protocol: string; routes: string[]; address?: string; handshakeAt?: string; rxBytes?: number; txBytes?: number; code?: string };
@@ -16,6 +18,7 @@ export async function l2tpKernelReady() {
   if (/\bppp\s+3\b/i.test(disciplines)) return true;
   try { await stat("/proc/net/pppol2tp"); return true; } catch { return false; }
 }
+export async function openVpnKernelReady() { try { return (await stat("/dev/net/tun")).isCharacterDevice(); } catch { return false; } }
 type Tunnel = { id: string; iface: string; config: VpnConfig; endpointIp: string; dir: string; processes: ChildProcess[]; failed?: string; controlSent?: boolean; diagnosticCodes: string[] };
 export class VpnAgent {
   tunnels = new Map<string, Tunnel>();
@@ -36,6 +39,7 @@ export class VpnAgent {
     if (config.address && [...this.tunnels.values()].some(t => t.config.address === config.address)) throw new VpnError("VPN_ADDRESS_CONFLICT", 409);
     if (this.tunnels.size >= 4 || config.protocol === "l2tp" && [...this.tunnels.values()].some(t => t.config.protocol === "l2tp")) throw new VpnError("VPN_CAPACITY", 409);
     if (!this.guardedRoutes.has(id ?? "") && this.guardedRoutes.size >= 4) throw new VpnError("VPN_CAPACITY", 409);
+    if (config.protocol === "openvpn" && !await openVpnKernelReady()) throw new VpnError("VPN_TUN_UNAVAILABLE", 503);
     if (config.protocol === "l2tp") { try { if (!(await stat("/dev/ppp")).isCharacterDevice()) throw new Error(); } catch { throw new VpnError("VPN_PPP_UNAVAILABLE", 503); }
       if (!await l2tpKernelReady()) throw new VpnError("VPN_PPP_KERNEL_REQUIRED", 503);
     }
@@ -45,7 +49,7 @@ export class VpnAgent {
     if (this.tunnels.has(id)) return this.status(id);
     const config = validateVpn(raw);
     const endpointIp = (await lookup(config.endpoint, { family: 4 })).address;
-    validateVpn({ ...config, endpoint: endpointIp });
+    validateVpnEndpoint(endpointIp);
     await this.preflight(config, endpointIp, id);
     const originalDefault = await this.defaults(), iface = `fv${createHash("sha256").update(id).digest("hex").slice(0, 10)}`;
     const tunnel: Tunnel = { id, iface, config, endpointIp, dir: `${this.root}/${iface}`, processes: [], diagnosticCodes: [] };
@@ -54,7 +58,7 @@ export class VpnAgent {
     this.guardedRoutes.set(id, config.routes);
     try {
       const current = await this.routes();
-      for (const range of config.routes) if (!current.some(route => route.dst === range && String(route.protocol) === "186" && ["unreachable", "7"].includes(String(route.type)) && route.metric === 42760)) await this.run("ip", ["route", "add", "unreachable", range, "metric", "42760", "proto", "186"]);
+      for (const range of config.routes) if (!current.some(route => (route.dst === range || `${route.dst}/32` === range) && String(route.protocol) === "186" && ["unreachable", "7"].includes(String(route.type)) && route.metric === 42760)) await this.run("ip", ["route", "add", "unreachable", range, "metric", "42760", "proto", "186"]);
       if (config.protocol === "wireguard") {
         await writeFile(`${tunnel.dir}/wg.conf`, wireguardConfig(config, endpointIp), { mode: 0o600 });
         try { await this.run("ip", ["link", "add", iface, "type", "wireguard"]); } catch { throw new VpnError("VPN_WIREGUARD_UNAVAILABLE", 503); }
@@ -62,7 +66,8 @@ export class VpnAgent {
         await unlink(`${tunnel.dir}/wg.conf`);
         await this.run("ip", ["address", "add", config.address!, "dev", iface, "noprefixroute"]);
         await this.run("ip", ["link", "set", "dev", iface, "mtu", String(config.mtu ?? 1420), "up"]);
-      } else await this.startL2tp(tunnel);
+      } else if (config.protocol === "openvpn") await this.startOpenVpn(tunnel);
+      else await this.startL2tp(tunnel);
       for (const range of config.routes) await this.run("ip", ["route", "add", range, "dev", iface, "metric", "50", "proto", "186"]);
       if (await this.defaults() !== originalDefault) throw new VpnError("VPN_DEFAULT_ROUTE_CHANGED", 500);
       return await this.status(id);
@@ -80,6 +85,12 @@ export class VpnAgent {
     const child = spawn(file, args, { stdio: ["ignore", "pipe", "pipe"], shell: false, windowsHide: true });
     const inspect = (chunk: Buffer) => {
       const message = String(chunk);
+      if (t.config.protocol === "openvpn") {
+        if (/AUTH_FAILED|auth-failure|private key password verification failed|bad decrypt/i.test(message)) t.failed = "VPN_OPENVPN_AUTH_FAILED";
+        else if (/VERIFY ERROR|certificate verify failed|TLS Error|certificate has expired/i.test(message)) t.failed = "VPN_OPENVPN_TLS_FAILED";
+        else if (/Options error|Unrecognized option/i.test(message)) t.failed = "VPN_OPENVPN_PROFILE_INVALID";
+        return;
+      }
       if (/unrecognized option|unknown option/i.test(message)) t.failed = "VPN_PPP_CONFIG_FAILED";
       else if (/authentication failed|CHAP authentication failure/i.test(message)) t.failed = "VPN_PPP_AUTH_FAILED";
       else if (/couldn.t open.*\/dev\/ppp|couldn.t create (?:new )?ppp unit|couldn.t set tty.*PPP/i.test(message)) t.failed = "VPN_PPP_UNAVAILABLE";
@@ -89,6 +100,31 @@ export class VpnAgent {
     child.stderr?.on("data", inspect); child.stdout?.on("data", inspect);
     child.on("error", () => { t.failed = "VPN_DAEMON_FAILED"; });
     t.processes.push(child); return child;
+  }
+  private async startOpenVpn(t: Tunnel) {
+    const profile = parseOpenVpnProfile(t.config.openvpnProfile);
+    if (profile.authUserPass) await writeFile(`${t.dir}/auth.txt`, `${t.config.username}\n${t.config.password}\n`, {mode:0o600});
+    if (t.config.keyPassphrase) await writeFile(`${t.dir}/pass.txt`, `${t.config.keyPassphrase}\n`, {mode:0o600});
+    await writeFile(`${t.dir}/client.conf`, openVpnConfig(profile, t.endpointIp, t.iface, t.dir, !!t.config.keyPassphrase), {mode:0o600});
+    await this.run("ip", ["tuntap", "add", "dev", t.iface, "mode", "tun"]);
+    const child = this.daemon(t,"openvpn",["--config",`${t.dir}/client.conf`]);
+    for (let i=0;i<80;i++) {
+      if (t.failed) throw new VpnError(t.failed,502);
+      if (child.exitCode!==null) throw new VpnError("VPN_OPENVPN_CONNECTION_FAILED",502);
+      const state=await openVpnState(`${t.dir}/management.sock`).catch(()=>null);
+      if (state?.connected && state.address) {
+        const address=state.address; privateRoute(`${address}/32`);
+        const routes=await this.routes();
+        if (routes.some(r=>r.dev!==t.iface&&r.dst&&r.dst!=="default"&&contains(r.dst.includes("/")?r.dst:`${r.dst}/32`,address))) throw new VpnError("VPN_ADDRESS_CONFLICT",409);
+        if ([...this.tunnels.values()].some(other=>other!==t&&other.config.address===`${address}/32`)) throw new VpnError("VPN_ADDRESS_CONFLICT",409);
+        // OpenVPN is forbidden to configure routes/addresses. Only this /32 and selected ranges are installed.
+        await this.run("ip",["address","add",`${address}/32`,"dev",t.iface,"noprefixroute"]);
+        await this.run("ip",["link","set","dev",t.iface,"mtu",String(profile.mtu),"up"]);
+        t.config.address=`${address}/32`; return;
+      }
+      await new Promise(resolve=>setTimeout(resolve,500));
+    }
+    throw new VpnError("VPN_OPENVPN_CONNECTION_FAILED",502);
   }
   private async startL2tp(t: Tunnel) {
     const configs = l2tpConfigs(t.config, t.endpointIp, t.iface, t.dir);
@@ -129,6 +165,11 @@ export class VpnAgent {
         const seconds = Number((await this.run("wg", ["show", t.iface, "latest-handshakes"])).trim().split(/\s+/)[1]);
         if (seconds > 0) { handshakeAt = new Date(seconds * 1000).toISOString(); state = Date.now() - seconds * 1000 < 180000 ? "connected" : "stale"; }
         const transfer = (await this.run("wg", ["show", t.iface, "transfer"])).trim().split(/\s+/); rxBytes = Number(transfer[1]) || 0; txBytes = Number(transfer[2]) || 0;
+      } else if (t.config.protocol === "openvpn") {
+        const management=await openVpnState(`${t.dir}/management.sock`);
+        const address=JSON.parse(await this.run("ip",["-j","-4","address","show","dev",t.iface]));
+        state=management.connected && `${management.address}/32`===t.config.address && address[0]?.addr_info?.some((a:{local:string})=>a.local===management.address) && t.processes.every(p=>p.exitCode===null)?"connected":"error";
+        rxBytes=management.rxBytes;txBytes=management.txBytes;
       } else {
         const address = JSON.parse(await this.run("ip", ["-j", "-4", "address", "show", "dev", t.iface]));
         const sa = await this.run("ipsec", ["status", t.iface]);
@@ -143,9 +184,9 @@ export class VpnAgent {
   async recover(id: string, raw: Record<string, unknown>) {
     const config = validateVpn(raw), t = this.tunnels.get(id);
     if (!t) return this.connect(id, config as unknown as Record<string, unknown>, true);
-    if (JSON.stringify(config) !== JSON.stringify(t.config)) throw new VpnError("VPN_PROFILE_CHANGED", 409);
+    if (JSON.stringify(config) !== JSON.stringify({...t.config,...(config.protocol==="openvpn"?{address:undefined}:{})})) throw new VpnError("VPN_PROFILE_CHANGED", 409);
     const status = await this.status(id); if (status.state === "connected") return status;
-    if (status.code === "VPN_PPP_AUTH_FAILED") throw new VpnError(status.code, 401);
+    if (["VPN_PPP_AUTH_FAILED","VPN_OPENVPN_AUTH_FAILED"].includes(status.code??"")) throw new VpnError(status.code!, 401);
     if (config.protocol === "wireguard" && ["waiting", "stale"].includes(status.state)) {
       // WireGuard recovers transport loss itself. Refresh DNS without destroying the live interface/keys/routes.
       const endpointIp = (await lookup(config.endpoint, { family: 4 })).address;
@@ -165,7 +206,10 @@ export class VpnAgent {
       if (!preserveGuards) { for (const range of this.guardedRoutes.get(id) ?? []) await this.run("ip", ["route", "del", "unreachable", range, "metric", "42760", "proto", "186"]).catch(() => ""); this.guardedRoutes.delete(id); }
       return { id, state: "disconnected" };
     }
-    for (const child of t.processes) child.kill("SIGTERM");
+    for (const child of t.processes) {
+      child.kill("SIGTERM");
+      await new Promise<void>(resolve=>{if(child.exitCode!==null)return resolve();const timer=setTimeout(()=>{child.kill("SIGKILL");resolve();},1500);child.once("exit",()=>{clearTimeout(timer);resolve();});});
+    }
     if (t.config.protocol === "l2tp") {
       await this.run("ipsec", ["down", t.iface]).catch(() => "");
       await this.run("ipsec", ["stop"]).catch(() => "");
@@ -203,7 +247,7 @@ export class VpnAgent {
   }
 }
 async function body(request: IncomingMessage) {
-  let input = ""; for await (const chunk of request) { input += chunk; if (input.length > 16384) throw new VpnError("VPN_REQUEST_TOO_LARGE"); }
+  let input = ""; for await (const chunk of request) { input += chunk; if (Buffer.byteLength(input) > 262144) throw new VpnError("VPN_REQUEST_TOO_LARGE"); }
   return JSON.parse(input || "{}");
 }
 export async function startVpnAgent() {
@@ -221,7 +265,7 @@ export async function startVpnAgent() {
     const task = async () => {
       try {
         const data = await body(request); let result: unknown;
-        if (request.url === "/health") result = { available: true, splitOnly: true, protocols: ["wireguard", "l2tp"], l2tpReady: await l2tpKernelReady() };
+        if (request.url === "/health") result = { available: true, splitOnly: true, protocols: ["wireguard", "l2tp", "openvpn"], l2tpReady: await l2tpKernelReady(), openvpnReady: await openVpnKernelReady() };
         else if (request.url === "/status") result = await agent.status(String(data.id));
         else if (request.url === "/connect") result = await agent.connect(String(data.id), data.config);
         else if (request.url === "/recover") result = await agent.recover(String(data.id), data.config);

@@ -5,7 +5,7 @@ export class VpnRecoverySchedule {
   failed(id: string, code: string | undefined, now = Date.now()) {
     if (!this.attempts.has(id) && this.attempts.size >= 256) this.attempts.delete(this.attempts.keys().next().value!);
     const count = (this.attempts.get(id)?.count ?? 0) + 1;
-    const blocked = ["VPN_PPP_AUTH_FAILED", "VPN_CREDENTIAL_UNAVAILABLE", "VPN_CREDENTIAL_INVALID", "VPN_KEY_INVALID"].includes(code ?? "");
+    const blocked = ["VPN_PPP_AUTH_FAILED", "VPN_OPENVPN_AUTH_FAILED", "VPN_CREDENTIAL_UNAVAILABLE", "VPN_CREDENTIAL_INVALID", "VPN_KEY_INVALID"].includes(code ?? "");
     const nextAt = now + Math.min(300000, 5000 * 2 ** Math.min(count - 1, 6));
     this.attempts.set(id, { count, nextAt, blocked });
   }

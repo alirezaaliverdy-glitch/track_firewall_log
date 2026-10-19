@@ -162,6 +162,7 @@ services:
       firewall-api:
         condition: service_healthy
     cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
     volumes:
       - firewall_vpn_control:/run/firewall-vpn
     tmpfs: ["/run/vpn-state:mode=0700"]

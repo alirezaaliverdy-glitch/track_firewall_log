@@ -62,10 +62,10 @@ async function assertAssetRoutes(profileId: string, routes: string[]) {
 }
 export async function listVpn(actor: VpnActor) {
   const profiles = await prisma.vpnConnection.findMany({ where: { ownerId: owner(actor) }, orderBy: { createdAt: "desc" }, take: 32 });
-  let available = false, l2tpReady: boolean | undefined;
-  try { const health = await vpnAgentCall<{ available: boolean; l2tpReady?: boolean }>("/health"); available = health.available; l2tpReady = health.l2tpReady; } catch { /* No privileged agent is a visible setup state, not a working VPN. */ }
+  let available = false, l2tpReady: boolean | undefined, openvpnReady: boolean | undefined;
+  try { const health = await vpnAgentCall<{ available: boolean; l2tpReady?: boolean; openvpnReady?: boolean }>("/health"); available = health.available; l2tpReady = health.l2tpReady; openvpnReady = health.openvpnReady; } catch { /* No privileged agent is a visible setup state, not a working VPN. */ }
   const items = await Promise.all(profiles.map(async profile => ({ ...safe(profile), runtime: available ? await vpnAgentCall<VpnRuntime>("/status", { id: profile.id }).catch(() => ({ id: profile.id, state: "unknown" })) : { id: profile.id, state: "unavailable" } })));
-  return { available, splitOnly: true, l2tpReady, profiles: items };
+  return { available, splitOnly: true, l2tpReady, openvpnReady, profiles: items };
 }
 export async function saveVpn(input: Record<string, unknown>, actor: VpnActor, id?: string) {
   admin(actor);
@@ -83,7 +83,7 @@ export async function saveVpn(input: Record<string, unknown>, actor: VpnActor, i
   let old: Record<string, unknown> = {};
   if (previous) { try { old = JSON.parse(decryptSecret(previous.configEncrypted) ?? "{}"); } catch { throw new VpnError("VPN_CREDENTIAL_UNAVAILABLE", 422); } }
   const merged = { ...old, ...input };
-  for (const field of ["privateKey", "presharedKey", "password", "ipsecPsk"]) if (previous && input[field] === "") merged[field] = old[field];
+  for (const field of ["privateKey", "presharedKey", "password", "ipsecPsk", "openvpnProfile", "keyPassphrase"]) if (previous && input[field] === "") merged[field] = old[field];
   const config = validateVpn(merged);
   if (previous) {
     const bindings = await prisma.vpnDeviceBinding.findMany({ where: { vpnConnectionId: previous.id }, select: { deviceId: true } });
@@ -207,7 +207,8 @@ export async function reconcileVpnConnections(now = Date.now()) {
         continue;
       }
       if (!recovery.due(profile.id, now)) continue;
-      if (runtime.code === "VPN_PPP_AUTH_FAILED" || profile.lastErrorCode === "VPN_PPP_AUTH_FAILED") throw new VpnError("VPN_PPP_AUTH_FAILED", 401);
+      const authFailure = [runtime.code, profile.lastErrorCode].find(code=>["VPN_PPP_AUTH_FAILED","VPN_OPENVPN_AUTH_FAILED"].includes(code??""));
+      if (authFailure) throw new VpnError(authFailure,401);
       const config = validateVpn(raw); await assertAssetRoutes(profile.id, config.routes);
       const current = await prisma.vpnConnection.findUnique({ where: { id: profile.id } });
       if (!current || stored(current).connectionIntent !== "connected") continue;

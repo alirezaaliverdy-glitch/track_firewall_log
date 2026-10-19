@@ -1,13 +1,15 @@
 import { isIP } from "node:net";
+import { parseOpenVpnProfile, OpenVpnProfileError } from "./openvpn-profile.js";
 
 export class VpnError extends Error {
   constructor(public code: string, public statusCode = 400) { super(code); }
 }
 export type VpnConfig = {
-  protocol: "wireguard" | "l2tp"; endpoint: string; endpointPort: number; routes: string[];
+  protocol: "wireguard" | "l2tp" | "openvpn"; endpoint: string; endpointPort: number; routes: string[];
   address?: string; privateKey?: string; publicKey?: string; presharedKey?: string;
   mtu?: number;
   username?: string; password?: string; ipsecPsk?: string;
+  openvpnProfile?: string; keyPassphrase?: string;
 };
 export function ipv4(value: string) {
   if (isIP(value) !== 4) throw new VpnError("VPN_IP_INVALID");
@@ -38,12 +40,20 @@ function secret(value: unknown) {
   if (typeof value !== "string" || !value.length || value.length > 256 || /[\x00-\x1f\x7f]/.test(value)) throw new VpnError("VPN_CREDENTIAL_INVALID");
   return value;
 }
-export function validateVpn(input: Record<string, unknown>): VpnConfig {
-  if (!["wireguard", "l2tp"].includes(String(input.protocol))) throw new VpnError("VPN_PROTOCOL_INVALID");
-  const endpoint = String(input.endpoint ?? "").trim();
+export function validateVpnEndpoint(endpoint: string) {
   if (endpoint.length > 253 || !/^(?:[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?)$/.test(endpoint) || endpoint === "localhost" || isIP(endpoint) === 6) throw new VpnError("VPN_ENDPOINT_INVALID");
   if (/^[\d.]+$/.test(endpoint) && isIP(endpoint) !== 4) throw new VpnError("VPN_ENDPOINT_INVALID");
   if (isIP(endpoint) === 4 && (endpoint.startsWith("127.") || endpoint.startsWith("0.") || ipv4(endpoint) >= ipv4("224.0.0.0"))) throw new VpnError("VPN_ENDPOINT_INVALID");
+}
+export function validateVpn(input: Record<string, unknown>): VpnConfig {
+  if (!["wireguard", "l2tp", "openvpn"].includes(String(input.protocol))) throw new VpnError("VPN_PROTOCOL_INVALID");
+  let openvpn: ReturnType<typeof parseOpenVpnProfile> | undefined;
+  if (input.protocol === "openvpn") {
+    try { openvpn = parseOpenVpnProfile(input.openvpnProfile); } catch (error) { throw new VpnError(error instanceof OpenVpnProfileError ? error.code : "VPN_OPENVPN_PROFILE_INVALID"); }
+    input = { ...input, endpoint: openvpn.endpoint, endpointPort: openvpn.endpointPort };
+  }
+  const endpoint = String(input.endpoint ?? "").trim();
+  validateVpnEndpoint(endpoint);
   const rawRoutes = Array.isArray(input.routes) ? input.routes : [];
   if (!rawRoutes.length || rawRoutes.length > 8) throw new VpnError("VPN_ROUTES_INVALID");
   const routes = [...new Set(rawRoutes.map(value => privateRoute(String(value).trim())))];
@@ -61,8 +71,12 @@ export function validateVpn(input: Record<string, unknown>): VpnConfig {
     if (parsed.host.endsWith(".0") || parsed.host.endsWith(".255")) throw new VpnError("VPN_ADDRESS_INVALID");
     config.address = `${parsed.host}/32`; // No implicit subnet route from the tunnel's address.
     config.privateKey = key(input.privateKey); config.publicKey = key(input.publicKey); config.presharedKey = key(input.presharedKey, true);
-  } else {
+  } else if (protocol === "l2tp") {
     config.username = secret(input.username); config.password = secret(input.password); config.ipsecPsk = secret(input.ipsecPsk);
+  } else {
+    config.openvpnProfile = input.openvpnProfile as string;
+    if (openvpn!.authUserPass) { config.username = secret(input.username); config.password = secret(input.password); }
+    if (input.keyPassphrase) config.keyPassphrase = secret(input.keyPassphrase);
   }
   return config;
 }

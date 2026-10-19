@@ -97,3 +97,13 @@ test("stale WireGuard refreshes the endpoint without destroying interface/defaul
     await agent.disconnect("recovery-fixture"); assert.equal((await agent.status("recovery-fixture")).state, "disconnected");
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("a retained host /32 guard rendered without prefix is not inserted twice during recovery",async()=>{
+ const root=await mkdtemp(join(tmpdir(),"vpn-host-guard-"));let guards=0;
+ const agent=new VpnAgent(root,async(file,args)=>{
+  if(args.includes("main"))return JSON.stringify([{dst:"192.168.18.50",protocol:186,type:7,metric:42760}]);
+  if(file==="ip"&&args[0]==="route"&&args[1]==="add"&&args.includes("unreachable")){guards++;throw new Error("duplicate guard");}
+  if(file==="wg"&&args.includes("latest-handshakes"))return `fixture\t${Math.floor(Date.now()/1000)}`;return "";
+ });
+ try{assert.equal((await agent.recover("host-guard-fixture",{...wg(),routes:["192.168.18.50/32"]})).state,"connected");assert.equal(guards,0);await agent.disconnect("host-guard-fixture");}finally{await rm(root,{recursive:true,force:true});}
+});

@@ -11,6 +11,7 @@ const INLINE_SECRET = /\b(password|passwd|passphrase|psksecret|psk|api[_-]?key|t
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 
 export const sensitiveLogPaths = [
+  "req.body.openvpnProfile", "body.openvpnProfile", "req.body.keyPassphrase", "body.keyPassphrase",
   "req.body.data",
   "body.data",
   "req.body.previewId",
@@ -59,6 +60,7 @@ export function redactText(value: string) {
 }
 
 function shouldRedactKey(key: string) {
+  if (key === "openvpnProfile") return true;
   const normalized = key.replace(/([a-z])([A-Z])/g, "$1_$2");
   return SENSITIVE_KEY.test(normalized) && !SAFE_REFERENCE_KEY.test(key);
 }

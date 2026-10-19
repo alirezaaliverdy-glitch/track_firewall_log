@@ -1,5 +1,11 @@
 # Architecture Map
 
+## OpenVPN split-route adapter
+
+`Admin .ovpn import -> allowlisted data parser -> existing encrypted VPN profile -> explicit connect -> persistent supervisor -> API-network helper/OpenVPN -> measured Unix management state -> manual /32 + selected private routes -> audit/result`
+
+Uploaded options never run verbatim. TUN is mapped only to the existing NET_ADMIN helper; default routes/DNS and arbitrary hooks are excluded. Cloud ID viewing remains a separate licensed-vendor integration prerequisite, not a direct DVRIP or VPN capability. See `VPN_SETUP.md` and `CAMERA_CLOUD_PREREQUISITES.md`.
+
 ## Core Flows
 
 `Persian Catalog or AI fallback -> validated ActionPlan -> Preview -> User Confirm -> PolicyGuard -> registered Connector -> Audit/Result`

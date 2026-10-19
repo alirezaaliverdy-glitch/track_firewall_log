@@ -17,7 +17,7 @@ export function VpnAccessField({ value, onChange, host, isFa = true }: { value: 
     <label htmlFor="vpn-access-select">{isFa ? "مسیر دسترسی" : "Access route"}</label>
     <select id="vpn-access-select" value={value} onChange={event => onChange(event.target.value)}>
       <option value="">{isFa ? "شبکهٔ مستقیم" : "Direct network"}</option>
-      {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.protocol === "wireguard" ? "WireGuard" : "L2TP"} · {profile.routesJson.join(", ")}</option>)}
+      {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.protocol === "wireguard" ? "WireGuard" : profile.protocol === "openvpn" ? "OpenVPN" : "L2TP"} · {profile.routesJson.join(", ")}</option>)}
     </select>
     {value && !selected ? <small role="alert">{isFa ? "این اتصال در دسترس نیست؛ فهرست VPN را به‌روز کن." : "This VPN is unavailable. Reload the VPN list."}</small>
       : unavailable ? <small>{isFa ? "VPN قطع است؛ پیش از تست یا مشاهده، آن را وصل کن." : "Connect this VPN before testing or viewing."}</small>
