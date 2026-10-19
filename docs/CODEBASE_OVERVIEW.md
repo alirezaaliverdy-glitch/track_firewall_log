@@ -23,6 +23,12 @@
 
 ## Backend Areas
 
+Device CLI: `backend/src/terminal/` and `routes/terminals.ts` provide admin-only,
+identity-checked, bounded interactive SSH sessions. The frontend lives in
+`src/features/terminal/`, entered from device details. Both dark/light terminal
+canvases follow the existing appearance setting. This uses a dedicated human
+session template and admission check, not raw AI execution. See `DEVICE_CLI.md`.
+
 | Area | Main files | API | Current state |
 |---|---|---|---|
 | Product state | `product-state/*`, `routes/product-state.ts` | `/api/product-state*` | Milestone 19A implemented; navigation fail-closed |

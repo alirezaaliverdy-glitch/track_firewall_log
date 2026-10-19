@@ -7,6 +7,11 @@ export type RoutePermissionPolicy = {
 };
 
 export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
+  { method: "POST", path: "/api/devices/:id/terminal/preview", permission: "devices.terminal" },
+  { method: "POST", path: "/api/devices/:id/terminal/sessions", permission: "devices.terminal" },
+  { method: "POST", path: "/api/terminal-sessions/:id/input", permission: "devices.terminal" },
+  { method: "POST", path: "/api/terminal-sessions/:id/resize", permission: "devices.terminal" },
+  { method: "POST", path: "/api/terminal-sessions/:id/close", permission: "devices.terminal" },
   { method: "POST", path: "/api/community/threads", permission: "community.participate" },
   { method: "POST", path: "/api/community/threads/:id/messages", permission: "community.participate" },
   { method: "POST", path: "/api/community/threads/:id/messages/files", permission: "community.participate" },

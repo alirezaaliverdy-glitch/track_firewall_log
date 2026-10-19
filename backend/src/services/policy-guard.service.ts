@@ -14,6 +14,15 @@ import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParame
 import { customPlanFromParameters, validateCustomCommandPlan } from "../ai/custom-action-plan.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
+
+/** Admission for the explicitly human-operated SSH channel. Automated/AI
+ * commands still use the existing ActionPlan policy and connector registry. */
+export function interactiveTerminalPolicy(input: { role: string; deviceId: string; source: string; template: string; implemented: boolean; intent: unknown; confirmed: unknown }) {
+  if (input.role !== "admin") return "TERMINAL_ADMIN_REQUIRED";
+  if (!input.deviceId || input.source !== "human_interactive" || input.template !== "interactive_ssh_session" || !input.implemented) return "TERMINAL_TEMPLATE_UNSUPPORTED";
+  if (input.intent !== "execute" || input.confirmed !== true) return "TERMINAL_CONFIRM_REQUIRED";
+  return null;
+}
 const WARNING_PORTS = new Set([22, 22022, 80, 443, 8080, 4000, 4050, 50, 5173]);
 const SHELL_KEYS = new Set(["command", "cmd", "shell", "script", "exec", "args"]);
 const DEVICE_REQUIRED_ACTIONS = new Set<ActionType>([

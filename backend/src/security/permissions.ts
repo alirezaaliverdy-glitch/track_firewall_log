@@ -1,6 +1,7 @@
 export type Role = "admin" | "operator" | "viewer";
 
 export type Permission =
+  | "devices.terminal"
   | "community.participate"
   | "community.moderate"
   | "assistant.chat"
@@ -21,6 +22,7 @@ export type Permission =
   | "auth.session.manage";
 
 export const ALL_PERMISSIONS: readonly Permission[] = [
+  "devices.terminal",
   "community.participate",
   "community.moderate",
   "assistant.chat",

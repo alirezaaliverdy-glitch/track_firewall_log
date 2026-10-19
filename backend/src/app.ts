@@ -10,6 +10,7 @@ import { loggerConfig } from "./lib/logger.js";
 import { analysisRoutes } from "./routes/analysis.js";
 import { aiRoutes } from "./routes/ai.js";
 import { deviceRoutes } from "./routes/devices.js";
+import { terminalRoutes } from "./routes/terminals.js";
 import { connectorPlanRoutes } from "./routes/connector-plans.js";
 import { collectorRoutes } from "./routes/collectors.js";
 import { credentialRoutes } from "./routes/credentials.js";
@@ -131,6 +132,7 @@ export async function buildApp(options: { authRequired?: boolean } = {}) {
   await app.register(analysisRoutes);
   await app.register(aiRoutes);
   await app.register(deviceRoutes);
+  await app.register(terminalRoutes);
   await app.register(cameraRoutes);
   await app.register(vpnRoutes);
   await app.register(communityRoutes);

@@ -22,6 +22,14 @@ Task 17.2C extends guided build-plan behavior: after valid wizard completion, pa
 
 ## Backend Map
 
+Human device CLI: `routes/terminals.ts` + `terminal/terminal.service.ts` plan a
+single-use, identity-bound admin admission through PolicyGuard, then open a
+dedicated `terminal-runtime.ts` SSH PTY. Authenticated HTTP output polling and
+sequenced input POSTs bind it to the same login, owner and device revision.
+Metadata-only session audit is separate from automatic ActionPlan results;
+AI/catalog execution behavior is unchanged. `features/terminal/` exposes it
+from the device header. See `docs/DEVICE_CLI.md` for trust, bounds and lifecycle.
+
 Application VPN: `routes/vpn.ts` and `vpn/vpn.service.ts` authenticate workspace/admin profile operations, encrypt secrets and audit explicit confirmation. `vpn-agent.ts` runs as a separate root/NET_ADMIN helper in the API network namespace, with a UID-restricted Unix socket; it installs exact private routes and verifies default routing. The main API retains its non-root user. CameraDevice stores a nullable VPN relation and device registration uses a separate VpnDeviceBinding table to avoid ALTER on legacy Device ownership. The React VPN page lives in Network Lab and VpnAccessField is shared by device onboarding and camera forms. Production PPP mapping is an optional Compose override; WireGuard has real protocol tests, while local L2TP PPP remains host-driver limited. See `VPN_SETUP.md`.
 
 Camera workspace: `routes/cameras.ts` authenticates workspace-scoped inventory, discovery, media and controls; `cameras/camera-network.ts` bounds private IPv4 and pins device-returned URLs; `camera-onvif.ts` handles SOAP discovery/identity/profiles/presets; `camera-media.ts` performs bounded server-only FFmpeg decoding. Camera connection secrets/media URLs use the existing encryption service. `camera.service.ts` persists `CameraDevice`/`CameraActionPlan` and sanitized audit; `camera-policy.ts` requires a fresh registered preview and one explicit confirmation before real ONVIF preset/reboot invocation. It does not change the existing vendor ActionPlan/PolicyGuard path. Frontend `src/features/cameras/` renders inventory, source-grouped NVR channels and authenticated fetch-based views. See `CAMERA_SETUP.md` for operational limits and legacy migration prerequisites.

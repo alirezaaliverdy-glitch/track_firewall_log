@@ -1,0 +1,61 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { randomBytes, randomUUID, generateKeyPairSync } from "node:crypto";
+import { createServer } from "node:http";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import ssh2, { type Connection } from "ssh2";
+const { Server } = ssh2;
+
+test("terminal API binds PTYs to administrator, workspace, login session, preview and trusted SSH identity",async()=>{
+  process.env.CREDENTIAL_ENCRYPTION_KEY=randomBytes(32).toString("hex");process.env.AUTH_SESSION_SECRET=randomBytes(32).toString("hex");
+  const dir=await mkdtemp(join(tmpdir(),"terminal-api-"));process.env.VPN_CONTROL_SOCKET=join(dir,"vpn.sock");
+  const agent=createServer((_request,response)=>{response.end(JSON.stringify({throughTunnel:false}));});await new Promise<void>(resolve=>agent.listen(process.env.VPN_CONTROL_SOCKET,resolve));
+  const {prisma,shutdownDatabase}=await import("../src/db/prisma.js"),{buildApp}=await import("../src/app.js"),{createSession}=await import("../src/services/auth.service.js"),{encryptSecret}=await import("../src/services/credential-crypto.service.js");
+  const service=await import("../src/terminal/terminal.service.js");
+  const password=randomBytes(18).toString("hex"),key=generateKeyPairSync("rsa",{modulusLength:2048}).privateKey.export({type:"pkcs1",format:"pem"}),clients=new Set<Connection>();let commands=0;
+  const server=new Server({hostKeys:[key]},client=>{clients.add(client);client.on("error",()=>{});client.on("close",()=>clients.delete(client));client.on("authentication",ctx=>{if(ctx.method==="password"&&ctx.password===password)ctx.accept();else ctx.reject();});client.on("ready",()=>client.on("session",accept=>{const session=accept();session.on("pty",accept=>accept?.());session.on("window-change",accept=>accept?.());session.on("shell",accept=>{const channel=accept();channel.write("fixture $ ");channel.on("data",()=>{commands++;channel.write("fixture-result\r\nfixture $ ");});});}));});
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));const port=(server.address() as {port:number}).port;
+  const app=await buildApp(),tag=`terminal-${randomUUID()}`,ids:string[]=[];let deviceId="",credentialId="";
+  async function identity(role:"admin"|"viewer"|"operator",ownerId?:string){const user=await prisma.appUser.create({data:{username:`${tag}-${ids.length}`,displayName:"Fixture",passwordHash:"not-a-login",role,workspaceOwnerId:ownerId,allowedSections:["assets"]}});ids.push(user.id);const session=await createSession(user.id,{});const headers={cookie:`firewall_session=${session.token}`,"x-csrf-token":""};headers["x-csrf-token"]=(await app.inject({url:"/api/auth/csrf",headers})).json().csrfToken;return {user,session,headers};}
+  try{
+    const owner=await identity("admin"),other=await identity("admin"),viewer=await identity("viewer",owner.user.id),operator=await identity("operator",owner.user.id);
+    const company=await prisma.company.create({data:{ownerId:owner.user.id,code:tag,name:tag}});
+    const cred=await prisma.deviceCredential.create({data:{name:tag,type:"password",username:"fixture",secretEncrypted:encryptSecret(password)}});credentialId=cred.id;
+    const device=await prisma.device.create({data:{name:tag,vendor:"linux",type:"linux_edge",host:"127.0.0.1",managementPort:port,protocol:"ssh",environment:"lab",companyId:company.id,credentialId:cred.id,capabilities:{}}});deviceId=device.id;
+    const base=`/api/devices/${device.id}/terminal`,send=(who:typeof owner,method:"GET"|"POST",url:string,payload?:unknown)=>app.inject({method,url,headers:who.headers,...(payload===undefined?{}:{payload})});
+    assert.equal((await app.inject({url:base})).statusCode,401);
+    assert.equal((await send(viewer,"GET",base)).statusCode,403);assert.equal((await send(operator,"GET",base)).statusCode,403);assert.equal((await send(other,"GET",base)).statusCode,404);
+    assert.equal((await app.inject({method:"POST",url:base+"/preview",headers:{cookie:owner.headers.cookie},payload:{}})).statusCode,403);
+    const meta=await send(owner,"GET",base);assert.equal(meta.statusCode,200);assert.equal(meta.body.includes(password),false);
+    const preview=await send(owner,"POST",base+"/preview",{});assert.equal(preview.statusCode,200);assert.equal(preview.json().firstTrust,true);
+    const input={previewId:preview.json().previewId,intent:"execute",confirmed:true,cols:80,rows:24};
+    assert.equal((await send(owner,"POST",base+"/sessions",{...input,intent:"preview"})).statusCode,400);assert.equal(commands,0);
+    const opened=await send(owner,"POST",base+"/sessions",input);assert.equal(opened.statusCode,201,"a real PTY opens after one confirmed admission");const id=opened.json().id,path=`/api/terminal-sessions/${id}`;
+    assert.equal((await send(owner,"POST",base+"/sessions",input)).statusCode,409,"preview cannot be reused");
+    assert.equal((await send(other,"GET",path)).statusCode,404);
+    const second=await createSession(owner.user.id,{});assert.equal((await app.inject({url:path,headers:{cookie:`firewall_session=${second.token}`}})).statusCode,404,"a second login cannot attach to a prior terminal");
+    assert.equal((await send(viewer,"POST",path+"/input",{sequence:1,data:"pwd\r"})).statusCode,403);
+    assert.equal((await send(owner,"POST",path+"/input",{sequence:1,data:"pwd\r"})).statusCode,200);
+    assert.equal((await send(owner,"POST",path+"/input",{sequence:1,data:"pwd\r"})).statusCode,409);
+    for(let i=0;i<50&&commands===0;i++)await new Promise(resolve=>setTimeout(resolve,20));assert.equal(commands,1);
+    const output=await send(owner,"GET",path+"?cursor=0");assert.equal(output.statusCode,200);assert.equal(output.headers["cache-control"],"no-store");
+    assert.equal((await send(owner,"POST",path+"/resize",{cols:100,rows:30})).statusCode,200);
+    assert.equal((await send(owner,"POST",path+"/close",{})).statusCode,200);assert.equal((await send(owner,"GET",path)).json().state,"closed");
+    const pinned=(await send(owner,"GET",base)).json().trustedFingerprint;assert.match(pinned,/^SHA256:/);
+    const actor={user:{id:owner.user.id,username:tag,displayName:"Fixture",role:"admin" as const,allowedSections:["assets"],scopeOwnerId:owner.user.id},token:owner.session.token};
+    const next=await service.prepareTerminal(device.id,actor);assert.equal(next.firstTrust,false);
+    await prisma.device.update({where:{id:device.id},data:{host:"192.0.2.250"}});
+    await assert.rejects(service.openTerminal(device.id,actor,{...input,previewId:next.previewId}),/TERMINAL_PREVIEW_EXPIRED/);
+    await prisma.device.update({where:{id:device.id},data:{host:"127.0.0.1"}});
+    const livePreview=await service.prepareTerminal(device.id,actor),liveSession=await service.openTerminal(device.id,actor,{...input,previewId:livePreview.previewId});
+    await prisma.device.update({where:{id:device.id},data:{managementPort:port===65535?22:port+1}});
+    await assert.rejects(service.inputTerminal(liveSession.id,actor,1,"must-not-run\r"),/TERMINAL_CONFIGURATION_CHANGED/);assert.equal(commands,1,"configuration revocation closes the PTY before accepting input");
+    await prisma.device.update({where:{id:device.id},data:{managementPort:port}});
+    await prisma.device.update({where:{id:device.id},data:{host:"127.0.0.1",capabilities:{terminalSshFingerprint:"SHA256:not-the-device"}}});
+    await assert.rejects(service.prepareTerminal(device.id,actor),/SSH_HOST_KEY_MISMATCH/);
+    await prisma.device.update({where:{id:device.id},data:{protocol:"api"}});assert.equal((await send(owner,"GET",base)).json().supported,false);
+    const audit=await prisma.auditLog.findMany({where:{deviceId:device.id,action:{startsWith:"terminal."}}});assert.ok(audit.some(a=>a.action==="terminal.session_connected"));assert.equal(JSON.stringify(audit).includes(password),false);assert.equal(JSON.stringify(audit).includes("pwd"),false);assert.equal(JSON.stringify(audit).includes(owner.session.token),false);
+  }finally{await app.close();for(const client of clients)client.end();await new Promise<void>(resolve=>server.close(()=>resolve()));if(deviceId)await prisma.auditLog.deleteMany({where:{deviceId}});await prisma.appUser.deleteMany({where:{id:{in:ids}}});if(credentialId)await prisma.deviceCredential.deleteMany({where:{id:credentialId}});await shutdownDatabase();await new Promise<void>(resolve=>agent.close(()=>resolve()));await rm(dir,{recursive:true,force:true});}
+});

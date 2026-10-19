@@ -17,6 +17,7 @@ const CommunityPage = lazy(() => import("@/features/community/CommunityPage"));
 const AssetsOverviewPage = lazy(() => import("@/features/assets/pages/AssetsOverviewPage"));
 const AssetListPage = lazy(() => import("@/features/assets/pages/AssetListPage"));
 const AssetDetailPage = lazy(() => import("@/features/assets/pages/AssetDevicePage"));
+const DeviceTerminalPage = lazy(() => import("@/features/terminal/DeviceTerminalPage"));
 const AssetSyncPage = lazy(() => import("@/features/assets/pages/AssetSyncPage"));
 const PortTopologyPage = lazy(() => import("@/features/assets/pages/PortTopologyPage"));
 const CamerasPage = lazy(() => import("@/features/cameras/CamerasPage"));
@@ -47,6 +48,7 @@ const LocalMobileRuntimePage = lazy(() => import("@/features/mobile-local/pages/
 const planned = (title: string, description?: string): ComponentType<RouteComponentProps> => () => <PlannedState title={title} description={description} />;
 
 export const appRoutes: AppRoute[] = [
+  { path:"/assets/devices/:deviceId/terminal",featureKey:"assets.device_terminal",labelFa:"کنسول CLI تجهیز",labelEn:"Device CLI",group:"assets",component:DeviceTerminalPage },
   { path: "/community", featureKey: "community", labelFa: "گفت‌وگو و پشتیبانی", labelEn: "Community & support", group: "community", component: CommunityPage },
   { path: "/tools/vpn", featureKey: "tools.vpn", labelFa: "اتصال VPN", labelEn: "VPN connections", group: "tools", component: VpnPage },
   { path: "/backups", featureKey: "backups.devices", labelFa: "بک‌آپ", labelEn: "Backups", group: "backups", component: BackupsPage },

@@ -11,6 +11,9 @@ const INLINE_SECRET = /\b(password|passwd|passphrase|psksecret|psk|api[_-]?key|t
 const BEARER_TOKEN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 
 export const sensitiveLogPaths = [
+  "req.body.data",
+  "body.data",
+  "req.body.previewId",
   "req.headers.authorization",
   "req.headers.cookie",
   "req.body.password",
