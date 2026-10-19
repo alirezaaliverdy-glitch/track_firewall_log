@@ -23,6 +23,8 @@ export type CameraResult = { status: string; connectorInvoked: boolean; accepted
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  CAMERA_REVIEW_RANGE_INVALID: ["بازه‌ای در گذشته، بین ۵ ثانیه و ۲۴ ساعت انتخاب کن؛ پایان باید بعد از شروع باشد.", "Choose a past range between 5 seconds and 24 hours, ending after its start."],
+  CAMERA_REPLAY_SHORT_SEGMENT: ["قطعهٔ دریافتی کوتاه‌تر از زمان درخواستی بود؛ ممکن است ضبط وقفه داشته باشد. ادامهٔ خودکار متوقف شد؛ زمان دیگری را از نوار انتخاب کن.", "The received segment was shorter than requested. Recording may have a gap. Automatic continuation stopped; choose another time."],
   NVR_CONFIG_OPERATION_UNSUPPORTED: ["این نسخهٔ دستگاه تنظیم انتخاب‌شده را ارائه نکرد؛ کنترل غیرفعال است.", "This device firmware does not expose this setting."],
   NVR_CONFIG_INVALID: ["تنظیم یا شمارهٔ کانال معتبر نیست.", "Invalid setting or channel."],
   NVR_CONFIG_CHANGED: ["تنظیم دستگاه پس از پیش‌نمایش تغییر کرده؛ دوباره بخوان و پیش‌نمایش بگیر.", "Device configuration changed. Reload and preview again."],

@@ -1,62 +1,101 @@
 import { useEffect, useRef, useState } from "react";
-import { Download, Film, History, LoaderCircle, Play, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download, Film, History, LoaderCircle, Play, Pause, RefreshCw, X, SkipBack, SkipForward, RotateCcw, RotateCw, Expand, Minimize } from "lucide-react";
 import { cameraJson, cameraErrorMessage, type CameraDevice } from "@/lib/cameras";
 import { apiRequest } from "@/lib/apiTransport";
 import { useAuth } from "@/context/AuthContext";
+import { CameraSelect } from "./CameraSelect";
+import { useCameraFullscreen } from "./useCameraFullscreen";
+import { reviewRange, reviewSegment } from "./playbackRange";
 import "./CameraPlaybackPanel.css";
 
-type Recording = { token: string; name: string; source: string; from: string | null; until: string | null; tracks: string[] };
-type Inventory = { supported: boolean; recordings: Recording[]; truncated: boolean; maxClipSeconds: number };
-const localTime = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+type Recording = { token: string; name: string; source: string; from: string | null; until: string | null };
+type Inventory = { recordings: Recording[]; truncated: boolean };
+type Segment = { url: string; start: number; duration: number };
+const localTime = (stamp: number) => { const date = new Date(stamp); return new Date(stamp - date.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
 
-export function CameraPlaybackPanel({ camera, isFa }: { camera: CameraDevice; isFa: boolean }) {
-  const { user } = useAuth();
-  const t = (fa: string, en: string) => isFa ? fa : en;
+export function CameraPlaybackPanel({ camera, isFa, initialSource = "" }: { camera: CameraDevice; isFa: boolean; initialSource?: string }) {
+  const { user } = useAuth(), t = (fa: string, en: string) => isFa ? fa : en;
   const [inventory, setInventory] = useState<Inventory>(), [loading, setLoading] = useState(true), [error, setError] = useState("");
-  const [token, setToken] = useState(""), [start, setStart] = useState(localTime(new Date(Date.now() - 60000))), [duration, setDuration] = useState(30);
-  const [busy, setBusy] = useState(false), [clip, setClip] = useState(""), [rate, setRate] = useState(1), [clipTime, setClipTime] = useState("");
-  const controller = useRef<AbortController | null>(null), blob = useRef(""), alive = useRef(true), video = useRef<HTMLVideoElement>(null);
+  const [token, setToken] = useState(""), [start, setStart] = useState(localTime(Date.now() - 360000)), [end, setEnd] = useState(localTime(Date.now() - 60000));
+  const [busy, setBusy] = useState(false), [clip, setClip] = useState<Segment>(), [rate, setRate] = useState(1), [position, setPosition] = useState(0), [playing, setPlaying] = useState(false);
+  const [range, setRange] = useState<{ start: number; end: number }>();
+  const controller = useRef<AbortController | null>(null), blob = useRef(""), alive = useRef(true), video = useRef<HTMLVideoElement>(null), screen = useRef<HTMLDivElement>(null);
+  const pending = useRef({ offset: 0, autoplay: false }), scrubbing = useRef(false), fullscreen = useCameraFullscreen(screen);
+  const time = (stamp: number | string | null | undefined) => stamp === undefined || stamp === null ? t("نامشخص", "Unknown") : new Date(stamp).toLocaleString(isFa ? "fa-IR" : "en-US");
+  const reset = () => { controller.current?.abort(); setBusy(false); video.current?.pause(); setPlaying(false); setClip(undefined); setRange(undefined); setError(""); if (blob.current) URL.revokeObjectURL(blob.current); blob.current = ""; };
+  const selectRecording = (item?: Recording) => {
+    reset(); setToken(item?.token ?? ""); const until = Math.min(item?.until ? Date.parse(item.until) : Date.now() - 60000, Date.now());
+    setEnd(localTime(Math.floor(until / 1000) * 1000)); setStart(localTime(Math.max(item?.from ? Date.parse(item.from) : 0, Math.floor(until / 1000) * 1000 - 300000)));
+  };
   const load = () => {
-    controller.current?.abort(); const request = new AbortController(); controller.current = request; setLoading(true); setError("");
+    reset(); setInventory(undefined); setToken(""); const request = new AbortController(); controller.current = request; setLoading(true);
     void cameraJson<Inventory>(`/${encodeURIComponent(camera.id)}/recordings`, { signal: request.signal }).then(data => {
       if (request.signal.aborted || !alive.current) return;
-      setInventory(data); setToken(data.recordings[0]?.token ?? "");
-      const latest = data.recordings[0]?.until; if (latest) setStart(localTime(new Date(Math.min(Date.parse(latest), Date.now()) - 30000)));
-    }).catch(failure => { if (!request.signal.aborted && alive.current) setError(failure instanceof Error ? failure.message : "CAMERA_REPLAY_FAILED"); }).finally(() => { if (alive.current && !request.signal.aborted) setLoading(false); });
+      setInventory(data); const candidate = initialSource ? data.recordings.find(item => item.source === initialSource) : data.recordings[0]; selectRecording(candidate);
+    }).catch(failure => { if (!request.signal.aborted && alive.current) setError(failure instanceof Error ? failure.message : "CAMERA_REPLAY_FAILED"); }).finally(() => { if (alive.current) setLoading(false); });
   };
-  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; controller.current?.abort(); if (blob.current) URL.revokeObjectURL(blob.current); }; }, [camera.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; controller.current?.abort(); if (blob.current) URL.revokeObjectURL(blob.current); }; }, [camera.id, initialSource]); // eslint-disable-line react-hooks/exhaustive-deps
   const selected = inventory?.recordings.find(item => item.token === token);
-  const time = (value: string | null | undefined) => value ? new Date(value).toLocaleString(isFa ? "fa-IR" : "en-US") : t("نامشخص", "Unknown");
-  const play = async (exporting = false) => {
+  const fetchAt = async (target: number, autoplay: boolean, exporting = false) => {
     if (busy || !selected) return;
-    controller.current?.abort(); const request = new AbortController(); controller.current = request;
-    setBusy(true); setError(""); if (!exporting) { if (blob.current) URL.revokeObjectURL(blob.current); blob.current = ""; setClip(""); }
+    controller.current?.abort(); const request = new AbortController(); controller.current = request; setBusy(true); setError(""); if (!exporting) video.current?.pause();
     try {
-      const stamp = new Date(start); if (!Number.isFinite(stamp.getTime())) throw new Error("CAMERA_REPLAY_WINDOW_INVALID");
-      const query = new URLSearchParams({ recordingToken: token, start: stamp.toISOString(), duration: String(duration) });
-      const response = await apiRequest(`/cameras/${encodeURIComponent(camera.id)}/playback${exporting ? "/export" : `?${query}`}`, { signal: request.signal, ...(exporting ? { method: "POST", body: JSON.stringify({ recordingToken: token, start: stamp.toISOString(), duration }) } : {}) });
+      const chosen = reviewRange(start, end), segment = reviewSegment(chosen, target);
+      if (selected.from && segment.start < Date.parse(selected.from) || selected.until && segment.start + segment.duration * 1000 > Date.parse(selected.until)) throw new Error("CAMERA_RECORDING_OUTSIDE_RANGE");
+      const parameters = { recordingToken: token, start: new Date(segment.start).toISOString(), duration: segment.duration };
+      const query = new URLSearchParams({ ...parameters, duration: String(segment.duration) });
+      const response = await apiRequest(`/cameras/${encodeURIComponent(camera.id)}/playback${exporting ? "/export" : `?${query}`}`, { signal: request.signal, ...(exporting ? { method: "POST", body: JSON.stringify(parameters) } : {}) });
       if (!response.ok) { const failure = await response.json().catch(() => null); throw new Error(failure?.error?.code ?? "CAMERA_REPLAY_FAILED"); }
       if (!response.headers.get("content-type")?.startsWith("video/mp4")) throw new Error("CAMERA_REPLAY_FAILED");
       const bytes = await response.blob(); if (bytes.size > 12 * 1024 * 1024) throw new Error("CAMERA_REPLAY_SIZE_LIMIT");
-      if (alive.current && !request.signal.aborted) {
-        if (exporting) { const url = URL.createObjectURL(bytes), anchor = document.createElement("a"); anchor.href = url; anchor.download = `recording-${stamp.getTime()}.mp4`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
-        else { blob.current = URL.createObjectURL(bytes); setClip(blob.current); setClipTime(stamp.toISOString()); setRate(1); }
+      if (!alive.current || request.signal.aborted) return;
+      if (exporting) { const url = URL.createObjectURL(bytes), anchor = document.createElement("a"); anchor.href = url; anchor.download = `recording-${segment.start}.mp4`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+      else {
+        video.current?.pause(); if (blob.current) URL.revokeObjectURL(blob.current); blob.current = URL.createObjectURL(bytes);
+        pending.current = { offset: segment.offset, autoplay }; setClip({ url: blob.current, start: segment.start, duration: segment.duration }); setRange(chosen); setPosition(segment.start + segment.offset * 1000);
       }
-    } catch (failure) { if (alive.current && !request.signal.aborted) setError(failure instanceof Error ? failure.message : "CAMERA_REPLAY_FAILED"); }
+    } catch (failure) { if (alive.current && !request.signal.aborted) { setError(failure instanceof Error ? failure.message : "CAMERA_REPLAY_FAILED"); video.current?.pause(); setPlaying(false); } }
     finally { if (alive.current && !request.signal.aborted) setBusy(false); }
   };
-  const unavailable = ["CAMERA_REPLAY_UNSUPPORTED", "CAMERA_ONVIF_UNAVAILABLE", "CAMERA_OPERATION_UNSUPPORTED"].includes(error);
+  const seek = (target: number) => {
+    if (!range || !clip || busy) return;
+    const at = Math.max(range.start, Math.min(range.end - 1, target)), duration = video.current?.duration ?? 0;
+    if (video.current && Number.isFinite(duration) && at >= clip.start && at < clip.start + duration * 1000) { video.current.currentTime = (at - clip.start) / 1000; setPosition(at); }
+    else void fetchAt(at, playing);
+  };
+  const toggle = () => { if (!video.current || busy) return; if (video.current.paused) void video.current.play().catch(() => setPlaying(false)); else video.current.pause(); };
+  const unavailable = ["CAMERA_REPLAY_UNSUPPORTED", "CAMERA_ONVIF_UNAVAILABLE", "CAMERA_OPERATION_UNSUPPORTED", "CAMERA_XML_INVALID"].includes(error);
+  const media = clip && <div className={`camera-replay-screen ${fullscreen.expanded ? "is-expanded" : ""}`} ref={screen} tabIndex={-1} role={fullscreen.expanded ? "dialog" : undefined} aria-modal={fullscreen.expanded || undefined} aria-label={t("پخش آرشیو دوربین", "Camera recording player")}>
+    <div className="camera-replay-screen__title"><strong>{camera.name} · {selected?.name}</strong><button className="camera-icon-button" aria-label={fullscreen.expanded ? t("خروج از تمام‌صفحه", "Exit fullscreen") : t("تمام‌صفحه بازپخش", "Replay fullscreen")} onClick={fullscreen.toggle}>{fullscreen.expanded ? <Minimize size={17}/> : <Expand size={17}/>}</button></div>
+    <video key={clip.url} ref={video} src={clip.url} controls controlsList="nodownload" playsInline preload="metadata" aria-label={t("کلیپ ضبط‌شده", "Recorded clip")} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+      onLoadedMetadata={() => { if (!video.current) return; video.current.playbackRate = rate; video.current.currentTime = Math.min(pending.current.offset, Math.max(0, video.current.duration - .1)); if (pending.current.autoplay) void video.current.play().catch(() => setPlaying(false)); }}
+      onTimeUpdate={() => { if (!scrubbing.current && video.current) setPosition(Math.min(range?.end ?? Infinity, clip.start + video.current.currentTime * 1000)); }}
+      onError={() => { setError("CAMERA_REPLAY_FAILED"); setPlaying(false); }}
+      onEnded={() => { setPlaying(false); const next = clip.start + clip.duration * 1000; if (range && next < range.end - 500) { if ((video.current?.duration ?? 0) < clip.duration - 1) { setError("CAMERA_REPLAY_SHORT_SEGMENT"); return; } void fetchAt(next, true); } }}/>
+    <div className="camera-replay-transport" dir={isFa ? "rtl" : "ltr"}>
+      <div className="camera-replay-transport__buttons" dir="ltr"><button className="camera-icon-button" disabled={busy} aria-label={t("یک دقیقه عقب", "Back one minute")} onClick={() => seek(position - 60000)}><SkipBack size={18}/></button><button className="camera-icon-button" disabled={busy} aria-label={t("ده ثانیه عقب", "Back ten seconds")} onClick={() => seek(position - 10000)}><RotateCcw size={18}/><small>10</small></button><button className="camera-button camera-button--primary" disabled={busy} aria-label={playing ? t("توقف بازپخش", "Pause replay") : t("ادامه بازپخش", "Resume replay")} onClick={toggle}>{playing ? <Pause size={19}/> : <Play size={19}/>}</button><button className="camera-icon-button" disabled={busy} aria-label={t("ده ثانیه جلو", "Forward ten seconds")} onClick={() => seek(position + 10000)}><RotateCw size={18}/><small>10</small></button><button className="camera-icon-button" disabled={busy} aria-label={t("یک دقیقه جلو", "Forward one minute")} onClick={() => seek(position + 60000)}><SkipForward size={18}/></button></div>
+      <span className="camera-replay-position"><time>{time(position)}</time><small>{t("زمان درخواستی آرشیو", "Requested archive time")}</small></span>
+      <CameraSelect label={t("سرعت بازپخش", "Replay speed")} value={String(rate)} onChange={value => { setRate(Number(value)); if (video.current) video.current.playbackRate = Number(value); }}>{[.25, .5, 1, 1.5, 2, 4].map(value => <option key={value} value={value}>{value}×</option>)}</CameraSelect>
+    </div>
+    {range && <div className="camera-replay-timeline" dir="ltr"><input type="range" min={range.start} max={range.end - 1} step={1000} value={Math.max(range.start, Math.min(range.end - 1, position))} disabled={busy} aria-label={t("نوار زمان بازپخش", "Recording timeline")} aria-valuetext={time(position)} onPointerDown={() => { scrubbing.current = true; }} onChange={e => { scrubbing.current = true; setPosition(Number(e.target.value)); }} onPointerUp={e => { scrubbing.current = false; seek(Number(e.currentTarget.value)); }} onPointerCancel={() => { scrubbing.current = false; }} onKeyUp={e => { if (["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"].includes(e.key)) { scrubbing.current = false; seek(Number(e.currentTarget.value)); } }}/><div><time>{time(range.start)}</time><time>{time(range.end)}</time></div><small>{t("نوار زمان، بازهٔ انتخابی است؛ خط پیوسته به معنی ضبط پیوسته نیست. جابه‌جایی به زمان دور، قطعهٔ جدید دریافت می‌کند.", "This is the selected review range, not proof of continuous recording. Distant seeks fetch a new segment.")}</small></div>}
+      {busy && <div className="camera-replay-buffering" role="status"><LoaderCircle className="camera-spin" size={17}/>{t("در حال دریافت قطعه…", "Loading segment…")}</div>}
+  </div>;
   return <section className="camera-replay" aria-label={t("بازپخش آرشیو", "Recorded playback")}>
-    <header className="camera-replay__heading"><span><History size={23}/></span><div><h3>{t("لحظه‌ای که دنبالشی", "Find the moment")}</h3><p>{t("آرشیو واقعی دستگاه، بدون ذخیرهٔ دائمی در سرور", "Real recorder footage · no permanent server cache")}</p></div><button className="camera-icon-button" disabled={loading || busy} onClick={load} aria-label={t("دریافت دوباره آرشیو", "Refresh recordings")}><RefreshCw size={17}/></button></header>
-    {loading ? <p role="status" className="camera-replay__state"><LoaderCircle className="camera-spin"/>{t("بررسی سرویس ضبط دستگاه…", "Checking the recorder…")}</p> : unavailable ? <div className="camera-replay__state"><Film size={34}/><h4>{t("بازپخش استاندارد در این اتصال ارائه نشد", "Standard replay is unavailable on this connection")}</h4><p>{t("مشاهدهٔ زنده و پایش هارد مستقل‌اند. بازپخش نیازمند ONVIF Profile G و مجوز مشاهدهٔ ضبط است؛ XMEye و بعضی دستگاه‌های AppWeb/DVRIP از رابط اختصاصی سازنده استفاده می‌کنند که هنوز به این برنامه متصل نیست.", "Live view and disk monitoring are separate. Replay requires ONVIF Profile G and recording access. Some XMEye/AppWeb/DVRIP devices need a proprietary vendor adapter that is not integrated yet.")}</p></div> : <>
-      {inventory?.recordings.length ? <><div className="camera-replay__form"><label>{t("آرشیو / کانال ضبط", "Recording / source")}<select value={token} disabled={busy} onChange={event => { setToken(event.target.value); const next = inventory.recordings.find(item => item.token === event.target.value); if (next?.until) setStart(localTime(new Date(Math.min(Date.parse(next.until), Date.now()) - duration * 1000))); }}>{inventory.recordings.map((item, index) => <option key={item.token} value={item.token}>{item.name || `${t("آرشیو", "Recording")} ${index + 1}`}{item.source ? ` · ${item.source}` : ""}</option>)}</select></label>
-        <label>{t("شروع به وقت مرورگر", "Start · browser local time")}<input type="datetime-local" step="1" value={start} max={localTime(new Date())} disabled={busy} onChange={event => setStart(event.target.value)}/></label>
-        <label>{t("طول کلیپ", "Clip length")}<select value={duration} disabled={busy} onChange={event => setDuration(Number(event.target.value))}>{[15, 30, 60].map(value => <option key={value} value={value}>{value} {t("ثانیه", "seconds")}</option>)}</select></label>
-      </div><div className="camera-replay__coverage"><Film size={17}/><span>{t("بازهٔ گزارش‌شدهٔ آرشیو", "Recorder-reported coverage")}<strong>{time(selected?.from)} ← {time(selected?.until)}</strong><small>{t("پیوستگی ضبط در این بازه تأیید نشده؛ زمان انتخابی ممکن است ضبط نداشته باشد.", "Recording may have gaps within this range.")}</small></span></div>
-      <div className="camera-replay__actions"><button className="camera-button camera-button--primary" disabled={busy || !start || !selected} onClick={() => void play()}>{busy ? <LoaderCircle size={17} className="camera-spin"/> : <Play size={17}/>} {busy ? t("آماده‌سازی کلیپ…", "Preparing clip…") : t("نمایش بازپخش", "View recording")}</button>{user?.role !== "viewer" && <button className="camera-button" disabled={busy || !start || !selected} onClick={() => void play(true)}><Download size={16}/>{t("دانلود کلیپ", "Download clip")}</button>}{busy && <button className="camera-button" onClick={() => { controller.current?.abort(); setBusy(false); }}><X size={16}/>{t("لغو", "Cancel")}</button>}<small>{t("حداکثر ۶۰ ثانیه و ۱۲ مگابایت؛ هر بار یک کلیپ در فضای کاری", "Up to 60 s / 12 MiB · one clip per workspace")}</small></div></> : inventory && <p className="camera-replay__state">{t("سرویس بازپخش فعال است؛ هیچ آرشیو قابل‌دسترسی گزارش نشد.", "Replay is available but no accessible recordings were returned.")}</p>}
-      {clip && <div className="camera-replay__video"><video ref={video} src={clip} controls controlsList="nodownload" playsInline preload="metadata" aria-label={t("کلیپ ضبط‌شده", "Recorded clip")} onLoadedMetadata={() => { if (video.current) video.current.playbackRate = rate; }}/><footer><span><ShieldCheck size={16}/>{time(clipTime)}</span><label>{t("سرعت", "Speed")}<select value={rate} onChange={event => { const value = Number(event.target.value); setRate(value); if (video.current) video.current.playbackRate = value; }}>{[.5, 1, 2, 4].map(value => <option key={value} value={value}>{value}×</option>)}</select></label></footer></div>}
-      {error && <p className="camera-alert" role="alert">{cameraErrorMessage(new Error(error), isFa)}</p>}
-      {inventory?.truncated && <p className="camera-hint">{t("نمایش به ۳۲ آرشیو نخست محدود شده است.", "Showing the first 32 recordings.")}</p>}
+    <header className="camera-replay__heading"><span><History size={23}/></span><div><h3>{t("بازپخش دوربین", "Camera playback")}</h3><p>{camera.name} · {t("زمان‌ها به وقت مرورگر شما", "Times use your browser timezone")}</p></div><button className="camera-icon-button" disabled={loading || busy} onClick={load} aria-label={t("دریافت دوباره آرشیو", "Refresh recordings")}><RefreshCw size={17}/></button></header>
+    {loading ? <p role="status" className="camera-replay__state"><LoaderCircle className="camera-spin"/>{t("بررسی آرشیو دستگاه…", "Checking device archives…")}</p> : unavailable ? <div className="camera-replay__state"><Film size={34}/><h4>{t("این اتصال، بازپخش قابل‌استفاده ارائه نکرد", "Replay is not available on this connection")}</h4><p>{t("پایش هارد یا نمایش زنده، پشتیبانی از بازپخش را ثابت نمی‌کند. دستگاه فعلی باید سرویس ضبط و Replay سازگار ارائه دهد؛ رابط اختصاصی بازپخش XMEye/AppWeb هنوز پیاده‌سازی نشده است. Cloud ID نیز در این نسخه فعال نیست.", "Disk monitoring or live video does not prove replay support. A compatible recording/Replay service is required. Proprietary XMEye/AppWeb playback and Cloud ID are not integrated.")}</p></div> : <>
+      {inventory?.recordings.length ? <>
+        {initialSource && !inventory.recordings.some(item => item.source === initialSource) && <p className="camera-alert" role="status">{t("ارتباط کانال انتخابی با آرشیو تأیید نشد؛ آرشیو صحیح را از فهرست واقعی دستگاه انتخاب کن. برنامه کانال را حدس نمی‌زند.", "The selected live channel could not be matched to an archive. Choose the actual device recording explicitly; channels are never guessed.")}</p>}
+        <div className="camera-replay__form"><label>{t("دوربین / آرشیو ضبط‌شده", "Camera / recorded archive")}<CameraSelect label={t("انتخاب آرشیو دوربین", "Choose camera archive")} value={token} disabled={busy} onChange={value => selectRecording(inventory.recordings.find(item => item.token === value))}><option value="" disabled>{t("آرشیو را انتخاب کن", "Choose an archive")}</option>{inventory.recordings.map((item, index) => <option key={item.token} value={item.token}>{item.name || `${t("آرشیو", "Recording")} ${index + 1}`}{item.source ? ` · ${item.source}` : ""}</option>)}</CameraSelect></label>
+          <label>{t("از تاریخ و ساعت", "From date & time")}<input type="datetime-local" step="1" value={start} max={localTime(Date.now())} disabled={busy} onChange={e => { reset(); setStart(e.target.value); }}/></label>
+          <label>{t("تا تاریخ و ساعت", "To date & time")}<input type="datetime-local" step="1" value={end} max={localTime(Date.now())} disabled={busy} onChange={e => { reset(); setEnd(e.target.value); }}/></label></div>
+        <div className="camera-replay-presets">{[1, 5, 15, 60].map(minutes => <button className="camera-button" key={minutes} disabled={busy || !selected} onClick={() => { reset(); const until = Math.floor(Math.min(selected?.until ? Date.parse(selected.until) : Date.now() - 1000, Date.now()) / 1000) * 1000; setEnd(localTime(until)); setStart(localTime(Math.max(selected?.from ? Date.parse(selected.from) : 0, until - minutes * 60000))); }}>{minutes} {t("دقیقهٔ آخر آرشیو", "min at archive end")}</button>)}</div>
+        <div className="camera-replay__actions"><button className="camera-button camera-button--primary" disabled={busy || !token || !start || !end} onClick={() => void fetchAt(Date.parse(start), true)}>{busy ? <LoaderCircle size={17} className="camera-spin"/> : <Play size={17}/>} {busy ? t("آماده‌سازی…", "Preparing…") : t("شروع بازپخش", "Start playback")}</button>{user?.role !== "viewer" && <button className="camera-button" disabled={busy || !token} onClick={() => void fetchAt(clip ? position : Date.parse(start), false, true)}><Download size={16}/>{t("دانلود قطعهٔ فعلی", "Download current segment")}</button>}{busy && <button className="camera-button" onClick={() => { controller.current?.abort(); setBusy(false); setPlaying(false); }}><X size={16}/>{t("لغو دریافت", "Cancel loading")}</button>}</div>
+        <p className="camera-hint">{t("بازهٔ مرور: حداکثر ۲۴ ساعت. هر بار فقط تا ۶۰ ثانیه و ۱۲ مگابایت دریافت می‌شود؛ دانلود نیز فقط همان قطعه است، نه کل بازه.", "Review up to 24 hours. Only a segment of up to 60 seconds / 12 MiB is loaded at once. Download exports that segment, not the entire review range.")}</p>
+        {media ? fullscreen.expanded ? createPortal(media, document.body) : media : <div className="camera-replay-empty"><Film size={32}/><p>{t("دوربین و بازه را انتخاب کن و «شروع بازپخش» را بزن.", "Choose an archive and time range, then start playback.")}</p></div>}
+        <details className="camera-disclosure"><summary>{t("بازهٔ موجودی گزارش‌شدهٔ دستگاه", "Device-reported archive bounds")}</summary><p className="camera-hint">{time(selected?.from)} ← {time(selected?.until)} · {t("وجود وقفه در ضبط ممکن است؛ پیوستگی تأیید نشده است.", "Recording may have gaps; continuity is not verified.")}</p></details>
+      </> : inventory && <p className="camera-replay__state">{t("دستگاه هیچ آرشیو قابل‌دسترسی گزارش نکرد.", "No accessible recordings were reported.")}</p>}
+      {error && <p className="camera-alert" role="alert">{cameraErrorMessage(new Error(error), isFa)}</p>}{inventory?.truncated && <p className="camera-hint">{t("فهرست به ۳۲ آرشیو نخست محدود شده است.", "Showing the first 32 archives.")}</p>}
     </>}
   </section>;
 }

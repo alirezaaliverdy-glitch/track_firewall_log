@@ -1,5 +1,15 @@
 # Camera studio and verified NVR configuration
 
+## Camera-first playback follow-up (2026-10-19)
+
+Playback is no longer embedded in recorder/settings dialogs. In Cameras → company, use the prominent Camera playback button or Playback on an individual camera/channel card. The full-page review workspace has a searchable real camera/channel list, explicit archive selection, start/end timestamps (browser local time), archive-end presets and a review range of5seconds–24hours. Only an actual exact reported source match is auto-selected; an unmatched channel requires explicit archive selection rather than guessing another camera. URL state stores only company/device/source/view selection so refresh/navigation restores the workspace, not a media URL or credential.
+
+The player supports an absolute requested-time scrubber, ±10seconds/±1minute, pause/resume,0.25–4× speed, viewport/native-fallback fullscreen and bounded next-segment continuation. Each device request/export remains5–60seconds/12MiB; only the current segment is downloaded, never a bulk24-hour export. A shorter-than-requested segment stops automatic continuation with a gap warning. The review slider is explicitly not a claim of continuous recording. Camera changes/editing the range release the old blob and cancel pending work. Backend permissions, resource limits, clock verification, audit and unsupported-vendor behavior are unchanged.
+
+Camera/NVR selects use a shared theme-owned keyboard-accessible combobox/listbox for the affected controls, avoiding unreadable Windows native popup colors; other native camera options also get explicit theme colors. The recorder connection description and DVRIP labels now explicitly say IP/LAN/VPN, not Cloud ID. XMEye Cloud ID and proprietary replay are still NOT enabled by selecting DVRIP.
+
+Follow-up validation: `scripts/qa/camera-playback-range.test.mjs` covers ordering/past/24-hour bounds, bounded segments, short final tails and invalid seeks. Expanded `capture-camera-studio.mjs` covers open themed menus/keyboard selection, no replay in NVR dialogs, camera-first entry points, viewport layouts, actual browser MP4/seek/speed/continuation/export, source mismatch and unsupported/viewer states with intercepted synthetic APIs only.
+
 ## Where to find it
 
 Assets → Cameras → company → recorder → dedicated NVR workspace:

@@ -1,5 +1,7 @@
 # Architecture Map
 
+Camera-first review UI: `company camera/channel choice -> explicit actual recording source -> validated5s–24h client review range -> bounded existing5–60s replay endpoint -> blob player/absolute seek/next segment -> scoped existing export`. Client selection persists in the camera route query; NVR settings no longer host replay. No fabricated channel association or continuous-recording timeline. A shared theme-owned accessible CameraSelect avoids native popup palette ambiguity. See `CAMERA_STUDIO.md`.
+
 Camera studio: `actual ONVIF archive -> bounded UTC window -> pinned authenticated loopback replay bridge -> in-memory MP4 -> authorized view/export audit`. NVR configuration: `actual AppWeb fields -> one-use camera preview -> PolicyGuard/confirmation -> fresh config hash -> allowlisted single-field write -> actual read-back -> audit/result`. Native monitoring and read-only disk diagnosis remain independent; unknown SMART does not become a physical self-test. VPN profile management now uses narrow `vpn.manage` plus the selected VPN page for operators, not general security-policy elevation. See `CAMERA_STUDIO.md`.
 
 ## Explicit page visibility and authorization
