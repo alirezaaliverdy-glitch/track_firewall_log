@@ -49,7 +49,9 @@ export function taoshiFrameParser(onFrame: (data: Buffer, fps: number, stamp: nu
     while(buffer.length>=48){
       if(buffer.readUInt32BE(0)!==0x54535231)throw new CameraError("CAMERA_REPLAY_FAILED",502);
       const size=buffer.readUInt32BE(4),fps=buffer.readUInt32BE(8),type=buffer.readUInt32BE(12);
-      if(!size||size>2*1024*1024||fps<1||fps>120||type<1||type>5||++count>7200)throw new CameraError("CAMERA_REPLAY_FAILED",502);
+      // This SDK's delta-frame rate field may contain a default/unused value.
+      // Only keyframe metadata defines the elementary stream's input rate.
+      if(!size||size>2*1024*1024||type<1||type>5||type===1&&(fps<1||fps>120)||++count>7200)throw new CameraError("CAMERA_REPLAY_FAILED",502);
       if(buffer.length<48+size){count--;return;}
       const [y,m,d,h,min,s]=Array.from({length:6},(_,i)=>buffer.readUInt32BE(16+i*4));
       if(y<2000||y>2099||m<1||m>12||d<1||d>31||h>23||min>59||s>59)throw new CameraError("CAMERA_REPLAY_RANGE_UNVERIFIED",502);
@@ -68,6 +70,20 @@ export function taoshiCodec(data: Buffer) {
     if([7,8].includes(data[n]&31))return "h264";
   }
   throw new CameraError("CAMERA_REPLAY_FAILED",502);
+}
+/** Keyframes carry stream metadata; delta-frame rate hints are not a rate change. */
+export function taoshiStreamRate(current: number, reported: number, keyframe: boolean) {
+  if (!keyframe) return current;
+  if (!Number.isInteger(reported) || reported < 1 || reported > 120) throw new CameraError("CAMERA_REPLAY_FAILED",502);
+  if (current && reported !== current) throw new CameraError("CAMERA_REPLAY_RATE_CHANGED",422);
+  return reported;
+}
+/** Bounded decode preroll and transport tail; neither extends the exported clip. */
+export function taoshiReplayWindow(start: string, end: string) {
+  return {
+    begin: taoshiWallTime(new Date(Date.parse(start)-8000).toISOString()),
+    finish: taoshiWallTime(new Date(Date.parse(end)+2000).toISOString())
+  };
 }
 export async function taoshiClip(input: { camera: Device; port: number; connection: CameraConnection; channel: number; start: string; end: string; duration: number; signal: AbortSignal }) {
   const {camera,connection,signal}=input;
@@ -93,15 +109,16 @@ export async function taoshiClip(input: { camera: Device; port: number; connecti
       const parse=taoshiFrameParser((data,rate,stamp,keyframe)=>{
         if(stamp<start-10000||stamp>end+2000||last&&stamp<last-1000)throw new CameraError("CAMERA_REPLAY_RANGE_UNVERIFIED",502);
         if(!frames.length&&!keyframe)return;
-        if(!frames.length){first=stamp;fps=rate;taoshiCodec(data);}
-        if(rate!==fps)throw new CameraError("CAMERA_REPLAY_FAILED",502);
+        if(!frames.length){first=stamp;taoshiCodec(data);}
+        fps=taoshiStreamRate(fps,rate,keyframe);
         if(stamp>=end){native.kill("SIGTERM");return;}
         last=stamp;frames.push(data);
       });
-      // The recorder starts on the next keyframe. Ask for a short lead-in, then
-      // trim it server-side; never label that later frame as the requested start.
-      const leadIn=new Date(start-3000).toISOString();
-      native.stdin.end([camera.host,input.port,connection.username,connection.password,"replay",input.channel,taoshiWallTime(leadIn),taoshiWallTime(input.end),""].join("\n"));
+      // Observed GOPs can exceed three seconds. Start before the requested
+      // frame, and allow the SDK's completion callback a small transport tail.
+      // Only frames before `end` are retained; FFmpeg trims the decode preroll.
+      const window=taoshiReplayWindow(input.start,input.end);
+      native.stdin.end([camera.host,input.port,connection.username,connection.password,"replay",input.channel,window.begin,window.finish,""].join("\n"));
       await new Promise<void>((resolve,reject)=>{
         let helperError=Buffer.alloc(0),transport: "unknown"|"frames"|"error"="unknown";
         native.once("error",()=>reject(new CameraError("CAMERA_REPLAY_UNSUPPORTED",422)));

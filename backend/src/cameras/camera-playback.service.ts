@@ -37,7 +37,10 @@ export async function listCameraRecordings(id: string, actor: CameraActor) {
       catch(error){if(!nativeFallback(error))throw error;}
     }
     const source=await nativeSource(camera,actor);
-    return {supported:true,protocol:"taoshi-direct",timeBasis:"device-local",deviceLocalTime:source.inventory.clock,recorderName:source.recorder.name,recordings:taoshiRecordings(source.recorder,source.channels),truncated:false,maxClipSeconds:15};
+    const recordings=taoshiRecordings(source.recorder,source.channels);
+    // This token is provided only after authenticated decoder/IP matching, not
+    // by comparing unrelated ONVIF/live/native source-token namespaces.
+    return {supported:true,protocol:"taoshi-direct",timeBasis:"device-local",deviceLocalTime:source.inventory.clock,recorderName:source.recorder.name,recordings,verifiedSelectionToken:camera.kind!=="nvr"&&recordings.length===1?recordings[0].token:null,truncated:false,maxClipSeconds:15};
   } finally { inFlight.delete(cameraOwner(actor)); }
 }
 export async function cameraPlaybackClip(id: string, input: Record<string, unknown>, actor: CameraActor, signal: AbortSignal, exporting = false) {

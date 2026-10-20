@@ -33,6 +33,7 @@ const errors: Record<string, [string, string]> = {
   CAMERA_PTZ_STEP_UNAVAILABLE: ["این کانال فضای استاندارد حرکت کوتاه یا زوم را ارائه نکرد؛ از موقعیت‌های ذخیره‌شده استفاده کن.", "This profile does not expose standard relative PTZ/zoom. Try presets."],
   CAMERA_PTZ_DIRECTION_INVALID: ["جهت حرکت معتبر نیست.", "Invalid PTZ direction."],
   CAMERA_REPLAY_FAILED: ["دستگاه کلیپ قابل‌پخش نداد؛ زمان ضبط، مجوز حساب و سرویس Replay را بررسی کن.", "No playable recording received. Check time, account access and Replay service."],
+  CAMERA_REPLAY_RATE_CHANGED: ["نرخ واقعی تصویر در این بازه تغییر کرده؛ زمان شروع دیگری یا بازهٔ کوتاه‌تری انتخاب کن.", "The stream rate changed within this recording. Select another start time or a shorter range."],
   CAMERA_REPLAY_RANGE_UNVERIFIED: ["دستگاه زمان بازپخش را تأیید نکرد؛ برای جلوگیری از نمایش اشتباه، پخش متوقف شد.", "The recorder did not verify replay time. Playback was stopped to avoid showing the wrong footage."],
   CAMERA_REPLAY_WINDOW_INVALID: ["زمان شروع معتبر و طول کلیپ بین ۵ تا ۶۰ ثانیه انتخاب کن.", "Select a valid past start time and a clip between 5 and 60 seconds."],
   CAMERA_REPLAY_BUSY: ["یک بررسی یا کلیپ دیگر در این فضای کاری در حال آماده‌سازی است؛ کمی صبر کن.", "Another recording request is running in this workspace. Please wait."],

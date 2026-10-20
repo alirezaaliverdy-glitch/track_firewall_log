@@ -36,6 +36,7 @@ test("native replay resolves real channel in same workspace/company, rechecks to
     const inventory=await listCameraRecordings(camera.id,actor);
     assert.equal(inventory.protocol,"taoshi-direct");assert.equal(inventory.recordings.length,1);assert.equal(inventory.recordings[0].token,`taoshi:${recorder.id}:0`);
     assert.equal(inventory.maxClipSeconds,15);
+    assert.equal(inventory.verifiedSelectionToken,inventory.recordings[0].token,"verified standalone camera does not depend on live source-token format");
     assert.equal(JSON.stringify(inventory).includes("fixture-password"),false);
     const input={recordingToken:`taoshi:${recorder.id}:1`,start:"2026-10-19T09:00:00.000Z",duration:10};
     await assert.rejects(cameraPlaybackClip(camera.id,input,actor,new AbortController().signal),/CAMERA_RECORDING_NOT_FOUND/);

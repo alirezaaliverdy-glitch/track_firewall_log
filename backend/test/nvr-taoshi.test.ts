@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decodeAppWebChannels } from "../src/cameras/nvr-appweb-codec.js";
-import { taoshiWallTime, taoshiFrameParser, taoshiCodec, taoshiRecordings } from "../src/cameras/nvr-taoshi.js";
+import { taoshiWallTime, taoshiFrameParser, taoshiCodec, taoshiRecordings, taoshiStreamRate, taoshiReplayWindow } from "../src/cameras/nvr-taoshi.js";
 import { reserveCameraReplay } from "../src/cameras/camera-media.js";
 
 // Synthetic legacy envelope; not customer configuration or a device password.
@@ -34,4 +34,18 @@ test("ONVIF and native playback share one-per-workspace and two-global replay le
     try{assert.throws(()=>reserveCameraReplay("fixture-replay-c"),/CAMERA_REPLAY_BUSY/);}finally{releaseB();}
   }finally{releaseA();}
   const release=reserveCameraReplay("fixture-replay-c");release();
+});
+
+test("a 20fps keyframe stream accepts 25/zero delta-frame hints without retiming footage",()=>{
+  let rate=0,frames=0;
+  const parse=taoshiFrameParser((_data,hint,_stamp,key)=>{rate=taoshiStreamRate(rate,hint,key);frames++;});
+  parse(packet(20));
+  for(const hint of [25,0,20,25]){const delta=packet(hint);delta.writeUInt32BE(2,12);parse(delta);assert.equal(rate,20);}
+  parse(packet(20));assert.equal(rate,20);assert.equal(frames,6);
+  assert.throws(()=>taoshiStreamRate(20,25,true),/CAMERA_REPLAY_RATE_CHANGED/);
+  assert.throws(()=>taoshiStreamRate(0,0,true));
+});
+
+test("native decode preroll spans a four-second GOP and transport tail crosses date boundaries",()=>{
+  assert.deepEqual(taoshiReplayWindow("2026-10-20T00:00:05.000Z","2026-10-20T00:00:20.000Z"),{begin:"2026-10-19 23:59:57",finish:"2026-10-20 00:00:22"});
 });
