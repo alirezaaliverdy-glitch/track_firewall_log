@@ -5,7 +5,7 @@ import { getFindingEvidence } from "./finding-evidence.service.js";
 import { buildTrustedSourceMatcher } from "./trusted-source-ip.service.js";
 import { analyzeFindingEvidence } from "./finding-analysis.service.js";
 import { parseLinuxSecurityLog } from "../security/linux-log-semantics.js";
-import { searchCatalog } from "../commands/catalog/index.js";
+import { findingDiagnostic } from "./finding-diagnostic.js";
 
 export type DecisionEvidence = {
   category: string;
@@ -115,11 +115,19 @@ export async function getFindingDecision(id: string, ownerId?: string) {
   const snapshotData = snapshot?.dataJson && typeof snapshot.dataJson === "object" ? snapshot.dataJson as Record<string, unknown> : {};
   const ssh = snapshotData.ssh && typeof snapshotData.ssh === "object" ? snapshotData.ssh as Record<string, unknown> : {};
   const snapshotFresh = Boolean(snapshot && Date.now() - snapshot.collectedAt.getTime() <= 30 * 60_000);
-  const diagnostic = searchCatalog({ vendor: finding.vendor, executable: true, readOnly: true }).filter(item => !item.requiredParams.length).sort((a, b) => Number(b.category === "daily-check") - Number(a.category === "daily-check"))[0];
+  const diagnostic = findingDiagnostic(finding.vendor, finding.affectedObject);
+  const measured = finding.source === "measured_resource" && finding.category === "resource_health";
+  const measuredFresh = Date.now() - finding.lastSeen.getTime() <= 300_000 && finding.lastSeen.getTime() <= Date.now() + 30_000;
   return {
     ...decision,
     ...(analysis.verdict === "contradicted" ? { mode: decision.mode === "closed" ? "closed" : "investigate", evidenceScore: 0, evidenceLabelFa: "تفسیر اولیه نادرست است", evidenceLabelEn: "Initial interpretation contradicted", explanationFa: analysis.summaryFa, explanationEn: analysis.summaryEn } : {}),
-    analysis,
+    analysis: measured ? { ...analysis, version: "measured-resource-v1", verdict: measuredFresh ? "supported" : "inconclusive", complete: measuredFresh,
+      titleFa: measuredFresh ? "مصرف بالا با سنسور تأیید شده است" : "برای بررسی وضعیت فعلی، پایش تازه لازم است", titleEn: measuredFresh ? "High use confirmed by measurements" : "Fresh measurements required",
+      summaryFa: "این یافته از اندازه‌گیری منابع ایجاد شده، نه از لاگ حمله. آستانه‌ها پیش‌فرض برنامه‌اند و باید با بار معمول تجهیز مقایسه شوند.", summaryEn: "This is measured resource pressure, not an attack log. Product thresholds must be compared with the device's normal workload.",
+      supportCount: measuredFresh ? 2 : 0, limitationsFa: ["دادهٔ قدیمی، قطع ارتباط یا نبود سنسور، رفع مشکل را ثابت نمی‌کند."], limitationsEn: ["Stale or missing samples never prove recovery."] } : analysis,
+    ...(measured ? { evidenceScore: measuredFresh ? 100 : 55, evidenceLabelFa: measuredFresh ? "اندازه‌گیری تأییدشده" : "نیازمند اندازه‌گیری تازه", evidenceLabelEn: measuredFresh ? "Verified measurements" : "Fresh measurements needed",
+      signals: [{ key: "measurement", level: measuredFresh ? "observed" : "caution", fa: "منبع، مقدار و زمان سنسور در شواهد اندازه‌گیری ثبت شده است؛ این یافته لاگ حمله نیست.", en: "Source, value and time are retained as measurement evidence; this is not an attack log." }],
+      nextStepFa: "مصرف فعلی و علت آن را با فرمان تشخیصی ثبت‌شده بررسی کنید؛ سپس تغییر مشخص را با تأیید انجام دهید.", nextStepEn: "Inspect current resource use with a registered diagnostic, then confirm a specific supported change." } : {}),
     deviceContext: { observedAt: snapshot?.collectedAt.toISOString() ?? null, fresh: snapshotFresh, snapshotType: snapshot?.snapshotType ?? null, permitRootLogin: typeof ssh.permitRootLogin === "string" ? ssh.permitRootLogin : null },
     suggestedAction: decision.mode === "review_action" && analysis.verdict !== "contradicted" ? { kind: "containment", labelFa: "بررسی و تأیید محدودسازی مبدأ", labelEn: "Review source restriction" } : diagnostic ? { kind: "diagnostic", labelFa: "بررسی وضعیت فعلی تجهیز", labelEn: "Check current device state", catalogId: diagnostic.id } : null,
   };

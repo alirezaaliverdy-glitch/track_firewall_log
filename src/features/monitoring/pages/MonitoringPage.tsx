@@ -1,10 +1,11 @@
 import DailyCheckPanel from "@/components/daily-check/DailyCheckPanel";
-import { Navigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import OperationsMonitoring from "./OperationsMonitoring";
 import "./MonitoringPage.css";
 
 export default function MonitoringPage() {
   const location = useLocation();
-  if (location.pathname !== "/monitoring/daily-check") return <Navigate to="/assets" replace />;
+  if (location.pathname !== "/monitoring/daily-check") return <OperationsMonitoring />;
   return (
     <section className="monitoring-page">
       <DailyCheckPanel />

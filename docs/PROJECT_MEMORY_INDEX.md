@@ -1,5 +1,7 @@
 # Project Memory Index
 
+Unified measured monitoring, bounded realtime dispatch, registered issue response and camera-only NVR registration/control: `docs/UNIFIED_MONITORING_NVR_ACCESS.md` (source/freshness boundaries, app thresholds, viewer/operator separation and one-clip replay prefetch).
+
 Camera playback/fullscreen, verified NVR settings/diagnostics and operator VPN management: `docs/CAMERA_STUDIO.md` (capability boundaries, real vs fixture acceptance, no universal SMART/replay claim).
 
 Page-level account visibility and authorization: `docs/PAGE_ACCESS.md` (Settings selections, independent Cameras/VPN, hidden navigation/direct-route/API gates and legacy compatibility).

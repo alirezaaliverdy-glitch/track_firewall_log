@@ -28,14 +28,18 @@ test("account-log collection stays near real time after idle runs but still back
 
 test("Task 34 detection is event-scoped, debounced, bounded, and never triggered by read pages", () => {
   const dispatcher = readFileSync(join(process.cwd(), "src", "services", "security-detection-dispatcher.service.ts"), "utf8");
+  const queue = readFileSync(join(process.cwd(), "src", "services", "detection-queue.ts"), "utf8");
+  const page = readFileSync(join(process.cwd(), "src", "services", "security-change-page.ts"), "utf8");
   const monitor = readFileSync(join(process.cwd(), "src", "services", "security-monitor.service.ts"), "utf8");
   const routes = readFileSync(join(process.cwd(), "src", "routes", "security-platform.ts"), "utf8");
   const intelligence = readFileSync(join(process.cwd(), "src", "assets", "asset-intelligence.service.ts"), "utf8");
-  assert.match(dispatcher, /const DEBOUNCE_MS = 750/);
-  assert.match(dispatcher, /const MAX_CONCURRENCY = 2/);
-  assert.match(dispatcher, /const pending = new Map/);
+  assert.match(dispatcher, /detectionQueue\(runSecurityDetection/);
+  assert.match(queue, /concurrency = 2, debounceMs = 750/);
+  assert.match(queue, /waiting = new Map/);
   assert.match(monitor, /detectChangedDevices/);
-  assert.match(monitor, /distinct: \["deviceId"\]/);
+  assert.match(monitor, /securityChangePage\(since, through, after\)/);
+  assert.match(page, /groupBy\(\{/);
+  assert.match(page, /by: \["deviceId"\]/);
   assert.doesNotMatch(routes, /app\.get[^;]+await runSecurityDetection\(\)/s);
   assert.doesNotMatch(intelligence, /listSecurityFindings[\s\S]{0,100}await runSecurityDetection/);
   assert.match(intelligence, /OR: \[\{ timestamp: \{ gte: cutoff \} \}, \{ receivedAt: \{ gte: cutoff \} \}\]/);

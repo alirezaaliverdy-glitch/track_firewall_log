@@ -4,6 +4,10 @@ type Guidance = { problem: string; steps: string[]; verification: string };
 type Copy = { fa: Guidance; en: Guidance };
 
 const guidance: Record<string, Copy> = {
+  resource: {
+    fa: { problem: "مصرف بالای منابع در چند اندازه‌گیری واقعی دیده شده؛ این به‌تنهایی خرابی یا حمله را ثابت نمی‌کند.", steps: ["نام سنسور، منبع و زمان شواهد را بررسی کنید و مصرف را با بار معمول همین تجهیز مقایسه کنید.", "فرمان تشخیصی ثبت‌شده را اجرا کنید؛ پس از مشخص‌شدن علت، تغییر مجاز را با پیش‌نمایش و تأیید انجام دهید. حذف فایل یا راه‌اندازی مجدد خودکار انجام نمی‌شود."], verification: "پایش تازه بگیرید؛ دو اندازه‌گیری زیر آستانهٔ بازیابی لازم است. قطع ارتباط، دادهٔ قدیمی یا نبود سنسور، رفع مشکل نیست." },
+    en: { problem: "High resource use was measured repeatedly; this alone proves neither failure nor an attack.", steps: ["Check the sensor, source and observation time against this device's usual workload.", "Run a registered diagnostic, then preview and confirm a supported change only after identifying the cause. No automatic deletion or restart."], verification: "Collect fresh evidence. Recovery requires two measurements below the recovery threshold; missing or stale data never clears the issue." }
+  },
   authentication: {
     fa: {
       problem: "چند تلاش ناموفق ورود ثبت شده است؛ این شواهد به‌تنهایی نفوذ موفق را ثابت نمی‌کنند.",
@@ -83,7 +87,7 @@ const guidance: Record<string, Copy> = {
 
 export function findingRemediation(finding: Pick<SecurityFinding, "category" | "title" | "source">, language: string): Guidance {
   const text = `${finding.category} ${finding.title}`.toLowerCase();
-  const key = /account-|privileg|sudo|administrator|identity-change/.test(text) ? "account"
+  const key = finding.category === "resource_health" ? "resource" : /account-|privileg|sudo|administrator|identity-change/.test(text) ? "account"
     : /firewall.disabled|audit.tamper|defense-evasion|log-integrity/.test(text) ? "defense"
       : /management.exposure|management-plane|sensitive.port|ssh.public|exposure/.test(text) ? "exposure"
         : /configuration.change|configuration-change|policy.changed|nat.change/.test(text) ? "configuration"

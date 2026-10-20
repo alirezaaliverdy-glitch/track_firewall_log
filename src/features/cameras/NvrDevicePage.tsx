@@ -32,7 +32,7 @@ function sensorValue(sensor: NvrSensor, fa: boolean) {
   return `${sensor.value.toLocaleString(fa ? "fa-IR" : "en-US", { maximumFractionDigits: 1 })}${sensor.unit === "count" ? "" : ` ${sensor.unit}`}`;
 }
 export default function NvrDevicePage({ params }: RouteComponentProps) {
-  const id = (params.deviceId ?? "").slice(4), { i18n } = useTranslation(), { user } = useAuth(), fa = i18n.language.startsWith("fa"), t = (faText: string, en: string) => fa ? faText : en;
+  const id = params.cameraId ?? (params.deviceId ?? "").slice(4), { i18n } = useTranslation(), { user } = useAuth(), fa = i18n.language.startsWith("fa"), t = (faText: string, en: string) => fa ? faText : en;
   const [camera, setCamera] = useState<CameraDevice>(), [data, setData] = useState<NvrMonitor>(), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   const [tab, setTab] = useState("sensors"), [group, setGroup] = useState("all"), [settings, setSettings] = useState(false), [removed, setRemoved] = useState(false);
   const canManage = Boolean(user && user.role !== "viewer");

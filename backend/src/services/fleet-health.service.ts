@@ -9,6 +9,7 @@ import { buildDeviceTrafficSeries } from "./device-traffic-series.js";
 import { recordVerifiedDeviceConnectivity } from "./device-connectivity-sensor.service.js";
 import { matchesDeviceMetricSource, metricSourceForVendor } from "./device-metric-source.js";
 import { pollSnmpv3, recordSnmpSamples } from "./snmpv3-collector.service.js";
+import { reconcileResourceIssues } from "./resource-issues.service.js";
 
 const PERIOD_MS = 120_000;
 let timer: NodeJS.Timeout | undefined;
@@ -107,6 +108,7 @@ async function collect(id: string, force = false) {
     } catch {
       // A secondary telemetry failure must not mark the management connection offline.
     }
+    await reconcileResourceIssues(id).catch(() => { collectionErrors.set(id, "RESOURCE_EVALUATION_FAILED"); });
   } })().finally(() => inFlight.delete(id));
   inFlight.set(id, task);
   return task;

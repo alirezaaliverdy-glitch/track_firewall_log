@@ -10,7 +10,8 @@ import { assessDeviceHealth } from "../services/device-health-assessment.js";
 import { findingSupportsIpResponse } from "./finding-remediation-policy.js";
 import { getFindingDecision } from "../services/finding-decision.service.js";
 import { repairMisclassifiedRootFindings } from "../services/finding-analysis.service.js";
-import { COMMAND_CATALOG_VERSION, searchCatalog } from "../commands/catalog/index.js";
+import { COMMAND_CATALOG_VERSION } from "../commands/catalog/index.js";
+import { findingDiagnostic } from "../services/finding-diagnostic.js";
 export { isCollectorOwnedAuthSuccess } from "../security/collector-auth-provenance.js";
 import { syncNvrInventory } from "../cameras/nvr-asset.js";
 
@@ -795,7 +796,10 @@ export async function createFindingActionPlan(id: string, ownerId?: string) {
   }) : null;
   const decision = await getFindingDecision(id, ownerId);
   const sourceIp = decision?.mode === "review_action" && findingSupportsIpResponse(finding) ? finding.srcIp ?? undefined : undefined;
-  const diagnostic = !sourceIp ? searchCatalog({ vendor, executable: true, readOnly: true }).filter(item => !item.requiredParams.length).sort((a, b) => Number(b.category === "daily-check") - Number(a.category === "daily-check"))[0] : undefined;
+  const diagnostic = !sourceIp ? findingDiagnostic(vendor, finding.affectedObject) : undefined;
+  if (!diagnostic && (!sourceIp || !["linux", "mikrotik", "fortigate"].includes(vendor))) {
+    throw Object.assign(new Error("برای این تجهیز فرمان اجرایی ثبت‌شده موجود نیست؛ راهنمای بررسی دستی را دنبال کنید."), { statusCode: 422, code: "FINDING_ACTION_UNSUPPORTED" });
+  }
   const responseAction = vendor === "linux" && sourceIp
     ? ActionType.linux_block_ip
     : vendor === "mikrotik" && sourceIp

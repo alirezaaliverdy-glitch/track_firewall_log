@@ -9,6 +9,7 @@ export type NormalizedFinding = { id: string; deviceId: string; vendor: Telemetr
 export type RawTelemetryEvent = { id?: string; timestamp?: string | Date; source?: string; raw?: string; message?: string; summary?: string; eventType?: string; action?: string; severity?: string; srcIp?: string; dstIp?: string; dstPort?: number; actor?: string; username?: string; affectedObject?: string; [key: string]: unknown };
 
 const windows = new Map<string, number[]>();
+const seenEvents = new Map<string, number>();
 function text(event: RawTelemetryEvent) { return [event.raw, event.message, event.summary, event.eventType, event.action, event.severity].filter(Boolean).join(" "); }
 function valueAt(input: unknown, path: string) { return path.split(".").reduce<unknown>((v, key) => v && typeof v === "object" ? (v as Record<string, unknown>)[key] : undefined, input); }
 function snapshotMatches(rule: VendorFindingRule, snapshot: unknown) { const value = valueAt(snapshot, rule.snapshotPath ?? ""); const s = String(value ?? "").toLowerCase(); switch (rule.snapshotTest) { case "truthy": return value === true || (typeof value === "number" && value > 0) || (typeof value === "string" && !["", "false", "no", "0", "unknown"].includes(s)); case "enabled": return ["yes", "true", "enabled", "without-password", "prohibit-password"].includes(s); case "inactive": return /^(inactive|disabled|failed|stopped|false|no)$/.test(s); case "public": return /wildcard|public|0\.0\.0\.0|\[::\]/.test(s); default: return false; } }
@@ -26,10 +27,19 @@ export function evaluateVendorTelemetry(input: { device: Pick<Device, "id" | "ve
   const profile = getVendorTelemetryProfile(input.device.vendor, input.device.type); if (!profile) return { vendor: null, findings: [] as NormalizedFinding[], suppressed: [] as Array<{ reason: string; event: RawTelemetryEvent }> };
   const now = input.now ?? new Date(); const findings: NormalizedFinding[] = []; const suppressed: Array<{ reason: string; event: RawTelemetryEvent }> = [];
   for (const event of input.events ?? []) {
+    const observed = event.timestamp ? new Date(event.timestamp).getTime() : now.getTime();
+    if (!Number.isFinite(observed) || observed > now.getTime() + 30_000 || now.getTime() - observed > 60 * 60_000) continue;
     if (profile.vendorId === "linux" && parseLinuxSecurityLog(String(event.raw ?? event.message ?? "")).kind === "sudo_command") continue;
     const raw = text(event); const suppression = profile.suppressionRules.find(x => x.pattern.test(raw)); if (suppression) { suppressed.push({ reason: suppression.reason, event }); continue; }
     for (const rule of profile.findingRules.filter(x => x.eventPattern?.test(raw))) {
-      const key = stableFingerprint(input.device.id, profile.vendorId, rule.id, event); const cutoff = now.getTime() - (rule.windowMinutes ?? 5) * 60_000; const timestamps = (windows.get(key) ?? []).filter(x => x >= cutoff); timestamps.push(now.getTime()); windows.set(key, timestamps); if (timestamps.length < (rule.threshold ?? 1)) continue;
+      const key = stableFingerprint(input.device.id, profile.vendorId, rule.id, event), reference = event.id ? `${key}:${event.id}` : null;
+      const cutoff = now.getTime() - (rule.windowMinutes ?? 5) * 60_000;
+      if (observed < cutoff || reference && seenEvents.has(reference)) continue;
+      if (reference) { seenEvents.set(reference, observed); if (seenEvents.size > 50_000) seenEvents.delete(seenEvents.keys().next().value!); }
+      const timestamps = (windows.get(key) ?? []).filter(x => x >= cutoff); timestamps.push(observed);
+      windows.delete(key); windows.set(key, timestamps.slice(-1000));
+      if (windows.size > 4096) windows.delete(windows.keys().next().value!);
+      if (timestamps.length < (rule.threshold ?? 1)) continue;
       findings.push(buildFinding(input.device.id, profile.vendorId, rule, key, event, undefined, timestamps.length, now));
     }
   }
@@ -82,4 +92,4 @@ export function shouldReopenResolvedSnapshot(existing: { status: string; updated
 }
 
 export function serializeFinding(record: Record<string, unknown>) { return { ...record, evidence: record.evidenceJson ?? [], rawRefs: record.rawRefsJson ?? [], recommendedActions: record.recommendedActions ?? [], evidenceJson: undefined, rawRefsJson: undefined }; }
-export function resetFindingEngineWindows() { windows.clear(); }
+export function resetFindingEngineWindows() { windows.clear(); seenEvents.clear(); }

@@ -15,7 +15,7 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
   assert.ok(host);
   const tag = `camera-fixture-${randomUUID()}`, secret = randomBytes(16).toString("hex");
   const users: string[] = [], actors: string[] = [];
-  let port = 0, writes = 0;
+  let port = 0, writes = 0, stops = 0;
   const soap = (action: string, body = "") => `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:d="http://www.onvif.org/ver10/device/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:m="http://www.onvif.org/ver10/media/wsdl"><s:Body><d:${action}Response>${body}</d:${action}Response></s:Body></s:Envelope>`;
   const server = createServer(async (request, reply) => {
     if (request.url?.startsWith("/ISAPI/")) { reply.writeHead(403); reply.end(); return; }
@@ -28,34 +28,42 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
     const endpoint = `http://${host}:${port}`;
     reply.setHeader("Content-Type", "application/soap+xml");
     if (action === "GetDeviceInformation") reply.end(soap(action, "<d:Manufacturer>Fixture</d:Manufacturer><d:Model>Camera</d:Model>"));
-    else if (action === "GetServices") reply.end(soap(action, `<d:Service><d:Namespace>http://www.onvif.org/ver10/media/wsdl</d:Namespace><d:XAddr>${endpoint}/media</d:XAddr></d:Service>`));
-    else if (action === "GetProfiles") reply.end(soap(action, '<m:Profiles token="profile"><tt:Name>Main</tt:Name><tt:VideoSourceConfiguration><tt:SourceToken>channel1</tt:SourceToken></tt:VideoSourceConfiguration></m:Profiles>'));
+    else if (action === "GetServices") reply.end(soap(action, `<d:Service><d:Namespace>http://www.onvif.org/ver10/media/wsdl</d:Namespace><d:XAddr>${endpoint}/media</d:XAddr></d:Service><d:Service><d:Namespace>http://www.onvif.org/ver20/ptz/wsdl</d:Namespace><d:XAddr>${endpoint}/ptz</d:XAddr></d:Service>`));
+    else if (action === "GetProfiles") reply.end(soap(action, '<m:Profiles token="profile"><tt:Name>Main</tt:Name><tt:VideoSourceConfiguration><tt:SourceToken>channel1</tt:SourceToken></tt:VideoSourceConfiguration><tt:PTZConfiguration><tt:NodeToken>fixture-node</tt:NodeToken></tt:PTZConfiguration></m:Profiles>'));
     else if (action === "GetStreamUri") reply.end(soap(action, `<tt:Uri>rtsp://${host}:554/video</tt:Uri>`));
     else if (action === "GetSnapshotUri") reply.end(soap(action, `<tt:Uri>${endpoint}/snapshot</tt:Uri>`));
     else if (action === "SystemReboot") { assert.equal(nodes(root, "Username")[0]?.text, "fixture-camera"); writes++; reply.end(soap(action)); }
+    else if (action === "Stop") { stops++; reply.end(soap(action)); }
     else reply.end(soap(action));
   });
   await new Promise<void>((resolve) => server.listen(0, "0.0.0.0", resolve)); port = (server.address() as { port: number }).port;
   const app = await buildApp();
   async function identity(role: "admin" | "viewer" | "operator", workspaceOwnerId?: string) {
     const username = `${tag}-${role}-${users.length}`;
-    const user = await prisma.appUser.create({ data: { username, displayName: "Camera test", role, workspaceOwnerId, passwordHash: "fixture-not-a-login-password", allowedSections: ["assets", "actions"] } }); users.push(user.id); actors.push(username);
+    const user = await prisma.appUser.create({ data: { username, displayName: "Camera test", role, workspaceOwnerId, passwordHash: "fixture-not-a-login-password", allowedSections: role === "operator" ? ["page:assets.cameras"] : ["assets", "actions"] } }); users.push(user.id); actors.push(username);
     const session = await createSession(user.id, {});
     const cookie = `firewall_session=${session.token}`;
     const csrf = await app.inject({ url: "/api/auth/csrf", headers: { cookie } }); assert.equal(csrf.statusCode, 200);
     return { id: user.id, headers: { cookie, "x-csrf-token": csrf.json().csrfToken } };
   }
   try {
-    const owner = await identity("admin"), other = await identity("admin"), viewer = await identity("viewer", owner.id);
+    const owner = await identity("admin"), other = await identity("admin"), viewer = await identity("viewer", owner.id), operator = await identity("operator", owner.id);
     for (const [path, payload] of [["/api/cameras/fixture/playback/export", { recordingToken: "fixture", start: "2026-01-01T00:00:00Z", duration: 5 }], ["/api/cameras/fixture/nvr/diagnostics", {}], ["/api/cameras/fixture/actions/preview", { operation: "nvr_overwrite", value: "StopRecord" }]] as const) assert.equal((await app.inject({ method: "POST", url: path, headers: viewer.headers, payload })).statusCode, 403, "viewer cannot export footage or change NVR settings");
     assert.equal((await app.inject({ url: "/api/cameras" })).statusCode, 401);
     const company = await prisma.company.create({ data: { ownerId: owner.id, name: "Fixture company", code: tag } });
     const input = { companyId: company.id, kind: "nvr", host, onvifPort: port, name: "Fixture camera", username: "fixture-camera", password: secret };
     assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: { cookie: owner.headers.cookie }, payload: input })).statusCode, 403);
     assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: viewer.headers, payload: input })).statusCode, 403);
-    const created = await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: input });
+    const created = await app.inject({ method: "POST", url: "/api/cameras", headers: operator.headers, payload: input });
     assert.equal(created.statusCode, 201); const camera = created.json().camera;
     assert.equal(camera.status, "verified"); assert.equal(camera.profiles.length, 1);
+    const asset = await prisma.asset.findUniqueOrThrow({ where: { id: `nvr-${camera.id}` } });
+    assert.equal(asset.companyId, company.id, "camera-only operator registers a real NVR asset projection");
+    for (const url of ["/api/devices", "/api/assets", "/api/actions", "/api/admin/users"]) assert.equal((await app.inject({ url, headers: operator.headers })).statusCode,403,url);
+    const stop = await app.inject({ method: "POST", url: `/api/cameras/${camera.id}/actions/preview`, headers: operator.headers, payload: { operation: "ptz_stop", profileToken: camera.profiles[0].token } });
+    assert.equal(stop.statusCode,200,"camera grant is enough to preview a registered permitted action");
+    const stopped = await app.inject({ method: "POST", url: `/api/cameras/${camera.id}/actions/${stop.json().id}/execute`, headers: operator.headers, payload: { intent: "execute", confirmed: true } });
+    assert.equal(stopped.statusCode,200);assert.equal(stopped.json().connectorInvoked,true);assert.equal(stops,1,"real fixture handler ran once");
     const companyTwo = await prisma.company.create({ data: { ownerId: owner.id, name: "Second fixture", code: `${tag}-two` } });
     const duplicateIp = await app.inject({ method: "POST", url: "/api/cameras", headers: owner.headers, payload: { ...input, companyId: companyTwo.id } });
     assert.equal(duplicateIp.statusCode, 201, 'same private IP can belong to different customer routes');
@@ -68,7 +76,7 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
     assert.equal((await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: viewer.headers })).statusCode, 403);
     assert.equal((await app.inject({ url: monitorUrl, headers: other.headers })).statusCode, 404);
     await prisma.cameraDevice.update({ where: { id: camera.id }, data: { monitorHistoryJson: Array.from({ length: 48 }, () => ({ checkedAt: new Date().toISOString(), reachable: true, warningCount: 0 })) } });
-    const monitoring = await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: owner.headers });
+    const monitoring = await app.inject({ method: "POST", url: monitorUrl + "/refresh", headers: operator.headers });
     assert.equal(monitoring.statusCode, 200); assert.equal(monitoring.json().report.reachable, true); assert.equal(monitoring.json().history.length, 48); assert.equal(monitoring.json().report.coverage.diskHealth, "unsupported");
     assert.equal(monitoring.json().history.at(-1).readings.connection, 1); assert.equal(monitoring.json().history.at(-1).readings.cpu, undefined);
     assert.equal(monitoring.json().sensors.find((sensor: { id: string }) => sensor.id === "cpu").status, "unknown");

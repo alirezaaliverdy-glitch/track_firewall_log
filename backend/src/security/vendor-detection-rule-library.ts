@@ -118,8 +118,8 @@ export const VENDOR_DETECTION_RULES: VendorDetectionRuleDefinition[] = [
 export function normalizeDetectionVendor(value: unknown) {
   const vendor = String(value ?? "").trim().toLowerCase();
   if (/routeros|mikrotik/.test(vendor)) return "mikrotik";
-  if (/fortinet|fortigate/.test(vendor)) return "fortigate";
-  if (/ios|cisco/.test(vendor)) return "cisco";
+  if (/fortios|fortinet|fortigate/.test(vendor)) return "fortigate";
+  if (/cisco|\bios(?:[-_\s]?xe)?\b/.test(vendor)) return "cisco";
   if (/pfsense|netgate/.test(vendor)) return "pfsense";
   if (/linux|ubuntu|debian|rhel|centos|rocky|alma/.test(vendor)) return "linux";
   return vendor;

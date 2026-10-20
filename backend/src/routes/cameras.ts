@@ -39,7 +39,7 @@ export const cameraRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) { return failure(reply, error); } finally { reply.raw.off("close", close); }
   });
   app.get<{ Params: { id: string }; Querystring: { recordingToken: string; start: string; duration: number } }>("/api/cameras/:id/playback", {
-    schema: { querystring: { type: "object", required: ["recordingToken", "start"], additionalProperties: false, properties: { recordingToken: { type: "string", minLength: 1, maxLength: 256 }, start: { type: "string", maxLength: 40 }, duration: { type: "integer", minimum: 5, maximum: 60, default: 30 } } } }
+    schema: { querystring: { type: "object", required: ["recordingToken", "start"], additionalProperties: false, properties: { recordingToken: { type: "string", minLength: 1, maxLength: 256 }, start: { type: "string", maxLength: 40 }, duration: { type: "integer", minimum: 5, maximum: 60 } } } }
   }, async (request, reply) => {
     const controller = new AbortController(), close = () => controller.abort(); reply.raw.once("close", close);
     try {

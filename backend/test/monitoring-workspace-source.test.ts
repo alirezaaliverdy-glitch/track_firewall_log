@@ -48,7 +48,7 @@ test("Linux monitoring uses readable fleet cards and persisted metric trends", (
   const client = read("src/lib/linuxMonitoring.ts");
 
   assert.match(page, /getLinuxMonitoringMetrics/);
-  assert.match(page, /refreshLinuxMonitoringDevice/);
+  assert.doesNotMatch(page, /refreshLinuxMonitoringDevice/, "the fleet page must not trigger connector writes on read");
   assert.match(page, /linux-fleet-grid/);
   assert.match(page, /TrendChart/);
   assert.match(page, /warningsJson/);

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { CameraSelect } from "./CameraSelect";
 import { useCameraFullscreen } from "./useCameraFullscreen";
 import { reviewRange, reviewSegment } from "./playbackRange";
+import { ReplayBuffer } from "./replayBuffer";
 import "./CameraPlaybackPanel.css";
 
 type Recording = { token: string; name: string; source: string; from: string | null; until: string | null };
@@ -26,8 +27,9 @@ export function CameraPlaybackPanel({ camera, isFa, initialSource = "" }: { came
   const [range, setRange] = useState<{ start: number; end: number }>();
   const controller = useRef<AbortController | null>(null), blob = useRef(""), alive = useRef(true), video = useRef<HTMLVideoElement>(null), screen = useRef<HTMLDivElement>(null);
   const pending = useRef({ offset: 0, autoplay: false }), scrubbing = useRef(false), fullscreen = useCameraFullscreen(screen);
+  const nextBuffer = useRef(new ReplayBuffer<Blob>());
   const time = (stamp: number | string | null | undefined) => stamp === undefined || stamp === null ? t("نامشخص", "Unknown") : new Date(stamp).toLocaleString(isFa ? "fa-IR" : "en-US", deviceClock ? { timeZone: "UTC" } : undefined);
-  const reset = () => { controller.current?.abort(); setBusy(false); video.current?.pause(); setPlaying(false); setClip(undefined); setRange(undefined); setError(""); if (blob.current) URL.revokeObjectURL(blob.current); blob.current = ""; };
+  const reset = () => { controller.current?.abort(); void nextBuffer.current.clear(); setBusy(false); video.current?.pause(); setPlaying(false); setClip(undefined); setRange(undefined); setError(""); if (blob.current) URL.revokeObjectURL(blob.current); blob.current = ""; };
   const selectRecording = (item?: Recording, context = inventory) => {
     reset(); setToken(item?.token ?? ""); const now=context?.timeBasis === "device-local" && context.deviceLocalTime ? Date.parse(context.deviceLocalTime.replace(" ","T")+"Z") : Date.now();
     const until = Math.min(item?.until ? Date.parse(item.until) : now - 60000, now);
@@ -40,20 +42,35 @@ export function CameraPlaybackPanel({ camera, isFa, initialSource = "" }: { came
       setInventory(data); const candidate = initialSource ? data.recordings.find(item => item.source === initialSource) : data.recordings[0]; selectRecording(candidate,data);
     }).catch(failure => { if (!request.signal.aborted && alive.current) setError(failure instanceof Error ? failure.message : "CAMERA_REPLAY_FAILED"); }).finally(() => { if (alive.current) setLoading(false); });
   };
-  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; controller.current?.abort(); if (blob.current) URL.revokeObjectURL(blob.current); }; }, [camera.id, initialSource]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { alive.current = true; load(); return () => { alive.current = false; controller.current?.abort(); void nextBuffer.current.clear(); if (blob.current) URL.revokeObjectURL(blob.current); }; }, [camera.id, initialSource]); // eslint-disable-line react-hooks/exhaustive-deps
   const selected = inventory?.recordings.find(item => item.token === token);
+  const segmentKey = (at: number, duration: number) => JSON.stringify([camera.id, token, start, end, at, duration]);
+  const download = async (at: number, duration: number, signal: AbortSignal, exporting = false) => {
+    const parameters = { recordingToken: token, start: new Date(at).toISOString(), duration };
+    const query = new URLSearchParams({ ...parameters, duration: String(duration) });
+    const response = await apiRequest(`/cameras/${encodeURIComponent(camera.id)}/playback${exporting ? "/export" : `?${query}`}`, { signal, ...(exporting ? { method: "POST", body: JSON.stringify(parameters) } : {}) });
+    if (!response.ok) { const failure = await response.json().catch(() => null); throw new Error(failure?.error?.code ?? "CAMERA_REPLAY_FAILED"); }
+    if (!response.headers.get("content-type")?.startsWith("video/mp4")) throw new Error("CAMERA_REPLAY_FAILED");
+    const bytes = await response.blob(); if (bytes.size > 12 * 1024 * 1024) throw new Error("CAMERA_REPLAY_SIZE_LIMIT");
+    return bytes;
+  };
+  useEffect(() => {
+    if (!clip || !range || busy || !selected) return;
+    const at = clip.start + clip.duration * 1000;
+    if (range.end - at < 5000) return;
+    const segment = reviewSegment(range, at, inventory?.maxClipSeconds ?? 60);
+    nextBuffer.current.prepare(segmentKey(segment.start, segment.duration), signal => download(segment.start, segment.duration, signal));
+  }, [clip, range, busy]); // eslint-disable-line react-hooks/exhaustive-deps
   const fetchAt = async (target: number, autoplay: boolean, exporting = false) => {
     if (busy || !selected) return;
     controller.current?.abort(); const request = new AbortController(); controller.current = request; setBusy(true); setError(""); if (!exporting) video.current?.pause();
     try {
       const chosen = reviewRange(new Date(parseInput(start)).toISOString(), new Date(parseInput(end)).toISOString(),archiveNow), segment = reviewSegment(chosen, target, inventory?.maxClipSeconds ?? 60);
       if (selected.from && segment.start < Date.parse(selected.from) || selected.until && segment.start + segment.duration * 1000 > Date.parse(selected.until)) throw new Error("CAMERA_RECORDING_OUTSIDE_RANGE");
-      const parameters = { recordingToken: token, start: new Date(segment.start).toISOString(), duration: segment.duration };
-      const query = new URLSearchParams({ ...parameters, duration: String(segment.duration) });
-      const response = await apiRequest(`/cameras/${encodeURIComponent(camera.id)}/playback${exporting ? "/export" : `?${query}`}`, { signal: request.signal, ...(exporting ? { method: "POST", body: JSON.stringify(parameters) } : {}) });
-      if (!response.ok) { const failure = await response.json().catch(() => null); throw new Error(failure?.error?.code ?? "CAMERA_REPLAY_FAILED"); }
-      if (!response.headers.get("content-type")?.startsWith("video/mp4")) throw new Error("CAMERA_REPLAY_FAILED");
-      const bytes = await response.blob(); if (bytes.size > 12 * 1024 * 1024) throw new Error("CAMERA_REPLAY_SIZE_LIMIT");
+      // A prefetched view is never reused for export: export retains its own authorization and audit.
+      const buffered = exporting ? (await nextBuffer.current.clear(), undefined) : await nextBuffer.current.take(segmentKey(segment.start, segment.duration), request.signal);
+      if (request.signal.aborted) return;
+      const bytes = buffered ?? await download(segment.start, segment.duration, request.signal, exporting);
       if (!alive.current || request.signal.aborted) return;
       if (exporting) { const url = URL.createObjectURL(bytes), anchor = document.createElement("a"); anchor.href = url; anchor.download = `recording-${segment.start}.mp4`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
       else {

@@ -4,10 +4,11 @@ import { isCurrentCollectorState, selectCollector } from "../collectors/collecto
 import { reconcileCollectorStates, runCollectorOnce } from "./collector.service.js";
 import { retryFailedSecurityAlertDeliveries } from "./security-alert-email.service.js";
 import { accountMonitoringSchedule, effectiveCollectorIntervalSeconds, isCollectorDue } from "./security-monitor-schedule.js";
-import { getDetectionDispatcherStatus, scheduleSecurityDetection, wasDetectionRecentlyCompleted } from "./security-detection-dispatcher.service.js";
+import { getDetectionDispatcherStatus, scheduleSecurityDetection } from "./security-detection-dispatcher.service.js";
 import { getDeviceConnectivitySensorStatus } from "./device-connectivity-sensor.service.js";
 import { monitoringCoverage } from "../monitoring/monitoring-coverage.js";
 import type { Prisma } from "@prisma/client";
+import { securityChangePage } from "./security-change-page.js";
 
 type MonitorLogger = {
   info(payload: unknown, message?: string): void;
@@ -70,25 +71,27 @@ async function runDueCollectors(logger?: MonitorLogger) {
 }
 
 async function detectChangedDevices(through: Date) {
-  const since = detectionSweepCursor ?? new Date(through.getTime() - 15 * 60_000);
-  const changed = await prisma.securityEvent.findMany({
-    where: { deviceId: { not: null }, receivedAt: { gt: since, lte: through } },
-    distinct: ["deviceId"],
-    select: { deviceId: true },
-    take: 100
-  });
-  const due = changed.filter((event) => !wasDetectionRecentlyCompleted({ deviceId: event.deviceId! }, since));
-  const results = await Promise.allSettled(due.map((event) => scheduleSecurityDetection({ deviceId: event.deviceId! })));
+  const since = detectionSweepCursor ? new Date(detectionSweepCursor.getTime() - 5000) : new Date(through.getTime() - 15 * 60_000);
+  const total = { rulesEvaluated: 0, eventsEvaluated: 0, findingsCreated: 0, findingsUpdated: 0 };
+  let after: string | undefined;
+  // Stable pages over a fixed window; do not lose the 101st device or advance on failure.
+  for (;;) {
+    const changed = await securityChangePage(since, through, after);
+  const results = await Promise.allSettled(changed.map((event) => scheduleSecurityDetection({ deviceId: event.deviceId! })));
   const failure = results.find((result) => result.status === "rejected");
   if (failure?.status === "rejected") throw failure.reason;
-  detectionSweepCursor = through;
   const completed = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-  return completed.reduce((total, result) => ({
+  Object.assign(total, completed.reduce((total, result) => ({
     rulesEvaluated: total.rulesEvaluated + result.rulesEvaluated,
     eventsEvaluated: total.eventsEvaluated + result.eventsEvaluated,
     findingsCreated: total.findingsCreated + result.findingsCreated,
     findingsUpdated: total.findingsUpdated + result.findingsUpdated
-  }), { rulesEvaluated: 0, eventsEvaluated: 0, findingsCreated: 0, findingsUpdated: 0 });
+  }), total));
+  if (changed.length < 100) break;
+  after = changed[changed.length - 1].deviceId!;
+  }
+  detectionSweepCursor = through;
+  return total;
 }
 
 export async function runSecurityMonitorCycle(logger?: MonitorLogger) {

@@ -19,12 +19,12 @@ async function nativeSource(camera: ReplayDevice, actor: CameraActor) {
   if(matches.length!==1 || camera.kind!=="nvr"&&matches[0].channels.length!==1)throw new CameraError("CAMERA_RECORDING_MAPPING_REQUIRED",422);
   return matches[0];
 }
-const nativeFallback=(error: unknown)=>error instanceof CameraError&&["CAMERA_REPLAY_UNSUPPORTED","CAMERA_ONVIF_UNAVAILABLE","CAMERA_XML_INVALID","CAMERA_OPERATION_UNSUPPORTED"].includes(error.code);
+const nativeFallback=(error: unknown)=>error instanceof CameraError&&["CAMERA_REPLAY_UNSUPPORTED","CAMERA_ONVIF_UNAVAILABLE","CAMERA_XML_INVALID","CAMERA_OPERATION_UNSUPPORTED","CAMERA_TIMEOUT","CAMERA_CONNECTION_FAILED"].includes(error.code);
 
 const inFlight = new Set<string>();
 async function device(id: string, actor: CameraActor) {
   const camera = await ownedCamera(id, actor);
-  await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true);
+  // Ownership first; validate the actual archive source's route, not the live camera's route.
   return camera;
 }
 export async function listCameraRecordings(id: string, actor: CameraActor) {
@@ -33,7 +33,7 @@ export async function listCameraRecordings(id: string, actor: CameraActor) {
   inFlight.add(cameraOwner(actor));
   try {
     if(camera.connectionMode!=="appweb") {
-      try{const data=await recordingInventory(camera,cameraConnection(camera));return{supported:true,protocol:"onvif-profile-g",recordings:data.recordings,truncated:data.truncated,maxClipSeconds:60};}
+      try{await cameraVpnTarget(camera.vpnConnectionId,camera.host,actor,true);const data=await recordingInventory(camera,cameraConnection(camera));if(data.recordings.length)return{supported:true,protocol:"onvif-profile-g",recordings:data.recordings,truncated:data.truncated,maxClipSeconds:60};}
       catch(error){if(!nativeFallback(error))throw error;}
     }
     const source=await nativeSource(camera,actor);
@@ -50,7 +50,7 @@ export async function cameraPlaybackClip(id: string, input: Record<string, unkno
       const source=await nativeSource(camera,actor),recordings=taoshiRecordings(source.recorder,source.channels);
       const item=recordings.find(r=>r.token===input.recordingToken);
       if(!item)throw new CameraError("CAMERA_RECORDING_NOT_FOUND",404);
-      const wall=taoshiWallTime(String(input.start)),start=wall.replace(" ","T")+".000Z",duration=Number(input.duration??30);
+      const wall=taoshiWallTime(String(input.start)),start=wall.replace(" ","T")+".000Z",duration=Number(input.duration??15);
       if(!Number.isInteger(duration)||duration<5||duration>15||Date.parse(start)>Date.parse(source.inventory.clock.replace(" ","T")+"Z"))throw new CameraError("CAMERA_REPLAY_WINDOW_INVALID");
       const end=new Date(Date.parse(start)+duration*1000).toISOString(),channel=Number(item.source.split(":")[1]);
       await checkTaoshiFiles(source.recorder,source.connection,channel,start,end);
@@ -61,6 +61,7 @@ export async function cameraPlaybackClip(id: string, input: Record<string, unkno
       await prisma.auditLog.create({data:{actor:actor.username,action:exporting?"camera.recording_exported":"camera.recording_viewed",targetType:"camera",targetId:id,dryRun:false,approvalStatus:"not_required",metadata:{ownerId,recorderId:source.recorder.id,channel,start,durationSeconds:duration,timeBasis:"device-local",bytes:clip.length,connectorInvoked:true,readOnly:true}}});
       return clip;
     }
+    await cameraVpnTarget(camera.vpnConnectionId,camera.host,actor,true);
     const connection = cameraConnection(camera), replay = await prepareReplay(camera, connection, input);
     const clip = await recordedCameraClip({ ownerId, cameraId: id, host: camera.host, connection, ...replay, signal });
     await prisma.auditLog.create({ data: { actor: actor.username, action: exporting ? "camera.recording_exported" : "camera.recording_viewed", targetType: "camera", targetId: id, dryRun: false, approvalStatus: "not_required", metadata: { ownerId, start: replay.start, durationSeconds: replay.duration, bytes: clip.length, connectorInvoked: true, readOnly: true } } });

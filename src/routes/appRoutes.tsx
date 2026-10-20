@@ -21,6 +21,8 @@ const DeviceTerminalPage = lazy(() => import("@/features/terminal/DeviceTerminal
 const AssetSyncPage = lazy(() => import("@/features/assets/pages/AssetSyncPage"));
 const PortTopologyPage = lazy(() => import("@/features/assets/pages/PortTopologyPage"));
 const CamerasPage = lazy(() => import("@/features/cameras/CamerasPage"));
+const NvrRegistrationPage = lazy(() => import("@/features/cameras/NvrRegistrationPage"));
+const NvrDevicePage = lazy(() => import("@/features/cameras/NvrDevicePage"));
 const SecurityOverviewPage = lazy(() => import("@/features/security/pages/SecurityOverviewPage"));
 const FindingsPage = lazy(() => import("@/features/security/pages/FindingsPage"));
 const VendorUsersPage = lazy(() => import("@/features/security/pages/VendorUsersPage"));
@@ -56,6 +58,8 @@ export const appRoutes: AppRoute[] = [
   { path: "/assets", featureKey: "assets.overview", labelFa: "نمای کلی", labelEn: "Overview", group: "assets", component: AssetsOverviewPage },
   { path: "/assets/devices", featureKey: "assets.devices", labelFa: "تجهیزات", labelEn: "Devices", group: "assets", component: AssetListPage },
   { path: "/assets/cameras", featureKey: "assets.cameras", labelFa: "دوربین‌ها", labelEn: "Cameras", group: "assets", component: CamerasPage },
+  { path: "/assets/cameras/register/nvr", featureKey: "assets.cameras", labelFa: "ثبت NVR", labelEn: "Register NVR", group: "assets", component: NvrRegistrationPage },
+  { path: "/assets/cameras/recorders/:cameraId", featureKey: "assets.cameras", labelFa: "پایش NVR", labelEn: "NVR monitoring", group: "assets", component: NvrDevicePage },
   { path: "/assets/devices/new", featureKey: "assets.device_onboarding_new", labelFa: "ثبت دستگاه", labelEn: "Register device", group: "assets", component: DeviceOnboardingPage },
   { path: "/assets/onboarding", featureKey: "assets.device_onboarding", labelFa: "راه‌اندازی دستگاه", labelEn: "Device onboarding", group: "assets", component: DeviceOnboardingPage },
   { path: "/assets/vendors/:vendorKey/devices/new", featureKey: "assets.vendor_device_onboarding", labelFa: "ثبت دستگاه وندور", labelEn: "Register vendor device", group: "assets", component: DeviceOnboardingPage },

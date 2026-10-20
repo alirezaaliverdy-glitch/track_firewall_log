@@ -9,6 +9,7 @@ const vendorAliases: Record<string, string> = {
 };
 
 const faSources: Record<string, string> = {
+  measured_resource: "اندازه‌گیری منابع تجهیز",
   auth: "احراز هویت",
   system: "سامانه",
   kernel: "هسته",
@@ -52,6 +53,7 @@ const faSources: Record<string, string> = {
 };
 
 const faCategories: Record<string, string> = {
+  resource_health: "سلامت و ظرفیت منابع",
   auth: "احراز هویت",
   privilege: "دسترسی ممتاز",
   config_change: "تغییر پیکربندی",
