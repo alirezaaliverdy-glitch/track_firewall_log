@@ -25,13 +25,11 @@ import {
   Activity,
   ArrowUpLeft,
   BellRing,
-  Check,
   CheckCircle2,
   CircleAlert,
   Clock3,
   Server,
   ShieldAlert,
-  ShieldCheck,
   Siren,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -44,6 +42,7 @@ import "./DashboardCommandCenter.css";
 import { FleetHealthPanel } from "./FleetHealthPanel";
 import { DashboardActionComposer } from "./DashboardActionComposer";
 import { DeviceTrafficPanel } from "./DeviceTrafficPanel";
+import { OperationalHealthPanel } from "./OperationalHealthPanel";
 type DashboardTone = "good" | "warning" | "danger" | "neutral";
 type AttentionItem = { id: string; deviceKey: string; title: string; reason: string; detail: string; route: string; tone: DashboardTone; actionFa: string; actionEn: string; observedAt: string | null; priority: number };
 
@@ -175,6 +174,7 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<OperationalDashboardActivity | null>(null);
   const [monitoring, setMonitoring] = useState<SecurityMonitoringStatus | null>(null);
   const [activityError, setActivityError] = useState(false);
+  const [monitoringError, setMonitoringError] = useState(false);
   const [, setLinuxError] = useState(false);
 
   const loadLinuxHealth = useCallback(async () => {
@@ -187,7 +187,7 @@ export default function DashboardPage() {
       getOperationalDashboardActivity(), getSecurityMonitoringStatus(),
     ]);
     if (activityResult.status === "fulfilled") { setActivity(activityResult.value); setActivityError(false); } else setActivityError(true);
-    if (monitoringResult.status === "fulfilled") setMonitoring(monitoringResult.value);
+    if (monitoringResult.status === "fulfilled") { setMonitoring(monitoringResult.value); setMonitoringError(false); } else setMonitoringError(true);
   }, []);
 
   useEffect(() => {
@@ -203,7 +203,7 @@ export default function DashboardPage() {
     void loadOperationalData();
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void loadOperationalData();
-    }, 10_000);
+    }, 5_000);
     return () => window.clearInterval(interval);
   }, [loadOperationalData]);
 
@@ -213,8 +213,6 @@ export default function DashboardPage() {
   const findings24h = openFindings.filter((item) => Date.now() - new Date(item.lastSeen).getTime() <= 86_400_000).length;
   const failedActions = activity?.summary.failedActions ?? 0;
   const pendingApprovals = activity?.summary.pendingApprovals ?? 0;
-  const linuxAttention = linux ? linux.warning + linux.critical + linux.offline + linux.stale + linux.unknown : 0;
-  const overallTone: DashboardTone = failedActions > 0 || criticalFindings > 0 ? "danger" : pendingApprovals > 0 || linuxAttention > 0 || assets.stats.needsReview > 0 ? "warning" : "good";
   const activeDevices = activity?.summary.activeDevices ?? assets.stats.total;
   const trend = useMemo(() => buildFindingTrend(findings.findings, isFa), [findings.findings, isFa]);
   const topTrendValue = Math.max(1, ...trend.map((item) => item.critical + item.high + item.medium + item.low));
@@ -345,14 +343,6 @@ export default function DashboardPage() {
       .slice(0, 8);
   }, [assets.assets, isFa, language, linux, monitoring, openFindings]);
 
-  const dailyChecks = [
-    { label: copy(isFa, "وضعیت تجهیزات", "Device health"), ok: assets.stats.needsReview === 0, value: `${number(assets.stats.online, language)} / ${number(assets.stats.total, language)}` },
-    { label: copy(isFa, "موتور تشخیص", "Detection engine"), ok: Boolean(monitoring?.running), value: monitoring?.running ? copy(isFa, "فعال", "Running") : copy(isFa, "متوقف", "Stopped") },
-    { label: copy(isFa, "جمع‌آورنده‌ها", "Collectors"), ok: Boolean(monitoring) && (monitoring?.collectors.failed ?? 0) === 0, value: `${number(monitoring?.collectors.succeeded ?? 0, language)} / ${number(monitoring?.collectors.configured ?? 0, language)}` },
-    { label: copy(isFa, "سرویس عملیات", "Operations service"), ok: !activityError, value: activityError ? copy(isFa, "قطع", "Unavailable") : copy(isFa, "متصل", "Connected") },
-  ];
-  const dailyHealthy = dailyChecks.every((item) => item.ok) && criticalFindings === 0;
-
 
   if ((assets.loading || findings.loading) && !activity) return <LoadingState label={copy(isFa, "در حال آماده‌سازی مرکز فرمان...", "Preparing command center...")} />;
   if (assets.error) return <ErrorState title={copy(isFa, "داشبورد در دسترس نیست", "Dashboard unavailable")} message={copy(isFa, "دریافت اطلاعات تجهیزات ناموفق بود.", "Could not load equipment data.")} onRetry={assets.refresh} />;
@@ -368,11 +358,7 @@ export default function DashboardPage() {
       <div className="command-workspace-shell">
         <div className="command-primary-workspace">
       <div className="command-overview-grid">
-        <article className={`command-panel daily-check-panel command-panel--${dailyHealthy ? "good" : overallTone}`}>
-          <header><span className="command-panel__icon"><ShieldCheck /></span><div><h2>{copy(isFa, "بررسی روزانه امنیت", "Daily security check")}</h2><p>{copy(isFa, "خلاصه زنده سرویس‌های کلیدی", "Live summary of critical services")}</p></div>{dailyHealthy ? <em>{copy(isFa, "سالم", "Healthy")}</em> : <a className="daily-check-panel__attention-link" href="#dashboard-attention">{copy(isFa, "مشاهده علت‌ها", "See causes")}<ArrowUpLeft size={14} /></a>}</header>
-          <ul>{dailyChecks.map((item) => <li key={item.label}><span><i className={item.ok ? "is-ok" : "is-alert"}>{item.ok ? <Check /> : <CircleAlert />}</i>{item.label}</span><b className={item.ok ? "is-ok" : "is-alert"}>{item.value}</b></li>)}</ul>
-          <footer><Clock3 size={14} />{copy(isFa, "چرخه پایش", "Monitoring cycle")}: {shortDate(monitoring?.lastCycleAt, language, copy(isFa, "ثبت نشده", "Not recorded"))}</footer>
-        </article>
+        <OperationalHealthPanel monitoring={monitoring} issueCount={openFindings.length} criticalCount={criticalFindings} offlineCount={assets.stats.unreachable} pendingCount={pendingApprovals} failedCount={failedActions} total={assets.stats.total} online={assets.stats.online} isFa={isFa} unavailable={activityError || monitoringError}/>
 
         <article className="command-panel device-count-panel">
           <header><span className="command-panel__icon"><Server /></span><div><h2>{copy(isFa, "تجهیزات", "Devices")}</h2><p>{copy(isFa, "موجودی فعال", "Active inventory")}</p></div></header>
@@ -411,7 +397,7 @@ export default function DashboardPage() {
         <div className="command-side-stack">
           <article className="command-panel latest-findings-panel">
             <header className="command-panel-heading"><div><span className="command-panel__icon"><ShieldAlert /></span><div><h2>{copy(isFa, "آخرین یافته‌ها", "Latest findings")}</h2><p>{copy(isFa, "نیازمند بررسی امنیتی", "Awaiting security review")}</p></div></div><Link to="/security/findings">{copy(isFa, "مشاهده همه", "View all")}<ArrowUpLeft size={14} /></Link></header>
-            {latestFindings.length ? <ul>{latestFindings.map((finding) => <li key={finding.id}><i className={`is-${finding.severity}`} /><div><Link to={`/security/findings/${finding.id}`}>{finding.title}</Link><span>{finding.device?.name ?? finding.asset?.name ?? finding.vendor}</span></div><time>{relativeDate(finding.lastSeen, language, "—")}</time></li>)}</ul> : <div className="command-empty command-empty--compact"><CheckCircle2 /><p>{copy(isFa, "یافته بازی وجود ندارد.", "No open findings.")}</p></div>}
+            {latestFindings.length ? <ul>{latestFindings.map((finding) => <li key={finding.id}><i className={`is-${finding.severity}`} /><div><Link to={`/security/findings/${finding.id}`}>{securityDisplayText(finding.title, language)}</Link><span>{finding.device?.name ?? finding.asset?.name ?? finding.vendor}</span></div><time>{relativeDate(finding.lastSeen, language, "—")}</time></li>)}</ul> : <div className="command-empty command-empty--compact"><CheckCircle2 /><p>{copy(isFa, "یافته بازی وجود ندارد.", "No open findings.")}</p></div>}
           </article>
         </div>
       </div>

@@ -48,10 +48,12 @@ export async function withAppWebSession<T>(host: string, port: number, https: bo
   active.add(origin);
   let cookie = "", loggedIn = false;
   const request = async (path: string, method = "GET", body?: string) => {
-    const read = /^\/CGI\/(?:Custom\/version|Record\/storageinfo|General\/(?:time|general)|Record\/record\/channels\/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))$/.test(path);
+    const read = /^\/CGI\/(?:Custom\/version|Record\/storageinfo|General\/(?:time|general)|Network\/netcommon|NetService\/rtsp|NetService\/decorder\/channels\/-1|Record\/record\/channels\/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7]))$/.test(path);
+    // playback.js uses PUT for searches; these two endpoints do not change recording settings.
+    const search = method === "PUT" && ["/CGI/Record/filelist", "/CGI/Record/filemonth"].includes(path);
     const write = path === "/CGI/General/general" || /^\/CGI\/Record\/record\/channels\/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-7])$/.test(path);
     const authentication = method === "GET" && /^\/CGI\/Security\/sessionLogin\?timestamp:\d+$/.test(path) || method === "POST" && path === "/CGI/Security/SelfExt/userCheck";
-    if (!(method === "GET" && read || method === "PUT" && write || authentication)) throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
+    if (!(method === "GET" && read || method === "PUT" && write || search || authentication)) throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
     const remaining = deadline - Date.now(); if (remaining <= 0) throw new CameraError("CAMERA_TIMEOUT", 504);
     const response = await cameraHttp(cameraUrl(origin + path, host), { method, body, timeout: Math.min(4000, remaining), maxBytes: 512 * 1024,
       headers: { "If-Modified-Since": "0", ...(cookie ? { Cookie: cookie } : {}), ...(body ? { "Content-Type": "application/json" } : {}) } });

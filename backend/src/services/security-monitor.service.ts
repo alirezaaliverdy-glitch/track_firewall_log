@@ -6,6 +6,8 @@ import { retryFailedSecurityAlertDeliveries } from "./security-alert-email.servi
 import { accountMonitoringSchedule, effectiveCollectorIntervalSeconds, isCollectorDue } from "./security-monitor-schedule.js";
 import { getDetectionDispatcherStatus, scheduleSecurityDetection, wasDetectionRecentlyCompleted } from "./security-detection-dispatcher.service.js";
 import { getDeviceConnectivitySensorStatus } from "./device-connectivity-sensor.service.js";
+import { monitoringCoverage } from "../monitoring/monitoring-coverage.js";
+import type { Prisma } from "@prisma/client";
 
 type MonitorLogger = {
   info(payload: unknown, message?: string): void;
@@ -136,18 +138,25 @@ export async function stopSecurityMonitor() {
   await cyclePromise;
 }
 
-export async function getSecurityMonitorStatus() {
+export async function getSecurityMonitorStatus(ownerId?: string) {
+  const deviceScope: Prisma.DeviceWhereInput = { deletedAt: null, ...(ownerId ? { company: { deletedAt: null, ownerId } } : { OR: [{ companyId: null }, { company: { deletedAt: null } }] }) };
   const [states, supportedDevices, enabledRules, alertChannels, pendingRetries] = await Promise.all([
     prisma.eventCollectorState.findMany({
+      where: { device: deviceScope },
       orderBy: [{ enabled: "desc" }, { updatedAt: "desc" }],
       include: { device: true }
     }),
-    prisma.device.findMany().then((devices) => devices.filter((device) => Boolean(selectCollector(device))).length),
+    prisma.device.findMany({ where: deviceScope }),
     prisma.detectionRule.count({ where: { enabled: true } }),
     prisma.securityAlertChannel.count({ where: { enabled: true, recipientEmail: { not: null } } }),
     prisma.securityAlertDelivery.count({ where: { status: { in: ["pending", "failed"] } } })
   ]);
   const currentStates = states.filter((state) => !state.device.deletedAt && isCurrentCollectorState(state.device, state.sourceType));
+  const collectorRows = currentStates.map(state => ({ ...state, effectiveIntervalSeconds: effectiveCollectorIntervalSeconds(accountMonitoringSchedule(state, state.sourceType)) }));
+  const coverage = monitoringCoverage(supportedDevices.map(device => ({ ...device, liveCollectorSupported: Boolean(selectCollector(device)) })), collectorRows);
+  const connectivity = getDeviceConnectivitySensorStatus();
+  const visibleIds = new Set(supportedDevices.map(device => device.id));
+  const connectivityDevices = connectivity.devices.filter(device => visibleIds.has(device.deviceId));
   return {
     enabled: env.securityMonitoringEnabled,
     running: runtime.running,
@@ -159,7 +168,7 @@ export async function getSecurityMonitorStatus() {
     lastDetectionAt: runtime.lastDetectionAt,
     lastErrorCode: runtime.lastErrorCode,
     collectors: {
-      supportedDevices,
+      supportedDevices: supportedDevices.filter(device => Boolean(selectCollector(device))).length,
       configured: currentStates.length,
       enabled: currentStates.filter((state) => state.enabled).length,
       attempted: runtime.collectorsAttempted,
@@ -182,7 +191,12 @@ export async function getSecurityMonitorStatus() {
     },
     detection: { enabledRules, lastRun: runtime.lastDetection },
     dispatcher: getDetectionDispatcherStatus(),
-    connectivity: getDeviceConnectivitySensorStatus(),
+    coverage,
+    connectivity: { ...connectivity, devices: connectivityDevices, checked: connectivityDevices.length,
+      online: connectivityDevices.filter(device => device.status === "online").length,
+      degraded: connectivityDevices.filter(device => device.status === "error").length,
+      offline: connectivityDevices.filter(device => device.status === "offline").length,
+      unknown: connectivityDevices.filter(device => device.status === "unknown").length },
     email: { enabledChannels: alertChannels, pendingRetries, lastRetry: runtime.lastEmailRetry }
   };
 }

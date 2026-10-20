@@ -1,4 +1,12 @@
 const faSecurityText: Record<string, string> = {
+  "Account: sensitive privileged command": "اجرای دستور حساس با دسترسی مدیریتی",
+  "Account: user or administrator changed": "تغییر حساب کاربر یا مدیر",
+  "Account: configuration changed": "تغییر تنظیمات توسط یک حساب کاربری",
+  "A named account executed a privileged command that can change access, services, firewall rules, or system availability. Review the command and its authorization.": "یک حساب مشخص، دستور حساسی اجرا کرده که می‌تواند دسترسی، سرویس‌ها، فایروال یا دسترس‌پذیری سیستم را تغییر دهد؛ دستور و مجوز اجرای آن را بررسی کنید.",
+  "A named operator changed a local user or administrator account. Review the audit event and change approval.": "یک کاربر مشخص، حساب کاربر یا مدیر را تغییر داده است؛ رویداد ممیزی و مجوز تغییر را بررسی کنید.",
+  "A configuration change was recorded with an attributable account. Review the change against the approved baseline.": "تغییر تنظیمات به نام یک حساب مشخص ثبت شده است؛ آن را با پیکربندی تأییدشده مقایسه کنید.",
+  "Nginx 5xx response burst": "افزایش خطاهای پاسخ وب‌سرور Nginx",
+  "Docker container restart or OOM": "راه‌اندازی مجدد یا کمبود حافظهٔ کانتینر Docker",
   "Repeated failed logins": "تلاش‌های ناموفق تکراری برای ورود",
   "Repeated denied SSH/login attempts from one source.": "تلاش‌های ردشده و تکراری SSH یا ورود از یک مبدأ.",
   "Login from new source": "ورود از مبدأ جدید",
@@ -113,6 +121,14 @@ export function securityDisplayText(value: string, language: string) {
   const exact = faSecurityText[value];
   if (exact) return exact;
   if (faVendorRuleTitles[value]) return faVendorRuleTitles[value];
+  const probe = value.match(/^Possible port scan from (.+)$/);
+  if (probe) return `نشانهٔ اسکن پورت از مبدأ ${probe[1]}`;
+  const brute = value.match(/^Possible (.+) brute force from (.+)$/);
+  if (brute) return `تلاش‌های تکراری حدس رمز ${brute[1]} از مبدأ ${brute[2]}`;
+  const port = value.match(/^Sensitive port (\d+) allowed$/);
+  if (port) return `دسترسی مجاز به پورت حساس ${port[1]}`;
+  const drop = value.match(/^Deny\/drop spike from (.+)$/);
+  if (drop) return `افزایش ترافیک ردشده از مبدأ ${drop[1]}`;
   const matchedEvents = value.match(/^.+? \((\d+) matching events in (\d+) minutes\)$/);
   if (matchedEvents) return `در ${matchedEvents[2]} دقیقه، ${matchedEvents[1]} رویداد مطابق این قانون ثبت شده است.`;
   if (value.endsWith(genericExposureSuffix)) {

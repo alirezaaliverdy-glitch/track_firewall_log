@@ -102,6 +102,7 @@ export type SecurityEmailAlertSettings = {
 };
 
 export type SecurityMonitoringStatus = {
+  coverage?: MonitoringCoverage;
   enabled: boolean;
   running: boolean;
   cycleRunning: boolean;
@@ -141,6 +142,16 @@ export type SecurityMonitoringStatus = {
     devices: Array<{ deviceId: string; consecutiveFailures: number; status: string; checkedAt: string; lastSuccessAt: string | null; latencyMs: number | null; code: string }>;
   };
   email: { enabledChannels: number; pendingRetries: number; lastRetry: { attempted: number; sent: number; failed: number } | null };
+};
+
+export type MonitoringCoverage = {
+  assessedAt: string; scope: "configured-checks-only"; eventDetection: "event-driven-with-polling-fallback";
+  dashboardRefreshSeconds: number; automaticRemediation: false;
+  summary: { total: number; fresh: number; gaps: number };
+  devices: Array<{ deviceId: string; deviceName: string; vendor: string;
+    state: "fresh" | "stale" | "failed" | "disabled" | "not_checked" | "not_configured" | "unsupported";
+    observedAt: string | null; intervalSeconds: number | null; eventRuleCount: number; snapshotRuleCount: number;
+    profileState: string; dailyCheck: string; officialGuide: { title: string; url: string } | null }>;
 };
 
 export type VendorFindingProfile = {

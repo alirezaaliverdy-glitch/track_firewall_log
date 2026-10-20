@@ -39,8 +39,16 @@ function assessSection(section: DailyCheckSectionProfile, outputs: DailyCheckOut
   if (outputs.length === 0) return "not_checked";
   const text = normalizeText(outputs);
   if (/command (?:not found|fail)|unknown command|not supported/.test(text)) return "not_supported";
-  if (outputs.some((output) => typeof output.exitCode === "number" && output.exitCode !== 0)) return "critical";
-  if (/\b(critical|panic|failed|failure|error)\b/.test(text)) return "critical";
+  // A failed collector is missing evidence, not proof of a critical device fault.
+  const collectionError = outputs.map(output => output.stderr ?? "").join("\n").toLowerCase();
+  if (outputs.some((output) => typeof output.exitCode === "number" && output.exitCode !== 0) || /permission denied|authentication failed|connection timed out/.test(collectionError)) return "not_checked";
+  if (/kernel panic|no space left on device|out of memory/.test(text)) return "critical";
+  if (section.key === "resources") {
+    const percentages = [...text.matchAll(/^\S+\s+\S+\s+\S+\s+\S+\s+(\d{1,3})%\s+\S+/gm)].map(match => Number(match[1])).filter(value => value <= 100);
+    const cpu = Number(text.match(/cpu-load:\s*(\d+)%/)?.[1] ?? 0);
+    if (cpu >= 95 || percentages.some(value => value >= 95)) return "critical";
+    if (cpu >= 85 || percentages.some(value => value >= 85)) return "needs_review";
+  }
   if (section.key === "license" && /\b(expired|invalid|unlicensed|not licensed)\b/.test(text)) return "needs_review";
   if (section.key === "management" && /set\s+allowaccess\s+.*\b(?:telnet|http)\b/.test(text)) return "critical";
   if (section.key === "system_health") {
@@ -51,12 +59,27 @@ function assessSection(section: DailyCheckSectionProfile, outputs: DailyCheckOut
   }
   if ((section.key === "route_dns" && !/(?:0\.0\.0\.0\/0|\bs\*\b|primary\s*:)/.test(text)) ||
       (section.key === "admins" && /set\s+accprofile\s+"?super_admin"?/.test(text) && !/set\s+trusthost\d+/.test(text))) return "needs_review";
-  if (/\b(warn|warning|degraded|inactive|disabled|refused)\b/.test(text)) return "needs_review";
+  const meaningful = text.replace(/\b(?:0|no)\s+(?:errors?|failures?|failed(?:\s+units?)?)\b/g, "");
+  if (/\b(warn|warning|degraded|inactive|disabled|refused|failed|failure|error|critical)\b/.test(meaningful)) return "needs_review";
   if (!text.trim() || /\b(unknown|unparsed|not checked)\b/.test(text)) return "not_checked";
+  const recognizable: Record<string, RegExp> = {
+    overall: /uptime|load average|version|hostname|cpu-load|cpu states|memory:/,
+    resources: /mem:|memtotal|free-memory|total-memory|cpu-load|filesystem|\/dev\/|tmpfs|memory:/,
+    services: /active|running|loaded units|\bname\b|\bport\b/,
+    network: /default via|inet|route|interface|ether|link|address|\d+\.\d+\.\d+\.\d+/,
+    firewall: /status:\s*active|chain|input|forward|filter|drop|accept|allow|deny/,
+    vpn_ha: /wireguard|ipsec|l2tp|peer|allowed-address|interface/,
+    logs: /sshd|system|account|firewall|journal|no entries|login|error|warning/,
+  };
+  if (recognizable[section.key] && !recognizable[section.key].test(text)) return "not_checked";
   return "safe";
 }
 
-function matchingOutputs(section: DailyCheckSectionProfile, outputs: DailyCheckOutput[]) {
+function matchingOutputs(section: DailyCheckSectionProfile, outputs: DailyCheckOutput[], vendor: string) {
+  const linux: Record<string, string[]> = { overall: ["daily check: system"], resources: ["daily check: system"], services: ["daily check: services"], network: ["daily check: network"], firewall: ["daily check: firewall"], logs: ["daily check: logs"] };
+  const mikrotik: Record<string, string[]> = { overall: ["/system resource", "/system package"], resources: ["/system resource"], services: ["/ip service"], network: ["/interface print", "/ip route", "/ip dhcp-server"], firewall: ["/ip firewall"], vpn_ha: ["/interface wireguard", "/ip ipsec"], logs: ["/log print"] };
+  const exact = vendor === "linux" ? linux[section.key] : vendor === "mikrotik" ? mikrotik[section.key] : undefined;
+  if (["linux", "mikrotik"].includes(vendor)) return outputs.filter(output => exact?.some(template => output.template.toLowerCase().includes(template)));
   if (section.templates.length === 0) return [];
   return outputs.filter((output) => section.templates.some((template) => output.template.toLowerCase().includes(template.toLowerCase())));
 }
@@ -67,9 +90,8 @@ export function buildDailyCheckResult(input: { deviceId: string; vendor: unknown
 
   const outputs = input.outputs ?? [];
   const sections: DailySectionResult[] = profile.sections.map((section) => {
-    const evidenceOutputs = matchingOutputs(section, outputs);
-    const sectionOutputs = evidenceOutputs.length > 0 ? evidenceOutputs : outputs;
-    const status = profile.implementationState === "implemented" ? assessSection(section, sectionOutputs) : "not_supported";
+    const evidenceOutputs = matchingOutputs(section, outputs, profile.vendor);
+    const status = profile.implementationState === "implemented" ? assessSection(section, evidenceOutputs) : "not_supported";
 
     return {
       key: section.key,
@@ -105,7 +127,7 @@ export function buildDailyCheckResult(input: { deviceId: string; vendor: unknown
     recommendationsFa: sections.flatMap((section) => section.suggestedActions).slice(0, 20),
     commands: outputs.map((output) => output.template),
     rawOutput: outputs.map((output) => output.stdout).filter(Boolean).join("\n"),
-    confidence: sections.some((section) => section.status === "not_checked") ? 0.65 : 0.9,
+    confidence: sections.filter(section => !["not_checked", "not_supported"].includes(section.status)).length / sections.length * 0.9,
     overallStatus,
     score,
     sections,

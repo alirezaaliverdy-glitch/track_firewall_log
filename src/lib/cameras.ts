@@ -38,6 +38,7 @@ const errors: Record<string, [string, string]> = {
   CAMERA_REPLAY_BUSY: ["یک بررسی یا کلیپ دیگر در این فضای کاری در حال آماده‌سازی است؛ کمی صبر کن.", "Another recording request is running in this workspace. Please wait."],
   CAMERA_REPLAY_TIMEOUT: ["آماده‌سازی کلیپ به‌موقع تمام نشد؛ بازهٔ کوتاه‌تر یا زمان دیگری را انتخاب کن.", "The recording timed out. Try a shorter clip or another time."],
   CAMERA_RECORDING_NOT_FOUND: ["این آرشیو در دستگاه موجود نیست؛ فهرست را تازه کن.", "Recording not found. Refresh the list."],
+  CAMERA_RECORDING_MAPPING_REQUIRED: ["کانال این دوربین روی NVR همین شرکت مشخص نشد؛ شرکت دوربین و ضبط‌کننده و آدرس کانال را بررسی کن.", "The camera could not be matched uniquely to a recorder channel in this company."],
   CAMERA_RECORDING_OUTSIDE_RANGE: ["زمان انتخابی خارج از بازهٔ آرشیو دستگاه است.", "The selected time is outside the recording range."],
   CAMERA_REPLAY_SIZE_LIMIT: ["کلیپ از سقف امن ۱۲ مگابایت بیشتر شد؛ بازه را کوتاه کن.", "The clip exceeds 12 MiB. Choose a shorter interval."],
   NVR_APPWEB_AUTH_FAILED: ["پنل NVR اطلاعات ذخیره‌شده را رد کرد (کد ۲۰۳). نام کاربری و رمز همین دستگاه را در ویرایش اتصال دوباره ذخیره کن؛ تلاش خودکار متوقف شد.", "NVR web login rejected the saved account (203). Update this device's credentials. Automatic retries stopped."],

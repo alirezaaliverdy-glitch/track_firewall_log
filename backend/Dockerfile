@@ -1,3 +1,11 @@
+FROM node:22-alpine AS taoshi-fetch
+COPY native/taoshi/fetch-sdk.mjs /fetch-sdk.mjs
+RUN node /fetch-sdk.mjs
+FROM debian:12-slim AS taoshi-build
+RUN apt-get update && apt-get install -y --no-install-recommends g++ ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=taoshi-fetch /sdk /sdk
+COPY native/taoshi/replay.cpp /replay.cpp
+RUN g++ -w -DLINUX -DLINUX64 -I/sdk -O2 /replay.cpp -Wl,--start-group /sdk/libNetSDK.a /sdk/libBasic.a /sdk/libTPLayer.a /sdk/libStreamParaser.a -Wl,--end-group -pthread -ldl -static -o /taoshi-replay
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
@@ -25,6 +33,7 @@ COPY docker-entrypoint.sh /usr/local/bin/firewall-entrypoint
 COPY --from=build /app/node_modules/.pnpm/@prisma+client@*/node_modules/.prisma /tmp/generated-prisma-client
 RUN set -eu; client_dir="$(dirname "$(readlink -f node_modules/@prisma/client)")"; cp -a /tmp/generated-prisma-client "$client_dir/../.prisma"; rm -rf /tmp/generated-prisma-client
 COPY --from=build /app/dist ./dist
+COPY --from=taoshi-build /taoshi-replay /usr/local/bin/taoshi-replay
 RUN mkdir -p src/config && cp dist/config/database-url.js src/config/database-url.js
 RUN sed -i 's/\r$//' /usr/local/bin/firewall-entrypoint \
   && chmod 0755 /usr/local/bin/firewall-entrypoint \

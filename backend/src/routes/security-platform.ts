@@ -181,7 +181,7 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Body: { deviceId?: string; assetId?: string } }>("/api/security/detections/run", async (request) => runSecurityDetection(request.body ?? {}));
 
-  app.get("/api/security/monitoring/status", async () => getSecurityMonitorStatus());
+  app.get("/api/security/monitoring/status", async request => getSecurityMonitorStatus(request.authUser?.scopeOwnerId));
 
   app.get("/api/security/alerts/email", async (request) => getSecurityEmailAlertSettings(request.authUser?.id));
 

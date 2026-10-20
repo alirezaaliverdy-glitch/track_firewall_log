@@ -15,6 +15,8 @@ import { getAction, normalizeObject, type ActionPlan } from "@/lib/actions";
 import { actionCommandOutputs, actionExecutionSucceeded, actionExecutionPending, type ActionCommandOutput } from "@/lib/actionResult";
 import { formatActionResult } from "@/features/actions/actionResultFormatter";
 import { useNavigate } from "react-router-dom";
+import { AccessLink as Link } from "@/components/auth/AccessLink";
+import "@/features/security/components/FindingReview.css";
 
 const metadataOf = (action: ActionPlan) => normalizeObject(normalizeObject(action.parametersJson).metadata);
 
@@ -220,6 +222,8 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
             </div>
           </dl>
         </section>
+
+        {typeof normalizeObject(action.parametersJson).findingId === "string" && <section className="command-panel finding-next-step"><header><h2>قدم بعدی: بررسی رفع واقعی مشکل</h2></header><p>{succeeded ? "اجرای فرمان تأیید شده است؛ برای تأیید رفع مشکل، شواهد و وضعیت تازهٔ همان تجهیز را بررسی کنید. موفقیت دستور به‌تنهایی به معنی رفع مشکل نیست." : "اقدام هنوز با نتیجهٔ موفق واقعی تکمیل نشده است؛ علت را بررسی کنید و یافته را رفع‌شده در نظر نگیرید."}</p><div className="finding-review__actions"><Link to={`/security/findings/${encodeURIComponent(String(normalizeObject(action.parametersJson).findingId))}`}>بازگشت به مشکل و شواهد</Link>{action.deviceId && <Link to={`/assets/devices/${encodeURIComponent(action.deviceId)}/monitoring`}>بررسی پایش تازهٔ تجهیز</Link>}</div></section>}
 
         <section className="rounded-2xl border border-slate-800 bg-slate-950/85 p-4 sm:p-5">
           <div className="mb-4">

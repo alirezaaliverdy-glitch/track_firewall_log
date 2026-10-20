@@ -16,3 +16,7 @@ test('the final sub-five-second tail overlaps a valid segment without leaving th
 test('invalid seek coordinates fail before any network request',()=>{
  assert.throws(()=>reviewSegment({start,end:start+60000},NaN));assert.throws(()=>reviewSegment({start,end:start},start));
 });
+test('native recorders advertise shorter bounded segments without changing ONVIF defaults',()=>{
+ const range={start,end:start+300000};assert.equal(reviewSegment(range,start,15).duration,15);assert.equal(reviewSegment(range,start).duration,60);
+ for(const invalid of [0,4,61,NaN,15.5])assert.throws(()=>reviewSegment(range,start,invalid));
+});

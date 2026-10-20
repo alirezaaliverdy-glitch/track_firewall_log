@@ -63,12 +63,15 @@ try {
   assert.match(await page.$eval(".finding-analysis .finding-analysis__accounts", element => element.textContent), /operator1/);
   await page.click(".finding-analysis__evidence summary"); await capture("finding-analysis-desktop");
   await page.setViewport({ width: 390, height: 844 }); await capture("finding-analysis-mobile");
-  await page.click(".finding-review__heading>button"); await page.waitForFunction(() => document.querySelector(".finding-decision--closed"));
-  assert.equal(reanalyses, 1);
+  // Create the diagnostic while the finding is open, then verify closed-state UX.
   await page.click(".finding-review__actions>button");
   await page.waitForFunction(() => location.pathname.endsWith("/actions/fixture-plan"));
   await page.waitForSelector(".operator-handoff"); assert.equal(plans, 1); assert.equal(executions, 0);
   await capture("finding-action-review-mobile");
+  await page.goto(`${base}/security/findings/${finding.id}`, { waitUntil: "networkidle0" });
+  await page.click(".finding-review__heading>button"); await page.waitForFunction(() => document.querySelector(".finding-decision--closed"));
+  assert.equal(reanalyses, 1); assert.equal(plans, 1);
+  assert.equal(await page.$eval(".finding-next-step .finding-review__actions>button", element => element.disabled), true);
   await page.goto(`${base}/tools/vpn`, { waitUntil: "networkidle0" }); await page.waitForSelector(".vpn-heading .camera-button--primary");
   await page.click(".vpn-heading .camera-button--primary"); await page.waitForSelector(".vpn-import input[type=file]");
   const picker = page.waitForFileChooser(); await page.click(".vpn-import input[type=file]");

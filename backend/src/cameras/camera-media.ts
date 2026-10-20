@@ -8,13 +8,17 @@ type FrameSession = { cameraId: string; latest: Buffer | null; lastRequest: numb
 const frameSessions = new Map<string, Promise<FrameSession>>();
 let sequence = 0;
 const replayOwners = new Set<string>();
+export function reserveCameraReplay(ownerId: string) {
+  cameraMediaCapacity(ownerId);
+  if (replayOwners.has(ownerId) || replayOwners.size >= 2) throw new CameraError("CAMERA_REPLAY_BUSY",429);
+  replayOwners.add(ownerId);
+  return () => replayOwners.delete(ownerId);
+}
 
 /** A bounded in-memory H.264/MP4 excerpt; no recording cache, customer disk write or raw RTSP URL leaves the server. */
 export async function recordedCameraClip(input: { ownerId: string; cameraId: string; host: string; uri: URL; connection: CameraConnection; start: string; end: string; duration: number; signal?: AbortSignal }) {
-  cameraMediaCapacity(input.ownerId);
-  if (replayOwners.has(input.ownerId) || replayOwners.size >= 2) throw new CameraError("CAMERA_REPLAY_BUSY", 429);
   if (input.signal?.aborted) throw new CameraError("CAMERA_REPLAY_CANCELLED", 499);
-  replayOwners.add(input.ownerId);
+  const release=reserveCameraReplay(input.ownerId);
   let bridge: Awaited<ReturnType<typeof openReplayBridge>> | undefined;
   let child: ChildProcessWithoutNullStreams | undefined;
   let deadline: NodeJS.Timeout | undefined;
@@ -43,7 +47,7 @@ export async function recordedCameraClip(input: { ownerId: string; cameraId: str
     });
     if (clip.subarray(4, 8).toString() !== "ftyp") throw new CameraError("CAMERA_REPLAY_FAILED", 502);
     return clip;
-  } finally { if (deadline) clearTimeout(deadline); stop(); active.delete(key); replayOwners.delete(input.ownerId); }
+  } finally { if (deadline) clearTimeout(deadline); stop(); active.delete(key); release(); }
 }
 
 function rtspInput(host: string, profile: string, connection: CameraConnection) {
