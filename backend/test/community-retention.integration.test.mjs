@@ -11,7 +11,7 @@ test('approved retention protects open tickets, tasks, audit and other workspace
   const app = await buildApp(), tag = `retention-${randomUUID()}`, users = [], audits = [];
   let safeError;
   app.addHook('onError', async (_req, _reply, error) => { safeError = { code: error.code, name: error.name, transactionExpired: /Transaction.*closed|timeout/i.test(error.message) }; });
-  const identity = async (role, workspaceOwnerId) => { const user = await prisma.appUser.create({ data: { username: `${tag}-${users.length}`, displayName: 'Retention fixture', role, workspaceOwnerId, passwordHash: 'fixture-only', allowedSections: [] } }); users.push(user.id); const session = await createSession(user.id, {}); const cookie = `firewall_session=${session.token}`; const csrf = await app.inject({ url: '/api/auth/csrf', headers: { cookie } }); return { id: user.id, headers: { cookie, 'x-csrf-token': csrf.json().csrfToken } }; };
+  const identity = async (role, workspaceOwnerId) => { const user = await prisma.appUser.create({ data: { username: `${tag}-${users.length}`, displayName: 'Retention fixture', role, workspaceOwnerId, passwordHash: 'fixture-only', allowedSections: ['page:community'] } }); users.push(user.id); const session = await createSession(user.id, {}); const cookie = `firewall_session=${session.token}`; const csrf = await app.inject({ url: '/api/auth/csrf', headers: { cookie } }); return { id: user.id, headers: { cookie, 'x-csrf-token': csrf.json().csrfToken } }; };
   const send = (who, method, path, payload) => app.inject({ method, url: '/api/community' + path, headers: who.headers, ...(payload ? { payload } : {}) });
   try {
     const owner = await identity('admin'), viewer = await identity('viewer', owner.id), foreign = await identity('admin');

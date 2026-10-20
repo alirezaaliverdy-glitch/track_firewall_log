@@ -10,9 +10,9 @@ test('community: persisted chat, private tickets, workspace isolation, CSRF, cur
   const { buildApp } = await import('../dist/app.js');
   const { createSession } = await import('../dist/services/auth.service.js');
   const app = await buildApp(); const users = [], tag = `community-fixture-${randomUUID()}`;
-  async function identity(role, workspaceOwnerId) {
+  async function identity(role, workspaceOwnerId, allowedSections = ['page:community']) {
     const user = await prisma.appUser.create({ data: { username: `${tag}-${users.length}`, displayName: `Fixture ${users.length}`, role,
-      passwordHash: 'fixture-not-a-login-password', workspaceOwnerId, allowedSections: [] } }); users.push(user.id);
+      passwordHash: 'fixture-not-a-login-password', workspaceOwnerId, allowedSections } }); users.push(user.id);
     const session = await createSession(user.id, {}), cookie = `firewall_session=${session.token}`;
     const csrf = await app.inject({ url: '/api/auth/csrf', headers: { cookie } });
     assert.equal(csrf.statusCode, 200);
@@ -22,8 +22,15 @@ test('community: persisted chat, private tickets, workspace isolation, CSRF, cur
   const send = (who, method, url, payload) => app.inject({ method, url: path + url, headers: who.headers, ...(payload ? { payload } : {}) });
   try {
     const owner = await identity('admin'), other = await identity('admin'), one = await identity('viewer', owner.id), two = await identity('operator', owner.id);
+    const noPages = await identity('operator', owner.id, []), cameraOnly = await identity('viewer', owner.id, ['page:assets.cameras']);
     assert.equal((await app.inject({ url: path + '?kind=ticket' })).statusCode, 401);
     const input = { title: 'Fixture support', body: '<script>not executable</script>', kind: 'ticket', clientKey: randomUUID() };
+    for (const denied of [noPages, cameraOnly]) {
+      assert.equal((await send(denied, 'GET', '?kind=discussion')).statusCode, 403, 'community requires an explicit page grant');
+      assert.equal((await send(denied, 'POST', '', input)).statusCode, 403);
+      const navigation = (await app.inject({ url: '/api/product-state/navigation', headers: denied.headers })).json().navigation;
+      assert.equal(navigation.some(item => item.key === 'community'), false, 'unselected page stays hidden');
+    }
     assert.equal((await app.inject({ method: 'POST', url: path, headers: { cookie: one.headers.cookie }, payload: input })).statusCode, 403);
     assert.equal((await app.inject({ method: 'POST', url: path, headers: { ...one.headers, origin: 'https://untrusted.example' }, payload: input })).statusCode, 403);
     const created = await send(one, 'POST', '', input); assert.equal(created.statusCode, 201);
@@ -71,7 +78,7 @@ test('community: persisted chat, private tickets, workspace isolation, CSRF, cur
     assert.equal(native.statusCode, 200, 'native viewer can participate');
     assert.equal((await app.inject({ method: 'POST', url: '/api/cameras', headers: one.headers, payload: {} })).statusCode, 403, 'viewer device mutation remains forbidden');
     const nav = (await app.inject({ url: '/api/product-state/navigation', headers: two.headers })).json().navigation;
-    assert.ok(nav.some(item => item.key === 'community'), 'operator with no device sections still has community');
+    assert.ok(nav.some(item => item.key === 'community'), 'community-only operator can participate without device access');
     // Check durability through a second application instance, not browser-only state.
     const second = await buildApp();
     try { assert.equal((await second.inject({ url: path + `/${ticket}`, headers: one.headers })).json().messages.length, 2); } finally { await second.close(); }

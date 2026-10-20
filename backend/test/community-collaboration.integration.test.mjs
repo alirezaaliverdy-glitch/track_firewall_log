@@ -12,7 +12,7 @@ test('collaboration: authorship, replies, change feed, private files, quotas, ta
   const app = await buildApp(), users = [], tag = `collaboration-${randomUUID()}`;
   async function identity(role, workspaceOwnerId, isActive = true) {
     const user = await prisma.appUser.create({ data: { username: `${tag}-${users.length}`, displayName: `Fixture ${users.length}`, role,
-      passwordHash: 'fixture-not-a-real-password', workspaceOwnerId, isActive, allowedSections: [] } }); users.push(user.id);
+      passwordHash: 'fixture-not-a-real-password', workspaceOwnerId, isActive, allowedSections: ['page:community'] } }); users.push(user.id);
     if (!isActive) return { id: user.id };
     const session = await createSession(user.id, {}), cookie = `firewall_session=${session.token}`;
     const csrf = await app.inject({ url: '/api/auth/csrf', headers: { cookie } });

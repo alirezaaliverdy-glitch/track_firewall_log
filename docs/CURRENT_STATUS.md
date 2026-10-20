@@ -1,3 +1,9 @@
+## 2026-10-20 - Repair stale CI community permission fixtures
+
+- Remote main isb39dd03, but CI39387794784 failed before deployment: two collaboration tests created operators with no page grant and expected route-level404/200 rather than the correct page-level403. Frontend and Compose succeeded; production deploy was skipped. Read-only SSH confirms production checkout/deploy marker0921ecb6, five healthy services and public dashboard/readiness200.
+- Positive fixtures now explicitly select page:community, including viewers in retention tests. Added negative empty-operator/camera-only-viewer API/navigation assertions and page-access/native replay regressions to CI. No runtime permission relaxation, schema or protected execution changes.
+- Final local CI-equivalent backend groups pass4+4+23+15+3 and final direct access/replay group21 (70 total), including actual50MiB upload/retention, non-owner migration-role, camera/NVR, VPN and SSH PTY fixtures.13 deployment regression checks, YAML/deployment prerequisite validation, cached unchanged-source backend build, UTF-8 and memory checks pass. Exact labeled synthetic DB/container/anonymous volume/network and unused dev image removed; application services/data untouched. Test/workflow-only repair requires no runtime redeploy. Local commit only; GitHub/server remain unupdated until an explicitly authorized push and successful deployment verification.
+
 ## 2026-10-20 - Selected-camera playback correction
 
 - Reproduced the actual selected channel's replay failure:20fps keyframes with25fps hints on some delta frames. Only stable validated keyframe metadata determines the decode rate; actual rate changes remain explicit localized errors.8s decode preroll covers the observed four-second GOP, and2s SDK transport tail is discarded after collecting the requested end. No synthetic frame padding or footage persistence.

@@ -1,3 +1,9 @@
+## 2026-10-20 - Fix the failed main-push CI permission gate
+
+- Inspected CI39387794784 for pushedb39dd03: frontend/Compose green, backend failed in community API/collaboration expectations403-versus404/200; production deployment skipped. Read-only SSH confirms checkout/deploy marker0921ecb6 and five healthy services; public dashboard/readiness200. No workflow rerun, server update or data changes performed.
+- Root cause is stale positive operator fixtures with allowedSections:[] after page-level enforcement. Give positive community participants the explicit page:community grant; exercise denied empty-operator and camera-only-viewer access/navigation separately. Preserve CSRF, workspace/private-ticket, roles, uploads, retention, task and audit assertions.
+- Added page-access/native replay/mapping/buffering checks to the normal backend CI step; no test removal or deployment bypass. Final matching CI groups pass4+4+23+15+3 plus direct final access/replay group21 (70 total) against an isolated labeled PostgreSQL database with all62 migrations applied.13 deployment regression checks, YAML parse/deploy prerequisites, cached unchanged-source backend build, UTF-8 and memory checks pass. Initial extra deployment test lacked the workflow mount; corrected full-repo invocation passes13. Exact synthetic QA DB/container/anonymous volume/network and unused dev image removed. Runtime source/schema unchanged, so no runtime redeployment is needed. Commit locally only; publishing still requires explicit authorization and subsequent actual CI/server verification.
+
 ## 2026-10-20 - Fix the selected camera's actual archive playback
 
 - Reproduced the reported channel's native failure at the per-frame rate-equality guard. Its actual20fps stream has delta-frame header hints of25; keyframe metadata remains20. Retain stable keyframe-rate validation, reject real changes with a localized error, preserve all other bounds/leases/ownership/audit.
