@@ -17,8 +17,16 @@ export async function syncNvrAsset(tx: Prisma.TransactionClient, camera: CameraD
   if (camera.kind !== "nvr" || !camera.companyId) return;
   const company = await tx.company.findFirst({ where: { id: camera.companyId, ownerId: camera.ownerId, deletedAt: null }, select: { id: true } });
   if (!company) return;
-  const collision = await tx.asset.findFirst({ where: { companyId: company.id, managementIp: camera.host, id: { not: nvrAssetId(camera.id) } }, select: { id: true } });
-  if (collision) throw new CameraError("NVR_ASSET_IP_CONFLICT", 409);
+  const collision = await tx.asset.findFirst({ where: { companyId: company.id, managementIp: camera.host, id: { not: nvrAssetId(camera.id) } }, select: { id: true, deletedAt: true, managedState: true, metadataJson: true } });
+  if (collision) {
+    const metadata=collision.metadataJson as Record<string,unknown>|null;
+    const oldCameraId=typeof metadata?.cameraId==="string"?metadata.cameraId:"";
+    // Release only a positively identified archived NVR whose transport was
+    // deleted. Never take over another live/generic asset by IP.
+    if((collision.deletedAt||collision.managedState==="archived")&&metadata?.entityType==="nvr"&&collision.id===nvrAssetId(oldCameraId)&&!await tx.cameraDevice.findUnique({where:{id:oldCameraId}})){
+      await tx.asset.update({where:{id:collision.id},data:{managementIp:null,metadataJson:{...metadata,formerManagementIp:camera.host} as Prisma.InputJsonValue}});
+    }else throw new CameraError("NVR_ASSET_IP_CONFLICT", 409);
+  }
   const report = camera.monitorReportJson as NvrReport | null;
   const age = report?.checkedAt ? Date.now() - Date.parse(report.checkedAt) : NaN;
   const fresh = Number.isFinite(age) && age >= -30000 && age <= camera.monitorIntervalSeconds * 2000;

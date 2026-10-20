@@ -3,7 +3,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { prisma } from "../db/prisma.js";
 import { cameraSoap, nodes, escapeCameraXml, type CameraConnection, type XmlNode } from "./camera-onvif.js";
 import { cameraUrl, CameraError } from "./camera-network.js";
-import { activeCameraScope, ownedCamera, cameraConnection, cameraVpnTarget, type CameraActor } from "./camera.service.js";
+import { activeCameraScope, ownedCamera, cameraConnection, cameraVpnTarget, refreshCamera, type CameraActor } from "./camera.service.js";
 import { cameraRevision } from "./camera-policy.js";
 import { probeNvrStorage, type NvrStorage } from "./nvr-storage.js";
 import { nvrSensors } from "./nvr-sensors.js";
@@ -107,7 +107,11 @@ export async function getNvrMonitor(id: string, actor: CameraActor) {
 }
 let activeProbes = 0;
 export async function refreshNvrMonitor(id: string, actor: CameraActor, background = false) {
-  const camera = await ownedCamera(id, actor);
+  let camera = await ownedCamera(id, actor);
+  if(camera.kind==="nvr"&&camera.connectionMode==="auto"){
+    await refreshCamera(id,actor);camera=await ownedCamera(id,actor);
+    if(camera.connectionMode==="auto")throw new CameraError(camera.lastErrorCode??"NVR_AUTO_DETECT_UNAVAILABLE",422);
+  }
   if (camera.kind !== "nvr") throw new CameraError("CAMERA_MONITOR_UNAVAILABLE", 422);
   if (activeProbes >= 2) throw new CameraError("CAMERA_MONITOR_BUSY", 409);
   const now = new Date(), lease = new Date(Date.now() + 120000);

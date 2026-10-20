@@ -16,6 +16,7 @@ import { getFindingDecision } from "../services/finding-decision.service.js";
 import { getFindingCampaign } from "../services/finding-campaign.service.js";
 import { repairMisclassifiedRootFindings } from "../services/finding-analysis.service.js";
 import { getAttackerDetails, listAttackers } from "../services/attacker-intelligence.service.js";
+import { getAttackerAnalytics } from "../services/attacker-analytics.service.js";
   import { getAttackerGeoStatus, refreshAttackerGeoDatabase } from "../services/attacker-geoip.service.js";
 import { connectGmailSecuritySender, disconnectGmailSecuritySender, getSecurityEmailAlertSettings, sendSecurityEmailTest, sendSecurityVendorEmailTests, updateSecurityEmailAlertSettings } from "../services/security-alert-email.service.js";
 import { getSecurityMonitorStatus } from "../services/security-monitor.service.js";
@@ -54,6 +55,15 @@ export const securityPlatformRoutes: FastifyPluginAsync = async (app) => {
       ownerId: request.authUser?.scopeOwnerId,
       includeResolved: request.query?.includeResolved === "true"
     });
+  });
+
+  app.get<{ Querystring: {days?:number;vendor?:string;deviceId?:string} }>("/api/security/attackers/analytics", {
+    schema:{querystring:{type:"object",additionalProperties:false,properties:{days:{type:"integer",enum:[1,7,30]},vendor:{type:"string",maxLength:40,pattern:"^[a-zA-Z0-9_-]+$"},deviceId:{type:"string",minLength:1,maxLength:100}}}}
+  },async(request,reply)=>{
+    reply.header("Cache-Control","no-store");
+    if(!request.authUser?.scopeOwnerId)return reply.code(403).send({error:"ATTACKER_ANALYTICS_SCOPE_REQUIRED"});
+    try{return await getAttackerAnalytics(request.authUser.scopeOwnerId,request.query.days??7,request.query.vendor?.toLowerCase(),request.query.deviceId);}
+    catch(error){if(error instanceof Error&&error.message==="ATTACKER_ANALYTICS_BUSY")return reply.code(429).send({error:error.message});throw error;}
   });
 
   app.get<{ Params: { ip: string }; Querystring: { vendor?: string; deviceId?: string; includeResolved?: string } }>("/api/security/attackers/:ip", async (request, reply) => {

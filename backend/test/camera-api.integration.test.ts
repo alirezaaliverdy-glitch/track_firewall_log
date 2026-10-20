@@ -18,6 +18,8 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
   let port = 0, writes = 0, stops = 0;
   const soap = (action: string, body = "") => `<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:d="http://www.onvif.org/ver10/device/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:m="http://www.onvif.org/ver10/media/wsdl"><s:Body><d:${action}Response>${body}</d:${action}Response></s:Body></s:Envelope>`;
   const server = createServer(async (request, reply) => {
+    if(request.method==="GET"&&request.url==="/doc/script/common.js"){reply.writeHead(404);reply.end();return;}
+    if(request.method==="GET"&&request.url==="/onvif/device_service"){reply.writeHead(401,{"WWW-Authenticate":'Digest realm="fixture", nonce="fixture"'});reply.end();return;}
     if (request.url?.startsWith("/ISAPI/")) { reply.writeHead(403); reply.end(); return; }
     if (request.url === "/snapshot") { reply.setHeader("Content-Type", "image/jpeg"); reply.end(Buffer.from([0xff, 0xd8, 0xff, 0xd9])); return; }
     let body = ""; for await (const chunk of request) body += chunk;
@@ -56,7 +58,7 @@ test("camera API enforces sessions, CSRF, workspace isolation, encrypted credent
     assert.equal((await app.inject({ method: "POST", url: "/api/cameras", headers: viewer.headers, payload: input })).statusCode, 403);
     const created = await app.inject({ method: "POST", url: "/api/cameras", headers: operator.headers, payload: input });
     assert.equal(created.statusCode, 201); const camera = created.json().camera;
-    assert.equal(camera.status, "verified"); assert.equal(camera.profiles.length, 1);
+    assert.equal(camera.status, "verified"); assert.equal(camera.profiles.length, 1); assert.equal(camera.connectionMode,"onvif","automatic detection resolves the real SOAP fixture");
     const asset = await prisma.asset.findUniqueOrThrow({ where: { id: `nvr-${camera.id}` } });
     assert.equal(asset.companyId, company.id, "camera-only operator registers a real NVR asset projection");
     for (const url of ["/api/devices", "/api/assets", "/api/actions", "/api/admin/users"]) assert.equal((await app.inject({ url, headers: operator.headers })).statusCode,403,url);

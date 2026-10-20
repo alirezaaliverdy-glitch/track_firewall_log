@@ -19,8 +19,7 @@ const FAILURE_ACTIONS = new Set([
   "login_failed",
   "authentication_failed",
 ]);
-const LEGACY_DENY_ACTIONS = new Set(["deny", "denied", "drop", "dropped", "reject", "rejected", "block", "blocked"]);
-const AUTH_FAILURE_PATTERN = /auth(?:entication)?[_ -]?(?:fail(?:ed|ure)?|denied)|failed password|invalid user|login[_ -]?fail(?:ed|ure)?|pam_unix.*failure|%sec_login.*fail|%snmp-3-authfail|winbox.*fail|webgui.*fail|ssl.?vpn.*(?:fail|denied)|status=.?(?:fail|failed)/i;
+const AUTH_FAILURE_PATTERN = /auth(?:entication)?[_ -]?(?:fail(?:ed|ure)?|denied)|failed password|invalid user|login[_ -]?fail(?:ed|ure)?|pam_unix.*authentication failure|%sec_login-\d+-login_failed\b|%snmp-3-authfail|(?:webgui|ssl.?vpn).*(?:login|auth).*(?:fail|denied)|action=["']?login["']?.*status=["']?(?:fail|failed|failure)\b/i;
 
 function eventText(event: AuthenticationEventLike) {
   return [event.vendor, event.eventType, event.action, event.ruleName, event.rawMessage, event.rawSnippet]
@@ -42,9 +41,12 @@ export function authenticationFailureService(event: AuthenticationEventLike) {
 export function isAuthenticationFailureEvent(event: AuthenticationEventLike) {
   if (!event.srcIp) return false;
   const action = String(event.action ?? "").trim().toLowerCase();
+  if (["auth_success", "login_success", "session_lifecycle"].includes(action)) return false;
   if (FAILURE_ACTIONS.has(action)) return true;
   if (AUTH_FAILURE_PATTERN.test(eventText(event))) return true;
-  return LEGACY_DENY_ACTIONS.has(action) && (event.dstPort === 22 || event.dstPort === 22022);
+  // A packet denied on an SSH port never reached authentication. Port alone is
+  // not evidence of a failed login (and must not inflate brute-force counts).
+  return false;
 }
 
 export function authenticationAttemptCount(events: AuthenticationEventLike[]) {

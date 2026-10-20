@@ -70,5 +70,14 @@ test("NVR inventory and batch company moves are durable, atomic, tenant-scoped a
     assert.equal(await prisma.cameraDevice.count({ where: { id: nvr.id } }), 0); assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: assetId } })).managedState, "archived");
     await app.inject({ url: `/api/assets?companyId=${target.id}`, headers: owner.headers });
     assert.equal((await prisma.asset.findUniqueOrThrow({ where: { id: assetId } })).managedState, "archived", "listing does not resurrect a deleted NVR");
+    assert.equal((await prisma.asset.findUniqueOrThrow({where:{id:assetId}})).managementIp,null,"deleted NVR releases its unique IP reservation");
+    // Pre-fix archives retained the IP even after CameraDevice was deleted.
+    await prisma.asset.update({where:{id:assetId},data:{managementIp:nvr.host}});
+    const replacement=await create(nvr.host,"nvr",target.id);
+    assert.notEqual(replacement.id,nvr.id);
+    assert.equal((await prisma.asset.findUniqueOrThrow({where:{id:assetId}})).managementIp,null,"only a verified legacy orphan NVR reservation is released");
+    assert.equal((await prisma.asset.findUniqueOrThrow({where:{id:assetId}})).managedState,"archived");
+    assert.equal((await app.inject({method:"DELETE",url:`/api/cameras/${replacement.id}`,headers:owner.headers})).statusCode,200);
+    const third=await create(nvr.host,"nvr",target.id);assert.ok(third.id);
   } finally { await app.close(); await prisma.auditLog.deleteMany({ where: { actor: { in: actors } } }); await prisma.appUser.deleteMany({ where: { id: { in: userIds } } }); await shutdownDatabase(); }
 });

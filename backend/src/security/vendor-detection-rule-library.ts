@@ -1,5 +1,6 @@
 import type { SecurityEvent } from "@prisma/client";
 import { isLinuxRemoteRootLogin, parseLinuxSecurityLog } from "./linux-log-semantics.js";
+import { isAuthenticationFailureEvent } from "./brute-force-detection.js";
 
 type Severity = "low" | "medium" | "high" | "critical";
 type RuleType = "port_scan" | "ssh_bruteforce" | "sensitive_port_exposure" | "deny_drop_spike" | "suspicious_outbound";
@@ -133,6 +134,7 @@ export function eventMatchesVendorRule(ruleKey: string, event: SecurityEvent) {
   // Command arguments can contain every detection keyword. They are data, not
   // authentication/firewall/audit events emitted by those services.
   if (definition.vendor === "linux" && parseLinuxSecurityLog(raw).program === "sudo") return false;
+  if (definition.logicalEventFamily === "authentication_failure") return isAuthenticationFailureEvent(event);
   const payload = [event.eventType, event.action, event.severity, event.ruleName, event.rawMessage, event.rawSnippet].filter(Boolean).join(" ");
   return definition.pattern.test(payload);
 }
@@ -166,29 +168,37 @@ export function deduplicateDetectionEvents(definition: VendorDetectionRuleDefini
   const exact = new Map<string, SecurityEvent>();
   for (const event of events) {
     const key = [event.deviceId, event.srcIp, event.username, event.eventType,
-      ...(definition.vendor === "mikrotik" ? [detectionEventTime(event)] : []), normalizedEvidenceText(event)].join("|");
+      definition.vendor === "linux" ? Math.floor(detectionEventTime(event) / 1000) : detectionEventTime(event), event.srcPort, event.dstPort, normalizedEvidenceText(event)].join("|");
     const previous = exact.get(key);
     if (!previous || detectionEventTime(event) > detectionEventTime(previous)) exact.set(key, event);
   }
   const uniqueEvents = [...exact.values()].sort((left, right) => detectionEventTime(left) - detectionEventTime(right));
-  // RouterOS emits one account log per attempt, not the PAM + sshd pair used
-  // by Linux. Merging an eight-second burst would hide real brute-force attacks.
-  if (definition.logicalEventFamily !== "authentication_failure" || definition.vendor === "mikrotik") return uniqueEvents;
+  // Only Linux has complementary PAM/sshd lines here. Never merge a fast
+  // sequence of independent RouterOS/Cisco/FortiGate failures into one attempt.
+  if (definition.logicalEventFamily !== "authentication_failure" || definition.vendor !== "linux") return uniqueEvents;
 
   const logical: SecurityEvent[] = [];
-  const latestAttempt = new Map<string, number>();
+  const attempts = new Map<string, Array<{ at: number; roles: Set<string>; index: number }>>();
   for (const event of uniqueEvents) {
     const text = normalizedEvidenceText(event);
-    const processId = text.match(/(?:sshd|pam_unix\(sshd:auth\))\[(\d+)\]/)?.[1] ?? "no-pid";
+    const processId = text.match(/(?:sshd|pam_unix\(sshd:auth\))\[(\d+)\]/)?.[1];
     const username = event.username ?? text.match(/(?:for|user=)\s*(?:invalid user\s+)?([\w.@-]+)/)?.[1] ?? "unknown-user";
+    // Only complementary Linux stack messages with an actual process identity
+    // may be paired. Independent primary failures in a fast burst stay separate.
+    const role = /failed password/.test(text) ? "password" : /pam_unix.*failure/.test(text) ? "pam" : /invalid user/.test(text) ? "invalid_user" : "other";
+    if (!processId || role === "other") { logical.push(event); continue; }
     const key = [event.deviceId, event.srcIp, username.toLowerCase(), processId].join("|");
     const timestamp = detectionEventTime(event);
-    const previous = latestAttempt.get(key);
-    if (previous !== undefined && timestamp - previous <= 8_000) {
-      latestAttempt.set(key, timestamp);
+    const recent = (attempts.get(key) ?? []).filter(attempt => timestamp - attempt.at <= 2_000);
+    const previous = [...recent].reverse().find(attempt => !attempt.roles.has(role));
+    if (previous) {
+      previous.roles.add(role);
+      if (role === "password") logical[previous.index] = event;
+      attempts.set(key, recent);
       continue;
     }
-    latestAttempt.set(key, timestamp);
+    recent.push({ at: timestamp, roles: new Set([role]), index: logical.length });
+    attempts.set(key, recent);
     logical.push(event);
   }
   return logical;

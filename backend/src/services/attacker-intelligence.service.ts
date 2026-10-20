@@ -5,7 +5,7 @@ import { prisma } from "../db/prisma.js";
 import { redactForPersistence, redactText } from "../security/redaction.js";
 import { buildTrustedSourceMatcher } from "./trusted-source-ip.service.js";
 import { VENDOR_DETECTION_RULES, deduplicateDetectionEvents } from "../security/vendor-detection-rule-library.js";
-import { authenticationFailureService, isAuthenticationFailureEvent } from "../security/brute-force-detection.js";
+import { authenticationAttemptCount, authenticationFailureService, isAuthenticationFailureEvent } from "../security/brute-force-detection.js";
 
 const CLOSED_FINDING_STATUSES = ["resolved", "false_positive", "accepted_risk", "suppressed"];
 const SEVERITY_WEIGHT: Record<string, number> = { critical: 88, high: 70, medium: 48, low: 28, info: 12 };
@@ -116,16 +116,17 @@ function mapEvidenceEvent(event: EventWithContext) {
   };
 }
 
-function isNewSourceAnomaly(finding: FindingWithContext) {
+type QualificationFinding = Pick<Finding, "title" | "summary" | "category" | "evidenceJson" | "count">;
+function isNewSourceAnomaly(finding: QualificationFinding) {
   return /login from new source/i.test(finding.title) || (finding.category === "general-detection" && /auth(?:entication)? success|login success/i.test(`${finding.summary} ${JSON.stringify(finding.evidenceJson)}`));
 }
 
-function isOperationalFinding(finding: FindingWithContext) {
+function isOperationalFinding(finding: QualificationFinding) {
   const text = `${finding.title} ${finding.summary} ${finding.category}`;
   return /configuration.?change|account.?management|administrator account changed|policy changed|host firewall disabled|audit trail tampering/i.test(text);
 }
 
-function isSuccessfulAccessOnly(finding: FindingWithContext) {
+function isSuccessfulAccessOnly(finding: QualificationFinding) {
   return /remote root login|successful (?:remote )?login|login success/i.test(`${finding.title} ${finding.summary}`) && !/after (?:authentication )?failures|brute.?force/i.test(`${finding.title} ${finding.summary}`);
 }
 
@@ -142,7 +143,7 @@ function isAuthenticationFailureText(value: string) {
   return /auth_failed|auth_failure|admin_auth_failed|vpn_auth_failed|failed password|login fail(?:ed|ure)?|authentication fail(?:ed|ure)?|invalid user|pam_unix.*failure/i.test(value);
 }
 
-function isActionableFinding(finding: FindingWithContext) {
+export function isActionableFinding(finding: QualificationFinding) {
   if (isNewSourceAnomaly(finding) || isOperationalFinding(finding) || isSuccessfulAccessOnly(finding)) return false;
   const definition = VENDOR_DETECTION_RULES.find((rule) => rule.name === finding.title);
   if (definition?.logicalEventFamily !== "authentication_failure" || !Array.isArray(finding.evidenceJson)) return true;
@@ -210,7 +211,7 @@ function buildAssessment(findings: FindingWithContext[], events: EventWithContex
     primaryReason: onlyNewSourceAnomaly ? "new_source_success_only" : confirmedThreat ? "vendor_security_engine_confirmed" : authThresholdReached ? "repeated_authentication_threshold" : correlationThresholdReached ? "correlated_detection_threshold" : "security_findings_require_review",
     actionableFindingCount: actionableFindings.length,
     informationalFindingCount: findings.length - actionableFindings.length,
-    logicalAuthenticationFailures: logicalAuthenticationFailures.length,
+    logicalAuthenticationFailures: authenticationAttemptCount(logicalAuthenticationFailures),
     bruteForceDetected: authThresholdReached,
     authenticationServices,
     authenticationFailureVendors,

@@ -162,7 +162,7 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
           sourceType: "linux_journal",
           vendor: "linux",
           eventType: "authentication_failure",
-          action: "denied",
+          action: "auth_failed",
           severity: "high",
           srcIp: publicIp,
           srcPort: 49221,
@@ -170,7 +170,7 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
           dstPort: 22,
           protocol: "tcp",
           username: "root",
-          rawSnippet: "login denied password=super-secret token=hidden",
+          rawSnippet: `sshd[101]: Failed password for root from ${publicIp} password=super-secret token=hidden`,
           normalizedJson: { result: "denied" },
           dedupeKey: `${runId}-event-linux`
         },
@@ -220,9 +220,9 @@ test("attacker API aggregates qualified source IPs across vendors and excludes l
     const firstLinuxEvidence = await prisma.securityEvent.findUniqueOrThrow({ where: { dedupeKey: `${runId}-event-linux` } });
     const secondLinuxEvidence = await prisma.securityEvent.create({ data: {
       deviceId: linux.id, assetId: linuxAsset.id, timestamp: now, sourceType: "linux_journal", vendor: "linux",
-      eventType: "authentication_failure", action: "denied", severity: "high", srcIp: publicIp,
+      eventType: "authentication_failure", action: "auth_failed", severity: "high", srcIp: publicIp,
       dstIp: linux.host, dstPort: 22, protocol: "tcp", username: "root",
-      rawSnippet: "second failed login", normalizedJson: { result: "denied" }, dedupeKey: `${runId}-event-linux-2`
+      rawSnippet: `sshd[102]: Failed password for root from ${publicIp}`, normalizedJson: { result: "denied" }, dedupeKey: `${runId}-event-linux-2`
     } });
     await prisma.finding.update({ where: { deviceId_fingerprint: { deviceId: linux.id, fingerprint: `${runId}-linux-public` } }, data: {
       rawRefsJson: [firstLinuxEvidence.id, secondLinuxEvidence.id]

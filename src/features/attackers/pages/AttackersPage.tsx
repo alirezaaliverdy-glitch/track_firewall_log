@@ -32,6 +32,9 @@ import { useAuth } from "@/context/AuthContext";
 import { createTrustedSourceIp, deleteTrustedSourceIp, listTrustedSourceIps, type TrustedSourceIp } from "@/lib/attackerAllowlist";
 import { getAttackerGeoStatus, refreshAttackerGeo, type GeoStatus } from "@/lib/attackerGeo";
 import { countryInfo } from "./attackerCountry";
+import { AttackerCharts } from "./AttackerCharts";
+import { securityDisplayText } from "@/features/security/securityPresentation";
+import "flag-icons/css/flag-icons.min.css";
 import "./AttackersPage.css";
 
 const severityOrder = ["critical", "high", "medium", "low"];
@@ -86,7 +89,7 @@ function AttackerCard({ attacker, selected, onSelect, isFa, locale }: { attacker
       <span className="attacker-card__body">
         <span className="attacker-card__identity">
           <code dir="ltr">{attacker.ip}</code>
-          {country ? <span className="attacker-country" title={`${country.name} (${country.code})`}><span aria-hidden="true">{country.flag}</span>{country.name}</span> : null}
+          {country ? <span className="attacker-country" title={`${country.name} (${country.code})`}><span className={`attacker-country__flag fi fi-${country.code.toLowerCase()}`} role="img" aria-label={country.name}/>{country.name}</span> : null}
           <i>{severityLabel(attacker.severity, isFa)}</i>
           <i>{scopeLabel(attacker.scope, isFa)}</i>
           {attacker.assessment.bruteForceDetected ? <i className="is-bruteforce"><KeyRound />{isFa ? "Brute Force" : "Brute force"}</i> : null}
@@ -219,7 +222,7 @@ function DetailPanel({ attacker, loading, onClose, onRespond, responseBusy, resp
       <section className="attacker-detail__section">
         <header><ShieldAlert /><div><h3>{isFa ? "دلایل شناسایی" : "Qualification findings"}</h3><p>{isFa ? "یافته‌هایی که باعث ورود IP به این فهرست شده‌اند" : "Findings that qualified this IP"}</p></div></header>
         <div className="attacker-finding-list">
-          {attacker.findings.map((finding) => <Link key={finding.id} to={`/security/findings/${finding.id}`}><span className={`is-${finding.severity}`}>{severityLabel(finding.severity, isFa)}</span><div><strong>{finding.title}</strong><p>{finding.summary}</p><small>{finding.vendor} · {finding.category} · {formatDate(finding.lastSeen, locale)}</small></div><ExternalLink /></Link>)}
+          {attacker.findings.map((finding) => <Link key={finding.id} to={`/security/findings/${finding.id}`}><span className={`is-${finding.severity}`}>{severityLabel(finding.severity, isFa)}</span><div><strong>{securityDisplayText(finding.title,isFa?"fa":"en")}</strong><p>{securityDisplayText(finding.summary,isFa?"fa":"en")}</p><small>{finding.vendor} · {threatFamilyLabel(finding.category,finding.category,isFa)} · {formatDate(finding.lastSeen, locale)}</small></div><ExternalLink /></Link>)}
         </div>
       </section>
 
@@ -231,7 +234,7 @@ function DetailPanel({ attacker, loading, onClose, onRespond, responseBusy, resp
         </div>
       </section>
 
-      <section className="attacker-enrichment-note" aria-label={isFa ? "اطلاعات شبکهٔ IP" : "IP network information"}><Globe2 /><div><strong>{isFa ? "کشور و شبکهٔ IP" : "IP country and network"}</strong>{attacker.enrichment.status === "not_public" ? <p>{isFa ? "IP داخلی یا غیرعمومی است؛ کشور اینترنتی ندارد." : "Private or non-public IP; no internet country applies."}</p> : attacker.enrichment.status === "database_unavailable" ? <p>{isFa ? "پایگاه مکان‌یابی نصب نشده؛ کشور و ASN هنوز معلوم نیست." : "The local Geo/ASN database is not installed."}</p> : <><p className="attacker-enrichment-note__country">{country ? <><span className="attacker-country-flag" aria-hidden="true">{country.flag}</span><b>{country.name}</b><code dir="ltr">{country.code}</code></> : <b>{isFa ? "کشور نامشخص" : "Country unknown"}</b>}</p><p className="attacker-enrichment-note__network"><span dir="ltr">{attacker.enrichment.asn ? `AS${attacker.enrichment.asn}` : "ASN —"}</span>{attacker.enrichment.networkOwner ? <span>{attacker.enrichment.networkOwner}</span> : null}</p></>}<small>{isFa ? "بر اساس IP مبدأ و پایگاه آفلاین DB-IP؛ تقریبی است و محل واقعی فرد را اثبات نمی‌کند." : "Based on the source IP and local DB-IP data; approximate, not a person's verified location."}</small></div></section>
+      <section className="attacker-enrichment-note" aria-label={isFa ? "اطلاعات شبکهٔ IP" : "IP network information"}><Globe2 /><div><strong>{isFa ? "کشور و شبکهٔ IP" : "IP country and network"}</strong>{attacker.enrichment.status === "not_public" ? <p>{isFa ? "IP داخلی یا غیرعمومی است؛ کشور اینترنتی ندارد." : "Private or non-public IP; no internet country applies."}</p> : attacker.enrichment.status === "database_unavailable" ? <p>{isFa ? "پایگاه مکان‌یابی نصب نشده؛ کشور و ASN هنوز معلوم نیست." : "The local Geo/ASN database is not installed."}</p> : <><p className="attacker-enrichment-note__country">{country ? <><span className={`attacker-country__flag fi fi-${country.code.toLowerCase()}`} role="img" aria-label={country.name}/><b>{country.name}</b><code dir="ltr">{country.code}</code></> : <b>{isFa ? "کشور نامشخص" : "Country unknown"}</b>}</p><p className="attacker-enrichment-note__network"><span dir="ltr">{attacker.enrichment.asn ? `AS${attacker.enrichment.asn}` : "ASN —"}</span>{attacker.enrichment.networkOwner ? <span>{attacker.enrichment.networkOwner}</span> : null}</p></>}<small>{isFa ? "بر اساس IP مبدأ و پایگاه آفلاین DB-IP؛ تقریبی است و محل واقعی فرد را اثبات نمی‌کند." : "Based on the source IP and local DB-IP data; approximate, not a person's verified location."}</small></div></section>
     </aside>
   );
 }
@@ -252,6 +255,7 @@ export default function AttackersPage() {
   const [severity, setSeverity] = useState("all");
   const [scope, setScope] = useState("all");
   const [selectedIp, setSelectedIp] = useState("");
+  const detailGeneration = useRef(0);
   const [details, setDetails] = useState<AttackerDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [allowlist, setAllowlist] = useState<TrustedSourceIp[]>([]);
@@ -320,10 +324,11 @@ export default function AttackersPage() {
   }
 
   const openDetails = (ip: string) => {
+    const generation=++detailGeneration.current;
     setSelectedIp(ip);
     setDetails(null);
     setDetailsLoading(true);
-    getAttackerDetails(ip).then((result) => setDetails(result.attacker)).catch(() => setDetails(null)).finally(() => setDetailsLoading(false));
+    getAttackerDetails(ip).then((result) => {if(generation===detailGeneration.current)setDetails(result.attacker);}).catch(() => {if(generation===detailGeneration.current)setDetails(null);}).finally(() => {if(generation===detailGeneration.current)setDetailsLoading(false);});
   };
 
   const createResponsePreview = async (findingId: string) => {
@@ -374,6 +379,8 @@ export default function AttackersPage() {
         <label><span>{isFa ? "محدوده IP" : "IP scope"}</span><select value={scope} onChange={(event) => setScope(event.target.value)}><option value="all">{isFa ? "همه محدوده‌ها" : "All scopes"}</option><option value="public">{scopeLabel("public", isFa)}</option><option value="private">{scopeLabel("private", isFa)}</option><option value="link_local">Link-local</option></select></label>
       </section>
 
+      <AttackerCharts vendor={vendor} isFa={isFa} locale={locale}/>
+
       {isAdmin ? <details className="trusted-source-panel">
         <summary><span><ShieldCheck /></span><div><strong>{isFa ? "IPهای مجاز" : "Trusted IPs"}</strong><small>{isFa ? `${allowlist.length.toLocaleString(locale)} مورد؛ جلوگیری از تشخیص اشتباه بر اساس وندور` : `${allowlist.length} entries; vendor-scoped false-positive protection`}</small></div><Plus /></summary>
         <div className="trusted-source-panel__body">
@@ -394,7 +401,7 @@ export default function AttackersPage() {
           <header><div><h2>{isFa ? "IPهای نیازمند بررسی" : "IPs requiring review"}</h2><p>{attackers.length.toLocaleString(locale)} {isFa ? "مورد مطابق فیلتر" : "matching results"}</p></div><Network /></header>
           {attackers.length ? <div className="attacker-list">{attackers.map((attacker) => <AttackerCard key={attacker.ip} attacker={attacker} selected={selectedIp === attacker.ip} onSelect={() => openDetails(attacker.ip)} isFa={isFa} locale={locale} />)}</div> : <div className="attacker-empty"><ShieldCheck /><h3>{isFa ? "موردی برای نمایش نیست" : "Nothing to review"}</h3><p>{data?.summary.total ? (isFa ? "فیلترها را پاک کنید تا همه موارد دیده شوند." : "Clear filters to see all results.") : (isFa ? "هنوز یافته باز و معتبری با IP مبدأ ثبت نشده است. رویداد عادی به‌تنهایی مهاجم محسوب نمی‌شود." : "No open finding with a valid source IP exists yet. Ordinary events are not classified as attackers.")}</p><Link to="/security/findings">{isFa ? "مشاهده یافته‌های امنیتی" : "View security findings"}</Link></div>}
         </section>
-        {selectedIp ? <DetailPanel attacker={details} loading={detailsLoading} onClose={() => { setSelectedIp(""); setDetails(null); }} onRespond={(findingId) => void createResponsePreview(findingId)} responseBusy={responseBusy} responseError={responseError} isFa={isFa} locale={locale} /> : null}
+        {selectedIp ? <DetailPanel attacker={details} loading={detailsLoading} onClose={() => { detailGeneration.current++; setSelectedIp(""); setDetails(null); }} onRespond={(findingId) => void createResponsePreview(findingId)} responseBusy={responseBusy} responseError={responseError} isFa={isFa} locale={locale} /> : null}
       </div>
       {isAdmin ? <div className="attacker-geo-setup"><Globe2 /><span>{geoStatus?.ready ? (isFa ? "اطلاعات کشور و ASN آماده است" : "Country and ASN data ready") : (isFa ? "اطلاعات کشور و ASN هنوز آماده نیست" : "Country and ASN data not ready")}</span><button type="button" disabled={geoBusy} onClick={() => void updateGeo()}>{geoBusy ? (isFa ? "در حال دریافت…" : "Downloading…") : (isFa ? "دریافت پایگاه Geo / ASN" : "Download Geo / ASN database")}</button>{geoError ? <small role="alert">{isFa ? "دریافت پایگاه ناموفق بود؛ دسترسی خروجی سرور را بررسی کنید." : "Download failed; check server egress."}</small> : null}</div> : null}
 

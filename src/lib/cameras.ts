@@ -3,14 +3,14 @@ import { apiRequest, apiUrl } from "./apiTransport";
 export type CameraProfile = { token: string; name: string; sourceToken: string; width: number | null; height: number | null; encoding: string | null; fps: number | null; ptz: boolean; ptzNodeToken?: string; streamAvailable: boolean; snapshotAvailable: boolean };
 export type CameraDevice = {
   company?: { id: string; name: string; code: string } | null;
-  id: string; name: string; location: string; host: string; companyId?: string | null; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; monitorReportJson?: NvrReport | null; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp" | "dvrip" | "appweb";
+  id: string; name: string; location: string; host: string; companyId?: string | null; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; monitorReportJson?: NvrReport | null; vpnConnectionId?: string | null; kind: "camera" | "nvr"; connectionMode: "auto" | "onvif" | "rtsp" | "dvrip" | "appweb";
   onvifPort: number; onvifPath: string; onvifHttps: boolean; status: "verified" | "error" | "unverified"; lastSeenAt: string | null; lastErrorCode: string | null;
   infoJson: Record<string, string> | null; profiles: CameraProfile[]; credentialsConfigured: boolean; createdAt: string;
   storageSettings?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port: number; https: boolean; separateCredentials: boolean };
 };
 export type CameraCandidate = { host: string; onvifPort: number; onvifPath: string; onvifHttps: boolean; name: string; evidence: "onvif" | "rtsp"; requiresCredentials: boolean; registered: boolean };
 export type CameraDiscovery = { cidr: string; candidates: CameraCandidate[]; scannedAddresses: number; partial: boolean };
-export type CameraInput = { storageSettings?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port: number; https: boolean; useDeviceCredentials: boolean; username?: string; password?: string }; companyId?: string; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; host: string; name: string; location: string; kind: "camera" | "nvr"; connectionMode: "onvif" | "rtsp" | "dvrip" | "appweb"; onvifPort: number; onvifPath: string; onvifHttps?: boolean; username?: string; password?: string; rtspUrl?: string; vpnConnectionId?: string };
+export type CameraInput = { storageSettings?: { adapter: "auto" | "hikvision" | "dahua" | "xiongmai"; port: number; https: boolean; useDeviceCredentials: boolean; username?: string; password?: string }; companyId?: string; monitoringEnabled?: boolean; monitorIntervalSeconds?: number; host: string; name: string; location: string; kind: "camera" | "nvr"; connectionMode: "auto" | "onvif" | "rtsp" | "dvrip" | "appweb"; onvifPort: number; onvifPath: string; onvifHttps?: boolean; username?: string; password?: string; rtspUrl?: string; vpnConnectionId?: string };
 export type CameraCompany = { id: string; name: string; code: string; description: string | null; cameraCount: number; nvrCount: number };
 export type NvrReport = { checkedAt: string; reachable: boolean; durationMs: number; errorCode?: string; configuredChannels: number; clockDriftSeconds: number | null; storageConfigurations: number | null; recordingCount: number | null;
   native?: { protocol?: "dvrip" | "appweb"; wireVersion: number; identity: Record<string, string>; configuredChannels: number | null; uptimeSeconds: number | null; deviceLocalTime: string | null; channels: { index: number; recording: boolean | null; signalPresent: boolean | null; bitrateBps: number | null }[]; errors: Record<string, string> };
@@ -23,6 +23,7 @@ export type CameraResult = { status: string; connectorInvoked: boolean; accepted
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  NVR_AUTO_DETECT_UNAVAILABLE: ["تجهیز ثبت شد، اما سرویس سازگار خودکار شناسایی نشد. IP و دسترسی شبکه را بررسی کن؛ اگر پورت دستگاه خاص است، تنظیمات پیشرفته را باز کن. سنسورهای پشتیبانی‌نشده نامشخص می‌مانند.", "Equipment saved, but a compatible service was not identified. Check the IP/network and advanced custom port settings. Unsupported sensors remain unknown."],
   CAMERA_REVIEW_RANGE_INVALID: ["بازه‌ای در گذشته، بین ۵ ثانیه و ۲۴ ساعت انتخاب کن؛ پایان باید بعد از شروع باشد.", "Choose a past range between 5 seconds and 24 hours, ending after its start."],
   CAMERA_REPLAY_SHORT_SEGMENT: ["قطعهٔ دریافتی کوتاه‌تر از زمان درخواستی بود؛ ممکن است ضبط وقفه داشته باشد. ادامهٔ خودکار متوقف شد؛ زمان دیگری را از نوار انتخاب کن.", "The received segment was shorter than requested. Recording may have a gap. Automatic continuation stopped; choose another time."],
   NVR_CONFIG_OPERATION_UNSUPPORTED: ["این نسخهٔ دستگاه تنظیم انتخاب‌شده را ارائه نکرد؛ کنترل غیرفعال است.", "This device firmware does not expose this setting."],

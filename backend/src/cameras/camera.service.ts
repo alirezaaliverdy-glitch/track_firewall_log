@@ -12,6 +12,7 @@ import { probeNativeNvr } from "./nvr-native-monitor.js";
 import { probeAppWebNvr } from "./nvr-appweb.js";
 import { cameraPtzStep, checkCameraPtzStep, runCameraPtzStep, stopCameraPtz } from "./camera-onvif.js";
 import { nvrConfigChange, readNvrSettings, writeNvrSetting } from "./nvr-config.js";
+import { detectNvrConnection } from "./nvr-auto-detect.js";
 
 export type CameraActor = { id: string; username: string; role: string; scopeOwnerId?: string | null };
 export const cameraOwner = (actor: CameraActor) => actor.scopeOwnerId ?? actor.id;
@@ -79,7 +80,7 @@ export async function createCamera(input: Record<string, unknown>, actor: Camera
   const host = privateCameraHost(input.host), onvifPort = cameraPort(input.onvifPort, input.connectionMode === "dvrip" ? 34567 : 80), onvifPath = devicePath(input.onvifPath);
   const vpnConnectionId = await cameraVpnTarget(input.vpnConnectionId, host, actor);
   const name = optionalText(input.name) || host, location = optionalText(input.location);
-  const connectionMode = ["dvrip", "appweb"].includes(String(input.connectionMode)) && input.kind === "nvr" ? String(input.connectionMode) : input.connectionMode === "rtsp" ? "rtsp" : "onvif";
+  const connectionMode = input.kind==="nvr"&&(input.connectionMode===undefined||input.connectionMode==="auto")?"auto":["dvrip", "appweb"].includes(String(input.connectionMode)) && input.kind === "nvr" ? String(input.connectionMode) : input.connectionMode === "rtsp" ? "rtsp" : "onvif";
   const connection: CameraConnection = { username: optionalText(input.username), password: typeof input.password === "string" ? input.password : undefined };
   if ((connection.username?.length ?? 0) > 128 || (connection.password?.length ?? 0) > 1024) throw new CameraError("CAMERA_CREDENTIAL_INVALID");
   if (connectionMode === "rtsp") connection.rtspUrl = cameraUrl(input.rtspUrl, host, ["rtsp:"]).href;
@@ -98,9 +99,19 @@ export async function createCamera(input: Record<string, unknown>, actor: Camera
 }
 
 export async function refreshCamera(id: string, actor: CameraActor) {
-  const camera = await ownedCamera(id, actor), connection = cameraConnection(camera);
+  let camera = await ownedCamera(id, actor); const connection = cameraConnection(camera);
   try {
     await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true);
+    if(camera.kind==="nvr"&&camera.connectionMode==="auto"){
+      const detected=await detectNvrConnection(camera.host,camera.onvifPort,camera.onvifHttps,camera.onvifPath);
+      camera=await prisma.$transaction(async tx=>{
+        await tx.$queryRaw`SELECT "id" FROM "CameraDevice" WHERE "id" = ${id} FOR UPDATE`;
+        const current=await tx.cameraDevice.findUniqueOrThrow({where:{id}});
+        if(cameraRevision(current)!==cameraRevision(camera))throw new CameraError("CAMERA_PREVIEW_EXPIRED",409);
+        const updated=await tx.cameraDevice.update({where:{id},data:{connectionMode:detected.mode,onvifPort:detected.port,onvifHttps:detected.https,onvifPath:detected.path},include:{company:{select:{id:true,name:true,code:true}}}});
+        await syncNvrAsset(tx,updated);return updated;
+      });
+    }
     if (["dvrip", "appweb"].includes(camera.connectionMode)) {
       const report = camera.connectionMode === "appweb" ? await probeAppWebNvr(camera.host, camera.onvifPort, camera.onvifHttps, connection) : await probeNativeNvr(camera.host, camera.onvifPort, connection);
       const updated = await prisma.$transaction(async tx => {
@@ -137,7 +148,7 @@ export async function updateCamera(id: string, input: Record<string, unknown>, a
   const camera = await ownedCamera(id, actor);
   const data: Prisma.CameraDeviceUpdateInput = {};
   if (input.connectionMode !== undefined && input.connectionMode !== camera.connectionMode) {
-    if (camera.kind !== "nvr" || !["onvif", "dvrip", "appweb"].includes(String(input.connectionMode))) throw new CameraError("CAMERA_OPERATION_UNSUPPORTED", 422);
+    if (camera.kind !== "nvr" || !["auto", "onvif", "dvrip", "appweb"].includes(String(input.connectionMode))) throw new CameraError("CAMERA_OPERATION_UNSUPPORTED", 422);
     data.connectionMode = String(input.connectionMode); data.profilesJson = Prisma.JsonNull; if (input.connectionMode === "dvrip") data.onvifHttps = false;
     data.onvifPort = input.onvifPort === undefined ? input.connectionMode === "dvrip" ? 34567 : 80 : cameraPort(input.onvifPort);
   }
@@ -180,8 +191,13 @@ export async function updateCamera(id: string, input: Record<string, unknown>, a
 }
 
 export async function deleteCamera(id: string, actor: CameraActor) {
-  await ownedCamera(id, actor); stopCameraStreams(id);
-  await prisma.$transaction(async tx => { await tx.asset.updateMany({ where: { id: nvrAssetId(id), company: { ownerId: cameraOwner(actor) } }, data: { deletedAt: new Date(), managedState: "archived", healthState: "archived" } }); await tx.cameraDevice.delete({ where: { id } }); });
+  const camera=await ownedCamera(id, actor); stopCameraStreams(id);
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "CameraDevice" WHERE "id" = ${id} AND "ownerId" = ${cameraOwner(actor)} FOR UPDATE`;
+    const asset=await tx.asset.findFirst({where:{id:nvrAssetId(id),company:{ownerId:cameraOwner(actor)}}});
+    if(asset)await tx.asset.update({where:{id:asset.id},data:{deletedAt:new Date(),managedState:"archived",healthState:"archived",managementIp:null,metadataJson:{...(asset.metadataJson as Record<string,Prisma.InputJsonValue>??{}),formerManagementIp:camera.host}}});
+    await tx.cameraDevice.delete({ where: { id } });
+  });
   await audit(actor, "camera.removed", id, {});
   return { deleted: true };
 }

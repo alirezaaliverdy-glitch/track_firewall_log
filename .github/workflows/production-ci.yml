@@ -137,6 +137,8 @@ jobs:
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/vpn.test.ts test/openvpn-profile.test.ts test/vpn-api.integration.test.ts test/vpn-recovery-api.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/terminal-runtime.test.ts test/terminal-api.integration.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/page-access.test.ts test/page-access-api.test.ts test/camera-replay.test.ts test/nvr-taoshi.test.ts test/nvr-taoshi.integration.test.ts test/playback-selection.test.ts test/replay-buffer.test.ts
+          pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/attacker-analytics.test.ts test/attacker-analytics-api.test.ts test/attacker-geo-layout.test.ts test/mikrotik-detection-response.test.ts test/task46-cross-vendor-bruteforce.test.ts
+          pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/nvr-auto-detect.test.ts test/nvr-registration-api.test.ts
 
       - name: Validate command catalog
         working-directory: backend

@@ -347,6 +347,15 @@ export type AttackerListResponse = {
   attackers: AttackerSummary[];
 };
 
+export type AttackerAnalytics = {
+  generatedAt: string; days: number; from: string; until: string; bucketSeconds: number;
+  basis: "distinct_source_ips_from_new_qualified_findings";
+  coverage: {complete:boolean;scanned:number;limit:number;includesResolved:boolean;retainedEvidenceOnly:boolean};
+  summary: {sources:number;devices:number;findings:number;peakAt:string|null;peakSources:number}|null;
+  series: Array<{at:string;until:string;high:number;other:number;total:number}>;
+  patterns: Array<{key:string;sources:number}>;
+};
+
 export type VendorUserActivity = {
   vendors: string[];
   recommendedVendor: string | null;
@@ -419,6 +428,7 @@ export const listAttackers = (filters: { query?: string; vendor?: string; device
   return request<AttackerListResponse>(`/security/attackers${query.size ? `?${query}` : ""}`);
 };
 export const getAttackerDetails = (ip: string, includeResolved = false) => request<{ generatedAt: string; qualification: string; attacker: AttackerDetails }>(`/security/attackers/${encodeURIComponent(ip)}${includeResolved ? "?includeResolved=true" : ""}`);
+export const getAttackerAnalytics = (days:number,vendor:string,signal:AbortSignal) => request<AttackerAnalytics>(`/security/attackers/analytics?${new URLSearchParams({days:String(days),...(vendor!=="all"?{vendor}:{})})}`,{signal});
 export const listVendorUserActivity = (filters: { vendor?: string; deviceId?: string; days?: number; username?: string } = {}) => {
   const query = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== "") query.set(key, String(value)); });
