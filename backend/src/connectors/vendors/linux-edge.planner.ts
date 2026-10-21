@@ -2,6 +2,7 @@ import { ActionType, DeviceType } from "@prisma/client";
 import type { PlannerInput, VendorCommandPlan, VendorPlanner } from "../types.js";
 import { customPlanFromParameters } from "../../ai/custom-action-plan.js";
 import { linuxDailyCheckCommands } from "../linux/command-library.js";
+import { isLiveLogPlan, liveLogCommands, liveLogQuery, WEB_LOG_DISCOVERY } from "../../linux/live-log-query.js";
 
 const WARNING_PORTS = new Set([22, 80, 443, 8080, 4000, 4050, 50]);
 const READ_ACTIONS = new Map<ActionType, string>([
@@ -145,6 +146,10 @@ export const linuxEdgePlanner: VendorPlanner = {
     return device?.type === DeviceType.linux_edge || String(device?.vendor ?? "").toLowerCase().includes("linux");
   },
   plan(input) {
+    if (isLiveLogPlan(input.parameters)) {
+      try { const q=liveLogQuery(input.parameters.logQuery),c=liveLogCommands(q);return {...base(input),commands:[c.probe,...(q.webFallback?[WEB_LOG_DISCOVERY]:[]),c.follow],warnings:["پایش فقط‌خواندنی؛ تا ۳۰ دقیقه، ۵۰۰ رویداد در حافظه؛ کلید SSH مطابق پیش‌نمایش بررسی می‌شود."]}; }
+      catch(e) { return {...base(input),status:"unsupported",unsupportedReason:e instanceof Error?e.message:"فیلتر نامعتبر"}; }
+    }
     if (input.actionType === ActionType.custom_vendor_action) {
       const customPlan = customPlanFromParameters(input.parameters);
       if (!customPlan || customPlan.vendor !== "linux") return { ...base(input), status: "unsupported", unsupportedReason: "Linux custom command plan is missing or targets another vendor." };

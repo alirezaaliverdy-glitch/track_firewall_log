@@ -52,7 +52,7 @@ export async function proposeActionPlan(input: Record<string, unknown>) {
   const catalog = getActionCatalogEntry(actionType, catalogVendor);
   if (catalog) riskLevel = catalog.riskLevel;
   const productVendor = vendor === "linux_edge" ? "linux" : vendor;
-  const productMatches = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.executionSupport === "connector" && item.actionType === actionType && item.vendor === productVendor);
+  const productMatches = COMMAND_CATALOG.filter((item) => item.id!=="linux.live-logs" && item.supportState === "verified" && item.executionSupport === "connector" && item.actionType === actionType && item.vendor === productVendor);
   if (productMatches.length === 1 && asObject(parameters.metadata).source !== "command_catalog") {
     const item = productMatches[0];
     const normalizedParams = executionParametersOnly(parameters);

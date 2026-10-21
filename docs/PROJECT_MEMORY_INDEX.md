@@ -1,5 +1,7 @@
 # Project Memory Index
 
+Natural-language Linux live logs: `docs/LINUX_LIVE_LOGS.md` (registered ActionPlan preview/one-confirmation/SSH flow, source-specific filters, bounded in-memory delivery, identity/access/privacy and actual acceptance).
+
 Unified measured monitoring, bounded realtime dispatch, registered issue response and camera-only NVR registration/control: `docs/UNIFIED_MONITORING_NVR_ACCESS.md` (source/freshness boundaries, app thresholds, viewer/operator separation and one-clip replay prefetch).
 
 Camera playback/fullscreen, verified NVR settings/diagnostics and operator VPN management: `docs/CAMERA_STUDIO.md` (capability boundaries, real vs fixture acceptance, no universal SMART/replay claim).

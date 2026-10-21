@@ -119,6 +119,7 @@ export const MUTATION_PERMISSION_POLICIES: readonly RoutePermissionPolicy[] = [
   { method: "POST", path: "/api/collectors/:deviceId/run-once", permission: "devices.manage" },
   { method: "POST", path: "/api/commands/catalog/:id/create-action-plan", permission: "actions.propose" },
   { method: "POST", path: "/api/commands/ai-propose", permission: "actions.propose" },
+  { method: "POST", path: "/api/commands/live-logs/:id/stop", permission: "actions.propose" },
   { method: "POST", path: "/api/actions/:id/plan", permission: "actions.propose" },
   { method: "POST", path: "/api/credentials", permission: "credentials.manage" },
   { method: "PATCH", path: "/api/credentials/:id", permission: "credentials.manage" },

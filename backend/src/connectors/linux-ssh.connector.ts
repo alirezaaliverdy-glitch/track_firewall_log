@@ -8,6 +8,7 @@ import { env } from "../config/env.js";
 import { buildLinuxServiceStatusCommand, parseLinuxServiceStatus, validateLinuxServiceName } from "../linux/service-status.js";
 import { resolveCredentialById, resolveCredentialByName } from "../services/credential.service.js";
 import { ACTION_PLAN_SECRET_KEYS, resolveActionPlanSecret } from "../services/action-plan-secret.service.js";
+import { isLiveLogPlan, liveLogCommands, liveLogQuery, WEB_LOG_DISCOVERY } from "../linux/live-log-query.js";
 import { customDryRun, customPlanFromParameters } from "../ai/custom-action-plan.js";
 import { linuxDailyCheckCommands, linuxReadCommand } from "./linux/command-library.js";
 import type {
@@ -614,6 +615,10 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
 }
 
 function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
+  if(isLiveLogPlan(plan.parametersJson)) {
+    const p=asObject(plan.parametersJson),q=liveLogQuery(p.logQuery),c=liveLogCommands(q);
+    return {plannedCommands:[c.probe,...(q.webFallback?[WEB_LOG_DISCOVERY]:[]),c.follow],affectedPorts:[],affectedServices:[q.container??q.unit??q.file??"journal"],validationWarnings:["متن لاگ ذخیرهٔ دائمی نمی‌شود؛ شروع جریان به معنی سالم‌بودن سرویس نیست.",...(q.webFallback?["اگر فایل وب وجود نداشت، فقط یک کانتینر واقعاً سازگار به‌صورت فقط‌خواندنی شناسایی می‌شود؛ چند نتیجه نیازمند تعیین نام دقیق است."]:[]),`SSH: ${String(p.liveLogFingerprint??"")}`],rollbackSteps:[],riskLevel:"low",requiresApproval:true};
+  }
   if (plan.actionType === ActionType.custom_vendor_action) {
     const customPlan = customPlanFromParameters(plan.parametersJson);
     if (!customPlan || customPlan.vendor !== "linux") throw new ConnectorError("CONNECTOR_ACTION_UNSUPPORTED", "Linux custom command plan is missing or targets another vendor.");
@@ -1131,7 +1136,13 @@ export const linuxSshConnector: DeviceConnector = {
   async dryRun(actionPlan, device) {
     return dryRunFor(actionPlan, device);
   },
-  execute(actionPlan, device, audit) {
+  async execute(actionPlan, device, audit) {
+    if (isLiveLogPlan(actionPlan.parametersJson)) {
+      const { openLiveLog } = await import("../linux/live-log.service.js");
+      const credential=await getCredential(device);
+      const session=await openLiveLog(actionPlan,device,connectConfig(device,credential));
+      return {executed:true,actionType:actionPlan.actionType,deviceId:device.id,commands:[{template:"linux_live_log_query",stdout:"Live log source verified; stream opened.",stderr:"",exitCode:0}],warnings:[],rollbackJson:{liveLogSession:session,outcome:"live_stream_started",verification:{ok:true,summary:"SSH and source precheck passed; live stream remains open.",evidence:[{sessionId:session.sessionId,status:session.status}]}}};
+    }
     return runAction(actionPlan, device, audit);
   },
   async rollback() {

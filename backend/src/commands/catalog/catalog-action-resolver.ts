@@ -13,7 +13,7 @@ export function resolveCatalogAction(plan: Pick<ActionPlan, "actionType" | "para
   // Legacy-controlled actions use an explicit canonical marker for revision
   // identity, but that marker is not a product-catalog item ID.
   const commandId = storedCommandId?.startsWith("legacy:") ? null : storedCommandId;
-  const fallback = COMMAND_CATALOG.filter((item) => item.supportState === "verified" && item.actionType === plan.actionType);
+  const fallback = COMMAND_CATALOG.filter((item) => item.id!=="linux.live-logs" && item.supportState === "verified" && item.actionType === plan.actionType);
   const item = commandId ? findCatalogItem(commandId) : fallback.length === 1 ? fallback[0] : undefined;
   if (!item) return commandId ? { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_FOUND", messageFa: "این دستور هنوز اجرای خودکار ندارد" } : { matched: false };
   if (item.supportState !== "verified" || item.executionSupport !== "connector") return { matched: true, valid: false, code: "CATALOG_COMMAND_NOT_VERIFIED", messageFa: "این دستور هنوز اجرای خودکار ندارد" };

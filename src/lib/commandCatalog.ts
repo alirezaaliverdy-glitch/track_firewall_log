@@ -49,6 +49,7 @@ export type CatalogItem = {
 export type AiProposalResponse =
   | {
       mode: "executable_action_plan";
+      liveLogQuery?: {source:string;unit?:string;file?:string;ip?:string;text?:string;errorsOnly?:boolean};
       messageFa: string;
       actionPlanId: string;
       actionPlan: ActionPlan;

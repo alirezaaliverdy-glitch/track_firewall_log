@@ -157,6 +157,13 @@ const RAW_COMMAND_CATALOG: readonly CommandCatalogItem[] = [
   item("linux", "open-ports", "نمایش پورت‌های باز", "Show open ports", "network", "linux_list_open_ports", implemented("linux_list_open_ports")),
   item("linux", "ssh-status", "بررسی وضعیت SSH", "Check SSH status", "ssh", "linux_check_ssh_status", implemented("linux_check_ssh_status")),
   item("linux", "failed-logins", "بررسی لاگ‌های ورود ناموفق", "Review failed logins", "authentication", "linux_check_failed_logins", implemented("linux_check_failed_logins", { searchKeywordsFa: ["ورود ناموفق", "لاگ احراز هویت"] })),
+  item("linux", "live-logs", "پایش زندهٔ لاگ لینوکس", "Live Linux logs", "observability", "linux_read_auth_logs", implemented("linux_live_log_query", {
+    required: [param("logQuery", "فیلتر لاگ", "پرس‌وجوی ساختاریافته؛ از اقدام با یک جمله بسازید. پیش‌نمایش اتصال خودکار ساخته می‌شود.", "string")],
+    descriptionFa: "دریافت فقط‌خواندنی لاگ واقعی از SSH؛ سرویس، IP و عبارت، حداکثر ۳۰ دقیقه و حافظهٔ محدود، بدون ذخیرهٔ دائمی متن لاگ.",
+    prechecks: ["مالکیت، SSH، کلید میزبان، مسیر VPN و خواندنی‌بودن منبع بررسی شود"],
+    verification: ["اتصال واقعی و بررسی موفق منبع و بازماندن جریان؛ سلامت سرویس از سکوت لاگ نتیجه‌گیری نمی‌شود"],
+    searchKeywordsFa: ["لاگ زنده", "لاگ سرویس", "لاگ IP"]
+  })),
   item("linux", "sudo-users", "بررسی کاربران sudo", "Review sudo users", "identity", "linux_check_sudo_users", implemented("linux_check_sudo_users")),
   item("linux", "firewall-status", "بررسی وضعیت فایروال", "Check firewall status", "firewall", "linux_check_firewall_status", implemented("linux_check_firewall_status")),
   item("linux", "fail2ban-status", "بررسی fail2ban", "Check fail2ban", "hardening", "linux_check_fail2ban_status", implemented("linux_check_fail2ban_status")),

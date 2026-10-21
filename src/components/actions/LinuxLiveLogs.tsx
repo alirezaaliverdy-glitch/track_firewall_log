@@ -1,0 +1,34 @@
+import { useEffect, useRef, useState } from "react";
+import { Activity, CircleStop, Pause, Play, Search, ShieldCheck, Terminal } from "lucide-react";
+import { apiRequest } from "@/lib/apiTransport";
+import "./linux-live-logs.css";
+
+type Event = {sequence:number;receivedAt:string;deviceTime:string|null;source:string;priority:number|null;message:string};
+type Batch = {status:string;deviceName:string;deviceHost:string;reason:string;events:Event[];cursor:number;observed:number;matched:number;dropped:number;gap:boolean;warnings:string[];query:{source:string;unit?:string;file?:string;container?:string;ip?:string;text?:string;kernel?:boolean};serverTime:string;expiresAt:string};
+async function request<T>(path:string,init?:RequestInit):Promise<T>{const response=await apiRequest(path,init);const data=await response.json();if(!response.ok)throw new Error(typeof data.messageFa==="string"?data.messageFa:"ارتباط با جریان لاگ برقرار نشد.");return data as T;}
+export function LinuxLiveLogs({sessionId,isFa=true}:{sessionId:string;isFa?:boolean}) {
+  const [batch,setBatch]=useState<Batch|null>(null),[events,setEvents]=useState<Event[]>([]),[error,setError]=useState(""),[paused,setPaused]=useState(false),[search,setSearch]=useState(""),[stopping,setStopping]=useState(false);
+  const ring=useRef<Event[]>([]),pausedRef=useRef(false),scroll=useRef<HTMLDivElement>(null),follow=useRef(true);
+  useEffect(()=>{let disposed=false,cursor=0;const controller=new AbortController();ring.current=[];setEvents([]);setBatch(null);setError("");
+    void(async()=>{while(!disposed){try{const data=await request<Batch>(`/commands/live-logs/${encodeURIComponent(sessionId)}?cursor=${cursor}`,{signal:controller.signal});if(disposed)return;cursor=data.cursor;ring.current=[...ring.current,...data.events].slice(-500);setBatch(data);if(!pausedRef.current)setEvents([...ring.current]);if(data.status!=="live")return;}catch(e){if(!disposed)setError(e instanceof Error?e.message:"ارتباط ناموفق بود.");return;}}})();
+    return()=>{disposed=true;controller.abort();};
+  },[sessionId]);
+  useEffect(()=>{if(follow.current&&!paused&&scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight;},[events,paused]);
+  function pause(){pausedRef.current=!paused;setPaused(!paused);if(paused)setEvents([...ring.current]);}
+  async function stop(){setStopping(true);try{await request(`/commands/live-logs/${encodeURIComponent(sessionId)}/stop`,{method:"POST"});setBatch(b=>b?{...b,status:"closed",reason:isFa?"پایش به درخواست شما متوقف شد.":"Monitoring stopped by you."}:b);}catch(e){setError(e instanceof Error?e.message:"توقف ناموفق بود.");}finally{setStopping(false);}}
+  const live=batch?.status==="live"&&!error,visible=events.filter(e=>!search||`${e.source} ${e.message}`.toLowerCase().includes(search.toLowerCase()));
+  return <section className="linux-live-logs" aria-label={isFa?"پایش زندهٔ لاگ لینوکس":"Live Linux logs"}>
+    <header><span className="linux-live-logs__icon"><Terminal/></span><div><h3>{batch?.deviceName??(isFa?"پنجرهٔ زندهٔ لاگ":"Live log window")}</h3><p>{batch?.deviceHost?`${batch.deviceHost} · `:""}{batch?.query.container??batch?.query.file??batch?.query.unit??(batch?.query.kernel?"kernel journal":"systemd journal")}{batch?.query.ip?` · IP ${batch.query.ip}`:""}{batch?.query.text?` · «${batch.query.text}»`:""}</p></div><span className={`linux-live-logs__status ${live?"is-live":""}`}><Activity size={15}/>{live?(isFa?"در حال دریافت":"Receiving"):(batch?.status==="closed"?(isFa?"متوقف":"Stopped"):batch?.status==="failed"||error?(isFa?"ارتباط ناموفق":"Connection failed"):(isFa?"بررسی اتصال":"Checking connection"))}</span></header>
+    <div className="linux-live-logs__metrics"><span>{isFa?"خوانده‌شده از منبع":"Read from source"}<b>{(batch?.observed??0).toLocaleString(isFa?"fa-IR":"en")}</b></span><span>{isFa?"مطابق فیلتر":"Matched"}<b>{(batch?.matched??0).toLocaleString(isFa?"fa-IR":"en")}</b></span><span>{isFa?"سقف پنجره":"Window limit"}<b>{isFa?"۵۰۰ رویداد":"500 events"}</b></span></div>
+    <div className="linux-live-logs__toolbar"><label><Search size={16}/><input aria-label={isFa?"جست‌وجو در پنجرهٔ فعلی":"Search current window"} placeholder={isFa?"جست‌وجو در همین پنجره…":"Search this window…"} value={search} onChange={e=>setSearch(e.target.value)} maxLength={160}/></label><button type="button" onClick={pause}>{paused?<Play size={16}/>:<Pause size={16}/>} {paused?(isFa?"ادامهٔ نمایش":"Resume view"):(isFa?"مکث نمایش":"Pause view")}</button><button type="button" className="linux-live-logs__stop" disabled={stopping||batch?.status==="closed"||batch?.status==="failed"} onClick={()=>void stop()}><CircleStop size={16}/>{isFa?"توقف پایش":"Stop monitoring"}</button></div>
+    {paused?<p className="linux-live-logs__notice">{isFa?"فقط نمایش مکث شده؛ دریافت همچنان ادامه دارد و پنجره محدود است.":"Display paused; bounded collection continues."}</p>:null}
+    {error?<p role="alert" className="linux-live-logs__notice">{error} {isFa?"برای تلاش دوباره یک درخواست جدید بسازید؛ جریان رهاشده خودکار بسته می‌شود.":"Prepare a new request to retry; abandoned streams close automatically."}</p>:null}
+    {batch?.reason?<p className="linux-live-logs__notice" role="status">{batch.reason}</p>:null}
+    {batch?.gap||!!batch?.dropped?<p className="linux-live-logs__notice">{isFa?"بخشی از رویدادهای قدیمی از پنجرهٔ محدود خارج شده‌اند؛ این پنجره آرشیو کامل نیست.":"Older events left the bounded window; this is not a complete archive."}</p>:null}
+    {batch?.warnings.map(w=><p className="linux-live-logs__notice" key={w}>{w}</p>)}
+    <div ref={scroll} className="linux-live-logs__console" role="log" aria-live="off" tabIndex={0} onScroll={()=>{const el=scroll.current;if(el)follow.current=el.scrollHeight-el.scrollTop-el.clientHeight<60;}}>
+      {!visible.length?<div className="linux-live-logs__empty"><Activity/><strong>{isFa?"منتظر رویداد مطابق فیلتر":"Waiting for matching events"}</strong><p>{isFa?"لاگ جدید که برسد همین‌جا نمایش داده می‌شود. نبودن رویداد، سلامت یا نبودن حمله را اثبات نمی‌کند.":"Matching entries appear here as they arrive. Silence does not prove health or absence of attacks."}</p></div>:visible.map(e=><article key={e.sequence} className={e.priority!==null&&e.priority<=3?"is-error":""}><div><time title={e.deviceTime??e.receivedAt}>{new Date(e.deviceTime??e.receivedAt).toLocaleTimeString(isFa?"fa-IR":"en")}</time><span>{e.source}</span><small>{e.deviceTime?(isFa?"زمان تجهیز":"Device time"):(isFa?"زمان دریافت":"Received time")}</small></div><pre dir="ltr">{e.message}</pre></article>)}
+    </div>
+    <footer><ShieldCheck size={16}/>{isFa?"فقط‌خواندنی · پوشاندن اسرار متداول · بدون آرشیو متن روی سرور · حداکثر ۳۰ دقیقه":"Read-only · Common secrets redacted · No server text archive · Up to 30 minutes"}</footer>
+  </section>;
+}

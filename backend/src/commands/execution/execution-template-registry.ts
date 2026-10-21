@@ -5,6 +5,7 @@ import { RESTORE_TEMPLATES } from "../../backups/restore-profiles.js";
 export type ExecutionTemplate = { id: string; actionType: string; connectorType: "linux-ssh" | "mikrotik-ssh" | "fortigate-ssh" | "cisco-ios-xe-ssh" | "sophos-api" | "esxi-soap"; handler: string };
 
 const templates: ExecutionTemplate[] = [
+  { id: "linux_live_log_query", actionType: "linux_read_auth_logs", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   ...Object.values(RESTORE_TEMPLATES).map(template => ({ id: template.id, actionType: "generic_security_action", connectorType: template.connector, handler: "backupRestorePlanner" })),
   { id: "linux_open_port", actionType: "linux_open_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },
   { id: "linux_close_port", actionType: "close_port", connectorType: "linux-ssh", handler: "linuxEdgePlanner" },

@@ -87,6 +87,7 @@ function bodyValue(request: FastifyRequest, keys: string[]) {
 }
 
 function policyForRequest(pathname: string, method?: string) {
+  if (/^\/api\/commands\/live-logs\//.test(pathname)) return {id:"live_log_read",limit:720,windowMs:60_000};
   if (/^\/api\/cameras\/[^/]+\/(?:playback(?:\/export)?|recordings)$/.test(pathname)) return { id: "camera_replay", limit: 12, windowMs: 60_000 };
   if (/^\/api\/devices\/[^/]+\/terminal\/(?:preview|sessions)$/.test(pathname)) return {id:"terminal_open",limit:8,windowMs:60_000};
   if (/^\/api\/terminal-sessions\/[^/]+(?:\/|$)/.test(pathname)) return {id:"terminal_io",limit:1500,windowMs:60_000};

@@ -9,6 +9,9 @@ import { proposeActionPlan } from "../services/action-plan.service.js";
 import { catalogGuidedBlueprintId } from "../guided-actions/catalog-guided-blueprint.js";
 import { buildAssistantTargetContextFromRecord } from "../ai/context/assistant-target-context.js";
 import { buildCustomCommandPlan, validateCustomCommandPlan } from "../ai/custom-action-plan.js";
+import { parseLiveLogIntent } from "../linux/live-log-query.js";
+import { checkLiveLogAccess, LiveLogError, prepareLiveLog, readLiveLog, shutdownLiveLogs, stopLiveLog } from "../linux/live-log.service.js";
+import { getSessionUser } from "../services/auth.service.js";
 
 const bool = (value: unknown) => value === "true" ? true : value === "false" ? false : undefined;
 const deviceVendor = (device: { type: string; vendor: string }) => {
@@ -32,6 +35,24 @@ function invalidValue(type: string, value: unknown) {
 }
 
 export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("onClose",async()=>shutdownLiveLogs());
+  app.get<{Params:{id:string};Querystring:{cursor?:string}}>("/api/commands/live-logs/:id",async(request,reply)=>{
+    if(!request.authUser)return reply.code(401).send({messageFa:"ابتدا وارد شوید."});
+    const abort=new AbortController();const disconnected=()=>abort.abort();reply.raw.on("close",disconnected);
+    try{
+      const result=await readLiveLog(request.params.id,request.authUser,Number(request.query.cursor??0),abort.signal);
+      const current=await getSessionUser(request.authSessionToken??"");
+      if(!current||current.id!==request.authUser.id){await stopLiveLog(request.params.id,request.authUser);return reply.code(401).send({messageFa:"نشست ورود پایان یافته است."});}
+      if(current.role==="viewer"||JSON.stringify(current.allowedSections)!==JSON.stringify(request.authUser.allowedSections)) {await stopLiveLog(request.params.id,request.authUser);return reply.code(403).send({messageFa:"دسترسی تغییر کرده است؛ دوباره وارد بخش شوید."});}
+      await checkLiveLogAccess(request.params.id,current);
+      reply.header("Cache-Control","no-store");return result;
+    }catch(e){return reply.code(e instanceof LiveLogError?e.statusCode:400).send({messageFa:e instanceof LiveLogError?e.message:"خواندن جریان ناموفق بود."});}
+    finally{reply.raw.off("close",disconnected);}
+  });
+  app.post<{Params:{id:string}}>("/api/commands/live-logs/:id/stop",async(request,reply)=>{
+    if(!request.authUser)return reply.code(401).send({messageFa:"ابتدا وارد شوید."});
+    try{return await stopLiveLog(request.params.id,request.authUser);}catch(e){return reply.code(e instanceof LiveLogError?e.statusCode:400).send({messageFa:e instanceof LiveLogError?e.message:"توقف ناموفق بود."});}
+  });
   app.get("/api/commands/catalog", async () => ({ productMode: env.productMode, enabled: env.productMode === "persian_command_catalog", count: COMMAND_CATALOG.length, categories: [...new Set(COMMAND_CATALOG.map((x) => x.category))].sort(), items: COMMAND_CATALOG }));
   app.get<{ Querystring: { q?: string; vendor?: string; deviceId?: string; category?: string; riskLevel?: string; readOnly?: string; executable?: string; includePlanned?: string } }>("/api/commands/catalog/search", async (request, reply) => {
     let vendor = request.query.vendor;
@@ -54,7 +75,13 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
     if (["sophos.create-ipsec-tunnel", "fortigate.guided-ipsec-site-to-site"].includes(item.id)) return reply.code(409).send({ error: "GUIDED_VPN_REQUIRED", messageFa: "برای ورود امن رمز مشترک و پارامترها، فرم مرحله‌ای ساخت تونل را باز کنید.", blueprintId: item.vendor === "sophos" ? "sophos_ipsec_site_to_site" : "fortigate_ipsec_site_to_site" });
     if (item.supportState === "unsupported") return reply.code(409).send({ error: "COMMAND_NOT_AVAILABLE", code: "COMMAND_NOT_AVAILABLE", messageKey: item.supportReasonKey, messageFa: item.disabledReasonFa, implementationState: item.implementationState, supportState: item.supportState });
     if (item.supportState === "verified" && (!item.executionTemplateRef || !getExecutionTemplate(item.executionTemplateRef))) return reply.code(409).send({ error: "COMMAND_NOT_EXECUTABLE", code: "COMMAND_NOT_EXECUTABLE", messageKey: "support.reason.missingRequirements", messageFa: "این دستور هنوز template اجرایی ثبت‌شده ندارد." });
-    const params = { ...item.defaultParams, ...(request.body?.params ?? {}) };
+    let params = { ...item.defaultParams, ...(request.body?.params ?? {}) };
+    if(item.id==="linux.live-logs") {
+      if(params.logQuery===undefined||params.logQuery==="")return reply.code(422).send({error:"NEEDS_INPUT",needsInput:true,missingFields:["logQuery"],messageFa:"از اقدام با یک جمله منبع لاگ را مشخص کنید؛ مثلاً «لاگ سرویس nginx»."});
+      if(!request.authUser||!request.body?.deviceId)return reply.code(400).send({messageFa:"کاربر و تجهیز لازم است."});
+      try{params={...params,...await prepareLiveLog(request.body.deviceId,params.logQuery,request.authUser)};}
+      catch(e){return reply.code(e instanceof LiveLogError?e.statusCode:422).send({messageFa:e instanceof Error?e.message:"فیلتر نامعتبر است."});}
+    }
     const fields = item.requiredParams.filter((field) => params[field.key] === undefined || params[field.key] === "" || invalidValue(field.type, params[field.key]));
     if (fields.length) return reply.code(422).send({ error: "NEEDS_INPUT", needsInput: true, messageFa: missingFieldsMessageFa(fields.map((field) => field.key)), fields, missingFields: fields.map((field) => field.key) });
     if (!request.body?.deviceId) return reply.code(400).send({ error: "DEVICE_REQUIRED", messageFa: "ابتدا دستگاه هدف را انتخاب کنید." });
@@ -137,6 +164,16 @@ export const commandCatalogRoutes: FastifyPluginAsync = async (app) => {
 
     const selectedVendor = request.body.selectedVendor ?? request.body.currentVendor ?? request.body.vendor;
     const resolvedVendor = deviceVendor(device);
+    const logIntent=resolvedVendor==="linux"?parseLiveLogIntent(userRequest):null;
+    if(logIntent){
+      if(logIntent.clarification)return {mode:"clarification",questionFa:logIntent.clarification,actionPlan:null};
+      if(!request.authUser)return reply.code(401).send({messageFa:"ابتدا وارد شوید."});
+      try{
+        const params=await prepareLiveLog(device.id,logIntent.query,request.authUser),item=findCatalogItem("linux.live-logs")!;
+        const plan=await proposeActionPlan({source:"user",requestedBy:request.authUser.id,deviceId:device.id,actionType:item.actionType,riskLevel:"low",parametersJson:{...params,vendor:"linux",executionSupport:"connector",executable:true,metadata:{catalogCommandId:item.id,catalogVersion:COMMAND_CATALOG_VERSION,catalogTitleFa:item.titleFa,executionTemplateRef:item.executionTemplateRef,connectorType:"linux-ssh",implementationState:"implemented",executionSupport:"connector",supportState:"verified",executable:true,source:"command_catalog",normalizedParams:params}}});
+        return {mode:"executable_action_plan",actionPlanId:plan.id,actionPlan:plan,resolution:{catalogItem:item},liveLogQuery:logIntent.query};
+      }catch(e){return reply.code(e instanceof LiveLogError?e.statusCode:422).send({messageFa:e instanceof LiveLogError?e.message:"ساخت پیش‌نمایش پایش ناموفق بود؛ اتصال و فیلتر را بررسی کنید."});}
+    }
     const targetDeviceContext = buildAssistantTargetContextFromRecord(device);
     const resolution = resolveAiTemplate({
       userText: userRequest,

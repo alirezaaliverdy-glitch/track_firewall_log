@@ -17,6 +17,7 @@ import { formatActionResult } from "@/features/actions/actionResultFormatter";
 import { useNavigate } from "react-router-dom";
 import { AccessLink as Link } from "@/components/auth/AccessLink";
 import "@/features/security/components/FindingReview.css";
+import { LinuxLiveLogs } from "./LinuxLiveLogs";
 
 const metadataOf = (action: ActionPlan) => normalizeObject(normalizeObject(action.parametersJson).metadata);
 
@@ -171,6 +172,7 @@ export default function ActionResultView({ actionPlanId }: { actionPlanId: strin
 
   return (
     <main className="mx-auto box-border min-w-0 max-w-6xl overflow-x-hidden px-3 py-4 sm:px-6 sm:py-8" dir="rtl">
+      {typeof normalizeObject(result.parsedResult).sessionId==="string"&&metadata.catalogCommandId==="linux.live-logs"?<LinuxLiveLogs sessionId={String(normalizeObject(result.parsedResult).sessionId)}/>:null}
       <div className="min-w-0 max-w-full space-y-4 text-right text-slate-100">
         <header className="min-w-0 max-w-full rounded-2xl border border-slate-800 bg-slate-950/85 p-4 shadow-xl sm:p-6">
           <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

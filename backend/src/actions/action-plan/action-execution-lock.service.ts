@@ -3,6 +3,7 @@ import { Client } from "pg";
 import type { ActionPlan } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { ActionExecutionError, asObject, planRevision } from "./action-plan.shared.js";
+import { assertSafeTestDatabaseEnvironment } from "../../testing/test-database-safety.js";
 
 type LockHandle = {
   client: Client;
@@ -29,10 +30,13 @@ export function actionExecutionLockKey(plan: ActionPlan, input: Record<string, u
 }
 
 async function tryAcquireActionExecutionLock(plan: ActionPlan, input: Record<string, unknown>): Promise<LockHandle | null> {
-  if (!env.databaseUrl) {
+  const testing=process.env.NODE_ENV==="test"||Boolean(process.env.NODE_TEST_CONTEXT);
+  if(testing)assertSafeTestDatabaseEnvironment();
+  const connectionString=testing?process.env.TEST_DATABASE_URL:env.databaseUrl;
+  if (!connectionString) {
     throw new ActionExecutionError("DATABASE_LOCK_UNAVAILABLE", "Database-backed execution locking requires DATABASE_URL.", 503);
   }
-  const client = new Client({ connectionString: env.databaseUrl });
+  const client = new Client({ connectionString });
   const key = actionExecutionLockKey(plan, input);
   await client.connect();
   const result = await client.query<{ locked: boolean }>("SELECT pg_try_advisory_lock(hashtext($1)) AS locked", [key]);

@@ -14,6 +14,7 @@ export type SupportStateEvaluation = {
 };
 
 const VERIFIED_RESULT_PARSERS = new Set<string>([
+  "linux_live_log_query",
   "linux_daily_check",
   "linux_open_port",
   "close_port",

@@ -12,6 +12,7 @@ import { resolveTrustedManagementSource } from "./action-preflight.service.js";
 import { env } from "../config/env.js";
 import { normalizeFortiGateGuidedVpnParameters, validateFortiGateGuidedVpnParameters } from "./fortigate-guided-vpn.schema.js";
 import { customPlanFromParameters, validateCustomCommandPlan } from "../ai/custom-action-plan.js";
+import { isLiveLogPlan, liveLogQuery } from "../linux/live-log-query.js";
 
 const PROTECTED_CLOSE_PORTS = new Set([22, 22022, 80, 443, 4000, 4050, 50, 5173]);
 
@@ -246,6 +247,10 @@ export async function validateActionPlan(plan: ActionPlan): Promise<ValidationRe
   const canonicalShapeErrors = validateCanonicalFieldShapes(parameters);
   const fieldErrors = [...catalogValidation.fieldErrors, ...canonicalShapeErrors];
   errors.push(...catalogValidation.errors, ...canonicalShapeErrors.map((issue) => issue.message));
+  if(isLiveLogPlan(parameters)){
+    try {liveLogQuery(parameters.logQuery);}catch(e){errors.push(e instanceof Error?e.message:"فیلتر لاگ معتبر نیست.");}
+    if(plan.actionType!==ActionType.linux_read_auth_logs||typeof parameters.liveLogPreviewId!=="string"||!/^[a-f0-9-]{36}$/.test(parameters.liveLogPreviewId))errors.push("پیش‌نمایش معتبر برای پایش لاگ لازم است.");
+  }
   let device: Device | null = null;
 
   if (plan.deviceId) {

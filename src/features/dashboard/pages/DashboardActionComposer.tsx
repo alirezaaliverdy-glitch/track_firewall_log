@@ -6,6 +6,9 @@ import { ArrowUpLeft, LoaderCircle, Sparkles } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AccessLink as Link } from "@/components/auth/AccessLink";
+import { dryRunAction, normalizeObject, quickExecuteAction, type ActionPlan } from "@/lib/actions";
+import { LinuxLiveLogs } from "@/components/actions/LinuxLiveLogs";
+import { apiRequest } from "@/lib/apiTransport";
 
 type Proposal = { title: string; detail: string; path: string };
 
@@ -17,7 +20,10 @@ export function DashboardActionComposer({ assets, isFa }: { assets: PlatformAsse
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [logPlan,setLogPlan]=useState<ActionPlan|null>(null);
+  const [logSession,setLogSession]=useState("");
   const selected = devices.find((asset) => asset.device?.id === deviceId);
+  const logQueryPreview=useMemo(()=>{try{return normalizeObject(JSON.parse(String(logPlan?.parametersJson.logQuery??"null")));}catch{return {}; }},[logPlan]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,6 +31,7 @@ export function DashboardActionComposer({ assets, isFa }: { assets: PlatformAsse
     setBusy(true);
     setError("");
     setProposal(null);
+    setLogPlan(null);
     try {
       const vendor = selected.vendor?.name ?? selected.device.type;
       const result = await proposeWithAi({
@@ -37,6 +44,7 @@ export function DashboardActionComposer({ assets, isFa }: { assets: PlatformAsse
       const matched = resolution?.catalogItem ?? resolution?.targetSupportedAction;
       const title = (isFa ? matched?.titleFa : matched?.titleEn) || requestText.trim();
       if (result.mode === "executable_action_plan") {
+        if(result.liveLogQuery){setLogPlan(await dryRunAction(result.actionPlanId));return;}
         publishActionPlanCreated(result.actionPlanId);
         setProposal({ title, detail: isFa ? "اقدام شناسایی شد. پیش‌نمایش را بررسی و سپس تأیید کنید." : "Action recognized. Review its preview before confirming.", path: actionPlanPath(result.actionPlanId) });
       } else if (result.mode === "needs_input" && "actionPlanId" in result && typeof result.actionPlanId === "string") {
@@ -65,19 +73,30 @@ export function DashboardActionComposer({ assets, isFa }: { assets: PlatformAsse
     }
   }
 
+  async function startLogs(){
+    if(!logPlan||busy)return;setBusy(true);setError("");
+    try{if(logSession){const stopped=await apiRequest(`/commands/live-logs/${encodeURIComponent(logSession)}/stop`,{method:"POST"});if(!stopped.ok&&stopped.status!==404)throw new Error("ابتدا پایش قبلی را متوقف کنید.");setLogSession("");}const result=await quickExecuteAction(logPlan.id,{intent:"execute"});const session=normalizeObject(normalizeObject(result.resultJson).parsedResult);
+      if(result.status!=="succeeded"||typeof session.sessionId!=="string")throw new Error(String(normalizeObject(result.resultJson).message??"شروع جریان لاگ موفق نبود؛ نتیجهٔ اقدام را بررسی کنید."));
+      setLogSession(session.sessionId);setLogPlan(null);
+    }catch(e){setError(e instanceof Error?e.message:"شروع پایش ناموفق بود.");}finally{setBusy(false);}
+  }
+
   return <article className="command-panel dashboard-action-composer">
     <div className="dashboard-action-composer__heading"><span className="command-panel__icon"><Sparkles /></span><div><h2>{isFa ? "اقدام با یک جمله" : "Action in one sentence"}</h2><p>{isFa ? "درخواستتان به یک اقدام ثبت‌شده نگاشت می‌شود؛ اجرا فقط بعد از پیش‌نمایش و تأیید است." : "Your request is mapped to a registered action. Execution requires preview and confirmation."}</p></div></div>
     <form onSubmit={(event) => void submit(event)}>
       <label className="sr-only" htmlFor="dashboard-action-device">{isFa ? "تجهیز هدف" : "Target device"}</label>
-      <select id="dashboard-action-device" value={deviceId} onChange={(event) => { setDeviceId(event.target.value); setProposal(null); }} required>
+      <select id="dashboard-action-device" value={deviceId} onChange={(event) => { setDeviceId(event.target.value); setProposal(null); setLogPlan(null); }} required>
         <option value="">{isFa ? "تجهیز را انتخاب کنید" : "Select a device"}</option>
         {devices.map((asset) => <option key={asset.device!.id} value={asset.device!.id}>{asset.name} · {asset.managementIp ?? asset.device!.host}</option>)}
       </select>
       <label className="sr-only" htmlFor="dashboard-action-request">{isFa ? "درخواست عملیات" : "Action request"}</label>
-      <input id="dashboard-action-request" value={requestText} onChange={(event) => { setRequestText(event.target.value); setProposal(null); }} placeholder={isFa ? "مثلاً IP 192.0.2.10 را مسدود کن" : "For example: block IP 192.0.2.10"} maxLength={1000} required />
+      <input id="dashboard-action-request" value={requestText} onChange={(event) => { setRequestText(event.target.value); setProposal(null); setLogPlan(null); }} placeholder={isFa ? "مثلاً لاگ زندهٔ nginx یا لاگ IP 192.0.2.10" : "For example: live nginx logs, or logs for IP 192.0.2.10"} maxLength={1000} required />
       <button type="submit" disabled={busy || !deviceId || !requestText.trim()}>{busy ? <LoaderCircle className="is-spinning" /> : <Sparkles />}{isFa ? "ساخت پیشنهاد" : "Prepare proposal"}</button>
     </form>
     {error ? <p className="dashboard-action-composer__error" role="alert">{error}</p> : null}
+    {logPlan?<div className="linux-live-preview"><strong>{isFa?"پیش‌نمایش پایش زندهٔ لینوکس":"Preview Linux log monitoring"}</strong><p>{logPlan.device?.name??selected?.name} · <bdi>{(()=>{try{const q=JSON.parse(String(logPlan.parametersJson.logQuery));return [q.container??q.file??q.unit??(q.kernel?"kernel":"journal"),q.ip,q.text,q.errorsOnly?"خطاها":""].filter(Boolean).join(" · ");}catch{return "";}})()}</bdi></p><p>{isFa?"فقط‌خواندنی، ۵۰ خط اخیر و سپس رویدادهای تازه؛ حداکثر ۳۰ دقیقه و ۵۰۰ رویداد در پنجره. دادهٔ خام دائماً ذخیره نمی‌شود. پس از تأیید اتصال واقعی شروع می‌شود.":"Read-only: 50 recent lines, then new events. Up to 30 minutes and 500 events in memory. Confirmation starts the real connection."}</p><code>{String(logPlan.parametersJson.liveLogFingerprint??"")}</code>{logPlan.parametersJson.liveLogFirstTrust?<p>{isFa?"این کلید SSH برای اولین بار در همین پیش‌نمایش مشاهده شده؛ قبل از تأیید با کلید تجهیز تطبیق دهید.":"First observed SSH key: compare with the device before confirming."}</p>:null}<button type="button" disabled={busy} onClick={()=>void startLogs()}>{busy?(isFa?"در حال اتصال…":"Connecting…"):(isFa?"تأیید و شروع پایش":"Confirm & monitor")}</button></div>:null}
+    {logPlan&&logQueryPreview.webFallback===true?<p className="linux-live-logs__notice">{isFa?"اگر فایل استاندارد وب موجود نباشد، پس از همین تأیید تنها کانتینر واقعاً سازگار شناسایی می‌شود. در صورت چند نتیجه، برنامه چیزی را حدس نمی‌زند و نام دقیق می‌خواهد.":"If the standard web log is missing, this confirmation permits read-only discovery of a unique compatible container. Ambiguous matches require an exact name."}</p>:null}
+    {logSession?<LinuxLiveLogs key={logSession} sessionId={logSession} isFa={isFa}/>:null}
     {proposal ? <div className="dashboard-action-composer__result" role="status"><div><strong>{proposal.title}</strong><small>{proposal.detail}</small></div><Link to={proposal.path}>{isFa ? "بررسی و تأیید" : "Review & confirm"}<ArrowUpLeft /></Link></div> : null}
   </article>;
 }

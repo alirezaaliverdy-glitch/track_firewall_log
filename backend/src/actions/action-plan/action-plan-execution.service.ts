@@ -328,7 +328,7 @@ export async function executeActionPlan(id: string, executionInput: Record<strin
       stdout: result.commands.map((command) => command.stdout).filter(Boolean).join("\n"),
       stderr: result.commands.map((command) => command.stderr).filter(Boolean).join("\n"),
       executor: connector.name,
-      parsedResult: serviceStatusReadSucceeded ? serviceStatus : dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands, asObject(result.rollbackJson).verification),
+      parsedResult: asObject(result.rollbackJson).liveLogSession ?? (serviceStatusReadSucceeded ? serviceStatus : dailyCheck ?? fortigateReadOnly ?? parseExecutionResult(plan.actionType, result.commands.map((command) => command.stdout).filter(Boolean).join("\n"), result.commands, asObject(result.rollbackJson).verification)),
       verification: null,
       executionEvidence: null,
       resultUrl: `/actions/${id}/result`
