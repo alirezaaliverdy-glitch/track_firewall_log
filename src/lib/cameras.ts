@@ -23,6 +23,8 @@ export type CameraResult = { status: string; connectorInvoked: boolean; accepted
 export type CameraHistory = { id: string; operation: string; status: string; createdAt: string; previewJson: CameraPreview["preview"]; resultJson: CameraResult | null };
 
 const errors: Record<string, [string, string]> = {
+  NVR_CHANNEL_CONTROL_UNSUPPORTED: ["این ضبط‌کننده رابط سازگار قطع و وصل کانال را ارائه نکرد. وضعیت حدس زده نمی‌شود؛ توقف ضبط با قطع کانال یا برق دوربین فرق دارد.", "This recorder does not expose a compatible channel control interface. Recording stop is not channel or power disable."],
+  NVR_CHANNEL_ALREADY_SET: ["کانال از قبل در همین وضعیت است؛ فهرست را دوباره بخوان.", "The channel is already in this state. Reload its current state."],
   NVR_AUTO_DETECT_UNAVAILABLE: ["تجهیز ثبت شد، اما سرویس سازگار خودکار شناسایی نشد. IP و دسترسی شبکه را بررسی کن؛ اگر پورت دستگاه خاص است، تنظیمات پیشرفته را باز کن. سنسورهای پشتیبانی‌نشده نامشخص می‌مانند.", "Equipment saved, but a compatible service was not identified. Check the IP/network and advanced custom port settings. Unsupported sensors remain unknown."],
   CAMERA_REVIEW_RANGE_INVALID: ["بازه‌ای در گذشته، بین ۵ ثانیه و ۲۴ ساعت انتخاب کن؛ پایان باید بعد از شروع باشد.", "Choose a past range between 5 seconds and 24 hours, ending after its start."],
   CAMERA_REPLAY_SHORT_SEGMENT: ["قطعهٔ دریافتی کوتاه‌تر از زمان درخواستی بود؛ ممکن است ضبط وقفه داشته باشد. ادامهٔ خودکار متوقف شد؛ زمان دیگری را از نوار انتخاب کن.", "The received segment was shorter than requested. Recording may have a gap. Automatic continuation stopped; choose another time."],
@@ -121,9 +123,9 @@ export const refreshCamera = (id: string) => cameraJson<{ camera: CameraDevice }
 export const discoverCameras = (cidr: string, ports?: number[], vpnConnectionId?: string, companyId?: string) => cameraJson<CameraDiscovery>("/discover", { method: "POST", body: JSON.stringify({ cidr, ports, vpnConnectionId, companyId }) });
 export const previewCameraAction = (id: string, operation: string, parameters?: Record<string, string>) => cameraJson<CameraPreview>(`/${encodeURIComponent(id)}/actions/preview`, { method: "POST", body: JSON.stringify({ operation, ...parameters }) });
 export const executeCameraAction = (id: string, planId: string) => cameraJson<CameraResult>(`/${encodeURIComponent(id)}/actions/${encodeURIComponent(planId)}/execute`, { method: "POST", body: JSON.stringify({ intent: "execute", confirmed: true }) });
-export const cameraImageUrl = (id: string, profile: string, mode: "live" | "snapshot" | "frame") => apiUrl(`/cameras/${encodeURIComponent(id)}/${mode}?profile=${encodeURIComponent(profile)}`);
+export const cameraImageUrl = (id: string, profile: string, mode: "live" | "snapshot" | "frame" | "thumbnail") => apiUrl(`/cameras/${encodeURIComponent(id)}/${mode}?profile=${encodeURIComponent(profile)}`);
 
-export async function cameraImageResponse(id: string, profile: string, mode: "live" | "snapshot" | "frame", signal?: AbortSignal) {
+export async function cameraImageResponse(id: string, profile: string, mode: "live" | "snapshot" | "frame" | "thumbnail", signal?: AbortSignal) {
   const response = await fetch(cameraImageUrl(id, profile, mode), { credentials: "include", signal, cache: "no-store" });
   if (!response.ok) {
     const data = await response.json().catch(() => null);

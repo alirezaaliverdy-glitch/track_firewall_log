@@ -15,6 +15,7 @@ import "./NvrDevicePage.css";
 import { CameraCompanies } from "./CameraCompanies";
 import { CameraCompanyDialog } from "./CameraCompanyDialog";
 import { CameraDialog } from "./CameraDialog";
+import { CameraThumbnail } from "./CameraThumbnail";
 
 function sources(camera: CameraDevice) {
   const groups = new Map<string, CameraProfile[]>();
@@ -34,6 +35,7 @@ function CameraCard({ camera, isFa, openSources, onView, onDetail, onPlayback }:
   return <article className={`camera-device-card camera-device-card--${camera.kind} ${open ? "is-viewing" : ""} ${camera.status === "error" ? "has-error" : ""}`}>
     <header><span className="camera-device-icon">{camera.kind === "nvr" ? <Server size={24} /> : <Camera size={24} />}</span><span className={`camera-status is-${camera.status}`}><i />{copy(camera.status === "verified" ? "تأییدشده" : camera.status === "error" ? "نیاز به بررسی" : "بررسی نشده", camera.status === "verified" ? "Verified" : camera.status === "error" ? "Needs attention" : "Unverified")}</span><button className="camera-icon-button" type="button" onClick={onDetail} title={copy("تنظیمات دستگاه", "Device settings")} aria-label={copy(`تنظیمات ${camera.name}`, `${camera.name} settings`)}><Settings2 size={18} /></button></header>
     <span className="camera-device-card__kind">{camera.kind === "nvr" ? copy("ضبط‌کننده · NVR", "Recorder · NVR") : copy("دوربین", "Camera")}</span><h3>{camera.name}</h3><p dir="ltr" className="camera-device-card__ip">{camera.host}</p>
+    <CameraThumbnail key={`${camera.id}:${profile?.token}`} id={camera.id} profile={profile?.token} name={camera.name} isFa={isFa} revision={`${camera.host}:${camera.companyId}:${camera.connectionMode}:${camera.vpnConnectionId??""}`} onOpen={()=>{if(profile&&selected)onView(selected.key);else onDetail();}}/>
     {camera.kind === "nvr" && <Link className="camera-button" to={`/assets/cameras/recorders/${encodeURIComponent(camera.id)}`}><Server size={16}/>{copy("پایش و مدیریت NVR", "Monitor & manage NVR")}</Link>}
     <div className="camera-device-card__tags"><span><MapPin size={13} />{camera.location || copy("بدون محل نصب", "No location")}</span><span>{camera.vpnConnectionId ? <><ShieldCheck size={13} />VPN</> : camera.connectionMode.toUpperCase()}</span></div>
     <div className="camera-device-card__meta"><span title={camera.infoJson?.Model}>{camera.infoJson?.Model || camera.connectionMode.toUpperCase()}</span>{camera.kind === "nvr" ? <span>{channels.length.toLocaleString(isFa ? "fa-IR" : "en-US")} {copy("کانال", "channels")}</span> : null}</div>

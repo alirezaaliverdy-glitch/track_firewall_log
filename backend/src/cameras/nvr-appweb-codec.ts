@@ -22,10 +22,7 @@ const S = [
 const bits = (buffer: Buffer) => Array.from({ length: buffer.length * 8 }, (_, i) => buffer[i >> 3] >> (i & 7) & 1);
 const permute = (input: number[], table: number[]) => table.map(i => input[i - 1]);
 
-export function decodeAppWebChannels(input: unknown, password: string) {
-  if (!input || typeof input !== "object" || !("Content" in input) || typeof input.Content !== "string" || input.Content.length > 256 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(input.Content)) throw new CameraError("NVR_APPWEB_RESPONSE_INVALID", 502);
-  const encrypted = Buffer.from(input.Content,"base64");
-  if (!encrypted.length || encrypted.length % 8) throw new CameraError("NVR_APPWEB_RESPONSE_INVALID",502);
+function crypt(encrypted: Buffer, password: string, encode = false) {
   let key = permute(bits(Buffer.from(dvripPasswordHash(password))),PC1);
   const subkeys = [1,1,2,2,2,2,2,2,1,2,2,2,2,2,2,1].map(shift => {
     const left=key.slice(0,28),right=key.slice(28);key=[...left.slice(shift),...left.slice(0,shift),...right.slice(shift),...right.slice(0,shift)]; return permute(key,PC2);
@@ -37,20 +34,37 @@ export function decodeAppWebChannels(input: unknown, password: string) {
   const decoded=Buffer.alloc(encrypted.length);
   for(let offset=0;offset<encrypted.length;offset+=8){
     const block=permute(bits(encrypted.subarray(offset,offset+8)),IP);let left=block.slice(0,32),right=block.slice(32);
-    for(let round=15;round>=0;round--){const modified=f(left,subkeys[round]);[left,right]=[right.map((b,i)=>b^modified[i]),left];}
+    for(let step=0;step<16;step++){const round=encode?step:15-step,modified=f(encode?right:left,subkeys[round]);[left,right]=encode?[right,left.map((b,i)=>b^modified[i])]:[right.map((b,i)=>b^modified[i]),left];}
     const plain=permute([...left,...right],FP);for(let i=0;i<64;i++)decoded[offset+(i>>3)]|=plain[i]<<(i&7);
   }
+  return decoded;
+}
+/** Sensitive complete configuration remains server-side; never expose or audit it. */
+export function decodeAppWebChannelConfig(input: unknown, password: string): Record<string,unknown>[] {
+  if (!input || typeof input !== "object" || !("Content" in input) || typeof input.Content !== "string" || input.Content.length > 256 * 1024 || !/^[A-Za-z0-9+/]+={0,2}$/.test(input.Content)) throw new CameraError("NVR_APPWEB_RESPONSE_INVALID", 502);
+  const encrypted=Buffer.from(input.Content,"base64");if(!encrypted.length||encrypted.length%8)throw new CameraError("NVR_APPWEB_RESPONSE_INVALID",502);
+  const decoded=crypt(encrypted,password);
   try {
     const terminator=decoded.indexOf(0);
     const value: unknown=JSON.parse(decoded.subarray(0,terminator<0?decoded.length:terminator).toString("utf8"));
-    if(!Array.isArray(value)||value.length>128)throw Error();
-    return value.flatMap((item,index)=>{
+    if(!Array.isArray(value)||value.length>128||value.some(item=>!item||typeof item!=="object"||Array.isArray(item)))throw Error();
+    return value;
+  } catch { throw new CameraError("NVR_APPWEB_RESPONSE_INVALID",502); }
+  finally { decoded.fill(0); }
+}
+export function encodeAppWebChannelConfig(value: Record<string,unknown>[], password: string) {
+  if(!Array.isArray(value)||value.length>128)throw new CameraError("NVR_APPWEB_RESPONSE_INVALID",502);
+  const raw=Buffer.from(JSON.stringify(value));
+  if(raw.length>190*1024)throw new CameraError("NVR_APPWEB_RESPONSE_INVALID",502);
+  const padded=Buffer.alloc(Math.ceil((raw.length+1)/8)*8);raw.copy(padded);raw.fill(0);
+  try{return{Content:crypt(padded,password,true).toString("base64")};}finally{padded.fill(0);}
+}
+export function decodeAppWebChannels(input: unknown, password: string) {
+    return decodeAppWebChannelConfig(input,password).flatMap((item,index)=>{
       if(item?.Enable!==true || item.ConnType!=="SINGLE" || typeof item.SingleConnId!=="string" || !/^0x[0-9a-f]{1,8}$/i.test(item.SingleConnId) || !Array.isArray(item.Decoder) || item.Decoder.length>32)return [];
       const selected=Number.parseInt(item.SingleConnId.slice(2),16)-1;
       if(selected<0||selected>=item.Decoder.length)return [];
       const decoder=item.Decoder[selected];
       return [{index,address:typeof decoder?.Address==="string"?decoder.Address:"",name:typeof decoder?.ConfName==="string"?decoder.ConfName.replace(/[\x00-\x1f\x7f]/g,"").slice(0,160):""}];
     });
-  } catch { throw new CameraError("NVR_APPWEB_RESPONSE_INVALID",502); }
-  finally { decoded.fill(0); }
 }

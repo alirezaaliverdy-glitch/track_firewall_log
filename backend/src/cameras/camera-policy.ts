@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { CameraError } from "./camera-network.js";
 
 export const CAMERA_CONTROL_TEMPLATES = {
+  nvr_channel_enable: { labelFa: "قطع و وصل کانال تصویر NVR", labelEn: "Enable or disable NVR channel", template: "appweb.nvr.channel_enabled", handler: "VerifiedDecoderChannelConfig", risk: "high" },
   nvr_overwrite: { labelFa: "تغییر رفتار هاردِ پر", labelEn: "Change disk-full behavior", template: "appweb.nvr.overwrite", handler: "VerifiedGeneralConfig", risk: "high" },
   nvr_recording_mode: { labelFa: "تغییر حالت ضبط کانال", labelEn: "Change channel recording mode", template: "appweb.nvr.recording_mode", handler: "VerifiedChannelConfig", risk: "high" },
   ptz_step: { labelFa: "حرکت کوتاه دوربین", labelEn: "Short PTZ step", template: "onvif.ptz.relative_step", handler: "RelativeMove", risk: "medium" },

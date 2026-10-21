@@ -124,6 +124,9 @@ jobs:
           DATABASE_URL: postgresql://fixture@127.0.0.1:5432/eosnet_ci_community_test
         run: pnpm exec prisma migrate deploy
 
+      - name: Install bounded image-test decoder
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Collaboration permissions, files, tasks and migration-role regressions
         working-directory: backend
         env:
@@ -139,6 +142,7 @@ jobs:
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/page-access.test.ts test/page-access-api.test.ts test/camera-replay.test.ts test/nvr-taoshi.test.ts test/nvr-taoshi.integration.test.ts test/playback-selection.test.ts test/replay-buffer.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/attacker-analytics.test.ts test/attacker-analytics-api.test.ts test/attacker-geo-layout.test.ts test/mikrotik-detection-response.test.ts test/task46-cross-vendor-bruteforce.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/nvr-auto-detect.test.ts test/nvr-registration-api.test.ts
+          node --test --test-force-exit --test-concurrency=1 test/camera-thumbnails.test.mjs test/camera-thumbnail-api.integration.test.mjs test/nvr-channel-control.integration.test.mjs
 
       - name: Validate command catalog
         working-directory: backend

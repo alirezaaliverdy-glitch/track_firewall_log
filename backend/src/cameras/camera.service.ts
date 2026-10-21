@@ -13,6 +13,8 @@ import { probeAppWebNvr } from "./nvr-appweb.js";
 import { cameraPtzStep, checkCameraPtzStep, runCameraPtzStep, stopCameraPtz } from "./camera-onvif.js";
 import { nvrConfigChange, readNvrSettings, writeNvrSetting } from "./nvr-config.js";
 import { detectNvrConnection } from "./nvr-auto-detect.js";
+import { cameraThumbnails } from "./camera-thumbnail-cache.js";
+import { readNvrChannels, writeNvrChannel } from "./nvr-channel-control.js";
 
 export type CameraActor = { id: string; username: string; role: string; scopeOwnerId?: string | null };
 export const cameraOwner = (actor: CameraActor) => actor.scopeOwnerId ?? actor.id;
@@ -192,6 +194,7 @@ export async function updateCamera(id: string, input: Record<string, unknown>, a
 
 export async function deleteCamera(id: string, actor: CameraActor) {
   const camera=await ownedCamera(id, actor); stopCameraStreams(id);
+  cameraThumbnails.clear(id);
   await prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT "id" FROM "CameraDevice" WHERE "id" = ${id} AND "ownerId" = ${cameraOwner(actor)} FOR UPDATE`;
     const asset=await tx.asset.findFirst({where:{id:nvrAssetId(id),company:{ownerId:cameraOwner(actor)}}});
@@ -267,6 +270,16 @@ export async function previewCameraAction(id: string, input: Record<string, unkn
     if (camera.kind !== "nvr" || camera.connectionMode !== "appweb" || camera.status !== "verified") throw new CameraError("NVR_CONFIG_OPERATION_UNSUPPORTED", 422);
   } else if (camera.connectionMode !== "onvif" || camera.status !== "verified") throw new CameraError("CAMERA_ONVIF_UNAVAILABLE", 422);
   const parameters: Record<string, string> = {};
+  if(operation==="nvr_channel_enable"){
+    if(input.value!=="true"&&input.value!=="false")throw new CameraError("NVR_CONFIG_INVALID");
+    if(!(typeof input.channel==="number"||typeof input.channel==="string"&&/^(0|[1-9]\d{0,2})$/.test(input.channel)))throw new CameraError("NVR_CONFIG_INVALID");
+    const channel=Number(input.channel);if(!Number.isInteger(channel)||channel<0||channel>127)throw new CameraError("NVR_CONFIG_INVALID");
+    await cameraVpnTarget(camera.vpnConnectionId,camera.host,actor,true);
+    const current=await readNvrChannels(camera,cameraConnection(camera)),selected=current.channels.find(row=>row.index===channel);
+    if(!selected)throw new CameraError("NVR_CHANNEL_CONTROL_UNSUPPORTED",422);
+    if(String(selected.enabled)===input.value)throw new CameraError("NVR_CHANNEL_ALREADY_SET",409);
+    parameters.channel=String(channel);parameters.value=input.value;parameters.previous=String(selected.enabled);parameters.configRevision=current.revision;
+  }
   if (operation === "nvr_overwrite" || operation === "nvr_recording_mode") {
     await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true);
     const change = nvrConfigChange({ setting: operation === "nvr_overwrite" ? "overwrite" : "recordingMode", value: input.value, channel: input.channel });
@@ -295,6 +308,10 @@ export async function previewCameraAction(id: string, input: Record<string, unkn
   if (operation.startsWith("nvr_")) {
     preview.effectFa = operation === "nvr_overwrite" ? parameters.value === "OverWrite" ? "پس از پرشدن هارد، ضبط جدید روی قدیمی‌ترین ضبط‌ها بازنویسی می‌شود؛ ضبط‌های قدیمی به‌تدریج از دست می‌روند." : "با پرشدن هارد، ضبط جدید متوقف می‌شود؛ ممکن است رخدادهای بعدی ضبط نشوند." : `حالت ضبط کانال ${Number(parameters.channel) + 1} از ${parameters.previous} به ${parameters.value} تغییر می‌کند. ClosedRecord ضبط را متوقف می‌کند؛ ConfigRecord از زمان‌بندی فعلی پیروی می‌کند.`;
     preview.effectEn = operation === "nvr_overwrite" ? parameters.value === "OverWrite" ? "New recordings overwrite the oldest footage when storage is full." : "New recording stops when storage is full; future incidents may not be recorded." : `Channel ${Number(parameters.channel) + 1}: ${parameters.previous} → ${parameters.value}. ClosedRecord stops recording. ConfigRecord follows the existing schedule.`;
+    if(operation==="nvr_channel_enable"){
+      preview.effectFa=`کانال ${Number(parameters.channel)+1} روی همین NVR ${parameters.value==="true"?"فعال":"غیرفعال"} می‌شود. قطع کانال می‌تواند دریافت تصویر و ضبط جدید آن را متوقف کند؛ آرشیو حذف نمی‌شود. برق و دسترسی مستقیم خود دوربین تغییر نمی‌کند.`;
+      preview.effectEn=`${parameters.value==="true"?"Enable":"Disable"} channel ${Number(parameters.channel)+1} on this recorder. Disabling can interrupt incoming video and new recording. Existing footage, camera power and direct camera access are unchanged.`;
+    }
   }
   const plan = await prisma.cameraActionPlan.create({ data: { cameraId: id, ownerId: cameraOwner(actor), requestedBy: actor.username, operation, parametersJson: json(parameters), previewJson: json(preview), cameraRevision: cameraRevision(camera), expiresAt: new Date(Date.now() + 5 * 60_000) } });
   await audit(actor, "camera.action_previewed", id, { planId: plan.id, operation, template: template.template });
@@ -314,7 +331,11 @@ export async function executeCameraAction(id: string, planId: string, input: Rec
   try {
     await cameraVpnTarget(camera.vpnConnectionId, camera.host, actor, true);
     const connection = cameraConnection(camera), parameters = plan.parametersJson as Record<string, string>;
-    if (policy.operation === "nvr_overwrite" || policy.operation === "nvr_recording_mode") {
+    if(policy.operation==="nvr_channel_enable"){
+      const actual=await writeNvrChannel(camera,connection,{channel:Number(parameters.channel),enabled:parameters.value==="true",revision:parameters.configRevision},()=>{connectorInvoked=true;});
+      stopCameraStreams(id);cameraThumbnails.clear(id);
+      result={status:"succeeded",connectorInvoked:true,accepted:true,verified:true,operation:policy.operation,template:policy.template,completedAt:new Date().toISOString(),channel:actual.channel,enabled:actual.enabled};
+    } else if (policy.operation === "nvr_overwrite" || policy.operation === "nvr_recording_mode") {
       const verified = await writeNvrSetting(camera, connection, parameters, parameters.configRevision, () => { connectorInvoked = true; });
       result = { status: "succeeded", connectorInvoked: true, accepted: true, verified: true, operation: policy.operation, template: policy.template, completedAt: new Date().toISOString(), settings: verified };
     } else if (policy.operation === "goto_preset") {
