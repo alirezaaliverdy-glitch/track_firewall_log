@@ -143,7 +143,8 @@ jobs:
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/attacker-analytics.test.ts test/attacker-analytics-api.test.ts test/attacker-geo-layout.test.ts test/mikrotik-detection-response.test.ts test/task46-cross-vendor-bruteforce.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/nvr-auto-detect.test.ts test/nvr-registration-api.test.ts
           node --test --test-force-exit --test-concurrency=1 test/camera-thumbnails.test.mjs test/camera-thumbnail-api.integration.test.mjs test/nvr-channel-control.integration.test.mjs
-          node --test --test-force-exit --test-concurrency=1 test/linux-live-log-query.test.mjs test/linux-live-log-api.integration.test.mjs
+          python3 --version
+          node --test --test-force-exit --test-concurrency=1 test/linux-live-log-query.test.mjs test/linux-live-log-collector.test.mjs test/linux-live-log-api.integration.test.mjs
 
       - name: Validate command catalog
         working-directory: backend

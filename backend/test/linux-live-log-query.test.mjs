@@ -3,12 +3,19 @@ import test from 'node:test';
 import {liveLogQuery,parseLiveLogIntent,liveLogCommands,liveLogMatches,redactLiveLog,discoverWebLogContainer,WEB_LOG_DISCOVERY} from '../dist/linux/live-log-query.js';
 
 test('Persian/English requests resolve to explicit sources and literal filters; uncertainty asks instead of guessing',()=>{
- assert.deepEqual(parseLiveLogIntent('لاگ زنده nginx').query,{source:'file',file:'/var/log/nginx/access.log',webFallback:true});
+ assert.deepEqual(parseLiveLogIntent('لاگ زنده nginx').query,{source:'auto',scope:'nginx'});
+ assert.deepEqual(parseLiveLogIntent('لاگ سرویس nginx').query,{source:'auto',scope:'nginx'});
+ assert.deepEqual(parseLiveLogIntent('لاگ journal nginx').query,{source:'journal',unit:'nginx'});
+ assert.deepEqual(parseLiveLogIntent('لاگ unit nginx').query,{source:'journal',unit:'nginx'});
+ assert.deepEqual(parseLiveLogIntent('لاگ /var/log/nginx/access.log').query,{source:'file',file:'/var/log/nginx/access.log'});
+ assert.deepEqual(parseLiveLogIntent('لاگ IP 192.0.2.10').query,{source:'auto',scope:'all',ip:'192.0.2.10'});
+ assert.deepEqual(parseLiveLogIntent('لاگ nginx برای IP 192.0.2.10').query,{source:'auto',scope:'nginx',ip:'192.0.2.10'});
  assert.deepEqual(parseLiveLogIntent('لاگ سرویس my-api@blue شامل «connection refused»').query,{source:'journal',unit:'my-api@blue',text:'connection refused'});
  assert.equal(parseLiveLogIntent('لاگ IP ۱۹۲.۰.۲.۱۰').query.ip,'192.0.2.10');
  assert.equal(parseLiveLogIntent('live logs service docker errors').query.errorsOnly,true);
  assert.deepEqual(parseLiveLogIntent('لاگ کانتینر main-nginx شامل «qa-request»').query,{source:'docker',container:'main-nginx',text:'qa-request'});
- assert.deepEqual(parseLiveLogIntent('لاگ شامل «nginx error»').query,{source:'journal',text:'nginx error'});
+ assert.deepEqual(parseLiveLogIntent('لاگ شامل «nginx error»').query,{source:'auto',scope:'all',text:'nginx error'});
+ assert.ok(parseLiveLogIntent('لاگ https://nazer.example.test/').clarification,'hostname not assumed to exist in access log');
  assert.equal(parseLiveLogIntent('لاگ کرنل').query.kernel,true);
  assert.equal(parseLiveLogIntent('لاگ nginx و docker').query,undefined);
  assert.ok(parseLiveLogIntent('لاگ حادثه نامشخص').clarification);
@@ -27,13 +34,14 @@ test('automatic web source requires real unique compatible container evidence an
  assert.ok(!WEB_LOG_DISCOVERY.includes('{{json .}}'));assert.ok(!WEB_LOG_DISCOVERY.includes('Labels'));
 });
 test('schema and compiler reject shell injection, arbitrary files and inconsistent or unknown parameters',()=>{
- for(const q of [{source:'journal',unit:'nginx;id'},{source:'file',file:'/etc/shadow'},{source:'file',file:'/var/log/../etc/shadow'},{source:'journal',file:'/var/log/auth.log'},{source:'journal',command:'id'},{source:'journal',ip:'999.1.2.3'},{source:'journal',errorsOnly:'yes'}])assert.throws(()=>liveLogQuery(q));
+ for(const q of [{source:'auto',scope:'all',file:'/var/log/auth.log'},{source:'auto',scope:'$(id)'},{source:'journal',scope:'all'},{source:'journal',unit:'nginx;id'},{source:'file',file:'/etc/shadow'},{source:'file',file:'/var/log/../etc/shadow'},{source:'journal',file:'/var/log/auth.log'},{source:'journal',command:'id'},{source:'journal',ip:'999.1.2.3'},{source:'journal',errorsOnly:'yes'}])assert.throws(()=>liveLogQuery(q));
  const q={source:'journal',unit:'api@blue',text:"$(touch /tmp/no); ' | id"};
  const c=liveLogCommands(q);assert.ok(!c.follow.includes(q.text));assert.ok(c.follow.includes("--unit='api@blue.service'"));assert.ok(c.follow.startsWith('timeout 1800 '));
  assert.ok(liveLogCommands({source:'file',file:'/var/log/auth.log'}).probe.includes('readlink -f'));
  assert.ok(liveLogCommands({source:'docker',container:'main-nginx'}).follow.includes("--tail 50 'main-nginx'"));
  assert.throws(()=>liveLogCommands({source:'docker',container:'$(id)'}));
  assert.throws(()=>liveLogCommands({source:'docker',container:'main-nginx',unit:'ssh'}));
+ const auto=liveLogCommands({source:'auto',scope:'all',text:'not a command $(id)'});assert.equal(auto.format,'multiplex');assert.ok(!auto.follow.includes('not a command $(id)'));assert.ok(auto.probe.includes('python3'));
 });
 test('literal IP/text matching excludes near IPs and regex interpretation, severity is source-specific',()=>{
  const q={source:'journal',ip:'192.0.2.1'};

@@ -15,7 +15,8 @@ const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==="object"&&!Array.isA
 export class LiveLogError extends Error { constructor(message:string,public statusCode=400,public probeExitCode?:number|null){super(message);} }
 type Preview={userId:string;ownerId:string;deviceId:string;revision:string;fingerprint:string;query:LiveLogQuery;expires:number};
 export type LiveLogEvent={sequence:number;receivedAt:string;deviceTime:string|null;source:string;priority:number|null;message:string};
-type Session=Preview&{id:string;actionPlanId:string;deviceName:string;deviceHost:string;startedAt:string;status:"live"|"closed"|"failed";reason:string;events:LiveLogEvent[];sequence:number;observed:number;matched:number;dropped:number;bytes:number;lastRead:number;client:Client;channel?:ClientChannel;wake:Set<()=>void>;warnings:Set<string>;privateKeyBlock:boolean};
+type Source={id:string;label:string;kind:"journal"|"file"|"docker";status:"live"|"failed";observed:number;matched:number;lastReceivedAt:string|null;privateKeyBlock:boolean};
+type Session=Preview&{id:string;actionPlanId:string;deviceName:string;deviceHost:string;startedAt:string;status:"live"|"closed"|"failed";reason:string;events:LiveLogEvent[];sequence:number;observed:number;matched:number;dropped:number;bytes:number;lastRead:number;client:Client;channel?:ClientChannel;wake:Set<()=>void>;warnings:Set<string>;privateKeyBlock:boolean;sources:Map<string,Source>;inventoryComplete:boolean};
 const previews=new Map<string,Preview>(), sessions=new Map<string,Session>();
 const preparing=new Set<string>();
 const userAllowed=(u:PublicUser)=>u.role!=="viewer"&&canAccessApi(u,"/api/commands","GET");
@@ -57,15 +58,29 @@ function close(s:Session,reason:string,failed=false){
   void prisma.auditLog.create({data:{actor:s.userId,deviceId:s.deviceId,action:"linux.live_log.closed",targetType:"live_log_session",targetId:s.id,metadata:{reason,observed:s.observed,matched:s.matched,dropped:s.dropped,ownerId:s.ownerId}}}).catch(()=>{});
 }
 const sweeper=setInterval(()=>{const now=Date.now();for(const[id,s]of sessions){if(s.status==="live"&&(now-s.lastRead>45000||now-Date.parse(s.startedAt)>1800000))close(s,now-s.lastRead>45000?"مهلت ارتباط با صفحه تمام شد.":"پایان سقف ۳۰ دقیقه‌ای؛ برای ادامه دوباره شروع کنید.");if(s.status!=="live"&&now-s.lastRead>60000)sessions.delete(id);}for(const[id,p]of previews)if(p.expires<now)previews.delete(id);},5000);sweeper.unref();
-function append(s:Session,line:string,format:"text"|"json"){
-  s.observed++;let message=line,deviceTime:string|null=null,priority:number|null=null,source=s.query.container??s.query.file??s.query.unit??"journal";
-  if(s.query.source==="docker"){const time=line.match(/^(\d{4}-\d{2}-\d{2}T\S+)\s/);if(time&&Number.isFinite(Date.parse(time[1])))deviceTime=new Date(time[1]).toISOString();}
+function append(s:Session,line:string,format:"text"|"json",origin?:Source){
+  s.observed++;if(origin){origin.observed++;origin.lastReceivedAt=new Date().toISOString();}let message=line,deviceTime:string|null=null,priority:number|null=null,source=origin?.label??s.query.container??s.query.file??s.query.unit??"journal";
+  if((origin?.kind??s.query.source)==="docker"){const time=line.match(/^(\d{4}-\d{2}-\d{2}T\S+)\s/);if(time&&Number.isFinite(Date.parse(time[1])))deviceTime=new Date(time[1]).toISOString();}
   if(format==="json"){try{const j=JSON.parse(line);if(typeof j.MESSAGE!=="string")return;message=j.MESSAGE;const ms=Number(j.__REALTIME_TIMESTAMP)/1000;if(Number.isFinite(ms)&&ms>0&&ms<8640000000000000)deviceTime=new Date(ms).toISOString();priority=/^[0-7]$/.test(String(j.PRIORITY))?Number(j.PRIORITY):null;source=String(j._SYSTEMD_UNIT??j.SYSLOG_IDENTIFIER??"journal").slice(0,120);}catch{return;}}
-  if(/-----BEGIN [^-]*PRIVATE KEY-----/.test(message))s.privateKeyBlock=true;
-  if(s.privateKeyBlock){if(/-----END [^-]*PRIVATE KEY-----/.test(message))s.privateKeyBlock=false;s.dropped++;return;}
-  if(!liveLogMatches(s.query,message,priority))return;s.matched++;
+  const privacy=origin??s;
+  if(/-----BEGIN [^-]*PRIVATE KEY-----/.test(message))privacy.privateKeyBlock=true;
+  if(privacy.privateKeyBlock){if(/-----END [^-]*PRIVATE KEY-----/.test(message))privacy.privateKeyBlock=false;s.dropped++;return;}
+  if(!liveLogMatches(origin?{...s.query,source:origin.kind}:s.query,message,priority))return;s.matched++;if(origin)origin.matched++;
   const event:LiveLogEvent={sequence:++s.sequence,receivedAt:new Date().toISOString(),deviceTime,source:redactLiveLog(source).slice(0,120),priority,message:redactLiveLog(message)};
   const size=Buffer.byteLength(JSON.stringify(event));s.events.push(event);s.bytes+=size;while(s.events.length>500||s.bytes>1048576){s.bytes-=Buffer.byteLength(JSON.stringify(s.events.shift()!));s.dropped++;}for(const wake of s.wake)wake();
+}
+function multiplex(s:Session,line:string){
+  let v:Record<string,unknown>;try{v=obj(JSON.parse(line));}catch{close(s,"قالب جریان چندمنبعی معتبر نیست.",true);return;}
+  if(v.type==="source"&&typeof v.id==="string"&&/^(?:[0-9]|[1-3][0-9]|4[0-7])$/.test(v.id)&&typeof v.label==="string"&&v.label.length<=240&&["journal","file","docker"].includes(String(v.kind))&&["live","failed"].includes(String(v.status))){
+    const existing=s.sources.get(v.id);s.sources.set(v.id,{...(existing??{observed:0,matched:0,lastReceivedAt:null,privateKeyBlock:false}),id:v.id,label:redactLiveLog(v.label),kind:v.kind as Source['kind'],status:v.status as Source['status']});
+    if(v.status==="failed")s.warnings.add("یک منبع بسته یا غیرقابل‌خواندن شد؛ وضعیت منابع را بررسی کنید.");
+  }else if(v.type==="line"&&typeof v.id==="string"&&typeof v.line==="string"){
+    const source=s.sources.get(v.id);if(source&&Buffer.byteLength(v.line)<=16384)append(s,v.line,source.kind==="journal"?"json":"text",source);else s.dropped++;
+  }else if(v.type==="inventory")s.inventoryComplete=true;
+  else if(v.type==="warning"&&typeof v.message==="string"&&s.warnings.size<24)s.warnings.add(redactLiveLog(v.message));
+  else if(v.type==="diagnostic"&&typeof v.id==="string")s.warnings.add("منبع شمارهٔ "+v.id+" هشدار خواندن/چرخش فایل دارد؛ پوشش آن ممکن است ناقص باشد.");
+  else if(v.type==="dropped")s.dropped++;
+  for(const wake of s.wake)wake();
 }
 export async function openLiveLog(plan:ActionPlan,device:Device,config:ConnectConfig){
   const params=obj(plan.parametersJson),p=previews.get(String(params.liveLogPreviewId)),q=liveLogQuery(params.logQuery);
@@ -77,7 +92,7 @@ export async function openLiveLog(plan:ActionPlan,device:Device,config:ConnectCo
   if(sessions.size>=64){for(const[id,s]of sessions){if(s.status!=="live")sessions.delete(id);if(sessions.size<64)break;}}
   previews.delete(String(params.liveLogPreviewId));
   let commands=liveLogCommands(q);const client=new Client();
-  const s:Session={...p,id:randomUUID(),actionPlanId:plan.id,deviceName:device.name,deviceHost:device.host,startedAt:new Date().toISOString(),status:"live",reason:"",events:[],sequence:0,observed:0,matched:0,dropped:0,bytes:0,lastRead:Date.now(),client,wake:new Set(),warnings:new Set(),privateKeyBlock:false};sessions.set(s.id,s);
+  const s:Session={...p,id:randomUUID(),actionPlanId:plan.id,deviceName:device.name,deviceHost:device.host,startedAt:new Date().toISOString(),status:"live",reason:"",events:[],sequence:0,observed:0,matched:0,dropped:0,bytes:0,lastRead:Date.now(),client,wake:new Set(),warnings:new Set(),privateKeyBlock:false,sources:new Map(),inventoryComplete:false};sessions.set(s.id,s);
   try{
     await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>reject(new LiveLogError("مهلت اتصال SSH تمام شد.",504)),15000);timer.unref();client.once("ready",()=>{clearTimeout(timer);resolve();});client.on("error",()=>{clearTimeout(timer);reject(new LiveLogError("اتصال یا احراز هویت SSH ناموفق بود.",502));close(s,"ارتباط SSH قطع شد.",true);});client.on("close",()=>close(s,"ارتباط SSH بسته شد.",true));client.connect({...config,readyTimeout:12000,keepaliveInterval:10000,keepaliveCountMax:2,hostVerifier:(k:Buffer)=>sshHostKeySha256Fingerprint(k)===p.fingerprint});});
     // Only fixed, bounded read-only commands; user filters are applied as literals locally.
@@ -87,6 +102,7 @@ export async function openLiveLog(plan:ActionPlan,device:Device,config:ConnectCo
     const privilege=(await run("id -u; if sudo -n true 2>/dev/null; then printf '\nEOSNET_SUDO\n'; fi")).trim();
     const wrap=(c:string)=>privilege.split("\n")[0]==="0"?c:privilege.includes("EOSNET_SUDO")?`sudo -n sh -c ${shellQuote(c)}`:c;
     if(privilege.split("\n")[0]!=="0"&&!privilege.includes("EOSNET_SUDO"))s.warnings.add("پوشش لاگ محدود به مجوزهای حساب SSH است؛ دسترسی کامل سیستم تأیید نشده است.");
+    if(q.source==="auto")s.warnings.add("فقط لاگ‌های واقعاً ثبت‌شده خوانده می‌شوند؛ IP پشت پراکسی/CDN ممکن است متفاوت باشد. کش مرورگر و ثبت با تأخیر نیز می‌تواند باعث نبودن درخواست تازه شود. لاگ‌گیری خاموش خودکار فعال نمی‌شود.");
     try{await run(wrap(commands.probe));}
     catch(error){
       if(!q.webFallback||!(error instanceof LiveLogError)||error.probeExitCode!==49)throw error;
@@ -97,12 +113,12 @@ export async function openLiveLog(plan:ActionPlan,device:Device,config:ConnectCo
     }
     await trackApplicationSshCommand({deviceId:device.id,username:config.username??"",command:wrap(commands.follow)},()=>new Promise<void>((resolve,reject)=>{
       client.exec(wrap(commands.follow),(error,ch)=>{if(error)return reject(new LiveLogError("شروع جریان لاگ ناموفق بود.",502));s.channel=ch;const decoder=new StringDecoder("utf8");let buffer="",windowAt=Date.now(),windowBytes=0;let ready=false;
-        const timer=setTimeout(()=>{if(s.status!=="live")return reject(new LiveLogError("منبع لاگ پیش از شروع بسته شد.",422));ready=true;resolve();},350);timer.unref();
+        const timer=setInterval(()=>{if(s.status!=="live"){clearInterval(timer);return reject(new LiveLogError("منبع لاگ پیش از شروع بسته شد.",422));}if(commands.format==="multiplex"&&!s.inventoryComplete){if(Date.now()-Date.parse(s.startedAt)>40000){clearInterval(timer);reject(new LiveLogError("مهلت شناسایی منابع لاگ تمام شد؛ سرویس یا کانتینر را دقیق‌تر مشخص کنید.",504));}return;}if(commands.format==="multiplex"&&![...s.sources.values()].some(v=>v.status==="live")){clearInterval(timer);return reject(new LiveLogError("هیچ منبع لاگ قابل‌خواندن نیست؛ مجوز حساب و سرویس‌های ثبت لاگ را بررسی کنید.",422));}clearInterval(timer);ready=true;resolve();},500);timer.unref();
         ch.on("data",(b:Buffer)=>{if(Date.now()-windowAt>1000){windowAt=Date.now();windowBytes=0;}windowBytes+=b.length;if(windowBytes>524288){close(s,"حجم جریان از سقف امن عبور کرد؛ فیلتر سرویس را محدودتر کنید.",true);return;}
-          buffer+=decoder.write(b);let index:number;while((index=buffer.indexOf("\n"))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(Buffer.byteLength(line)>16384){s.dropped++;continue;}append(s,line,commands.format);}if(Buffer.byteLength(buffer)>16384){close(s,"یک خط لاگ بیش از سقف مجاز بود.",true);}
+          buffer+=decoder.write(b);let index:number;const limit=commands.format==="multiplex"?131072:16384;while((index=buffer.indexOf("\n"))>=0){const line=buffer.slice(0,index);buffer=buffer.slice(index+1);if(Buffer.byteLength(line)>limit){s.dropped++;continue;}if(commands.format==="multiplex")multiplex(s,line);else append(s,line,commands.format);}if(Buffer.byteLength(buffer)>limit){close(s,"یک خط لاگ بیش از سقف مجاز بود.",true);}
         });
         ch.stderr.on("data",()=>{s.warnings.add("منبع یک هشدار فرستاده است؛ ممکن است پوشش لاگ کامل نباشد.");for(const wake of s.wake)wake();});
-        ch.on("close",()=>{clearTimeout(timer);close(s,"جریان منبع پایان یافت؛ برای ادامه دوباره شروع کنید.",true);if(!ready)reject(new LiveLogError("منبع لاگ جریان قابل‌خواندن ارائه نکرد.",422));});
+        ch.on("close",()=>{clearInterval(timer);close(s,"جریان منبع پایان یافت؛ برای ادامه دوباره شروع کنید.",true);if(!ready)reject(new LiveLogError("منبع لاگ جریان قابل‌خواندن ارائه نکرد؛ برای تشخیص چندمنبعی Python 3 و ابزارهای منبع لازم است.",422));});
       });
     }));
     if(s.status!=="live")throw new LiveLogError("جریان لاگ برقرار نماند.",502);
@@ -124,7 +140,7 @@ export async function readLiveLog(id:string,user:PublicUser,cursor:number,signal
   if(!Number.isSafeInteger(cursor)||cursor<0||cursor>s.sequence)throw new LiveLogError("موقعیت جریان معتبر نیست.");
   if(cursor===s.sequence&&s.status==="live"&&!signal?.aborted)await new Promise<void>(resolve=>{const finish=()=>{clearTimeout(timer);s.wake.delete(finish);signal?.removeEventListener("abort",finish);resolve();};const timer=setTimeout(finish,10000);s.wake.add(finish);signal?.addEventListener("abort",finish,{once:true});});
   await new Promise(resolve=>setTimeout(resolve,200));
-  return {sessionId:s.id,deviceId:s.deviceId,deviceName:s.deviceName,deviceHost:s.deviceHost,actionPlanId:s.actionPlanId,status:s.status,reason:s.reason,startedAt:s.startedAt,query:s.query,events:s.events.filter(e=>e.sequence>cursor).slice(0,200),cursor:s.events.filter(e=>e.sequence>cursor).slice(0,200).at(-1)?.sequence??cursor,observed:s.observed,matched:s.matched,dropped:s.dropped,gap:cursor<(s.events[0]?.sequence??1)-1,warnings:[...s.warnings],serverTime:new Date().toISOString(),expiresAt:new Date(Date.parse(s.startedAt)+1800000).toISOString()};
+  return {sessionId:s.id,deviceId:s.deviceId,deviceName:s.deviceName,deviceHost:s.deviceHost,actionPlanId:s.actionPlanId,status:s.status,reason:s.reason,startedAt:s.startedAt,query:s.query,sources:[...s.sources.values()].map(({privateKeyBlock,...v})=>v),inventoryComplete:s.inventoryComplete,events:s.events.filter(e=>e.sequence>cursor).slice(0,200),cursor:s.events.filter(e=>e.sequence>cursor).slice(0,200).at(-1)?.sequence??cursor,observed:s.observed,matched:s.matched,dropped:s.dropped,gap:cursor<(s.events[0]?.sequence??1)-1,warnings:[...s.warnings],serverTime:new Date().toISOString(),expiresAt:new Date(Date.parse(s.startedAt)+1800000).toISOString()};
 }
 export async function stopLiveLog(id:string,user:PublicUser){const s=await owned(id,user);close(s,"پایش به درخواست شما متوقف شد.");return {status:s.status};}
 export async function checkLiveLogAccess(id:string,user:PublicUser){await owned(id,user);}

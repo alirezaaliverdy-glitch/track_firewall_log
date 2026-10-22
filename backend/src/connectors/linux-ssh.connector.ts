@@ -617,7 +617,7 @@ async function collectLinuxStatus(device: Device): Promise<DeviceConnectionTestR
 function dryRunFor(plan: ActionPlan, device: Device): ConnectorDryRun {
   if(isLiveLogPlan(plan.parametersJson)) {
     const p=asObject(plan.parametersJson),q=liveLogQuery(p.logQuery),c=liveLogCommands(q);
-    return {plannedCommands:[c.probe,...(q.webFallback?[WEB_LOG_DISCOVERY]:[]),c.follow],affectedPorts:[],affectedServices:[q.container??q.unit??q.file??"journal"],validationWarnings:["متن لاگ ذخیرهٔ دائمی نمی‌شود؛ شروع جریان به معنی سالم‌بودن سرویس نیست.",...(q.webFallback?["اگر فایل وب وجود نداشت، فقط یک کانتینر واقعاً سازگار به‌صورت فقط‌خواندنی شناسایی می‌شود؛ چند نتیجه نیازمند تعیین نام دقیق است."]:[]),`SSH: ${String(p.liveLogFingerprint??"")}`],rollbackSteps:[],riskLevel:"low",requiresApproval:true};
+    return {plannedCommands:[c.probe,...(q.webFallback?[WEB_LOG_DISCOVERY]:[]),c.follow],affectedPorts:[],affectedServices:[q.scope??q.container??q.unit??q.file??"journal"],validationWarnings:["متن لاگ ذخیرهٔ دائمی نمی‌شود؛ شروع جریان به معنی سالم‌بودن سرویس نیست.",...(q.source==="auto"?["تشخیص و خواندن هم‌زمان فایل‌های واقعی /var/log، journal و stdout/stderr کانتینرها؛ برای Nginx فقط مسیرهای لاگ از تنظیمات استخراج می‌شوند، نه متن تنظیمات یا اسرار. فرمان‌های ثابت nginx -T و tail داخل کانتینر مرتبط نیز فقط‌خواندنی‌اند. سقف ۴۸ منبع؛ هر محدودیت اعلام می‌شود."]:[]),...(q.webFallback?["اگر فایل وب وجود نداشت، فقط یک کانتینر واقعاً سازگار به‌صورت فقط‌خواندنی شناسایی می‌شود؛ چند نتیجه نیازمند تعیین نام دقیق است."]:[]),`SSH: ${String(p.liveLogFingerprint??"")}`],rollbackSteps:[],riskLevel:"low",requiresApproval:true};
   }
   if (plan.actionType === ActionType.custom_vendor_action) {
     const customPlan = customPlanFromParameters(plan.parametersJson);

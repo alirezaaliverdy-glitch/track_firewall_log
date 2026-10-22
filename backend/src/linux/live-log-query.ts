@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
+import { LIVE_LOG_COLLECTOR } from "./live-log-collector.js";
 
-export type LiveLogQuery = { source: "journal" | "file" | "docker"; unit?: string; file?: string; container?:string; ip?: string; text?: string; errorsOnly?: boolean; kernel?:boolean; webFallback?:boolean };
+export type LiveLogQuery = { source: "journal" | "file" | "docker" | "auto"; scope?:"all"|"nginx"|"apache"; unit?: string; file?: string; container?:string; ip?: string; text?: string; errorsOnly?: boolean; kernel?:boolean; webFallback?:boolean };
 export const LIVE_LOG_TEMPLATE = "linux_live_log_query";
 const files = ["/var/log/auth.log", "/var/log/secure", "/var/log/syslog", "/var/log/messages", "/var/log/kern.log", "/var/log/ufw.log", "/var/log/nginx/access.log", "/var/log/nginx/error.log", "/var/log/apache2/access.log", "/var/log/apache2/error.log", "/var/log/httpd/access_log", "/var/log/httpd/error_log", "/var/log/fail2ban.log"];
 const object = (v: unknown): Record<string, unknown> => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -8,8 +9,9 @@ export function liveLogQuery(value: unknown): LiveLogQuery {
   let input = value;
   if (typeof input === "string") { if (input.length > 1200) throw new Error("پرس‌وجوی لاگ بیش از حد طولانی است."); try { input = JSON.parse(input); } catch { throw new Error("پرس‌وجوی لاگ معتبر نیست."); } }
   const q = object(input);
-  if (Object.keys(q).some(k => !["source", "unit", "file", "container", "ip", "text", "errorsOnly", "kernel", "webFallback"].includes(k))) throw new Error("فیلتر ناشناختهٔ لاگ مجاز نیست.");
-  if (q.source !== "journal" && q.source !== "file" && q.source!=="docker") throw new Error("منبع لاگ باید مشخص باشد.");
+  if (Object.keys(q).some(k => !["source", "scope", "unit", "file", "container", "ip", "text", "errorsOnly", "kernel", "webFallback"].includes(k))) throw new Error("فیلتر ناشناختهٔ لاگ مجاز نیست.");
+  if (!["journal","file","docker","auto"].includes(String(q.source))) throw new Error("منبع لاگ باید مشخص باشد.");
+  if(q.source==="auto" ? !["all","nginx","apache"].includes(String(q.scope))||!!q.unit||!!q.file||!!q.container||q.kernel!==undefined||q.webFallback!==undefined : q.scope!==undefined)throw new Error("دامنهٔ تشخیص منابع معتبر نیست.");
   if(q.container!==undefined&&(typeof q.container!=="string"||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(q.container)))throw new Error("نام یا شناسهٔ کانتینر معتبر نیست.");
   if(q.source==="docker"? !q.container||!!q.file||!!q.unit : !!q.container)throw new Error("منبع کانتینر ناسازگار است.");
   if (q.unit !== undefined && (typeof q.unit !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.@:-]{0,95}$/.test(q.unit))) throw new Error("نام سرویس معتبر نیست.");
@@ -20,8 +22,9 @@ export function liveLogQuery(value: unknown): LiveLogQuery {
   if (q.errorsOnly !== undefined && typeof q.errorsOnly !== "boolean") throw new Error("شدت لاگ معتبر نیست.");
   if(q.kernel!==undefined&&(typeof q.kernel!=="boolean"||q.source!=="journal"||!!q.unit))throw new Error("فیلتر کرنل با این منبع سازگار نیست.");
   if(q.webFallback!==undefined&&(typeof q.webFallback!=="boolean"||q.source!=="file"||!/^\/var\/log\/(nginx|apache2)\/(access|error)\.log$/.test(String(q.file))))throw new Error("تشخیص وب فقط برای مسیرهای ثبت‌شدهٔ nginx و Apache مجاز است.");
-  return { source: q.source, ...(q.unit ? {unit: q.unit as string} : {}), ...(q.file ? {file: q.file as string} : {}), ...(q.container?{container:q.container as string}:{}), ...(q.ip ? {ip: q.ip as string} : {}), ...(q.text ? {text: (q.text as string).trim()} : {}), ...(q.errorsOnly ? {errorsOnly:true} : {}),...(q.kernel?{kernel:true}:{}),...(q.webFallback?{webFallback:true}:{}) };
+  return { source: q.source as LiveLogQuery['source'], ...(q.scope?{scope:q.scope as LiveLogQuery['scope']}:{}), ...(q.unit ? {unit: q.unit as string} : {}), ...(q.file ? {file: q.file as string} : {}), ...(q.container?{container:q.container as string}:{}), ...(q.ip ? {ip: q.ip as string} : {}), ...(q.text ? {text: (q.text as string).trim()} : {}), ...(errors(q) ? {errorsOnly:true} : {}),...(q.kernel?{kernel:true}:{}),...(q.webFallback?{webFallback:true}:{}) };
 }
+const errors=(q:Record<string,unknown>)=>q.errorsOnly===true;
 export function isLiveLogPlan(parameters: unknown) { return object(object(parameters).metadata).catalogCommandId === "linux.live-logs"; }
 export function parseLiveLogIntent(request: string): { query?: LiveLogQuery; clarification?: string } | null {
   const normalized = request.normalize("NFKC").replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776)).replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632));
@@ -36,20 +39,27 @@ export function parseLiveLogIntent(request: string): { query?: LiveLogQuery; cla
   const ipCandidates = semantic.match(/(?:\d{1,3}\.){3}\d{1,3}|(?:[a-fA-F0-9]{0,4}:){2,}[a-fA-F0-9:.]*/g) ?? [];
   if (ipCandidates.length > 1) return {clarification:"برای هر جریان یک IP مشخص کنید."};
   const explicit = semantic.match(/(?:سرویس|service|unit)\s+([a-zA-Z0-9][a-zA-Z0-9_.@:-]*)/i)?.[1];
+  const journalRequested=/\bjournal\b|\bunit\s/i.test(semantic);
+  const domain=semantic.match(/\b(?:https?:\/\/)?([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+)(?::\d+)?(?:\/[^\s]*)?/i)?.[1];
   const aliases=[...semantic.matchAll(/\b(nginx|apache2|apache|httpd|ssh|sshd|docker|fail2ban|postgresql|mysql|mariadb|redis|cron|ufw)\b/gi)].map(m=>m[1].toLowerCase());
   if(!container&&new Set(aliases).size>1)return {clarification:"برای هر جریان یک سرویس انتخاب کنید؛ مثلاً «لاگ سرویس nginx»."};
   const alias=aliases[0];
   const unit = explicit ?? (alias === "apache" ? "apache2" : alias);
   const errorsOnly = /(خطا|ارور|errors?\b|critical\b)/i.test(semantic);
-  const file = path ?? (!explicit&&!container?(alias === "nginx" ? `/var/log/nginx/${errorsOnly ? "error" : "access"}.log` : alias === "apache" || alias === "apache2" ? `/var/log/apache2/${errorsOnly ? "error" : "access"}.log` : /ورود|احراز|authentication|\bauth\b/i.test(semantic)?"/var/log/auth.log":alias==="fail2ban"?"/var/log/fail2ban.log":undefined):undefined);
-  if (!container&&!file && !unit && !ipCandidates.length && !quoted.length && !errorsOnly && !/(همه|سیستم|system|journal|ورود|احراز|kernel|کرنل)/i.test(normalized)) return {clarification:"منبع را دقیق‌تر بگویید؛ مثلاً «لاگ سرویس nginx»، «لاگ IP 192.0.2.10» یا «لاگ شامل «connection refused»»."};
+  const file = path ?? (!explicit&&!container&&!journalRequested?(alias === "nginx" ? `/var/log/nginx/${errorsOnly ? "error" : "access"}.log` : alias === "apache" || alias === "apache2" ? `/var/log/apache2/${errorsOnly ? "error" : "access"}.log` : /ورود|احراز|authentication|\bauth\b/i.test(semantic)?"/var/log/auth.log":alias==="fail2ban"?"/var/log/fail2ban.log":undefined):undefined);
+  if (!container&&!file && !unit && !ipCandidates.length && !quoted.length && !domain && !errorsOnly && !/(همه|سیستم|system|journal|ورود|احراز|kernel|کرنل)/i.test(normalized)) return {clarification:"منبع را دقیق‌تر بگویید؛ مثلاً «لاگ سرویس nginx»، «لاگ IP 192.0.2.10» یا «لاگ شامل «connection refused»»."};
   if(container&&(explicit||path))return {clarification:"برای هر جریان یک منبع انتخاب کنید: کانتینر، سرویس یا فایل."};
-  try { return {query:liveLogQuery({source:container?"docker":file ? "file" : "journal", ...(container?{container}:file ? {file} : unit ? {unit} : {}), ...(ipCandidates[0] ? {ip:ipCandidates[0]} : {}), ...(quoted[0] ? {text:quoted[0][1]} : {}), ...(errorsOnly ? {errorsOnly:true} : {}),...(!container&&!file&&!unit&&/kernel|کرنل/i.test(semantic)?{kernel:true}:{}),...(!path&&!explicit&&file&&/\/var\/log\/(nginx|apache2)\//.test(file)?{webFallback:true}:{})})}; }
+  const web=!container&&!path&&!journalRequested&&["nginx","apache","apache2","httpd"].includes((explicit??alias??"").toLowerCase());
+  const auto=web||(!container&&!file&&!unit&&!/kernel|کرنل|journal/i.test(semantic));
+  // A hostname is not necessarily recorded in an access log; do not silently filter it out.
+  if(domain&&!path&&!container&&!ipCandidates.length&&!quoted.length&&!alias&&!explicit)return {clarification:"نام دامنه همیشه در متن لاگ ثبت نمی‌شود. برای دیدن درخواست‌های سایت، «لاگ nginx» یا «لاگ nginx برای IP …» را بنویسید؛ برای تطابق متن از گیومه استفاده کنید."};
+  try { return {query:liveLogQuery({source:auto?"auto":container?"docker":file ? "file" : "journal", ...(auto?{scope:web?(/nginx/i.test(explicit??alias??"")?"nginx":"apache"):"all"}:container?{container}:file ? {file} : unit ? {unit} : {}), ...(ipCandidates[0] ? {ip:ipCandidates[0]} : {}), ...(quoted[0] ? {text:quoted[0][1]} : {}), ...(errorsOnly ? {errorsOnly:true} : {}),...(!auto&&!container&&!file&&!unit&&/kernel|کرنل/i.test(semantic)?{kernel:true}:{})})}; }
   catch(e) { return {clarification:e instanceof Error ? e.message : "فیلتر معتبر نیست."}; }
 }
 export const shellQuote = (value:string) => `'${value.replace(/'/g, `'"'"'`)}'`;
 export function liveLogCommands(input: unknown) {
   const q = liveLogQuery(input);
+  if(q.source==="auto")return {probe:"command -v timeout >/dev/null || exit 40; command -v python3 >/dev/null || exit 51",follow:`timeout 1800 python3 -u -c ${shellQuote(LIVE_LOG_COLLECTOR)} ${shellQuote(Buffer.from(JSON.stringify(q)).toString("base64"))}`,format:"multiplex" as const};
   if(q.source==="docker"){
     const name=shellQuote(q.container!);
     return {probe:`command -v timeout >/dev/null || exit 40; command -v docker >/dev/null || exit 41; docker info --format '{{.ServerVersion}}' >/dev/null 2>&1 || exit 42; running=$(docker inspect --format '{{.State.Running}}' ${name} 2>/dev/null) || exit 43; test "$running" = true || exit 44`,follow:`timeout 1800 docker logs --follow --timestamps --tail 50 ${name} 2>&1`,format:"text" as const};
@@ -65,7 +75,7 @@ export function liveLogCommands(input: unknown) {
 }
 export function liveLogProbeError(code:number|null){
  const messages:Record<number,string>={40:"ابزار timeout روی تجهیز موجود نیست؛ برای پایش محدود و امن لازم است.",41:"Docker روی این تجهیز موجود نیست؛ لاگ سرویس systemd یا فایل مجاز را درخواست کنید.",42:"دسترسی به موتور Docker برقرار نیست؛ مجوز حساب SSH و وضعیت Docker را بررسی کنید.",43:"کانتینر انتخابی روی این تجهیز پیدا نشد؛ نام دقیق کانتینر را وارد کنید.",44:"کانتینر متوقف است؛ این قابلیت فقط لاگ کانتینر در حال اجرا را پایش می‌کند.",46:"این تجهیز journalctl ندارد؛ یک فایل لاگ مجاز را مشخص کنید.",47:"واحد systemd انتخابی بارگذاری نشده است؛ نام دقیق سرویس را بررسی کنید.",48:"حساب SSH اجازهٔ خواندن این منبع را ندارد؛ دسترسی journal یا sudo بدون رمز را بررسی کنید.",49:"فایل لاگ وجود ندارد یا مسیر واقعی آن با مسیر مجاز متفاوت است؛ نام سرویس یا منبع دیگری را مشخص کنید.",50:"ابزار tail روی تجهیز موجود نیست."};
- return code===null?"بررسی منبع بدون کد خروج معتبر پایان یافت.":messages[code]??"منبع لاگ خواندنی نیست یا سرویس/فایل وجود ندارد؛ دسترسی journal و sudo بدون رمز را بررسی کنید.";
+ return code===51?"برای تشخیص و خواندن هم‌زمان منابع، Python 3 روی تجهیز لازم است؛ نصب خودکار انجام نمی‌شود. فعلاً نام دقیق کانتینر، فایل مجاز یا واحد systemd را مشخص کنید.":code===null?"بررسی منبع بدون کد خروج معتبر پایان یافت.":messages[code]??"منبع لاگ خواندنی نیست یا سرویس/فایل وجود ندارد؛ دسترسی journal و sudo بدون رمز را بررسی کنید.";
 }
 // Minimal source inventory, never environment variables or container inspect JSON.
 export const WEB_LOG_DISCOVERY = `docker ps --format '{"ID":"{{.ID}}","Image":"{{.Image}}","Ports":"{{.Ports}}"}'`;
