@@ -99,6 +99,7 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
   const [thread, setThread] = useState<Thread | null>(null), [messages, setMessages] = useState<ChatMessage[]>([]);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null), [editing, setEditing] = useState<ChatMessage | null>(null);
   const [deleting, setDeleting] = useState<ChatMessage | null>(null), [deleteBusy, setDeleteBusy] = useState(false);
+  const [downloadFile, setDownloadFile] = useState<Attachment | null>(null), [downloadBusy, setDownloadBusy] = useState(false);
   const [files, setFiles] = useState<File[]>([]), [taskSource, setTaskSource] = useState<ChatMessage | null>(null), [notice, setNotice] = useState("");
   const fileInput = useRef<HTMLInputElement>(null), previousDraft = useRef(""), changeCursor = useRef(0);
   const [body, setBody] = useState(draft), [sending, setSending] = useState(false), [busyStatus, setBusyStatus] = useState(false);
@@ -164,6 +165,7 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
       let input: unknown = { body: text, clientKey: pending.current.key, ...(replyTo ? { replyToId: replyTo.id } : {}) };
       if (files.length) { const form = new FormData(); form.set("body", text); form.set("clientKey", pending.current.key); if (replyTo) form.set("replyToId", replyTo.id); files.forEach(file => form.append("files", file)); input = form; }
       const data = await communityApi<{ message: ChatMessage }>(`/${id}/messages${files.length ? "/files" : ""}`, { method: "POST", body: input });
+      if(!data.message?.id||files.length&&(!Array.isArray(data.message.attachments)||data.message.attachments.length!==files.length))throw {code:"COMMUNITY_INVALID_RESPONSE"};
       saveDraft(""); if (!alive.current) return;
       // Do not advance the polling cursor here: a concurrent user's reply may precede ours.
       stick.current = true; setAtBottom(true); setMessages(items => mergeMessages(items, [data.message])); setBody(""); setReplyTo(null); setFiles([]); pending.current = { signature: "", key: "" }; refreshList(); setRevision(n => n + 1);
@@ -175,7 +177,6 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
   function chooseFiles(next: FileList | null) {
     const chosen = [...files, ...Array.from(next ?? [])];
     if (chosen.length > 3 || chosen.some(file => file.size > 50 * 1024 * 1024 || !file.size)) { setSendError(t("حداکثر سه فایل، هر فایل تا ۵۰ مگابایت.", "Up to three files, 50 MiB each.")); return; }
-    if (chosen.some(file => !/\.(png|jpe?g|webp|pdf|txt|log|csv)$/i.test(file.name))) { setSendError(t("تصویر، PDF یا متن ساده انتخاب کن؛ فایل اجرایی مجاز نیست.", "Choose an image, PDF or plain text. Executables are not allowed.")); return; }
     setFiles(chosen); setSendError("");
   }
   async function removeMessage() {
@@ -185,11 +186,16 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
     } catch (e) { if (alive.current) setSendError(requestError(e, t)); } finally { if (alive.current) setDeleteBusy(false); }
   }
   async function download(file: Attachment) {
+    if (downloadBusy) return; setDownloadBusy(true); setSendError("");
     try {
       const response = await fetch(attachmentUrl(id, file.id), { credentials: "include" });
       if (!response.ok) throw { status: response.status };
-      const url = URL.createObjectURL(await response.blob()); const link = document.createElement("a"); link.href = url; link.download = file.fileName; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+      // Never trust the response MIME for blob URLs; a download is not a preview.
+      const blob = new Blob([await response.arrayBuffer()], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = file.fileName; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+      if (alive.current) setDownloadFile(null);
     } catch (e) { if (alive.current) setSendError(requestError(e, t)); }
+    finally { if (alive.current) setDownloadBusy(false); }
   }
   async function changeStatus(status: ThreadStatus) {
     setBusyStatus(true);
@@ -220,7 +226,7 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
           </div></details>}</div>
           {message.replyTo && !message.deletedAt && <blockquote className="hub-quote"><strong>{message.replyTo.author.displayName}</strong><span>{message.replyTo.deletedAt ? t("پیام حذف شده است", "Message deleted") : message.replyTo.body || t("پیوست", "Attachment")}</span></blockquote>}
           <p dir="auto">{message.deletedAt ? t("این پیام حذف شده است.", "This message was deleted.") : message.body}</p>
-          {!message.deletedAt && message.attachments?.map(file => <button type="button" key={file.id} className="hub-file" onClick={() => void download(file)}><span><FileText size={20}/></span><span><strong dir="auto">{file.fileName}</strong><small>{(file.size / 1024).toLocaleString(isFa ? "fa-IR" : "en-US", { maximumFractionDigits: 0 })} KB · {t("دانلود فایل", "Download file")}</small></span><Download size={16}/></button>)}
+          {!message.deletedAt && message.attachments?.map(file => <button type="button" key={file.id} className="hub-file" onClick={() => { setSendError(""); setDownloadFile(file); }}><span><FileText size={20}/></span><span><strong dir="auto">{file.fileName}</strong><small>{(file.size / 1024).toLocaleString(isFa ? "fa-IR" : "en-US", { maximumFractionDigits: 0 })} KB · {t("دانلود · اسکن‌نشده", "Download · Not scanned")}</small></span><Download size={16}/></button>)}
           <time dateTime={message.createdAt}>{message.editedAt && !message.deletedAt && <span>{t("ویرایش‌شده", "Edited")} · </span>}{new Date(message.createdAt).toLocaleTimeString(isFa ? "fa-IR" : "en-US", { hour: "2-digit", minute: "2-digit" })}{mine && <CheckCheck size={13} aria-label={t("ثبت‌شده", "Saved")}/>}</time></div></div></div>;
       })}
       {!messages.length && !error && <p className="hub-list-empty">{thread ? t("پیامی باقی نمانده؛ پیام‌های قدیمی ممکن است طبق سیاست نگهداری حذف شده باشند.", "No retained messages. Older messages may have expired under the retention policy.") : t("در حال دریافت پیام‌ها…", "Loading messages…")}</p>}
@@ -231,14 +237,27 @@ function Conversation({ id, isFa, draft, saveDraft, onBack, refreshList }: { id:
       {(replyTo || editing) && <div className="hub-compose-context">{editing ? <Pencil size={17}/> : <Reply size={17}/>}<div><strong>{editing ? t("ویرایش پیام", "Editing message") : `${t("پاسخ به", "Reply to")} ${replyTo!.author.displayName}`}</strong><span>{(editing ?? replyTo)?.body.slice(0, 130) || t("پیوست", "Attachment")}</span></div><button type="button" disabled={sending} onClick={() => editing ? cancelEdit() : setReplyTo(null)} aria-label={t("انصراف", "Cancel")}><X size={17}/></button></div>}
       {!!files.length && !editing && <div className="hub-pending-files">{files.map((file, i) => <span key={`${file.name}-${i}`}><Paperclip size={13}/><span dir="auto">{file.name}</span><button type="button" disabled={sending} onClick={() => setFiles(items => items.filter((_, index) => index !== i))} aria-label={t("برداشتن فایل", "Remove file")}><X size={14}/></button></span>)}</div>}
       {thread?.status === "resolved" ? <p className="hub-closed"><CheckCheck size={18}/>{t("گفت‌وگو بسته شده؛ مدیر می‌تواند دوباره بازش کند.", "Closed. An administrator can reopen this conversation.")}</p> : <form onSubmit={send} className="hub-composer">
-        {!editing && <><input ref={fileInput} type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.log,.csv" aria-label={t("انتخاب پیوست", "Choose attachments")} onChange={e => { chooseFiles(e.target.files); e.target.value = ""; }}/><button className="hub-attach" type="button" disabled={sending || !thread || files.length >= 3} onClick={() => fileInput.current?.click()} aria-label={t("پیوست فایل", "Attach files")} title={t("حداکثر سه فایل، هر فایل ۵۰ مگابایت", "Three files, 50 MiB each")}><Paperclip size={20}/></button></>}
+        {!editing && <><input ref={fileInput} type="file" multiple hidden aria-label={t("انتخاب پیوست", "Choose attachments")} onChange={e => { chooseFiles(e.target.files); e.target.value = ""; }}/><button className="hub-attach" type="button" disabled={sending || !thread || files.length >= 3} onClick={() => fileInput.current?.click()} aria-label={t("پیوست فایل", "Attach files")} title={t("همهٔ انواع فایل؛ حداکثر سه فایل، هر فایل ۵۰ مگابایت", "All file types; three files, 50 MiB each")}><Paperclip size={20}/></button></>}
         <label className="sr-only" htmlFor="community-message">{t("متن پیام", "Your message")}</label><textarea id="community-message" ref={composer} value={body} maxLength={4000} disabled={sending || !thread} rows={2} dir="auto" placeholder={t("پیامت را بنویس…", "Write a message…")} onChange={e => { setBody(e.target.value); if (!editing) saveDraft(e.target.value); }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !window.matchMedia("(pointer: coarse)").matches) { e.preventDefault(); void send(); } }}/><button className="hub-send" type="submit" disabled={sending || !thread || (!body.trim() && (!files.length || !!editing))} aria-label={editing ? t("ذخیرهٔ پیام", "Save message") : t("ارسال پیام", "Send message")}>{editing ? <Check size={19}/> : <Send size={19}/>}<span>{sending ? t("ارسال…", "Sending…") : editing ? t("ذخیره", "Save") : t("ارسال", "Send")}</span></button></form>}
       <div className="hub-composer__hint"><span><LockKeyhole size={12}/>{files.length ? t("فایل‌ها اسکن آنتی‌ویروس نشده‌اند.", "Files are not antivirus-scanned.") : t("اطلاعات محرمانه نفرست.", "Keep confidential information private.")}</span><span>{files.length ? t("هر فایل تا ۵۰ MB", "50 MiB per file") : `${body.length.toLocaleString(isFa ? "fa-IR" : "en-US")} / ${Number(4000).toLocaleString(isFa ? "fa-IR" : "en-US")}`}</span></div>
     </div>
     {deleting && <DeleteMessageDialog busy={deleteBusy} error={sendError} t={t} onClose={() => setDeleting(null)} onConfirm={() => void removeMessage()}/>}
+    {downloadFile && <DownloadFileDialog file={downloadFile} busy={downloadBusy} error={sendError} t={t} onClose={() => setDownloadFile(null)} onConfirm={() => void download(downloadFile)}/>}
     {taskSource && <TaskDialog source={taskSource} isFa={isFa} onClose={() => setTaskSource(null)} onSaved={() => { setTaskSource(null); setNotice(t("کار ثبت شد؛ از تب کارها پیگیری کن.", "Task created. Follow up in Tasks.")); }}/ >}
     <span className="sr-only" role="status">{messages.length ? t(`${messages.length} پیام دریافت شد`, `${messages.length} messages loaded`) : ""}</span>
   </article>;
+}
+
+function DownloadFileDialog({ file, busy, error, t, onClose, onConfirm }: { file: Attachment; busy: boolean; error: string; t: Translate; onClose: () => void; onConfirm: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  return <dialog ref={dialog} className="hub-dialog community-hub" aria-labelledby="download-file-title" onCancel={e => { if (busy) e.preventDefault(); else onClose(); }}>
+    <header><span className="hub-avatar"><Download/></span><h2 id="download-file-title">{t("دریافت پیوست", "Download attachment")}</h2></header>
+    <p dir="auto" style={{overflowWrap:"anywhere"}}>{file.fileName}</p>
+    <p className="hub-dialog__privacy"><LockKeyhole size={18}/>{t("این فایل اسکن آنتی‌ویروس نشده است. فقط اگر به فرستنده اعتماد داری دانلود کن و پیش از بازکردن، آن را اسکن کن. برنامه فایل را اجرا یا پیش‌نمایش نمی‌کند؛ فایل اجرایی، ماکرو و آرشیو می‌تواند خطرناک باشد.", "This file has not been antivirus-scanned. Download only if you trust the sender; scan it before opening. The app never executes or previews files. Executables, macros and archives can be dangerous.")}</p>
+    {error && <p className="hub-error" role="alert">{error}</p>}
+    <footer><button autoFocus disabled={busy} onClick={onClose}>{t("انصراف", "Cancel")}</button><button className="hub-primary" disabled={busy} onClick={onConfirm}><Download size={16}/>{busy ? t("در حال دریافت…", "Downloading…") : t("دانلود با آگاهی از خطر", "Download with caution")}</button></footer>
+  </dialog>;
 }
 
 function DeleteMessageDialog({ busy, error, t, onClose, onConfirm }: { busy: boolean; error: string; t: Translate; onClose: () => void; onConfirm: () => void }) {

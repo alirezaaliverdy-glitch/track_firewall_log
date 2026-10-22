@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/config/frontendEnv";
+import { communityRequestError, retryableCommunityUpload } from "./communityErrors";
 export type Kind = "discussion" | "ticket";
 export type ThreadStatus = "open" | "in_progress" | "resolved";
 export type Person = { id: string; displayName: string };
@@ -20,13 +21,24 @@ export function messageKey() {
 }
 export async function collaborationApi<T>(path: string, options: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const multipart = options.body instanceof FormData;
-  const response = await fetch(`${API_BASE_URL}/community${path}`, { credentials: "include", signal: options.signal,
-    method: options.method ?? "GET", ...(options.body !== undefined ? multipart ? { body: options.body as FormData } : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(options.body) } : {}) });
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({})) as { error?: string };
-    throw Object.assign(new Error("COMMUNITY_REQUEST_FAILED"), { status: response.status, code: data.error });
+  const key=multipart?(options.body as FormData).get("clientKey"):null;
+  const retrySafe=options.method?.toUpperCase()==="POST"&&path.endsWith("/messages/files")&&typeof key==="string"&&/^[a-zA-Z0-9_-]{1,100}$/.test(key);
+  const online=()=>typeof navigator==="undefined"||navigator.onLine!==false;
+  const send=()=>fetch(`${API_BASE_URL}/community${path}`,{credentials:"include",signal:options.signal,method:options.method??"GET",...(options.body!==undefined?multipart?{body:options.body as FormData}:{headers:{"Content-Type":"application/json"},body:JSON.stringify(options.body)}:{})});
+  let response:Response|undefined;
+  for(let attempt=0;attempt<2;attempt++){
+    try{response=await send();}
+    catch(error){if(options.signal?.aborted)throw error;if(attempt===0&&retryableCommunityUpload(0,retrySafe,online())){await new Promise(resolve=>setTimeout(resolve,750));continue;}throw Object.assign(new Error("COMMUNITY_NETWORK_FAILED"),{code:"COMMUNITY_NETWORK_FAILED"});}
+    // Never queue offline or retry validation/permission/quota/storage failures.
+    // A short-lived gateway/network retry reuses the exact FormData and clientKey.
+    if(attempt===0&&retryableCommunityUpload(response.status,retrySafe,online())){await response.body?.cancel();await new Promise(resolve=>setTimeout(resolve,750));continue;}break;
   }
-  return response.json() as Promise<T>;
+  if(!response)throw Object.assign(new Error("COMMUNITY_NETWORK_FAILED"),{code:"COMMUNITY_NETWORK_FAILED"});
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw communityRequestError(response.status,data,response.headers.get("X-Request-Id"));
+  }
+  try{return await response.json() as T;}catch{throw communityRequestError(response.status,{error:"COMMUNITY_INVALID_RESPONSE"},response.headers.get("X-Request-Id"));}
 }
 export function communityApi<T>(path: string, options: Parameters<typeof collaborationApi>[1] = {}): Promise<T> {
   return collaborationApi<T>(`/threads${path}`, options);

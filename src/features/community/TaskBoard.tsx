@@ -2,19 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CalendarDays, CheckCheck, ClipboardList, LoaderCircle, Plus, Search, UserRound, X, ExternalLink } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { collaborationApi, messageKey, type Person, type Task, type TaskStatus } from "./communityApi";
+import { communityErrorMessage } from "./communityErrors";
 
 type Translate = (fa: string, en: string) => string;
 const statuses = (t: Translate): Record<TaskStatus, string> => ({ todo: t("برای انجام", "To do"), in_progress: t("در حال انجام", "In progress"), done: t("انجام‌شده", "Done") });
 export function collaborationError(error: unknown, t: Translate) {
-  const e = error as { status?: number; code?: string };
-  if (e.code === "COMMUNITY_STORAGE_QUOTA") return t("سهمیهٔ فایل پر شده است؛ با مدیر فضای کاری هماهنگ کن.", "Attachment quota reached. Contact your workspace administrator.");
-  if (e.status === 413) return t("هر فایل حداکثر ۵۰ مگابایت و هر پیام حداکثر سه فایل.", "Up to three files per message, 50 MiB per file.");
-  if (e.status === 415) return t("نوع یا نام فایل مجاز نیست. تصویر، PDF یا متن ساده انتخاب کن.", "Unsupported file type or name. Choose an image, PDF or plain text.");
-  if (e.status === 409) return t("این مورد تغییر کرده است؛ تازه‌سازی کن و دوباره بررسی کن. متن تو حفظ شد.", "This item changed. Refresh and review; your draft is kept.");
-  if (e.status === 403) return t("اجازهٔ این تغییر را نداری.", "You do not have permission to make this change.");
-  if (e.status === 404) return t("این مورد در دسترس نیست؛ صفحه را تازه‌سازی کن.", "This item is unavailable. Refresh to check.");
-  if (e.status === 429) return t("کمی صبر کن و دوباره تلاش کن.", "Please wait a moment and retry.");
-  return t("درخواست انجام نشد؛ دوباره تلاش کن. متن تو حفظ شد.", "Request failed. Retry; your draft is kept.");
+  return communityErrorMessage(error,t);
 }
 
 export function TaskBoard({ isFa, onThread }: { isFa: boolean; onThread: (id: string) => void }) {

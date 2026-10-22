@@ -22,17 +22,27 @@ export function memberScope(user: PublicUser): Prisma.AppUserWhereInput {
   return { isActive: true, OR: [{ id: workspaceId(user) }, { workspaceOwnerId: workspaceId(user), role: { not: "admin" } }] };
 }
 export const communityError = (code: string, statusCode = 400) => Object.assign(new Error(code), { statusCode });
+// Never return/log database messages: they may contain serialized attachment bytes.
+export function communityUploadFailure(error:unknown){
+  const e=(error??{}) as {code?:string;message?:string;statusCode?:number};
+  if(["FST_REQ_FILE_TOO_LARGE","FST_FILES_LIMIT","FST_FIELDS_LIMIT","FST_PARTS_LIMIT","FST_ERR_CTP_BODY_TOO_LARGE"].includes(e.code??""))return {status:413,code:"COMMUNITY_FILE_SIZE"};
+  if(e.code?.startsWith("FST_")||["ERR_STREAM_PREMATURE_CLOSE","ECONNRESET"].includes(e.code??""))return {status:400,code:"COMMUNITY_UPLOAD_INCOMPLETE"};
+  if(e.statusCode&&e.statusCode>=400&&e.statusCode<500&&/^(COMMUNITY_[A-Z_]+|not_found|forbidden)$/.test(e.message??""))return {status:e.statusCode,code:e.message!};
+  if(["P1001","P1002","P1017","P2021","P2022","P2028"].includes(e.code??""))return {status:503,code:"COMMUNITY_STORAGE_UNAVAILABLE"};
+  return {status:500,code:"COMMUNITY_FILE_STORE_FAILED"};
+}
 export type ValidatedFile = { fileName: string; mimeType: string; size: number; checksum: string; content: Buffer };
 
-// Client MIME and suffix are not proof. No archives, active web formats or executables.
-// Downloads are always attachments; this validator is not an antivirus guarantee.
+// Arbitrary formats are opaque, untrusted bytes: never execute, extract, render,
+// or pass uploads to a document/media parser. All downloads force octet-stream.
+// Recognition is metadata only, NOT proof of safety or an antivirus guarantee.
 export function validateCommunityFile(fileName: string, content: Buffer): ValidatedFile {
   const name = fileName.normalize("NFC");
   if (name.length > 100 || !/^[\p{L}\p{N} _().-]+$/u.test(name) || name.startsWith(".") || name.includes("..") || name.trim() !== name)
     throw communityError("COMMUNITY_FILE_NAME", 415);
   if (!content.length || content.length > FILE_LIMIT) throw communityError("COMMUNITY_FILE_SIZE", 413);
   const ext = name.split(".").at(-1)?.toLowerCase();
-  let mimeType = "";
+  let mimeType = "application/octet-stream";
   if (ext === "png" && content.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) mimeType = "image/png";
   if ((ext === "jpg" || ext === "jpeg") && content[0] === 255 && content[1] === 216 && content[2] === 255) mimeType = "image/jpeg";
   if (ext === "webp" && content.subarray(0, 4).toString() === "RIFF" && content.subarray(8, 12).toString() === "WEBP") mimeType = "image/webp";
@@ -42,9 +52,8 @@ export function validateCommunityFile(fileName: string, content: Buffer): Valida
       const text = new TextDecoder("utf-8", { fatal: true }).decode(content);
       if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) throw new Error();
       mimeType = "text/plain";
-    } catch { throw communityError("COMMUNITY_FILE_TYPE", 415); }
+    } catch { /* Binary/unknown data remains an opaque download, not plain text. */ }
   }
-  if (!mimeType) throw communityError("COMMUNITY_FILE_TYPE", 415);
   return { fileName: name, mimeType, size: content.length, content, checksum: createHash("sha256").update(content).digest("hex") };
 }
 export function messageHash(body: string, replyToId: string | undefined, files: ValidatedFile[]) {

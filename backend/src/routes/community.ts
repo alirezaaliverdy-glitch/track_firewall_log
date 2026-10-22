@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import type { PublicUser } from "../services/auth.service.js";
-import { author, messageInclude, safeMessage, nextChange, communityError, messageHash, validateCommunityFile,
+import { author, messageInclude, safeMessage, nextChange, communityError, communityUploadFailure, messageHash, validateCommunityFile,
   FILE_LIMIT, WORKSPACE_FILE_LIMIT, GLOBAL_FILE_LIMIT, DAILY_FILE_LIMIT, type ValidatedFile } from "../services/community-collaboration.service.js";
 import { communityTaskRoutes } from "./community-tasks.js";
 import { communityRetentionRoutes } from "./community-retention.js";
@@ -145,6 +145,7 @@ export async function communityRoutes(app: FastifyInstance) {
     return { message: await createMessage(req.authUser!, req.params.id, req.body, []) };
   });
   app.post<{ Params: { id: string } }>("/api/community/threads/:id/messages/files", { bodyLimit: 160 * 1024 * 1024, schema: { params } }, async (req, reply) => {
+    reply.header("X-Request-Id",req.id);
     const user = req.authUser!;
     // Authorize before consuming bytes; cap simultaneous buffered requests as well as disk use.
     if (!await prisma.communityThread.findFirst({ where: { AND: [communityScope(user), { id: req.params.id }] } }))
@@ -170,13 +171,10 @@ export async function communityRoutes(app: FastifyInstance) {
         (fields.replyToId !== undefined && !/^[a-zA-Z0-9_-]{1,100}$/.test(fields.replyToId))) throw communityError("COMMUNITY_FIELDS");
       return { message: await createMessage(user, req.params.id, { body: fields.body ?? "", clientKey: fields.clientKey, replyToId: fields.replyToId }, files) };
     } catch (error) {
-      if ((error as { code?: string }).code?.startsWith("FST_")) return reply.code(413).send({ error: "COMMUNITY_FILE_SIZE" });
-      const safe = error as { message?: string; statusCode?: number; code?: string };
-      if (safe.statusCode && safe.statusCode >= 400 && safe.statusCode < 500 && /^(COMMUNITY_[A-Z_]+|not_found|forbidden)$/.test(safe.message ?? ""))
-        return reply.code(safe.statusCode).send({ error: safe.message });
+      const failure=communityUploadFailure(error),safe=error as {code?:string};
       // Database exceptions can contain serialized upload arguments. Never log them.
-      req.log.warn({ code: "COMMUNITY_FILE_STORE_FAILED", databaseCode: /^P\d{4}$/.test(safe.code ?? "") ? safe.code : undefined }, "Attachment could not be stored");
-      return reply.code(500).send({ error: "COMMUNITY_FILE_STORE_FAILED" });
+      if(failure.status>=500)req.log.warn({ code:failure.code,databaseCode:/^P\d{4}$/.test(safe.code??"")?safe.code:undefined },"Attachment could not be stored");
+      return reply.code(failure.status).send({error:failure.code,requestId:req.id});
     } finally { clearTimeout(timeout); activeUploads.delete(user.id); }
   });
   const messageParams = { type: "object", required: ["id", "messageId"], additionalProperties: false, properties: { id: idSchema, messageId: idSchema } };

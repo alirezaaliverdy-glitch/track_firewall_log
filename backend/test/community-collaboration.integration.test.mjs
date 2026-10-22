@@ -59,8 +59,15 @@ test('collaboration: authorship, replies, change feed, private files, quotas, ta
     assert.equal(download.headers['content-type'], 'application/octet-stream'); assert.match(download.headers['content-security-policy'], /sandbox/);
     for (const who of [peer, foreign]) assert.equal((await send(who, 'GET', `/threads/${ticket}/attachments/${file.id}`)).statusCode, 404);
     assert.equal((await app.inject({ url: `/api/community/threads/${ticket}/attachments/${file.id}` })).statusCode, 401);
-    assert.equal((await upload(viewer, ticket, [{ name: 'active.svg', data: Buffer.from('<svg onload="alert(1)"/>') }])).statusCode, 415);
-    assert.equal((await upload(viewer, ticket, [{ name: 'fake.png', data: Buffer.from('MZnot-an-image') }])).statusCode, 415);
+    for (const [name, bytes] of [['active.svg', '<svg onload="alert(1)"/>'], ['fake.png', 'MZnot-an-image']]) {
+      const opaque = await upload(viewer, ticket, [{ name, data: Buffer.from(bytes) }]);
+      assert.equal(opaque.statusCode, 200);
+      assert.equal(opaque.json().message.attachments[0].mimeType, 'application/octet-stream');
+      const download = await send(viewer, 'GET', `/threads/${ticket}/attachments/${opaque.json().message.attachments[0].id}`);
+      assert.equal(download.statusCode, 200); assert.equal(download.headers['content-type'], 'application/octet-stream');
+      assert.match(download.headers['content-disposition'], /^attachment;/); assert.equal(download.headers['x-content-type-options'], 'nosniff');
+      assert.match(download.headers['content-security-policy'], /sandbox/); assert.equal(download.body, bytes);
+    }
     assert.equal((await upload(viewer, ticket, [{ name: 'large.txt', data: Buffer.alloc(52428801, 65) }])).statusCode, 413);
     const nativeHeaders = { authorization: `Bearer ${viewer.token}`, 'x-firewall-client': 'android' };
     const nativeFile = await upload({ headers: nativeHeaders }, topic, [{ name: 'native.txt', data: Buffer.from('native viewer fixture') }]);
@@ -69,8 +76,8 @@ test('collaboration: authorship, replies, change feed, private files, quotas, ta
     assert.equal((await upload(viewer, topic, [{ name: 'limited.txt', data: Buffer.from('rate limited') }])).statusCode, 429);
     assert.equal((await app.inject({ method: 'POST', url: `/api/community/threads/${topic}/messages/files`, headers: { cookie: owner.headers.cookie } })).statusCode, 403);
     assert.throws(() => validateCommunityFile('../unsafe.txt', Buffer.from('text')), /COMMUNITY_FILE_NAME/);
-    assert.throws(() => validateCommunityFile('x.txt', Buffer.from([0xff, 0xfe])), /COMMUNITY_FILE_TYPE/);
-    assert.throws(() => validateCommunityFile('x.exe', Buffer.from('MZ')), /COMMUNITY_FILE_TYPE/);
+    assert.equal(validateCommunityFile('x.txt', Buffer.from([0xff, 0xfe])).mimeType, 'application/octet-stream');
+    assert.equal(validateCommunityFile('x.exe', Buffer.from('MZ')).mimeType, 'application/octet-stream');
     assert.equal((await upload(peer, topic, Array.from({ length: 4 }, () => ({ name: 'file.txt', data: Buffer.from('text') })))).statusCode, 413);
     // Synthetic quota metadata only, scoped to these fixture users and removed below.
     const quota = await prisma.communityAttachment.create({ data: { messageId: source.id, workspaceId: owner.id, uploaderId: owner.id,

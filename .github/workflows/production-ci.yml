@@ -134,8 +134,8 @@ jobs:
           LOG_LEVEL: silent
           TEST_DATABASE_URL: postgresql://fixture@127.0.0.1:5432/eosnet_ci_community_test
         run: |
-          pnpm exec tsx --test --test-force-exit test/community-collaboration.test.ts
-          node --test --test-concurrency=1 test/community-api.integration.test.mjs test/community-collaboration.integration.test.mjs test/community-retention.integration.test.mjs test/community-migration-role.integration.test.mjs
+          pnpm exec tsx --test --test-force-exit test/community-collaboration.test.ts test/community-upload-errors.test.ts
+          node --test --test-concurrency=1 test/community-api.integration.test.mjs test/community-collaboration.integration.test.mjs test/community-retention.integration.test.mjs test/community-migration-role.integration.test.mjs test/community-upload.integration.test.mjs
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/camera-workspace.test.ts test/camera-api.integration.test.ts test/nvr-storage.test.ts test/nvr-dvrip.test.ts test/nvr-sensors.test.ts test/nvr-assets.integration.test.ts test/nvr-native.test.ts test/nvr-appweb.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/vpn.test.ts test/openvpn-profile.test.ts test/vpn-api.integration.test.ts test/vpn-recovery-api.test.ts
           pnpm exec tsx --test --test-force-exit --test-concurrency=1 test/terminal-runtime.test.ts test/terminal-api.integration.test.ts

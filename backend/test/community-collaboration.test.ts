@@ -4,14 +4,13 @@ import { findMutationPermission } from "../src/security/authorization.js";
 import { hasPermission } from "../src/security/permissions.js";
 import { FILE_LIMIT, GLOBAL_FILE_LIMIT, WORKSPACE_FILE_LIMIT, validateCommunityFile, messageHash, memberScope } from "../src/services/community-collaboration.service.js";
 
-test("collaboration upload accepts only bounded business formats with matching bytes", () => {
+test("collaboration upload preserves arbitrary formats as bounded opaque bytes, not executable or renderable content", () => {
   assert.equal(validateCommunityFile("یادداشت.txt", Buffer.from("متن آزمایشی")).mimeType, "text/plain");
   assert.equal(validateCommunityFile("export.csv", Buffer.from("name,status\nfixture,ok")).mimeType, "text/plain");
   assert.equal(validateCommunityFile("sample.pdf", Buffer.from("%PDF-1.7\nfixture\n%%EOF")).mimeType, "application/pdf");
-  for (const name of ["active.svg", "page.html", "payload.exe", "archive.zip", "macro.docm"])
-    assert.throws(() => validateCommunityFile(name, Buffer.from("fixture")), /COMMUNITY_FILE_TYPE/);
-  assert.throws(() => validateCommunityFile("fake.png", Buffer.from("fixture")), /COMMUNITY_FILE_TYPE/);
-  assert.throws(() => validateCommunityFile("binary.log", Buffer.from([65, 0, 66])), /COMMUNITY_FILE_TYPE/);
+  for (const name of ["active.svg", "page.html", "payload.exe", "archive.zip", "macro.docm", "office.docx", "sheet.xlsx", "video.mp4", "phone.heic", "backup.tar.gz", "unknown", "data.bin", "fake.png"])
+    assert.equal(validateCommunityFile(name, Buffer.from("fixture")).mimeType, "application/octet-stream");
+  assert.equal(validateCommunityFile("binary.log", Buffer.from([65, 0, 66])).mimeType, "application/octet-stream");
   assert.throws(() => validateCommunityFile("empty.txt", Buffer.alloc(0)), /COMMUNITY_FILE_SIZE/);
   assert.throws(() => validateCommunityFile("large.txt", Buffer.alloc(FILE_LIMIT + 1, 65)), /COMMUNITY_FILE_SIZE/);
   assert.ok(WORKSPACE_FILE_LIMIT < GLOBAL_FILE_LIMIT);
