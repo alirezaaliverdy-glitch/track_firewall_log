@@ -23,7 +23,6 @@ export function DashboardActionComposer({ assets, isFa }: { assets: PlatformAsse
   const [logPlan,setLogPlan]=useState<ActionPlan|null>(null);
   const [logSession,setLogSession]=useState("");
   const selected = devices.find((asset) => asset.device?.id === deviceId);
-  const logQueryPreview=useMemo(()=>{try{return normalizeObject(JSON.parse(String(logPlan?.parametersJson.logQuery??"null")));}catch{return {}; }},[logPlan]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,8 +94,7 @@ export function DashboardActionComposer({ assets, isFa }: { assets: PlatformAsse
     </form>
     {error ? <p className="dashboard-action-composer__error" role="alert">{error}</p> : null}
     {logPlan?<div className="linux-live-preview"><strong>{isFa?"پیش‌نمایش پایش زندهٔ لینوکس":"Preview Linux log monitoring"}</strong><p>{logPlan.device?.name??selected?.name} · <bdi>{(()=>{try{const q=JSON.parse(String(logPlan.parametersJson.logQuery));return [q.source==="auto"?`${isFa?"چندمنبعی":"Multiple sources"}: ${q.scope}`:q.container??q.file??q.unit??(q.kernel?"kernel":"journal"),q.ip,q.text,q.errorsOnly?"خطاها":""].filter(Boolean).join(" · ");}catch{return "";}})()}</bdi></p><p>{isFa?"فقط‌خواندنی، ۵۰ خط اخیر هر منبع و سپس رویدادهای تازه؛ حداکثر ۳۰ دقیقه و ۵۰۰ رویداد در پنجره. دادهٔ خام دائماً ذخیره نمی‌شود. پس از تأیید اتصال واقعی شروع می‌شود.":"Read-only: 50 recent lines per source, then new events. Up to 30 minutes and 500 events in memory. Confirmation starts the real connection."}</p><code>{String(logPlan.parametersJson.liveLogFingerprint??"")}</code>{logPlan.parametersJson.liveLogFirstTrust?<p>{isFa?"این کلید SSH برای اولین بار در همین پیش‌نمایش مشاهده شده؛ قبل از تأیید با کلید تجهیز تطبیق دهید.":"First observed SSH key: compare with the device before confirming."}</p>:null}<button type="button" disabled={busy} onClick={()=>void startLogs()}>{busy?(isFa?"در حال اتصال…":"Connecting…"):(isFa?"تأیید و شروع پایش":"Confirm & monitor")}</button></div>:null}
-    {logPlan&&logQueryPreview.source==="auto"?<p className="linux-live-logs__notice">{isFa?"با همین تأیید، منابع واقعی فایل، journal و کانتینرها هم‌زمان خوانده می‌شوند (حداکثر ۴۸ منبع). مسیرهای ثبت لاگ Nginx نیز روی میزبان و کانتینر مرتبط بررسی می‌شوند؛ فقط فرمان‌های ثابت خواندن تنظیمات مسیر و لاگ اجرا می‌شوند. Python 3 لازم است؛ هیچ تنظیمی تغییر نمی‌کند. محدودیت یا خطای هر منبع در پنجره مشخص است.":"This confirmation allows read-only discovery of files, journal and container logs (up to 48 sources), including fixed Nginx log-path inspection on host/related containers. Requires Python 3; no settings are changed. Coverage limits and source failures are shown."}</p>:null}
-    {logSession?<LinuxLiveLogs key={logSession} sessionId={logSession} isFa={isFa}/>:null}
+    {logSession?<LinuxLiveLogs key={logSession} sessionId={logSession} isFa={isFa} onClose={()=>setLogSession("")}/>:null}
     {proposal ? <div className="dashboard-action-composer__result" role="status"><div><strong>{proposal.title}</strong><small>{proposal.detail}</small></div><Link to={proposal.path}>{isFa ? "بررسی و تأیید" : "Review & confirm"}<ArrowUpLeft /></Link></div> : null}
   </article>;
 }
